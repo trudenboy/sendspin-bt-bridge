@@ -27,6 +27,7 @@ class BluetoothTransportSnapshot:
     delay_tenths_ms: int | None = None
     delay_ms: float | None = None
     updated_at: str | None = None
+    volume: int | None = None
 
 
 def _as_int(value: Any) -> int | None:
@@ -74,4 +75,17 @@ def select_transport_snapshot(managed_objects: Any, device_path: str) -> Bluetoo
         delay_tenths_ms=delay_tenths_ms,
         delay_ms=round(delay_tenths_ms / 10.0, 1) if delay_tenths_ms is not None else None,
         updated_at=datetime.now(tz=UTC).isoformat(),
+        volume=_as_int(props.get("Volume")) if "Volume" in props else None,
     )
+
+
+def transport_connect_line(previous_path: str | None, snapshot: BluetoothTransportSnapshot) -> str | None:
+    """One INFO line for a transport not described yet (a connect), else None."""
+    if not snapshot.path or snapshot.path == previous_path:
+        return None
+    codec = "unknown"
+    if snapshot.codec_id is not None:
+        codec = f"{snapshot.codec_name or 'codec'} (0x{snapshot.codec_id:02x})"
+    delay = f"{snapshot.delay_ms:.1f} ms (reported by the speaker)" if snapshot.delay_supported else "absent"
+    volume = f"{snapshot.volume}/127" if snapshot.volume is not None else "absent"
+    return f"BT transport {snapshot.path}: codec {codec}, Delay {delay}, Volume {volume}, state {snapshot.state or 'unknown'}"

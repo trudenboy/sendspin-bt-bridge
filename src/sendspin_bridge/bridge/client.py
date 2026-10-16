@@ -64,6 +64,8 @@ from sendspin_bridge.services.audio.latency_calibration import (
 )
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
+from sendspin_bridge.services.audio.player.settings import output_latency_compensated
+from sendspin_bridge.services.bluetooth.transport_telemetry import transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
 from sendspin_bridge.services.infrastructure.config_validation import (
@@ -272,6 +274,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "timing_sampled_at",
         "required_lead_time_ms",
         "min_buffer_ms",
+        "declared_lead_time_ms",
         "pairing_pin",
         "pairing_window_open",
         "pairing_state",
@@ -420,6 +423,9 @@ class DeviceStatus:
     timing_sampled_at: str | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250
+    # The startup lead the daemon actually declares to the server (it covers
+    # a measured sink lookahead when the output latency is compensated).
+    declared_lead_time_ms: int | None = None
     static_delay_ms: float = 0.0
     static_delay_source: str = "default"
     static_delay_calibrated_at: str | None = None
@@ -652,6 +658,8 @@ class SendspinClient:
         static_delay_codec: str | None = None,
     ):
         self.player_name = player_name
+        # The BlueZ transport last described in the log (one line per connect).
+        self._described_transport_path: str | None = None
         self.server_host = server_host
         self.server_port = server_port
         self.bt_manager = bt_manager
@@ -1967,6 +1975,7 @@ class SendspinClient:
                     return
                 own_server = await self._resolve_own_server()
                 self._seen_server_delay_seq = 0
+                spawn_config = load_config()
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -1989,9 +1998,11 @@ class SendspinClient:
                             "config_schema_version": CONFIG_SCHEMA_VERSION,
                             "bt_product_name": bt_product_name,
                             "bt_manufacturer": bt_manufacturer,
-                            "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
+                            "require_pairing": bool(spawn_config.get("SENDSPIN_PAIRING", False)),
                             "own_server": own_server.to_params() if own_server else None,
-                            "own_server_only": bool(load_config().get("SENDSPIN_OWN_SERVER_ONLY", True)),
+                            "own_server_only": bool(spawn_config.get("SENDSPIN_OWN_SERVER_ONLY", True)),
+                            "compensate_output_latency": bool(spawn_config.get("COMPENSATE_OUTPUT_LATENCY", True)),
+                            "playout_diag": bool(spawn_config.get("PLAYOUT_DIAG", False)),
                         }
                     )
                 )
@@ -2605,6 +2616,10 @@ class SendspinClient:
             device = self.bt_manager.device if self.bt_manager else None
             if device is not None:
                 snapshot = await device.transport_snapshot()
+                line = transport_connect_line(self._described_transport_path, snapshot)
+                if line is not None:
+                    logger.info("[%s] %s", self.player_name, line)
+                self._described_transport_path = snapshot.path
                 codec_name = (
                     snapshot.codec_name
                     or ("sbc" if getattr(self.bt_manager, "prefer_sbc", False) else None)
@@ -2622,8 +2637,11 @@ class SendspinClient:
                 )
                 revision = f"{snapshot.path}:{snapshot.delay_tenths_ms}:{snapshot.codec_id}"
                 backend_latency = self.status.get("backend_output_latency_ms")
+                # A compensated pipeline latency is taken out of the schedule,
+                # so it can no longer count twice with the speaker's Delay.
                 double_count_risk = bool(
-                    snapshot.delay_ms is not None
+                    not output_latency_compensated(load_config())
+                    and snapshot.delay_ms is not None
                     and isinstance(backend_latency, (int, float))
                     and backend_latency >= snapshot.delay_ms * 0.75
                 )

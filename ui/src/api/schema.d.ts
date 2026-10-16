@@ -2686,6 +2686,12 @@ export interface components {
              */
             CHECK_UPDATES?: boolean | null;
             /**
+             * Compensate Output Latency
+             * @description Take the PulseAudio buffer's latency out of the playback schedule, so audio leaves the audio server at its scheduled time whatever PULSE_LATENCY_MSEC is. Off restores the timing before 3.1.0-beta.7, where speakers played behind by that latency. The SENDSPIN_COMPENSATE_OUTPUT_LATENCY environment variable overrides it.
+             * @default true
+             */
+            COMPENSATE_OUTPUT_LATENCY?: boolean | null;
+            /**
              * Config Schema Version
              * @description Schema version; managed by the application — do not change.
              */
@@ -2832,6 +2838,12 @@ export interface components {
              * @default true
              */
             MUTE_VIA_MA?: boolean | null;
+            /**
+             * Playout Diag
+             * @description Playback clock diagnostics: let the audio sink provide its own clock so the log's Clock diag line also reports the sink's audio clock rate. Playback timing is unchanged. The SENDSPIN_PLAYOUT_DIAG environment variable overrides it.
+             * @default false
+             */
+            PLAYOUT_DIAG?: boolean | null;
             /**
              * Prefer Sbc Codec
              * @description Prefer SBC codec over AAC/aptX for Bluetooth audio.
@@ -3518,6 +3530,8 @@ export interface components {
             clock_synchronized: boolean;
             /** Clock Uncertainty Ms */
             clock_uncertainty_ms: number | null;
+            /** Declared Lead Time Ms */
+            declared_lead_time_ms: number | null;
             /** Last Reanchor At */
             last_reanchor_at: number | null;
             /** Last Sync Error Ms */

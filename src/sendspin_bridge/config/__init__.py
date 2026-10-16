@@ -151,6 +151,10 @@ DEFAULT_CONFIG = {
     "AUTO_UPDATE": False,
     "CHECK_UPDATES": True,
     "DISABLE_PA_RESCUE_STREAMS": False,
+    # Take the PulseAudio buffer's latency out of the schedule (3.1.0-beta.7).
+    "COMPENSATE_OUTPUT_LATENCY": True,
+    # Let the sink provide its audio clock so its rate is logged.
+    "PLAYOUT_DIAG": False,
     "PULSE_SINK_RESET_ON_START": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],

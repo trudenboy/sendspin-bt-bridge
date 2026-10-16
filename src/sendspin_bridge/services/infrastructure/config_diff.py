@@ -82,6 +82,9 @@ _GLOBAL_RESTART_FIELDS: frozenset[str] = frozenset(
         "BT_CHURN_WINDOW",
         "DISABLE_PA_RESCUE_STREAMS",
         "BASE_LISTEN_PORT",
+        # Read by each daemon at spawn.
+        "COMPENSATE_OUTPUT_LATENCY",
+        "PLAYOUT_DIAG",
     }
 )
 

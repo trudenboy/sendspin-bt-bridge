@@ -686,3 +686,31 @@ async def test_audio_server_snapshot_uses_one_connection():
     assert opened.call_count == 1
     assert server_name == "pulseaudio"
     assert [s["name"] for s in sinks] == ["bluez_sink.x"]
+
+
+@pytest.mark.asyncio
+async def test_pid_sink_input_latency_reads_only_this_process_stream():
+    own = SimpleNamespace(index=11, buffer_usec=87_000, sink_usec=25_300, proplist={"application.process.id": "1234"})
+    other = SimpleNamespace(index=12, buffer_usec=1, sink_usec=1, proplist={"application.process.id": "9999"})
+    pulse = MagicMock()
+    pulse.sink_input_list = AsyncMock(return_value=[other, own])
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        latency = await _pulse_mod.apid_sink_input_latency(1234)
+
+    assert latency == {"buffer_ms": 87.0, "sink_ms": 25.3}
+
+
+@pytest.mark.asyncio
+async def test_pid_sink_input_latency_is_none_without_a_stream():
+    pulse = MagicMock()
+    pulse.sink_input_list = AsyncMock(return_value=[])
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        assert await _pulse_mod.apid_sink_input_latency(1234) is None

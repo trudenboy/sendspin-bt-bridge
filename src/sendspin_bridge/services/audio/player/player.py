@@ -30,8 +30,13 @@ class StreamPlayer:
         sink_factory: Callable[[], object],
         raw_now_us: Callable[[], int] | None = None,
         clock: object | None = None,
+        output_latency_ns: int = 0,
     ) -> None:
         self._sink_factory = sink_factory
+        # The pipeline latency, fixed on every new pipeline and taken out of
+        # every timestamp, so a buffer sounds at its play time instead of play
+        # time + whatever latency the sink negotiated. 0 keeps GStreamer's own.
+        self._output_latency_ns = max(0, int(output_latency_ns))
         self._raw_now_us = raw_now_us or _raw_now_us
         self._clock = clock
         self._pipeline: Any = None
@@ -50,6 +55,15 @@ class StreamPlayer:
         # (play_time_us, end_us, payload): ``resync`` re-times it after a delay change.
         self._queued: deque[tuple[int, int, bytes]] = deque(maxlen=_MAX_QUEUED_CHUNKS)
         self._resyncs = 0
+        # Per-output start facts (see ``start_report``); a new output starts over.
+        self._generation = 0
+        self._first_lead_us: int | None = None
+        self._first_margin_raw_ns: int | None = None
+
+    @property
+    def stream_generation(self) -> int:
+        """How many outputs (pipelines) this player has built so far."""
+        return self._generation
 
     def start(self, audio_format: PcmFormat) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
@@ -67,10 +81,17 @@ class StreamPlayer:
         self._pipeline = pipeline
         self._appsrc = appsrc
         self._sink = sink
-        if self._clock is not None:
-            pipeline.use_clock(self._clock)
+        # The system clock (CLOCK_MONOTONIC) is what the pipeline picks anyway
+        # while the sink provides no clock; forcing it keeps that true when a
+        # diagnostic build lets the sink provide its audio clock for reading.
+        pipeline.use_clock(self._clock if self._clock is not None else Gst.SystemClock.obtain())
         pipeline.set_start_time(Gst.CLOCK_TIME_NONE)
         pipeline.set_base_time(0)
+        if self._output_latency_ns:
+            pipeline.set_latency(self._output_latency_ns)
+        self._generation += 1
+        self._first_lead_us = None
+        self._first_margin_raw_ns = None
         self._attach_sink_probe()
         self._apply_volume()
         self._set_caps(audio_format)
@@ -92,7 +113,9 @@ class StreamPlayer:
         clock = self._pipeline.get_clock()
         gst_now_ns = int(clock.get_time()) if clock is not None else 0
         raw_now_us = self._raw_now_us()
-        pts_ns = gst_pts_ns(play_time_us, raw_now_us, gst_now_ns)
+        pts_ns = max(0, gst_pts_ns(play_time_us, raw_now_us, gst_now_ns) - self._output_latency_ns)
+        if self._first_lead_us is None:
+            self._first_lead_us = play_time_us - raw_now_us
         frame = self._format.frame_bytes()
         n_frames = len(payload) // frame if frame else 0
         duration_ns = int(n_frames * 1_000_000_000 / self._format.sample_rate) if n_frames else 0
@@ -133,7 +156,10 @@ class StreamPlayer:
         audio_format = self._format
         now_us = self._raw_now_us()
         keep = [(start_us + shift_us, payload) for start_us, _end_us, payload in self._queued]
-        keep = [(start_us, payload) for start_us, payload in keep if start_us >= now_us]
+        # A compensated output plays at the play time itself, so audio due
+        # before the rebuilt output can take it would only be clipped.
+        guard_us = _RESYNC_GUARD_US if self._output_latency_ns else 0
+        keep = [(start_us, payload) for start_us, payload in keep if start_us >= now_us + guard_us]
         self.stop()
         self.start(audio_format)
         for play_time_us, payload in keep:
@@ -262,6 +288,8 @@ class StreamPlayer:
             clock = self._pipeline.get_clock() if self._pipeline is not None else None
             if clock is not None and buf.pts != Gst.CLOCK_TIME_NONE:
                 self._sync_error_ns = int(clock.get_time()) - int(buf.pts)
+                if self._first_margin_raw_ns is None:
+                    self._first_margin_raw_ns = -self._sync_error_ns
             return Gst.PadProbeReturn.OK
 
         pad.add_probe(Gst.PadProbeType.BUFFER, _probe)
@@ -290,6 +318,56 @@ class StreamPlayer:
                 detail = f" ({debug})" if debug else ""
                 raise RuntimeError(f"GStreamer pipeline error: {error}{detail}")
 
+    def start_report(self) -> dict[str, float | None] | None:
+        """What the current output started with, in ms (None while nothing plays).
+
+        ``first_lead_ms``: how far ahead of its play time the first chunk came.
+        ``first_buffer_margin_ms``: how long before it was due to sound the
+        first buffer reached the sink (negative: it was late).
+        ``configured_latency_ms``: the latency the pipeline runs with;
+        ``min_latency_ms``: the least the sink said it needs.
+        """
+        if self._pipeline is None:
+            return None
+        configured_ns = self._configured_latency_ns()
+        min_ns = self._latency_query()
+        margin_ms = None
+        if self._first_margin_raw_ns is not None:
+            margin_ms = _ns_to_ms(self._first_margin_raw_ns + (configured_ns or 0))
+        return {
+            "compensated_latency_ms": _ns_to_ms(self._output_latency_ns),
+            "configured_latency_ms": _ns_to_ms(configured_ns),
+            "min_latency_ms": _ns_to_ms(min_ns),
+            "first_lead_ms": None if self._first_lead_us is None else round(self._first_lead_us / 1000.0, 3),
+            "first_buffer_margin_ms": margin_ms,
+        }
+
+    def audio_clock_ns(self) -> int | None:
+        """The sink's own audio clock (internal time), when the sink provides one.
+
+        pulsesink provides it only with ``provide-clock=true``; the pipeline
+        keeps running on the system clock either way, so this is read-only.
+        """
+        sink = self._sink
+        if sink is None or not hasattr(sink, "provide_clock"):
+            return None
+        clock = sink.provide_clock()
+        if clock is None:
+            return None
+        return int(clock.get_internal_time())
+
+    def _configured_latency_ns(self) -> int | None:
+        from sendspin_bridge.services.audio.player.gst_support import Gst
+
+        if self._pipeline is None:
+            return None
+        if self._output_latency_ns:
+            return self._output_latency_ns
+        value = self._pipeline.get_latency()
+        if value == Gst.CLOCK_TIME_NONE:
+            return self._latency_query()
+        return int(value)
+
     def _gst_format_time(self):
         from sendspin_bridge.services.audio.player.gst_support import Gst
 
@@ -306,6 +384,11 @@ class StreamPlayer:
         _live, min_latency, _max_latency = query.parse_latency()
         return int(min_latency)
 
+
+# How soon after a resync a rebuilt, compensated output can play: its PulseAudio
+# stream reconnects and the sink renders a little ahead (7 ms measured on a
+# null sink, 25 ms + one block on bluez5).
+_RESYNC_GUARD_US = 50_000
 
 # Bounds the resync record if the clock stalls: far beyond any send-ahead
 # (over 5 min of 20 ms chunks); played chunks are dropped by time anyway.

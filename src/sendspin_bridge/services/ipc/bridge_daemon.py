@@ -39,6 +39,13 @@ logger = logging.getLogger(__name__)
 # client/state (never the hello) and names the delay command set_output_delay.
 # Delay changes closer together than this are applied as one resync.
 _DELAY_RESYNC_QUIET_S = 0.15
+# A compensated chunk must reach PulseAudio before the sink renders it, i.e.
+# the sink's lookahead (PA "sink latency") ahead of its play time; the declared
+# lead covers a measured lookahead plus this much.
+_LEAD_MARGIN_MS = 50.0
+# The stream start timing line waits until the output has settled.
+_START_TIMING_DELAY_S = 2.0
+_CLOCK_DIAG_INTERVAL_S = 1.0
 _PLAYER_COMMANDS = [PlayerCommand.VOLUME, PlayerCommand.MUTE, PlayerCommand.SET_OUTPUT_DELAY]
 
 
@@ -61,6 +68,12 @@ class DaemonArgs:
     # ``pa``: volume and mute are the sink's own (PulseVolumeController).
     # ``sendspin``: they scale this daemon's stream; the sink is never touched.
     volume_controller: str = "pa"
+    # Fix the pipeline latency to the PulseAudio buffer and take it out of
+    # every timestamp (SENDSPIN_COMPENSATE_OUTPUT_LATENCY, default on).
+    compensate_output_latency: bool = True
+    # Let pulsesink provide its audio clock so its rate can be logged
+    # (SENDSPIN_PLAYOUT_DIAG=1). The pipeline stays on the system clock.
+    playout_diag: bool = False
 
 
 class BridgeDaemon:
@@ -129,6 +142,11 @@ class BridgeDaemon:
         self._bt_manufacturer = bt_manufacturer
         self._required_lead_time_ms = required_lead_time_ms
         self._min_buffer_ms = min_buffer_ms
+        self._clock_diag_task: asyncio.Task[None] | None = None
+        self._start_timing_task: asyncio.Task[None] | None = None
+        # Largest PulseAudio sink lookahead measured at a stream start (ms).
+        self._sink_lookahead_ms: float | None = None
+        self._warned_min_latency = False
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -161,15 +179,9 @@ class BridgeDaemon:
             self._bridge_status["sendspin_client_id"] = self._identity.peer_id
         self._client = self._create_client(self._static_delay_ms)
         sink_name = self._args.sink_name or self._bluetooth_sink_name
-        self._player = StreamPlayer(
-            sink_factory=default_pulsesink_factory(
-                device=sink_name,
-                client_name=self._args.client_name,
-                buffer_time_us=max(1, int(self._args.pulse_latency_msec)) * 1000,
-                slave_method=self._args.slave_method,
-            )
-        )
+        self._player = self._new_player(sink_name)
         self._audio_handler = self._player
+        self._clock_diag_task = asyncio.create_task(self._clock_diag_loop())
         if self._scales_stream:
             self._apply_stream_volume()
         elif self._bluetooth_sink_name:
@@ -192,6 +204,13 @@ class BridgeDaemon:
             if self._delay_resync_handle is not None:
                 self._delay_resync_handle.cancel()
                 self._delay_resync_handle = None
+            for task in (self._clock_diag_task, self._start_timing_task):
+                if task is not None:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+            self._clock_diag_task = None
+            self._start_timing_task = None
             if self._pairing_window_task is not None:
                 self._pairing_window_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -352,18 +371,44 @@ class BridgeDaemon:
         self._notify()
         self._report_player_state()
 
+    def _new_player(self, sink_name: str | None) -> StreamPlayer:
+        buffer_time_us = max(1, int(self._args.pulse_latency_msec)) * 1000
+        return StreamPlayer(
+            sink_factory=default_pulsesink_factory(
+                device=sink_name,
+                client_name=self._args.client_name,
+                buffer_time_us=buffer_time_us,
+                slave_method=self._args.slave_method,
+                provide_clock=self._args.playout_diag,
+            ),
+            output_latency_ns=buffer_time_us * 1000 if self._args.compensate_output_latency else 0,
+        )
+
+    def declared_lead_time_ms(self, value_ms: float) -> float:
+        """The startup lead to declare to the server for a configured value.
+
+        A compensated chunk only has to reach PulseAudio before the sink
+        renders it: the sink's own lookahead ahead of its play time. Measured
+        on PulseAudio 17 and pipewire-pulse null sinks at buffer 200/600/800 ms,
+        a steady 60 ms lead played every chunk on time, so the configured lead
+        stands until a stream start measures a sink lookahead that, with a
+        margin, needs more. The minimum buffer is never changed.
+        """
+        lookahead = getattr(self, "_sink_lookahead_ms", None)
+        if lookahead is None or not self._args.compensate_output_latency:
+            return float(value_ms)
+        return max(float(value_ms), lookahead + _LEAD_MARGIN_MS)
+
+    def _note_sink_lookahead(self, sink_ms: float) -> None:
+        """Keep the largest sink lookahead seen this session (the lead only grows)."""
+        if self._sink_lookahead_ms is None or sink_ms > self._sink_lookahead_ms:
+            self._sink_lookahead_ms = float(sink_ms)
+
     def retarget_sink(self, sink_name: str | None) -> None:
         if self._player is None:
             return
         self._player.stop()
-        self._player = StreamPlayer(
-            sink_factory=default_pulsesink_factory(
-                device=sink_name,
-                client_name=self._args.client_name,
-                buffer_time_us=max(1, int(self._args.pulse_latency_msec)) * 1000,
-                slave_method=self._args.slave_method,
-            )
-        )
+        self._player = self._new_player(sink_name)
         self._audio_handler = self._player
         if self._scales_stream:
             self._apply_stream_volume()
@@ -397,6 +442,13 @@ class BridgeDaemon:
         self._report_player_state()
 
     # ── Client creation ──────────────────────────────────────────────────────
+
+    def _declared_lead_for_client(self) -> float:
+        lead = self.declared_lead_time_ms(getattr(self, "_required_lead_time_ms", 250.0))
+        status = getattr(self, "_bridge_status", None)
+        if status is not None:
+            status["declared_lead_time_ms"] = round(lead)
+        return lead
 
     def _create_client(self, static_delay_ms: float = 0.0):
         """Create client with bridge-specific DeviceInfo and register all listeners."""
@@ -448,7 +500,7 @@ class BridgeDaemon:
                     buffer_capacity=32_000_000,
                 ),
                 "output_delay_ms": static_delay_ms,
-                "required_lead_time_ms": getattr(self, "_required_lead_time_ms", 250.0),
+                "required_lead_time_ms": self._declared_lead_for_client(),
                 "min_buffer_ms": getattr(self, "_min_buffer_ms", 250.0),
                 "initial_volume": getattr(self, "_volume", 100),
                 "initial_muted": getattr(self, "_muted", False),
@@ -1066,7 +1118,11 @@ class BridgeDaemon:
         self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
+            generation = self._player.stream_generation
             self._player.start(PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth))
+            # A start that keeps the running output has no new start to describe.
+            if self._player.stream_generation != generation:
+                self._schedule_start_timing_line()
         self._on_stream_event("start")
 
     def _reset_decoder(
@@ -1178,6 +1234,115 @@ class BridgeDaemon:
         if self._player is None:
             return {}
         return self._player.metrics()
+
+    # ── Timing diagnostics ───────────────────────────────────────────────────
+
+    def _schedule_start_timing_line(self) -> None:
+        player = self._player
+        if player is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if self._start_timing_task is not None:
+            self._start_timing_task.cancel()
+        generation = player.stream_generation
+        self._start_timing_task = loop.create_task(self._log_stream_start_timing(generation, _START_TIMING_DELAY_S))
+
+    async def _log_stream_start_timing(self, generation: int, delay_s: float = 0.0) -> None:
+        """One INFO line per stream start with every timing term the bridge knows."""
+        import os
+
+        from sendspin_bridge.services.audio import pulse
+        from sendspin_bridge.services.audio.player.start_diag import format_stream_start_line, time_sync_summary
+
+        if delay_s:
+            await asyncio.sleep(delay_s)
+        player = self._player
+        if player is None or player.stream_generation != generation:
+            return
+        report = player.start_report()
+        if report is None:
+            return
+        try:
+            pa_latency = await pulse.apid_sink_input_latency(os.getpid())
+        except Exception as exc:
+            logger.debug("PA sink-input latency unavailable: %s", exc)
+            pa_latency = None
+        logger.info(
+            "%s",
+            format_stream_start_line(
+                report,
+                pa_latency=pa_latency,
+                time_sync=time_sync_summary(self._client),
+                output_delay_ms=self._player_delay_ms,
+            ),
+        )
+        self._check_min_latency(report)
+        if pa_latency is not None and self._args.compensate_output_latency:
+            self._raise_lead_for_lookahead(float(pa_latency["sink_ms"]))
+
+    def _check_min_latency(self, report: dict[str, Any]) -> None:
+        compensated = report.get("compensated_latency_ms")
+        min_latency = report.get("min_latency_ms")
+        if self._warned_min_latency or not compensated or min_latency is None or min_latency <= compensated:
+            return
+        self._warned_min_latency = True
+        logger.warning(
+            "The sink reports a min latency of %.1f ms, more than the %.1f ms compensated "
+            "(PULSE_LATENCY_MSEC); audio may play up to %.1f ms late. Raise PULSE_LATENCY_MSEC.",
+            min_latency,
+            compensated,
+            min_latency - compensated,
+        )
+
+    def _raise_lead_for_lookahead(self, sink_ms: float) -> None:
+        self._note_sink_lookahead(sink_ms)
+        client = self._client
+        if client is None or not hasattr(client, "set_required_lead_time_ms"):
+            return
+        lead = self.declared_lead_time_ms(self._required_lead_time_ms)
+        if lead == float(getattr(client, "required_lead_time_ms", lead)):
+            return
+        client.set_required_lead_time_ms(lead)
+        self._bridge_status["declared_lead_time_ms"] = round(lead)
+        self._notify()
+        self._report_player_state()
+        logger.info("Declared lead time raised to %.0f ms to cover the sink's %.1f ms lookahead", lead, sink_ms)
+
+    async def _clock_diag_loop(self) -> None:
+        """While playing: clock rates, DEBUG every 10 s and INFO once a minute."""
+        import time
+
+        from sendspin_bridge.services.audio.player.clock_diag import ClockDiagnostics
+
+        diag = ClockDiagnostics(audio_clock_enabled=self._args.playout_diag)
+        raw_id = getattr(time, "CLOCK_MONOTONIC_RAW", time.CLOCK_MONOTONIC)
+        while True:
+            await asyncio.sleep(_CLOCK_DIAG_INTERVAL_S)
+            player = self._player
+            if player is None or not self._bridge_status.get("audio_streaming"):
+                continue
+            try:
+                raw_a = time.clock_gettime_ns(raw_id)
+                mono = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
+                audio_ns = player.audio_clock_ns()
+                raw_b = time.clock_gettime_ns(raw_id)
+                raw_us = (raw_a + raw_b) // 2000
+                diag.sample(
+                    raw_us=raw_us,
+                    mono_us=mono // 1000,
+                    audio_ns=audio_ns,
+                    generation=player.stream_generation,
+                )
+                due = diag.due(raw_us=raw_us)
+            except Exception as exc:
+                logger.debug("Clock diag sample failed: %s", exc)
+                continue
+            if due is not None:
+                level, line = due
+                logger.log(level, "%s", line)
 
 
 def _declared_formats():

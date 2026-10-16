@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Timing diagnostics in the log, for setting beside a phone measurement:
+  every stream start logs one `Stream start timing:` line (pipeline latency,
+  PulseAudio stream latency, time sync offset and error, how early the first
+  audio arrived, output delay); every Bluetooth connect logs the speaker's
+  transport once (`BT transport …`: codec, the speaker's reported Delay or
+  "absent", Volume); while playing, a `Clock diag:` line gives the system
+  clock rate against the Sendspin clock (every 10 s at debug level, once a
+  minute at info). Settings → Audio → **Playback clock diagnostics**
+  (`PLAYOUT_DIAG`, advanced) adds the rate of the sink's own audio clock.
+
+### Fixed
+
+- Speakers played behind the schedule by the PulseAudio buffer's latency,
+  an amount that depended on `PULSE_LATENCY_MSEC` and the audio server
+  (on PulseAudio 17 about 110 ms at 200 ms, 310 ms at the default 600 ms and
+  410 ms at 800 ms; PipeWire reports other values). The bridge now fixes that
+  latency and takes it out of the schedule, so audio leaves the audio server
+  at its scheduled time whatever `PULSE_LATENCY_MSEC` is. Groups do not start
+  later: the lead time and buffer declared to Music Assistant stay as
+  configured, and the lead is raised only if a sink is measured to need more.
+  Delays tuned before this release absorbed the old offset and need tuning
+  again (lower by the `sink min` value the new start line shows). Settings →
+  Audio → **Compensate the audio buffer latency** (`COMPENSATE_OUTPUT_LATENCY`,
+  advanced, on by default) turned off restores the old timing. In Docker the
+  `SENDSPIN_COMPENSATE_OUTPUT_LATENCY` and `SENDSPIN_PLAYOUT_DIAG` environment
+  variables override both settings.
+
 ## [3.1.0-beta.6] - 2026-10-16
 
 ### Added

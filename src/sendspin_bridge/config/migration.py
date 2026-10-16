@@ -565,6 +565,8 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "EXPERIMENTAL_PA_MODULE_RELOAD",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
         "RSSI_BADGE",
+        "COMPENSATE_OUTPUT_LATENCY",
+        "PLAYOUT_DIAG",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
 
