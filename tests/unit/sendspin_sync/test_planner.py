@@ -47,6 +47,17 @@ def test_not_adjustable_and_failed_members_are_left_out_and_listed():
     assert (rows["a"].after_ms, rows["c"].after_ms) == (0, 20)  # c is 20 ms late; b unmeasured -> no normalisation
 
 
+def test_a_measured_non_adjustable_member_gets_no_row_and_does_not_block_normalisation():
+    # Every adjustable member is measured, so normalisation runs even though "cast" (measured,
+    # first in line, but without a delay) is not adjustable: it gets no row and stays unverified.
+    ms = [ok("cast", 50.0), ok("a", 0.0), ok("c", 20.0)]
+    p = planner.plan(ms, [mem("a", 100), mem("c", 100), mem("cast", adjustable=False, origin="other")])
+    rows = {r.member: r for r in p.rows}
+    assert set(rows) == {"a", "c"} and p.reference == "a"
+    assert p.unverified == ("cast",)
+    assert (rows["a"].after_ms, rows["c"].after_ms) == (0, 20)  # 100/120 shifted down to start at 0
+
+
 def test_no_normalisation_when_a_member_was_skipped():
     ms = [ok("a", 0.0), Measurement(member="b", status="skipped"), ok("c", 20.0)]
     p = planner.plan(ms, [mem("a", 100), mem("b", 100), mem("c", 100)])
