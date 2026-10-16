@@ -258,3 +258,17 @@ def test_bad_session_mfa_context_still_expires():
     with pytest.raises(UseCaseError) as exc:
         ma_auth.ha_login_mfa(MA_URL, "123456", {"code_challenge": CHALLENGE})
     assert exc.value.code == "flow_expired"
+
+
+def test_the_home_assistant_code_never_reaches_the_log(monkeypatch, caplog):
+    """The code redeems a Music Assistant session: a refused or failed exchange logs the host only."""
+    import logging
+
+    from sendspin_bridge.application.music_assistant import auth
+
+    monkeypatch.setattr(auth, "is_safe_external_url", lambda url: False)
+    with caplog.at_level(logging.DEBUG):
+        assert auth._ma_callback_exchange("http://ma.example:8095", "SECRET-HA-CODE", "STATE-123") is None
+    assert "SECRET-HA-CODE" not in caplog.text
+    assert "STATE-123" not in caplog.text
+    assert "ma.example" in caplog.text

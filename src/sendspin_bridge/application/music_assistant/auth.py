@@ -623,6 +623,12 @@ def _ha_login_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str
         return None
 
 
+def _without_query(url: str) -> str:
+    """``url`` for a log line: the query carries the Home Assistant code and the OAuth state."""
+    parts = _up.urlsplit(url)
+    return _up.urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
 def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
     """Call MA /auth/callback to exchange HA code for MA token."""
     import urllib.parse as _up
@@ -632,7 +638,7 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
             f"{ma_url}/auth/callback?code={_up.quote(code)}&state={_up.quote(oauth_state)}&provider_id=homeassistant"
         )
         if not is_safe_external_url(cb_url):
-            logger.warning("Refusing MA callback exchange: disallowed URL %s", cb_url)
+            logger.warning("Refusing MA callback exchange: disallowed URL %s", _without_query(cb_url))
             return None
         parsed_cb = _up.urlparse(cb_url)
         hostname = parsed_cb.hostname or "localhost"
@@ -653,7 +659,7 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
             conn.close()
             if ma_token:
                 return ma_token
-            logger.warning("MA callback redirect missing code: %s", location)
+            logger.warning("MA callback redirect missing code: %s", _without_query(location))
             return None
 
         body = resp.read().decode("utf-8", errors="replace")
