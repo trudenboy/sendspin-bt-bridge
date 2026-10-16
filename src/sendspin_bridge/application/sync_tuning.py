@@ -81,15 +81,16 @@ def _not_found(detail: str) -> NoReturn:
 
 
 def _control() -> GroupControl:
-    """A fresh control (its own Music Assistant connection); patched in tests."""
-    from sendspin_bridge.sync_tuning.ma_group_control import default_group_control
+    """A control over the shared, long-lived Music Assistant connection; patched in tests."""
+    from sendspin_bridge.sync_tuning.ma_group_control import shared_group_control
 
-    return default_group_control()
+    return shared_group_control()
 
 
 @contextlib.contextmanager
 def _ephemeral_control() -> Iterator[GroupControl]:
-    """A control for one request outside a session, closed afterwards; errors become problems."""
+    """A control for one request outside a session; errors become problems. Closing it at the
+    end leaves the shared connection open."""
     control: GroupControl | None = None
     try:
         control = _control()

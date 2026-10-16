@@ -196,3 +196,21 @@ def test_close_closes_the_music_assistant_connection():
     ctl.close()
     assert ma.closed == 1
     make()[0].close()  # an api without close() is fine
+
+
+def test_the_session_less_control_shares_one_connection_and_never_closes_it(monkeypatch):
+    from sendspin_bridge.sync_tuning import ma_api, ma_group_control
+
+    class Closable(FakeMa):
+        closed = 0
+
+        def close(self):
+            self.closed += 1
+
+    shared = Closable()
+    monkeypatch.setattr(ma_api, "shared_ma_api", lambda: shared)
+    a, b = ma_group_control.shared_group_control(), ma_group_control.shared_group_control()
+    assert a is not b  # per request: no member cache or solo state is shared
+    a.close()
+    b.close()
+    assert shared.closed == 0  # the connection outlives the request

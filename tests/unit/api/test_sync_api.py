@@ -539,3 +539,12 @@ def test_a_group_shows_when_each_member_was_last_measured(api_client, sync_env):
     assert store.active_for("g") is None
     listed = api_client.get("/api/v1/sync/groups").json()[0]["members"]
     assert {m["ma_player_id"]: m["last_measured_at"] for m in listed}["a"] == during["a"]  # kept after the session
+
+
+def test_session_less_requests_use_the_shared_music_assistant_connection(monkeypatch):
+    from sendspin_bridge.application import sync_tuning as uc
+    from sendspin_bridge.sync_tuning import ma_api
+
+    sentinel = object()
+    monkeypatch.setattr(ma_api, "shared_ma_api", lambda: sentinel)
+    assert uc._control()._api is sentinel and uc._control()._api is sentinel

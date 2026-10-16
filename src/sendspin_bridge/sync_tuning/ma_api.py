@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import threading
 from typing import TYPE_CHECKING, Any, Protocol
 
 from sendspin_bridge.application.errors import UseCaseError
@@ -110,6 +111,7 @@ class MaWsApi:
     """
 
     def __init__(self, url: str, token: str, *, fire_window: float = _FIRE_WINDOW_S) -> None:
+        self.credentials = (url, token)  # as given, to tell whether the configured ones changed
         url = url.strip()
         self._url = url if "://" in url else f"http://{url}"
         self._token = token
@@ -195,14 +197,14 @@ class MaWsApi:
         except Exception as exc:
             raise _classify(exc) from exc
 
+    async def aclose(self) -> None:
+        """Disconnect and stop the listener; run on the bridge loop."""
+        async with self._lock:
+            await self._drop()
+
     def close(self) -> None:
         """Disconnect and stop the listener (scheduled on the bridge loop; not waited for)."""
-
-        async def _close() -> None:
-            async with self._lock:
-                await self._drop()
-
-        submit_on_loop(_close(), description="MA close")
+        submit_on_loop(self.aclose(), description="MA close")
 
 
 def ma_api_from_config() -> MaWsApi:
@@ -210,3 +212,50 @@ def ma_api_from_config() -> MaWsApi:
     if not url or not token:
         raise MaApiError("ma_unavailable", "Music Assistant is not connected")
     return MaWsApi(url, token)
+
+
+# -- one long-lived connection for requests outside a session ------------------------------
+
+_shared_lock = threading.Lock()
+_shared: MaWsApi | None = None
+
+
+def shared_ma_api() -> MaWsApi:
+    """The connection session-less requests share (group lists, manual writes, profiles).
+
+    Built on first use and kept open (it reconnects lazily when MA drops it); replaced, and
+    the old one closed, when the configured credentials change. Sessions keep their own.
+    """
+    global _shared
+    url, token = get_ma_api_credentials()
+    if not url or not token:
+        raise MaApiError("ma_unavailable", "Music Assistant is not connected")
+    with _shared_lock:
+        old = _shared
+        if old is not None and old.credentials == (url, token):
+            return old
+        _shared = api = MaWsApi(url, token)
+    if old is not None:
+        old.close()
+    return api
+
+
+def _take_shared() -> MaWsApi | None:
+    global _shared
+    with _shared_lock:
+        api, _shared = _shared, None
+    return api
+
+
+def close_shared_ma_api() -> None:
+    """Close the shared connection (scheduled on the bridge loop); the next request opens a new one."""
+    api = _take_shared()
+    if api is not None:
+        api.close()
+
+
+async def aclose_shared_ma_api() -> None:
+    """Close the shared connection and wait for it; the bridge's shutdown awaits this on its loop."""
+    api = _take_shared()
+    if api is not None:
+        await api.aclose()

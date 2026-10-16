@@ -252,3 +252,46 @@ def test_from_config_requires_credentials(monkeypatch):
     assert exc.value.code == "ma_unavailable"
     monkeypatch.setattr(ma_api, "get_ma_api_credentials", lambda: ("http://ma:8095", "t"))
     assert isinstance(ma_api.ma_api_from_config(), MaWsApi)
+
+
+@pytest.fixture
+def shared_reset():
+    yield
+    ma_api._shared = None
+
+
+def test_the_shared_api_keeps_one_connection_across_requests(bridge_loop, server, monkeypatch, shared_reset):
+    monkeypatch.setattr(ma_api, "get_ma_api_credentials", lambda: ("http://ma:8095", "tok"))
+    first = ma_api.shared_ma_api()
+    first.call("players/get", {"player_id": "a"})
+    second = ma_api.shared_ma_api()
+    second.call("players/get", {"player_id": "b"})
+    assert first is second and len(server.connections) == 1
+    listener = first._listener
+    monkeypatch.setattr(ma_api, "get_ma_api_credentials", lambda: ("http://ma:8095", "new-token"))
+    third = ma_api.shared_ma_api()  # new credentials: a new client, the old one is closed
+    assert third is not first
+    assert _wait_until(listener.done)
+    third.call("players/get", {"player_id": "c"})
+    assert len(server.connections) == 2 and server.live.auth_token == "new-token"
+    listener = third._listener
+    ma_api.close_shared_ma_api()
+    assert _wait_until(listener.done) and not server.live.connected
+    assert ma_api.shared_ma_api() is not third
+
+
+def test_the_shared_api_needs_credentials(monkeypatch, shared_reset):
+    monkeypatch.setattr(ma_api, "get_ma_api_credentials", lambda: ("http://ma:8095", ""))
+    with pytest.raises(MaApiError) as exc:
+        ma_api.shared_ma_api()
+    assert exc.value.code == "ma_unavailable"
+
+
+def test_the_shared_api_is_closed_and_awaited_at_shutdown(bridge_loop, server, monkeypatch, shared_reset):
+    monkeypatch.setattr(ma_api, "get_ma_api_credentials", lambda: ("http://ma:8095", "tok"))
+    api = ma_api.shared_ma_api()
+    api.call("players/get", {"player_id": "a"})
+    listener = api._listener
+    asyncio.run_coroutine_threadsafe(ma_api.aclose_shared_ma_api(), bridge_loop).result(timeout=5)
+    assert listener.done() and not server.live.connected  # done when the coroutine returns
+    asyncio.run_coroutine_threadsafe(ma_api.aclose_shared_ma_api(), bridge_loop).result(timeout=5)  # idempotent

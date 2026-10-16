@@ -103,8 +103,10 @@ class MaGroupControl:
         solo: SoloStrategy,
         groups: Callable[[], list[dict[str, Any]]] = get_ma_groups,
         bridge_player_ids: Callable[[], set[str]] = _bridge_ids,
+        owns_api: bool = True,
     ) -> None:
         self._api = api
+        self._owns_api = owns_api
         self._signal = signal
         self._solo = solo
         self._groups = groups
@@ -245,7 +247,10 @@ class MaGroupControl:
             raise _wrap(exc) from exc
 
     def close(self) -> None:
-        """Release the Music Assistant connection this control owns (the session store calls it)."""
+        """Release the Music Assistant connection this control owns (the session store calls it);
+        a control over the shared connection leaves it open."""
+        if not self._owns_api:
+            return
         close = getattr(self._api, "close", None)
         if callable(close):
             close()
@@ -262,3 +267,15 @@ def default_group_control() -> MaGroupControl:
 
     api = ma_api_from_config()
     return MaGroupControl(api, signal=AnnouncementSignal(api), solo=MaMuteSolo(api))
+
+
+def shared_group_control() -> MaGroupControl:
+    """A control for one request outside a session, over the long-lived shared connection.
+
+    Built per request (its member cache and solo memory are not shared); ``close()`` leaves
+    the connection open for the next request.
+    """
+    from sendspin_bridge.sync_tuning import ma_api
+
+    api = ma_api.shared_ma_api()
+    return MaGroupControl(api, signal=AnnouncementSignal(api), solo=MaMuteSolo(api), owns_api=False)

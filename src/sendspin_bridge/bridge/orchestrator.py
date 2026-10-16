@@ -602,8 +602,9 @@ class BridgeOrchestrator:
 
         Runs on a daemon thread, not the executor: the executor's threads are joined at
         interpreter exit, so an abandoned attempt there would still hold the process.
+        Then closes the shared Music Assistant connection the session-less sync requests use.
         """
-        from sendspin_bridge.sync_tuning import session_store
+        from sendspin_bridge.sync_tuning import ma_api, session_store
 
         loop = asyncio.get_running_loop()
         finished = asyncio.Event()
@@ -622,6 +623,10 @@ class BridgeOrchestrator:
             await asyncio.wait_for(finished.wait(), timeout=_SYNC_SHUTDOWN_TIMEOUT_S)
         except TimeoutError:
             logger.warning("Group sync-tuning sessions did not end in time; the next start restores them")
+        try:
+            await asyncio.wait_for(ma_api.aclose_shared_ma_api(), timeout=_SYNC_SHUTDOWN_TIMEOUT_S)
+        except Exception:
+            logger.debug("Closing the shared Music Assistant connection failed", exc_info=True)
 
     async def initialize_ma_integration(
         self,

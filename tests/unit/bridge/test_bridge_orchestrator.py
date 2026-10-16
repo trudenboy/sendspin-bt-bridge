@@ -1306,3 +1306,22 @@ def test_load_sync_tuning_registers_the_persisted_restores(monkeypatch):
 
     monkeypatch.setattr(session_store, "get_store", boom)
     BridgeOrchestrator().load_sync_tuning()  # logged, never breaks startup
+
+
+@pytest.mark.asyncio
+async def test_shutdown_closes_the_shared_music_assistant_connection_after_the_sessions(monkeypatch):
+    from sendspin_bridge.sync_tuning import ma_api, session_store
+
+    order: list[str] = []
+    monkeypatch.setattr(session_store, "shutdown_store", lambda: order.append("sync"))
+
+    async def aclose():
+        order.append("shared")
+
+    monkeypatch.setattr(ma_api, "aclose_shared_ma_api", aclose)
+
+    async def no_mute(_sink, _flag):
+        return False
+
+    await BridgeOrchestrator(lifecycle_state=RecordingLifecycleState()).graceful_shutdown(clients=[], mute_sink=no_mute)
+    assert order == ["sync", "shared"]
