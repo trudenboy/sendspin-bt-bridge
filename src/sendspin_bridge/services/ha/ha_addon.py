@@ -9,7 +9,10 @@ import os
 import time
 import urllib.request as _ur
 from datetime import UTC, datetime
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -536,6 +539,8 @@ class MaAddonLookup(NamedTuple):
 
     info: dict[str, Any] | None
     reason: str = ""
+    #: Which rule accepted the add-on, for the log.
+    rule: str = ""
 
 
 def _started_ma_candidates() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
@@ -557,51 +562,178 @@ def _started_ma_candidates() -> tuple[list[dict[str, Any]], list[dict[str, Any]]
     return official, others, rows
 
 
+def _opted_in_slug() -> str:
+    """``MA_ADDON_SLUG``: the admin's explicit choice of a Music Assistant add-on."""
+    try:
+        from sendspin_bridge.config import load_config
+
+        return str(load_config().get("MA_ADDON_SLUG") or "").strip()
+    except Exception as exc:
+        logger.debug("MA_ADDON_SLUG unavailable: %s", exc)
+        return ""
+
+
+def _trust_rule(info: dict[str, Any], opted_in: str) -> str:
+    """Why a non-official add-on may be trusted, from facts the Supervisor sets ("" = none).
+
+    Slug and name text are the author's choice and prove nothing.  The
+    Supervisor's ``repository`` is ``local`` only for an add-on an admin placed
+    in the host's ``/addons`` folder; any other repository needs the admin to
+    name the slug in ``MA_ADDON_SLUG``.
+    """
+    if str(info.get("repository") or "").lower() == "local":
+        return "local repository"
+    if opted_in and str(info.get("slug") or "") == opted_in:
+        return "MA_ADDON_SLUG"
+    return ""
+
+
+def _resolve_host(host: str) -> set[str]:
+    """The IP addresses *host* resolves to (itself when it is one)."""
+    import ipaddress
+    import socket
+
+    try:
+        return {str(ipaddress.ip_address(host))}
+    except ValueError:
+        pass
+    try:
+        return {str(row[4][0]) for row in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)}
+    except OSError as exc:
+        logger.debug("Could not resolve %s: %s", host, exc)
+        return set()
+
+
+def host_addresses() -> set[str]:
+    """The HA host's own addresses: the Supervisor network gateway and every interface address."""
+    payload = _get_supervisor_payload("/network/info")
+    data = (payload or {}).get("data")
+    if not isinstance(data, dict):
+        return set()
+    found: set[str] = set()
+    docker = data.get("docker")
+    if isinstance(docker, dict) and docker.get("gateway"):
+        found.add(str(docker["gateway"]))
+    for interface in data.get("interfaces") or []:
+        if not isinstance(interface, dict):
+            continue
+        for family in ("ipv4", "ipv6"):
+            config = interface.get(family)
+            if not isinstance(config, dict):
+                continue
+            for key in ("address", "addresses"):
+                for address in config.get(key) or []:
+                    found.add(str(address).split("/", 1)[0])
+    return found
+
+
+def _exposed_ports(info: dict[str, Any]) -> tuple[set[int], set[int]]:
+    """(container ports, host-published ports) from the add-on's ``network`` map."""
+    container: set[int] = set()
+    published: set[int] = set()
+    network = info.get("network")
+    if isinstance(network, dict):
+        for key, value in network.items():
+            with contextlib.suppress(TypeError, ValueError):
+                container.add(int(str(key).split("/", 1)[0]))
+            with contextlib.suppress(TypeError, ValueError):
+                if value is not None:
+                    published.add(int(value))
+    return container, published
+
+
+def _address_matches(info: dict[str, Any], ma_url: str, host_ips: Callable[[], set[str]]) -> bool:
+    """Whether *ma_url* is an address of this add-on, judged by Supervisor facts only.
+
+    A host-network add-on: the URL's host is the HA host (Supervisor gateway or
+    a host interface address) and its port is Music Assistant's.  A bridged
+    add-on: the URL's host is the add-on's hostname or IP with a port it
+    exposes, or the HA host with a port it publishes there.
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(ma_url.strip())
+        host = (parsed.hostname or "").lower()
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if not host:
+        return False
+    resolved = _resolve_host(host)
+    if info.get("host_network"):
+        return port == MA_DEFAULT_PORT and bool(resolved & host_ips())
+    container, published = _exposed_ports(info)
+    own = {str(info.get("hostname") or "").lower(), str(info.get("ip_address") or "")} - {""}
+    if (host in own or resolved & own) and port in container:
+        return True
+    return port in published and bool(resolved & host_ips())
+
+
 def _choose(official: list[dict], others: list[dict], ma_url: str) -> MaAddonLookup:
     """Pick the add-on that is the MA behind *ma_url*, or refuse.
 
     The official repository's add-ons are trusted outright.  Any other add-on
-    only *says* it is Music Assistant (its author picks slug and name), so it
-    receives a user's ingress session or identity only once it has proved to be
-    the Music Assistant *ma_url* reaches: the ``server_id`` its own address
-    reports equals the one ``ma_url`` reports, and no other candidate reports
-    it too (a look-alike echoing the real ``/info`` makes a tie, which is refused).
+    is used only when all of this holds, so it can't be handed a user's
+    ingress session or identity by naming itself "Music Assistant" or by
+    echoing the real server's public ``/info``:
+
+    - a Supervisor fact vouches for it (``repository: local``, or the admin's
+      ``MA_ADDON_SLUG``);
+    - *ma_url* is one of its addresses (``_address_matches``);
+    - it is the only such add-on;
+    - its ``server_id`` does not contradict *ma_url*'s (checked, never sufficient).
     """
     target = ma_server_id(ma_url) if ma_url else None
-    ids = {c["slug"]: _addon_server_id(c) for c in official + others} if target else {}
 
-    if target:
-        for candidate in official:
-            if ids.get(candidate["slug"]) == target:
-                return MaAddonLookup(candidate)
-        matching = [c for c in others if ids.get(c["slug"]) == target]
-        if len(matching) == 1:
-            return MaAddonLookup(matching[0])
-        if len(matching) > 1:
-            return MaAddonLookup(
-                None,
-                "Several add-ons claim to be the Music Assistant at "
-                f"{ma_url}: {describe_addons(matching, with_state=False)}; refusing to pick one",
-            )
-        # Official add-on that couldn't be reached to compare: still the official one.
-        unproven = [c for c in official if ids.get(c["slug"]) is None]
-        if unproven:
-            return MaAddonLookup(unproven[0])
+    for candidate in official:
+        if not target or _addon_server_id(candidate) in (None, target):
+            return MaAddonLookup(candidate, rule="official repository")
+
+    if not others:
         return MaAddonLookup(
             None,
-            f"None of the Music Assistant add-ons is the server at {ma_url} "
-            f"({describe_addons(official + others, with_state=False)}); "
-            "set the Music Assistant URL to the add-on you use",
+            f"The Music Assistant add-on is not the server at {ma_url} "
+            f"({describe_addons(official, with_state=False)}); set the Music Assistant URL to the add-on you use",
+        )
+    if not ma_url:
+        return MaAddonLookup(
+            None,
+            "Can't confirm which add-on is Music Assistant without its address: "
+            f"{describe_addons(others, with_state=False)}; set the Music Assistant URL",
         )
 
-    if official:
-        return MaAddonLookup(official[0])
-    why = "its address is unknown or did not answer" if not ma_url else f"{ma_url} did not answer"
-    return MaAddonLookup(
-        None,
-        f"Can't confirm which add-on is Music Assistant ({why}): "
-        f"{describe_addons(others, with_state=False)}; set the Music Assistant URL to the add-on you use",
-    )
+    opted_in = _opted_in_slug()
+    trusted = [(c, rule) for c in others if (rule := _trust_rule(c, opted_in))]
+    untrusted = [c for c in others if not _trust_rule(c, opted_in)]
+    cached_ips: list[set[str]] = []
+
+    def host_ips() -> set[str]:
+        if not cached_ips:
+            cached_ips.append(host_addresses())
+        return cached_ips[0]
+
+    matching = [(c, rule) for c, rule in trusted if _address_matches(c, ma_url, host_ips)]
+    if target:
+        matching = [(c, rule) for c, rule in matching if _addon_server_id(c) in (None, target)]
+    if len(matching) == 1:
+        candidate, rule = matching[0]
+        return MaAddonLookup(candidate, rule=f"{rule}, at {ma_url}")
+    if len(matching) > 1:
+        return MaAddonLookup(
+            None,
+            f"Several Music Assistant add-ons are at {ma_url}: "
+            f"{describe_addons([c for c, _r in matching], with_state=False)}; refusing to pick one",
+        )
+    parts = []
+    if trusted:
+        parts.append(f"not at {ma_url}: {describe_addons([c for c, _r in trusted], with_state=False)}")
+    if untrusted:
+        parts.append(
+            "not from a local repository and not named in MA_ADDON_SLUG: "
+            f"{describe_addons(untrusted, with_state=False)}"
+        )
+    return MaAddonLookup(None, "No Music Assistant add-on can be trusted (" + "; ".join(parts) + ")")
 
 
 def resolve_ma_addon(ma_url: str = "") -> MaAddonLookup:
@@ -640,7 +772,9 @@ def resolve_ma_addon(ma_url: str = "") -> MaAddonLookup:
         _ma_addon_not_found[key] = (time.monotonic(), result.reason)
         return result
     slug = str(result.info["slug"])
-    logger.info("Using Music Assistant add-on '%s' (%s)", slug, result.info.get("name") or "?")
+    logger.info(
+        "Using Music Assistant add-on '%s' (%s): %s", slug, result.info.get("name") or "?", result.rule or "remembered"
+    )
     _ma_addon_slug_cache[key] = slug
     _ma_addon_not_found.pop(key, None)
     return result
@@ -697,7 +831,8 @@ def get_ma_addon_discovery_candidates() -> list[dict[str, str]]:
 
     if os.environ.get("SUPERVISOR_TOKEN", "").strip():
         official, others, _rows = _started_ma_candidates()
-        addons = official or (others if len(others) == 1 else [])
+        opted_in = _opted_in_slug()
+        addons = official or (others if len(others) == 1 and _trust_rule(others[0], opted_in) else [])
         for addon in addons:
             hostname = str(addon.get("hostname") or "").strip()
             if hostname:

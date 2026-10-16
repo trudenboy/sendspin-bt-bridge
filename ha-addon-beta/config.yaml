@@ -59,6 +59,7 @@ options:
   ma_api_url: ""
   ma_api_token: ""
   ma_auto_silent_auth: true
+  ma_addon_slug: ""
   bluetooth_adapters: []
   ha_integration:
     enabled: false
@@ -90,6 +91,7 @@ schema:
   ma_api_url: str?
   ma_api_token: str?
   ma_auto_silent_auth: bool?
+  ma_addon_slug: str?
   bluetooth_adapters:
     - id: str
       mac: str?

@@ -1089,6 +1089,19 @@
             "description": "MA OAuth access token. Managed by the application.",
             "title": "Ma Access Token"
           },
+          "MA_ADDON_SLUG": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "",
+            "description": "HA add-on mode: slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need no entry).",
+            "title": "Ma Addon Slug"
+          },
           "MA_API_TOKEN": {
             "anyOf": [
               {

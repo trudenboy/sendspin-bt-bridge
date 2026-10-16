@@ -194,6 +194,7 @@ Core addon options include:
 | **auth_enabled** | Direct-listener auth toggle; HA addon mode still enforces HA auth regardless |
 | **ma_api_url / ma_api_token** | Music Assistant REST integration |
 | **ma_auto_silent_auth** | Allow addon/Ingress pages to try silent HA-backed MA token creation on open |
+| **ma_addon_slug** | Slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need none) |
 | **volume_via_ma / mute_via_ma** | Route controls through MA to keep UI state aligned |
 | **update_channel** | In-app release-lane preference for update checks and warnings |
 | **log_level** | Base logging verbosity |
@@ -271,6 +272,7 @@ Use device-level overrides when:
 | `MA_API_TOKEN` | string | Music Assistant API token |
 | `MA_USERNAME` | string | Username last used for a successful MA connection flow |
 | `MA_AUTO_SILENT_AUTH` | boolean | Allow addon/Ingress pages to try silent HA-backed MA token creation on open |
+| `MA_ADDON_SLUG` | string | Slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need none) |
 | `MA_WEBSOCKET_MONITOR` | boolean | Live queue/now-playing monitor |
 | `VOLUME_VIA_MA` | boolean | Route volume changes through MA |
 | `MUTE_VIA_MA` | boolean | Route mute changes through MA |

@@ -150,3 +150,24 @@ describe('useMaAutoConnect retries', () => {
     expect(useMaStore().autoConnectFailed).toBe(true)
   })
 })
+
+describe('useMaAutoConnect turned off', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.appendChild(haElement)
+  })
+  afterEach(() => haElement.remove())
+
+  it('shows no failure when the admin turned automatic sign-in off', async () => {
+    const { ApiError } = await import('@/api/client')
+    vi.mocked(api.silentAuth).mockRejectedValueOnce(
+      new ApiError({ status: 403, code: 'silent_auth_disabled', title: 'off', detail: 'off' } as never),
+    )
+    useBridgeStore().snapshot = status(false)
+    useMaAutoConnect()
+    await settle()
+
+    expect(useMaStore().autoConnectFailed).toBe(false)
+  })
+})

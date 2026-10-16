@@ -825,6 +825,10 @@
         "label": "Renew sign-in automatically",
         "help": "Refresh the Music Assistant sign-in in the background when it expires."
       },
+      "MA_ADDON_SLUG": {
+        "label": "Music Assistant add-on from another repository",
+        "help": "Home Assistant add-on only. Leave empty for the official Music Assistant add-on or one in the local add-on folder. For one from another repository, enter its slug so the bridge may sign in through it."
+      },
       "DUPLICATE_DEVICE_CHECK": {
         "label": "Warn about speakers on other bridges",
         "help": "Ask Music Assistant whether another bridge already serves the same speaker."

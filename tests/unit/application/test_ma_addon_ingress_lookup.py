@@ -66,6 +66,9 @@ def _ma_addon(slug: str = LOCAL_SLUG, name: str = "Music Assistant (dev)", state
         "slug": slug,
         "name": name,
         "state": state,
+        "repository": slug.split("_", 1)[0],
+        "host_network": True,
+        "ip_address": "172.30.32.1",
         "hostname": slug.replace("_", "-"),
         "ingress": True,
         "ingress_port": 8094,
@@ -81,6 +84,13 @@ def _bridge_is_an_add_on(monkeypatch, addons: list[dict], server_ids: dict[str, 
     def supervisor(path: str, timeout: float = 5.0):
         if path == "/supervisor/info":
             return {"data": {"addons": [{k: a[k] for k in ("slug", "name", "state")} for a in addons]}}
+        if path == "/network/info":
+            return {
+                "data": {
+                    "interfaces": [{"ipv4": {"address": ["192.168.10.10/24"]}}],
+                    "docker": {"gateway": "172.30.32.1"},
+                }
+            }
         if path.startswith("/addons/") and path.endswith("/info"):
             info = by_slug.get(path[len("/addons/") : -len("/info")])
             return {"data": dict(info)} if info else None
@@ -88,6 +98,7 @@ def _bridge_is_an_add_on(monkeypatch, addons: list[dict], server_ids: dict[str, 
 
     monkeypatch.setattr(ha_addon, "_get_supervisor_payload", supervisor)
     monkeypatch.setattr(ha_addon, "ma_server_id", lambda url, timeout=5.0: server_ids.get(url.rstrip("/")))
+    monkeypatch.setattr(ha_addon, "_resolve_host", lambda host: {host})
 
 
 def _token_response(token: str = "ma_long_lived_token"):
@@ -241,3 +252,14 @@ def test_in_the_add_on_the_error_points_to_the_automatic_sign_in(_addon, _oauth,
         ma_auth.ha_login_start("http://ma:8095", "user", "pass")
 
     assert "Home Assistant sidebar" in (err.value.detail or "")
+
+
+@patch.object(ma_auth, "_get_ha_user_via_ws")
+def test_automatic_sign_in_respects_ma_auto_silent_auth(mock_user, tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({"MA_AUTO_SILENT_AUTH": False}))
+
+    with pytest.raises(UseCaseError) as err:
+        ma_auth.ha_silent_auth("ha-token", MA_URL)
+
+    assert err.value.status == 403
+    mock_user.assert_not_called()

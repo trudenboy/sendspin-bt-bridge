@@ -2,13 +2,16 @@
 
 A Music Assistant add-on installed from a local or custom repository gets a
 slug the bridge can't know in advance (``local_music_assistant_dev_local`` on a
-real install), so the bridge lists the installed add-ons.  Slug and name are
-chosen by the add-on's author, so a non-official add-on is trusted only once it
-proves to be the Music Assistant the bridge's MA URL reaches.
+real install), so the bridge lists the installed add-ons.  Slug, name and the
+public ``/info`` are all the add-on author's to choose, so a non-official
+add-on is trusted only on facts the Supervisor sets: it comes from the local
+repository (or the admin named it in ``MA_ADDON_SLUG``), and the configured MA
+URL is one of its addresses.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 
 import pytest
@@ -16,15 +19,21 @@ import pytest
 from sendspin_bridge.services.ha import ha_addon
 
 LOCAL = "local_music_assistant_dev_local"
-MA_URL = "http://192.168.10.10:8095"
+LAN_IP = "192.168.10.10"
+MA_URL = f"http://{LAN_IP}:8095"
 
 
 def _addon(slug: str, name: str, state: str = "started", **extra) -> dict:
+    repository = slug.split("_", 1)[0] if "_" in slug else "local"
     info = {
         "slug": slug,
         "name": name,
         "state": state,
+        "repository": repository,
         "hostname": slug.replace("_", "-"),
+        "ip_address": "172.30.33.5",
+        "host_network": False,
+        "network": {},
         "ingress": True,
         "ingress_port": 8094,
         "ingress_url": f"/api/hassio_ingress/{slug}-token/",
@@ -33,11 +42,16 @@ def _addon(slug: str, name: str, state: str = "started", **extra) -> dict:
     return info
 
 
+def _host_ma(slug: str = LOCAL, name: str = "Music Assistant (dev)", **extra) -> dict:
+    """Music Assistant as its add-on runs it: on the host network."""
+    return _addon(slug, name, host_network=True, ip_address="172.30.32.1", **extra)
+
+
 class FakeSupervisor:
     """The Supervisor API as an add-on with ``hassio_role: default`` sees it.
 
-    That role may read ``/<anything>/info`` (so ``/supervisor/info`` with its
-    add-on list, and ``/addons/<slug>/info``) but not ``GET /addons``.
+    That role may read ``/<anything>/info`` (``/supervisor/info`` with its
+    add-on list, ``/network/info``, ``/addons/<slug>/info``) but not ``GET /addons``.
     """
 
     def __init__(self, addons: list[dict]):
@@ -47,13 +61,17 @@ class FakeSupervisor:
     def __call__(self, path: str, timeout: float = 5.0):
         self.calls.append(path)
         if path == "/supervisor/info":
+            rows = [
+                {k: a[k] for k in ("slug", "name", "state", "repository")}
+                for a in sorted(self.addons.values(), key=lambda a: a["slug"])
+            ]
+            return {"result": "ok", "data": {"addons": rows}}
+        if path == "/network/info":
             return {
                 "result": "ok",
                 "data": {
-                    "addons": [
-                        {"slug": a["slug"], "name": a["name"], "state": a["state"], "repository": "x"}
-                        for a in sorted(self.addons.values(), key=lambda a: a["slug"])
-                    ]
+                    "interfaces": [{"interface": "enp0s18", "ipv4": {"address": [f"{LAN_IP}/24"]}}],
+                    "docker": {"interface": "hassio", "address": "172.30.32.0/23", "gateway": "172.30.32.1"},
                 },
             }
         if path.startswith("/addons/") and path.endswith("/info"):
@@ -64,134 +82,133 @@ class FakeSupervisor:
         return None  # 403 for the role: GET /addons etc.
 
 
-class FakeMaNetwork:
-    """``GET <url>/info`` → ``server_id`` for whatever answers at that address."""
-
-    def __init__(self, ids: dict[str, str]):
-        self.ids = ids
-
-    def __call__(self, base_url: str, timeout: float = 5.0):
-        return self.ids.get(base_url.rstrip("/"))
-
-
 @pytest.fixture(autouse=True)
-def _supervisor_env(monkeypatch):
+def _supervisor_env(monkeypatch, tmp_path):
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({}))
     monkeypatch.setenv("SUPERVISOR_TOKEN", "bridge-supervisor-token")
+    # Fake DNS: the HA host's name resolves to its LAN address.
+    dns = {"homeassistant.local": {LAN_IP}}
+    monkeypatch.setattr(ha_addon, "_resolve_host", lambda host: {host} if host[0].isdigit() else dns.get(host, set()))
     ha_addon.reset_ma_addon_cache()
     yield
     ha_addon.reset_ma_addon_cache()
 
 
 def _install(monkeypatch, addons: list[dict], ids: dict[str, str] | None = None) -> FakeSupervisor:
+    """The Supervisor, plus what answers ``GET <url>/info`` with which ``server_id``."""
     fake = FakeSupervisor(addons)
+    known = ids or {}
     monkeypatch.setattr(ha_addon, "_get_supervisor_payload", fake)
-    monkeypatch.setattr(ha_addon, "ma_server_id", FakeMaNetwork(ids or {}))
+    monkeypatch.setattr(ha_addon, "ma_server_id", lambda url, timeout=5.0: known.get(url.rstrip("/")))
     return fake
 
 
-def test_finds_ma_installed_from_a_local_repository(monkeypatch, caplog):
+def _opt_in(tmp_path, slug: str) -> None:
+    (tmp_path / "config.json").write_text(json.dumps({"MA_ADDON_SLUG": slug}))
+
+
+@pytest.mark.parametrize("ma_url", [MA_URL, "http://homeassistant.local:8095"])
+def test_local_host_network_ma_is_used(monkeypatch, caplog, ma_url):
+    _install(monkeypatch, [_addon("core_mosquitto", "Mosquitto broker"), _host_ma()])
+
+    with caplog.at_level(logging.INFO, logger=ha_addon.__name__):
+        info = ha_addon.find_ma_addon_info(ma_url)
+
+    assert info is not None and info["slug"] == LOCAL
+    assert "local repository" in caplog.text
+
+
+def test_local_bridged_ma_is_used_at_its_hostname(monkeypatch):
+    _install(monkeypatch, [_addon(LOCAL, "Music Assistant (dev)", network={"8095/tcp": None})])
+    url = "http://local-music-assistant-dev-local:8095"
+
+    assert ha_addon.get_ma_addon_internal_ingress_url(url) == "http://local-music-assistant-dev-local:8094"
+
+
+def test_local_ma_on_another_port_is_not_the_one(monkeypatch):
+    _install(monkeypatch, [_host_ma()])
+
+    lookup = ha_addon.resolve_ma_addon(f"http://{LAN_IP}:9000")
+
+    assert lookup.info is None
+    assert LOCAL in lookup.reason
+
+
+def test_lone_custom_repository_look_alike_echoing_info_is_refused(monkeypatch):
+    """Named "Music Assistant", on the host network, and proxying the real /info:
+    still nothing the Supervisor vouches for."""
+    fake = _host_ma("abcd1234_music_assistant", "Music Assistant")
     _install(
         monkeypatch,
-        [_addon("core_mosquitto", "Mosquitto broker"), _addon(LOCAL, "Music Assistant (dev)", host_network=True)],
-        {MA_URL: "srv-1", "http://local-music-assistant-dev-local:8095": "srv-1"},
+        [fake],
+        {MA_URL: "srv-real", "http://abcd1234-music-assistant:8095": "srv-real"},
     )
+
+    lookup = ha_addon.resolve_ma_addon(MA_URL)
+
+    assert lookup.info is None
+    assert "abcd1234_music_assistant" in lookup.reason and "MA_ADDON_SLUG" in lookup.reason
+
+
+def test_opted_in_custom_repository_add_on_is_used_at_its_address(monkeypatch, tmp_path, caplog):
+    _opt_in(tmp_path, "abcd1234_music_assistant")
+    _install(monkeypatch, [_host_ma("abcd1234_music_assistant", "Music Assistant")])
 
     with caplog.at_level(logging.INFO, logger=ha_addon.__name__):
         info = ha_addon.find_ma_addon_info(MA_URL)
 
-    assert info is not None and info["slug"] == LOCAL
-    assert LOCAL in caplog.text
+    assert info is not None and info["slug"] == "abcd1234_music_assistant"
+    assert "MA_ADDON_SLUG" in caplog.text
 
 
-def test_ingress_url_of_a_local_ma_addon(monkeypatch):
-    _install(
-        monkeypatch,
-        [_addon(LOCAL, "Music Assistant (dev)")],
-        {MA_URL: "srv-1", "http://local-music-assistant-dev-local:8095": "srv-1"},
-    )
+def test_opted_in_add_on_must_still_be_at_the_ma_url(monkeypatch, tmp_path):
+    _opt_in(tmp_path, "abcd1234_music_assistant")
+    _install(monkeypatch, [_addon("abcd1234_music_assistant", "Music Assistant", network={"8095/tcp": None})])
 
-    assert ha_addon.get_ma_addon_internal_ingress_url(MA_URL) == "http://local-music-assistant-dev-local:8094"
+    lookup = ha_addon.resolve_ma_addon(MA_URL)  # the host's address, but this add-on isn't on the host network
 
-
-def test_finds_ma_by_its_name_when_the_slug_says_nothing(monkeypatch):
-    # Answers only on its ingress port.
-    _install(
-        monkeypatch,
-        [_addon("a1b2c3d4_mass", "Music Assistant Server")],
-        {MA_URL: "srv-1", "http://a1b2c3d4-mass:8094": "srv-1"},
-    )
-
-    info = ha_addon.find_ma_addon_info(MA_URL)
-
-    assert info is not None and info["slug"] == "a1b2c3d4_mass"
+    assert lookup.info is None
 
 
-def test_skips_a_stopped_ma_addon(monkeypatch):
-    _install(
-        monkeypatch,
-        [
-            _addon("d5369777_music_assistant", "Music Assistant", state="stopped"),
-            _addon(LOCAL, "Music Assistant (dev)"),
-        ],
-        {MA_URL: "srv-1", "http://local-music-assistant-dev-local:8095": "srv-1"},
-    )
-
-    info = ha_addon.find_ma_addon_info(MA_URL)
-
-    assert info is not None and info["slug"] == LOCAL
-
-
-def test_refuses_a_look_alike_that_is_another_server(monkeypatch):
-    """An add-on named like MA that sorts first is not the MA the bridge uses."""
-    _install(
-        monkeypatch,
-        [_addon("abcd1234_music_assistant_fake", "Music Assistant"), _addon(LOCAL, "Music Assistant (dev)")],
-        {
-            MA_URL: "srv-real",
-            "http://abcd1234-music-assistant-fake:8095": "srv-fake",
-            "http://local-music-assistant-dev-local:8095": "srv-real",
-        },
-    )
-
-    info = ha_addon.find_ma_addon_info(MA_URL)
-
-    assert info is not None and info["slug"] == LOCAL
-
-
-def test_refuses_a_look_alike_when_it_is_the_only_candidate(monkeypatch):
-    _install(
-        monkeypatch,
-        [_addon("abcd1234_music_assistant_fake", "Music Assistant")],
-        {MA_URL: "srv-real", "http://abcd1234-music-assistant-fake:8095": "srv-fake"},
-    )
+def test_two_local_host_network_candidates_are_refused(monkeypatch):
+    _install(monkeypatch, [_host_ma(), _host_ma("local_music_assistant", "Music Assistant")])
 
     lookup = ha_addon.resolve_ma_addon(MA_URL)
 
     assert lookup.info is None
-    assert "abcd1234_music_assistant_fake" in lookup.reason
+    assert LOCAL in lookup.reason and "local_music_assistant " in lookup.reason
 
 
-def test_refuses_to_pick_when_two_add_ons_claim_the_same_server(monkeypatch):
-    # A look-alike echoing the real /info makes a tie: refused, nothing is sent anywhere.
+def test_server_id_mismatch_refuses_an_otherwise_trusted_add_on(monkeypatch):
     _install(
-        monkeypatch,
-        [_addon("abcd1234_music_assistant_fake", "Music Assistant"), _addon(LOCAL, "Music Assistant (dev)")],
-        {
-            MA_URL: "srv-real",
-            "http://abcd1234-music-assistant-fake:8095": "srv-real",
-            "http://local-music-assistant-dev-local:8095": "srv-real",
-        },
+        monkeypatch, [_host_ma()], {MA_URL: "srv-real", "http://local-music-assistant-dev-local:8095": "srv-other"}
     )
 
-    lookup = ha_addon.resolve_ma_addon(MA_URL)
-
-    assert lookup.info is None
-    assert "abcd1234_music_assistant_fake" in lookup.reason and LOCAL in lookup.reason
+    assert ha_addon.find_ma_addon_info(MA_URL) is None
 
 
-def test_refuses_a_non_official_add_on_without_proof(monkeypatch):
-    # No MA URL to compare with: a non-official add-on can't be trusted.
-    _install(monkeypatch, [_addon(LOCAL, "Music Assistant (dev)")], {})
+def test_skips_a_stopped_official_add_on(monkeypatch):
+    _install(monkeypatch, [_host_ma("d5369777_music_assistant", "Music Assistant", state="stopped"), _host_ma()])
+
+    info = ha_addon.find_ma_addon_info(MA_URL)
+
+    assert info is not None and info["slug"] == LOCAL
+
+
+def test_official_add_on_wins_outright(monkeypatch):
+    _install(monkeypatch, [_host_ma("d5369777_music_assistant", "Music Assistant"), _host_ma()])
+
+    info = ha_addon.find_ma_addon_info()
+
+    assert info is not None and info["slug"] == "d5369777_music_assistant"
+
+
+def test_non_official_add_on_needs_the_ma_url(monkeypatch):
+    _install(monkeypatch, [_host_ma()])
 
     lookup = ha_addon.resolve_ma_addon("")
 
@@ -199,27 +216,12 @@ def test_refuses_a_non_official_add_on_without_proof(monkeypatch):
     assert LOCAL in lookup.reason
 
 
-def test_official_add_on_wins_outright(monkeypatch):
-    _install(
-        monkeypatch,
-        [_addon("d5369777_music_assistant", "Music Assistant"), _addon(LOCAL, "Music Assistant (dev)")],
-    )
-
-    info = ha_addon.find_ma_addon_info()
-
-    assert info is not None and info["slug"] == "d5369777_music_assistant"
-
-
 def test_remembered_add_on_is_per_ma_url(monkeypatch):
     # Official and dev both run; the bridge's MA URL is the dev one.
     _install(
         monkeypatch,
-        [_addon("d5369777_music_assistant", "Music Assistant"), _addon(LOCAL, "Music Assistant (dev)")],
-        {
-            MA_URL: "srv-dev",
-            "http://d5369777-music-assistant:8095": "srv-official",
-            "http://local-music-assistant-dev-local:8095": "srv-dev",
-        },
+        [_addon("d5369777_music_assistant", "Music Assistant"), _host_ma()],
+        {MA_URL: "srv-dev", "http://d5369777-music-assistant:8095": "srv-official"},
     )
     first = ha_addon.find_ma_addon_info()  # e.g. discovery, no URL yet
 
@@ -230,11 +232,7 @@ def test_remembered_add_on_is_per_ma_url(monkeypatch):
 
 
 def test_found_slug_is_remembered_until_it_stops(monkeypatch):
-    fake = _install(
-        monkeypatch,
-        [_addon(LOCAL, "Music Assistant (dev)")],
-        {MA_URL: "srv-1", "http://local-music-assistant-dev-local:8095": "srv-1"},
-    )
+    fake = _install(monkeypatch, [_host_ma()])
     ha_addon.find_ma_addon_info(MA_URL)
     fake.calls.clear()
 
@@ -247,10 +245,7 @@ def test_found_slug_is_remembered_until_it_stops(monkeypatch):
 
 
 def test_not_found_is_remembered_briefly_and_warned_once(monkeypatch, caplog):
-    fake = _install(
-        monkeypatch,
-        [_addon("core_mosquitto", "Mosquitto broker"), _addon(LOCAL, "Music Assistant (dev)", state="stopped")],
-    )
+    fake = _install(monkeypatch, [_addon("core_mosquitto", "Mosquitto broker"), _host_ma(state="stopped")])
 
     with caplog.at_level(logging.WARNING, logger=ha_addon.__name__):
         assert ha_addon.find_ma_addon_info(MA_URL) is None
@@ -270,22 +265,25 @@ def test_no_supervisor_means_no_addon(monkeypatch):
 
 
 def test_discovery_suggests_a_lone_local_add_on(monkeypatch):
-    _install(monkeypatch, [_addon(LOCAL, "Music Assistant (dev)")])
+    _install(monkeypatch, [_host_ma()])
 
     urls = [c["url"] for c in ha_addon.get_ma_addon_discovery_candidates()]
 
     assert urls[0] == "http://local-music-assistant-dev-local:8095"
 
 
-def test_discovery_does_not_suggest_one_of_several_look_alikes(monkeypatch):
-    _install(
-        monkeypatch,
-        [_addon("abcd1234_music_assistant_fake", "Music Assistant"), _addon(LOCAL, "Music Assistant (dev)")],
-    )
+def test_discovery_does_not_suggest_a_custom_repository_look_alike(monkeypatch):
+    _install(monkeypatch, [_host_ma("abcd1234_music_assistant", "Music Assistant")])
 
     sources = [c["source"] for c in ha_addon.get_ma_addon_discovery_candidates()]
 
     assert "ha_addon_hostname" not in sources
+
+
+def test_host_addresses_come_from_the_supervisor(monkeypatch):
+    _install(monkeypatch, [])
+
+    assert ha_addon.host_addresses() == {LAN_IP, "172.30.32.1"}
 
 
 @pytest.mark.parametrize(

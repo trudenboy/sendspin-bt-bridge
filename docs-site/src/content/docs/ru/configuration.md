@@ -165,6 +165,7 @@ Standalone-login использует CSRF-защищённые формы и co
 | **auth_enabled** | Standalone-style auth toggle для прямого доступа; в HA addon mode auth всё равно принудительно контролируется HA |
 | **ma_api_url / ma_api_token** | REST-интеграция с Music Assistant |
 | **ma_auto_silent_auth** | Разрешить addon/Ingress-страницам пробовать silent-создание HA-backed MA-токена при открытии |
+| **ma_addon_slug** | Slug аддона Music Assistant из стороннего репозитория, через который мосту можно входить (для официального и локального аддона не нужен) |
 | **volume_via_ma / mute_via_ma** | Маршрутизация управления через MA |
 | **update_channel** | Выбор release-lane для in-app update checks и предупреждений |
 | **log_level** | Базовый уровень логирования |
@@ -248,6 +249,7 @@ Bridge поддерживает два необязательных top-level ov
 | `MA_API_TOKEN` | string | Токен Music Assistant API |
 | `MA_USERNAME` | string | Username, использованный при последнем успешном MA login-flow |
 | `MA_AUTO_SILENT_AUTH` | boolean | Разрешить addon/Ingress-страницам пробовать silent-создание HA-backed MA-токена при открытии |
+| `MA_ADDON_SLUG` | string | Slug аддона Music Assistant из стороннего репозитория, через который мосту можно входить (для официального и локального аддона не нужен) |
 | `MA_WEBSOCKET_MONITOR` | boolean | Live monitor now-playing и очереди |
 | `VOLUME_VIA_MA` | boolean | Пропускать volume через MA |
 | `MUTE_VIA_MA` | boolean | Пропускать mute через MA |

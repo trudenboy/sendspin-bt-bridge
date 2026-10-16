@@ -1515,6 +1515,8 @@ def ha_silent_auth(ha_token: str, ma_url: str) -> dict:
     if not ha_token or not ma_url:
         raise UseCaseError(400, "missing_fields", "Missing ha_token or ma_url")
     _require_safe_url(ma_url)
+    if load_config().get("MA_AUTO_SILENT_AUTH") is False:
+        raise UseCaseError(403, "silent_auth_disabled", "Automatic Music Assistant sign-in is turned off")
 
     existing_url, existing_token = get_ma_api_credentials()
     if existing_token and existing_url and existing_url.rstrip("/") == ma_url:

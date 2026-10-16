@@ -108,6 +108,7 @@ Important:
 | `ma_api_url` | string | _(empty)_ | Music Assistant REST API URL (e.g. `http://192.168.1.100:8095`). Auto-detected in addon mode. |
 | `ma_api_token` | string | _(empty)_ | MA API token. **In addon mode** — open **Configuration → Music Assistant** and use "Sign in with Home Assistant" to create or refresh it automatically (no manual setup needed). For Docker/LXC — create a token in MA → Settings → API Tokens and paste it here. |
 | `ma_auto_silent_auth` | bool | `true` | Addon/Ingress only. When enabled, the bridge first tries silent token creation or reuse via Home Assistant Ingress before falling back to the regular HA login popup. |
+| `ma_addon_slug` | string | _(empty)_ | Addon only. Leave empty for the official Music Assistant add-on or one in the local add-on folder. For a Music Assistant add-on from another (custom) repository, enter its slug so the bridge may sign in through it — the bridge never trusts an add-on just because its name says Music Assistant. |
 | `volume_via_ma` | bool | `true` | Route volume commands through the MA API instead of controlling PulseAudio directly. Keeps MA and the speaker in sync. |
 
 The Music Assistant panel is reconfigurable: you can return to

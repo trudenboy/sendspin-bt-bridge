@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { useMaStore } from '@/stores/ma'
 import { useBridgeStore } from '@/stores/bridge'
 import { useIngress } from '@/composables/useIngress'
+import { ApiError } from '@/api/client'
 
 /** Tries no more often than this, so an unreachable Music Assistant isn't hammered. */
 const MIN_ATTEMPT_INTERVAL_MS = 30_000
@@ -75,7 +76,12 @@ export function useMaAutoConnect() {
       // A sign-in that has to be repeated soon backs off (each one mints a token).
       interval = Math.min(interval * 2, MAX_ATTEMPT_INTERVAL_MS)
       await ma.fetchGroups()
-    } catch {
+    } catch (e) {
+      // Turned off by the admin (MA_AUTO_SILENT_AUTH): not a failure, stop trying.
+      if (e instanceof ApiError && e.code === 'silent_auth_disabled') {
+        interval = Number.POSITIVE_INFINITY
+        return
+      }
       ma.autoConnectFailed = true
     } finally {
       ma.autoConnecting = false

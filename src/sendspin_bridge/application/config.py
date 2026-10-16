@@ -668,6 +668,7 @@ def _sync_ha_options(config: dict) -> None:
             "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
             "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
             "ma_auto_silent_auth": bool(config.get("MA_AUTO_SILENT_AUTH", True)),
+            "ma_addon_slug": str(config.get("MA_ADDON_SLUG") or ""),
             "bluetooth_adapters": sup_adapters,
         }
         if config.get("BASE_LISTEN_PORT") is not None:
