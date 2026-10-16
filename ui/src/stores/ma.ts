@@ -29,6 +29,9 @@ export const useMaStore = defineStore('ma', () => {
   const nowPlaying = ref<NowPlaying>({})
   const servers = ref<MaServer[]>([])
   const discovering = ref(false)
+  /** The add-on's automatic sign-in (see ``useMaAutoConnect``) is running / last failed. */
+  const autoConnecting = ref(false)
+  const autoConnectFailed = ref(false)
 
   async function fetchConnection() {
     connection.value = await getConnection()
@@ -110,6 +113,8 @@ export const useMaStore = defineStore('ma', () => {
     nowPlaying,
     servers,
     discovering,
+    autoConnecting,
+    autoConnectFailed,
     fetchConnection,
     fetchGroups,
     refresh,

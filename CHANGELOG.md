@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- In the Home Assistant add-on, signing in to Music Assistant through Home
+  Assistant finds a Music Assistant add-on installed from a local or custom
+  repository (for example `local_music_assistant_dev_local`), not only the
+  official one. When several run, the one at the configured Music Assistant
+  address is used; when none is found, the error lists the add-ons Home
+  Assistant reported.
+- In the Home Assistant add-on, the bridge signs in to Music Assistant by
+  itself on any page of its web UI, and again as soon as Music Assistant stops
+  accepting the stored token, instead of only on the Groups page.
+- When Music Assistant has no Home Assistant OAuth sign-in configured, the
+  error now points to the automatic add-on sign-in or to pasting a Music
+  Assistant token instead of only to the password sign-in.
+
 ## [3.1.0-beta.5] - 2026-10-16
 
 ### Added

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -429,13 +430,144 @@ def get_self_delivery_channel() -> str:
     return "stable"
 
 
-def find_started_ma_addon_info() -> dict[str, Any] | None:
+# Music Assistant's own web server port (``ma_url`` normally points here).
+MA_DEFAULT_PORT = 8095
+
+# Slug of the Music Assistant add-on found last time.  An add-on from a local or
+# custom repository has a slug no list can know in advance
+# (``local_music_assistant_dev_local``), so the one found by listing is kept and
+# tried first next time.
+_ma_addon_slug_cache: str | None = None
+
+
+def reset_ma_addon_cache() -> None:
+    """Forget the remembered Music Assistant add-on slug."""
+    global _ma_addon_slug_cache
+    _ma_addon_slug_cache = None
+
+
+def is_ma_addon(entry: dict[str, Any]) -> bool:
+    """Whether an add-on entry (list row or info) is Music Assistant.
+
+    The slug is ``<repository>_<add-on slug>``: the repository part is a hash for
+    a custom repository and ``local`` for one on the host, and the add-on slug
+    itself varies between the official, beta, dev and self-built variants.  So
+    any slug containing ``music_assistant`` counts, and so does any add-on whose
+    name says Music Assistant.
+    """
+    slug = str(entry.get("slug") or "").lower()
+    name = " ".join(str(entry.get("name") or "").lower().replace("_", " ").replace("-", " ").split())
+    return "music_assistant" in slug or "music assistant" in name
+
+
+def _ma_url_match_score(info: dict[str, Any], ma_url: str) -> int:
+    """How well an add-on's info matches the MA URL the bridge uses (0 = no sign)."""
+    if not ma_url:
+        return 0
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(ma_url.strip())
+        host = (parsed.hostname or "").lower()
+        port = parsed.port or MA_DEFAULT_PORT
+    except ValueError:
+        return 0
+    score = 0
+    names = {str(info.get(key) or "").lower() for key in ("hostname", "ip_address", "slug")}
+    names |= {n.replace("_", "-") for n in names}
+    if host and host in names:
+        score += 2
+    network = info.get("network")
+    published = set()
+    if isinstance(network, dict):
+        for value in network.values():
+            with contextlib.suppress(TypeError, ValueError):
+                published.add(int(value))
+    if port in published or (info.get("host_network") and port == MA_DEFAULT_PORT):
+        score += 1
+    return score
+
+
+def _is_started(info: dict[str, Any] | None) -> bool:
+    return bool(info) and str((info or {}).get("state") or "").lower() == "started"
+
+
+def list_supervisor_addons(timeout: float = 5.0) -> list[dict[str, Any]]:
+    """The installed add-ons (slug, name, state) as the bridge's Supervisor role sees them.
+
+    ``hassio_role: default`` may read ``/supervisor/info`` (whose ``addons`` lists
+    every installed add-on) but not ``GET /addons``; the latter is tried too for
+    a bridge running with a higher role.
+    """
+    for path in ("/supervisor/info", "/addons"):
+        payload = _get_supervisor_payload(path, timeout=timeout)
+        data = (payload or {}).get("data")
+        rows = data.get("addons") if isinstance(data, dict) else None
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict) and row.get("slug")]
+    return []
+
+
+def describe_addons(rows: list[dict[str, Any]]) -> str:
+    """``slug (name, state)`` for each row, for logs and error messages."""
+    if not rows:
+        return "none"
+    return ", ".join(f"{row.get('slug')} ({row.get('name') or '?'}, {row.get('state') or '?'})" for row in rows)
+
+
+def find_ma_addon_info(ma_url: str = "") -> dict[str, Any] | None:
+    """The running Music Assistant add-on's Supervisor info, or None.
+
+    Tries the remembered slug, then the official repository's slugs, then lists
+    the installed add-ons and picks the Music Assistant one that is started,
+    preferring the add-on behind *ma_url* when several run.
+    """
+    global _ma_addon_slug_cache
+    if not os.environ.get("SUPERVISOR_TOKEN", "").strip():
+        return None
+
+    if _ma_addon_slug_cache:
+        cached = get_supervisor_addon_info(_ma_addon_slug_cache)
+        if _is_started(cached):
+            return cached
+        _ma_addon_slug_cache = None
+
+    seen: dict[str, dict[str, Any]] = {}
     for slug in KNOWN_MA_ADDON_SLUGS:
-        data = get_supervisor_addon_info(slug)
-        if not data or data.get("state") != "started":
+        info = get_supervisor_addon_info(slug)
+        if info is not None and _is_started(info):
+            seen[slug] = info
+            if not ma_url or _ma_url_match_score(info, ma_url) > 0:
+                logger.info("Using Music Assistant add-on '%s' (%s)", slug, info.get("name") or "?")
+                _ma_addon_slug_cache = slug
+                return info
+
+    rows = list_supervisor_addons()
+    for row in rows:
+        slug = str(row["slug"])
+        if slug in seen or not is_ma_addon(row) or str(row.get("state") or "").lower() != "started":
             continue
-        return data
-    return None
+        info = get_supervisor_addon_info(slug)
+        if info is not None and _is_started(info) and is_ma_addon({"slug": slug, **info}):
+            seen[slug] = info
+
+    if not seen:
+        ma_rows = [row for row in rows if is_ma_addon(row)]
+        logger.warning(
+            "No running Music Assistant add-on found via the Supervisor; Music Assistant add-ons: %s; all add-ons: %s",
+            describe_addons(ma_rows),
+            describe_addons(rows),
+        )
+        return None
+
+    slug, info = max(seen.items(), key=lambda item: _ma_url_match_score(item[1], ma_url))
+    logger.info("Using Music Assistant add-on '%s' (%s)", slug, info.get("name") or "?")
+    _ma_addon_slug_cache = slug
+    return info
+
+
+def find_started_ma_addon_info() -> dict[str, Any] | None:
+    return find_ma_addon_info()
 
 
 def get_ma_addon_ui_url() -> str:
@@ -445,8 +577,8 @@ def get_ma_addon_ui_url() -> str:
     return str(data.get("ingress_url") or data.get("ingress_entry") or "").rstrip("/")
 
 
-def get_ma_addon_internal_ingress_url() -> str:
-    data = find_started_ma_addon_info()
+def get_ma_addon_internal_ingress_url(ma_url: str = "") -> str:
+    data = find_ma_addon_info(ma_url)
     if not data:
         return "http://localhost:8094"
 
