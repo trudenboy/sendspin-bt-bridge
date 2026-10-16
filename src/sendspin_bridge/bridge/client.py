@@ -64,6 +64,7 @@ from sendspin_bridge.services.audio.latency_calibration import (
 )
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
+from sendspin_bridge.services.bluetooth.transport_telemetry import transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
 from sendspin_bridge.services.infrastructure.config_validation import (
@@ -652,6 +653,8 @@ class SendspinClient:
         static_delay_codec: str | None = None,
     ):
         self.player_name = player_name
+        # The BlueZ transport last described in the log (one line per connect).
+        self._described_transport_path: str | None = None
         self.server_host = server_host
         self.server_port = server_port
         self.bt_manager = bt_manager
@@ -2605,6 +2608,10 @@ class SendspinClient:
             device = self.bt_manager.device if self.bt_manager else None
             if device is not None:
                 snapshot = await device.transport_snapshot()
+                line = transport_connect_line(self._described_transport_path, snapshot)
+                if line is not None:
+                    logger.info("[%s] %s", self.player_name, line)
+                self._described_transport_path = snapshot.path
                 codec_name = (
                     snapshot.codec_name
                     or ("sbc" if getattr(self.bt_manager, "prefer_sbc", False) else None)

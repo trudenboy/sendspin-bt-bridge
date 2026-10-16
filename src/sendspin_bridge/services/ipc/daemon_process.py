@@ -541,7 +541,8 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 logger.warning("%s not supported by current sendspin client", cmd.cmd)
                 continue
             try:
-                setter(value_ms)
+                declared = getattr(daemon, "declared_timing_ms", None)
+                setter(declared(value_ms) if callable(declared) else value_ms)
                 setattr(daemon, f"_{attr}", value_ms)
                 daemon._bridge_status[attr] = round(value_ms)
                 daemon._notify()
@@ -601,6 +602,13 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() not in ("0", "false", "no", "off")
 
 
 async def _run(params: dict) -> None:
@@ -674,6 +682,8 @@ async def _run(params: dict) -> None:
         pairing_store_path=str(pairing_path),
         require_pairing=bool(params.get("require_pairing", False)),
         volume_controller="sendspin" if params.get("volume_controller") == "sendspin" else "pa",
+        compensate_output_latency=_env_flag("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", default=True),
+        playout_diag=_env_flag("SENDSPIN_PLAYOUT_DIAG", default=False),
     )
 
     status = StatusStore(

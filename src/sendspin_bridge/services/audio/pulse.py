@@ -34,6 +34,7 @@ __all__ = [
     "aensure_null_sink",
     "alist_cards",
     "amove_pid_sink_inputs",
+    "apid_sink_input_latency",
     "areload_bluez5_discover_module",
     "aset_card_profile",
     "asuspend_sink",
@@ -301,6 +302,30 @@ async def amove_sink_input(sink_input_idx: int, sink_name: str) -> bool:
             exc,
         )
         return _fallback_move_sink_input(sink_input_idx, sink_name)
+
+
+async def apid_sink_input_latency(pid: int) -> dict[str, float] | None:
+    """PulseAudio's latency for this process's stream: its buffer and its sink's, in ms.
+
+    Diagnostics only (no ``pactl`` fallback): None when unavailable.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return None
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                inputs = await pulse.sink_input_list()
+    except Exception as exc:
+        logger.debug("apid_sink_input_latency(%d) error: %s", pid, exc)
+        return None
+    for si in inputs:
+        props = getattr(si, "proplist", {}) or {}
+        if str(props.get("application.process.id", "")) == str(pid):
+            return {
+                "buffer_ms": round(float(si.buffer_usec) / 1000.0, 3),
+                "sink_ms": round(float(si.sink_usec) / 1000.0, 3),
+            }
+    return None
 
 
 async def amove_pid_sink_inputs(pid: int, sink_name: str) -> int:

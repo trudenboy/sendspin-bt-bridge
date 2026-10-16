@@ -13,6 +13,7 @@ def default_pulsesink_factory(
     client_name: str,
     buffer_time_us: int,
     slave_method: str,
+    provide_clock: bool = False,
 ) -> Callable[[], Gst.Element]:
     def _make() -> Gst.Element:
         sink = Gst.ElementFactory.make("pulsesink", "sink")
@@ -22,7 +23,9 @@ def default_pulsesink_factory(
             sink.set_property("device", device)
         sink.set_property("client-name", client_name)
         sink.set_property("sync", True)
-        sink.set_property("provide-clock", False)
+        # Providing the clock only lets it be read (diagnostics): the player
+        # keeps the pipeline on the system clock either way.
+        sink.set_property("provide-clock", bool(provide_clock))
         _set_if_present(sink, "slave-method", _slave_method_value(slave_method))
         _set_if_present(sink, "buffer-time", buffer_time_us)
         return sink

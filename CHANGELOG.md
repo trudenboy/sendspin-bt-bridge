@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Timing diagnostics in the log, for setting beside a phone measurement:
+  every stream start logs one `Stream start timing:` line (pipeline latency,
+  PulseAudio stream latency, time sync offset and error, how early the first
+  audio arrived, output delay); every Bluetooth connect logs the speaker's
+  transport once (`BT transport …`: codec, the speaker's reported Delay or
+  "absent", Volume); while playing, a `Clock diag:` line gives the system
+  clock rate against the Sendspin clock (every 10 s at debug level, once a
+  minute at info). `SENDSPIN_PLAYOUT_DIAG=1` adds the rate of the sink's own
+  audio clock.
+
+### Fixed
+
+- Speakers played behind the schedule by the PulseAudio buffer's latency,
+  an amount that depended on `PULSE_LATENCY_MSEC` and the audio server
+  (about 110 ms at 200 ms, 410 ms at 800 ms on PulseAudio 17; PipeWire
+  reports other values). The bridge now fixes that latency and takes it out
+  of the schedule, so audio leaves the audio server at its scheduled time
+  whatever `PULSE_LATENCY_MSEC` is, and declares a lead time to Music
+  Assistant that covers the buffer. Delays tuned before this release absorbed
+  the old offset and need tuning again (lower by the `sink min` value the
+  new start line shows). `SENDSPIN_COMPENSATE_OUTPUT_LATENCY=0` restores the
+  old timing.
+
 ## [3.1.0-beta.6] - 2026-10-16
 
 ### Added
