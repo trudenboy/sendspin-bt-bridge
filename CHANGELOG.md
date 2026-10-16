@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.6] - 2026-10-16
+
 ### Added
 
 - Group sync tuning: manual tuning, and the fine-tuning by ear after a
@@ -6420,7 +6422,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.4...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.5...HEAD
+[3.1.0-beta.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.4...v3.1.0-beta.5
 [3.1.0-beta.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.3...v3.1.0-beta.4
 [3.1.0-beta.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.2...v3.1.0-beta.3
 [3.1.0-beta.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.1...v3.1.0-beta.2
