@@ -522,3 +522,16 @@ def test_a_store_that_was_never_told_to_load_still_keeps_the_entries_on_disk(tmp
 
 def s_id(store, group_id):
     return store.active_for(group_id).id
+
+
+def test_a_leftover_tmp_that_cannot_be_removed_does_not_break_every_create(tmp_path, caplog):
+    stuck = tmp_path / "sync_snapshot.tmp"
+    stuck.mkdir()  # unlink() on a directory raises an OSError
+    (stuck / "x").write_text("x")
+    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+    store, *_ = make(tmp_path)
+    store.load_persisted()
+    assert [p["group_id"] for p in store.pending()] == ["g"]  # the snapshot file was still read
+    s = store.create("other", "semi", "listening")
+    assert s.group_id == "other"
+    assert "sync_snapshot.tmp" in caplog.text

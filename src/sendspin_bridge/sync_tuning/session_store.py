@@ -164,7 +164,12 @@ class SessionStore:
         with self._load_lock:
             if self._loaded:
                 return
-            self._path().with_suffix(".tmp").unlink(missing_ok=True)  # a write cut short by the last shutdown
+            tmp = self._path().with_suffix(".tmp")
+            try:
+                tmp.unlink(missing_ok=True)  # a write cut short by the last shutdown
+            except OSError:
+                # never leave the store unloaded over it: every create() would fail
+                logger.warning("Could not remove %s", tmp, exc_info=True)
             entries = self._read_file() or []
             with self._lock:
                 for e in entries:
