@@ -145,6 +145,9 @@ class BridgeDaemon:
             loop.add_signal_handler(signal.SIGTERM, signal_handler)
 
         self._static_delay_ms = max(0.0, min(5000.0, self._args.static_delay_ms))
+        # Report the delay the client starts with, so the parent shows it before
+        # Music Assistant ever sends one.
+        self._bridge_status["static_delay_ms"] = round(self._static_delay_ms)
         await self._load_identity_and_pairing_store()
         if self._identity is not None:
             # MA keys the player by this id, not by the bridge's player id.

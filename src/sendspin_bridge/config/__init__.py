@@ -88,6 +88,7 @@ __all__ = [
     "save_device_sink",
     "save_device_static_delay",
     "save_device_volume",
+    "save_player_static_delay",
     "save_player_volume",
     "update_config",
     "write_config_file",
@@ -484,6 +485,23 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
         logger.warning("Could not save sink for %s: %s", mac, e)
 
 
+def _set_player_static_delay(player: dict, clamped: int, source: str | None, codec: str | None) -> None:
+    player["static_delay_ms"] = clamped
+    if source:
+        player["static_delay_source"] = source
+        player["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if codec:
+        player["static_delay_codec"] = codec
+
+
+def _clamp_static_delay(owner: str, delay_ms: object) -> int | None:
+    try:
+        return max(0, min(5000, int(delay_ms)))  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        logger.warning("Skipping static_delay_ms save for %s: invalid value %r", owner, delay_ms)
+        return None
+
+
 def save_device_static_delay(
     mac: str | None,
     delay_ms: int,
@@ -493,18 +511,14 @@ def save_device_static_delay(
 ) -> None:
     """Persist per-device static_delay_ms into the matching player.
 
-    Used when MA pushes a SET_STATIC_DELAY command — the parent extracts the
-    new value from the daemon's status update and writes it through to config
-    so the change survives a restart. Unlike LAST_VOLUMES (a runtime cache),
-    static_delay_ms is a per-device config field, so it is mutated in-place
-    on the device dict.
+    static_delay_ms is a per-device config field (not a LAST_* runtime
+    cache), so it is mutated in-place on the player dict and survives a
+    restart.  :func:`save_player_static_delay` is the id-keyed twin.
     """
     if not mac or not CONFIG_FILE.exists():
         return
-    try:
-        clamped = max(0, min(5000, int(delay_ms)))
-    except (TypeError, ValueError):
-        logger.warning("Skipping static_delay_ms save for %s: invalid value %r", mac, delay_ms)
+    clamped = _clamp_static_delay(mac, delay_ms)
+    if clamped is None:
         return
 
     def _set_delay(cfg: dict) -> None:
@@ -514,17 +528,45 @@ def save_device_static_delay(
         if player is None:
             logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", mac.strip().upper())
             return
-        player["static_delay_ms"] = clamped
-        if source:
-            player["static_delay_source"] = source
-            player["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        if codec:
-            player["static_delay_codec"] = codec
+        _set_player_static_delay(player, clamped, source, codec)
 
     try:
         update_config(_set_delay)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save static_delay_ms for %s: %s", mac, e)
+
+
+def save_player_static_delay(
+    player_id: str | None,
+    delay_ms: int,
+    *,
+    source: str | None = None,
+    codec: str | None = None,
+) -> None:
+    """Persist a player's static_delay_ms by its config id, for any backend.
+
+    Used when Music Assistant changes a player's delay: the next daemon is
+    spawned with the saved value, so the bridge and MA agree after a restart.
+    """
+    if not player_id or not CONFIG_FILE.exists():
+        return
+    clamped = _clamp_static_delay(player_id, delay_ms)
+    if clamped is None:
+        return
+
+    def _set_delay(cfg: dict) -> None:
+        from sendspin_bridge.config.players import find_player_by_id
+
+        player = find_player_by_id(cfg, player_id)
+        if player is None:
+            logger.warning("Skipping static_delay_ms save for unknown player %s", player_id)
+            return
+        _set_player_static_delay(player, clamped, source, codec)
+
+    try:
+        update_config(_set_delay)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save static_delay_ms for player %s: %s", player_id, e)
 
 
 def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> None:
