@@ -95,9 +95,14 @@ class FakeControl:
 class FakeHost:
     def __init__(self) -> None:
         self.released: list[str] = []
+        self.prepared: list[str] = []
 
-    def url_for(self, session_id: str) -> str:
-        return f"http://bridge/api/v1/sync/signal/{session_id}.wav"
+    def prepare(self, track: str = "measure") -> None:
+        self.prepared.append(track)
+
+    def url_for(self, session_id: str, track: str = "measure") -> str:
+        name = session_id if track == "measure" else f"{session_id}/{track}"
+        return f"http://bridge/api/v1/sync/signal/{name}.wav"
 
     def release(self, session_id: str) -> None:
         self.released.append(session_id)

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from sendspin_sync.models import GroupPlayback, Member, Profile, Snapshot
+
+
+#: What the host serves: the measurement's click track, or one of manual tuning's listening sounds.
+Track = Literal["measure", "clicks", "accent", "noise"]
 
 
 class GroupControl(Protocol):
@@ -38,7 +42,16 @@ class ProfileRepository(Protocol):
 
 
 class ClickTrackHost(Protocol):
-    def url_for(self, session_id: str) -> str: ...
+    def prepare(self, track: Track = "measure") -> None:
+        """Block until *track* can be served (its file written); called outside the session's lock.
+        Raises ``ControlError`` (``disk_full``, ``track_unavailable``) when it cannot be written."""
+        ...
+
+    def url_for(self, session_id: str, track: Track = "measure") -> str:
+        """The URL Music Assistant fetches *track* from for this session (every track under the
+        session's one token)."""
+        ...
+
     def release(self, session_id: str) -> None: ...
 
 

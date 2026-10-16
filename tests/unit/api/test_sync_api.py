@@ -657,3 +657,51 @@ def test_reset_puts_back_every_delay_this_session_wrote(api_client, sync_env):
     resp = api_client.post(f"{base}/reset")
     assert resp.status_code == 200 and resp.json()["state"] == "tuning"
     assert ctl.delays_now == {"a": 0, "b": 0}
+
+
+def test_manual_tuning_picks_its_listening_sound_over_http(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = _ready(api_client, mode="manual")
+    base = f"/api/v1/sync/sessions/{sid}"
+    assert api_client.get(base).json()["sound"] == "clicks"
+    assert ctl.calls[-1] == ("clicker", f"http://bridge/api/v1/sync/signal/{sid}/clicks.wav")
+    api_client.post(f"{base}/solo", json={"member": "a"})
+    switched = api_client.put(f"{base}/sound", json={"sound": "noise"})
+    assert switched.status_code == 200
+    body = switched.json()
+    assert body["sound"] == "noise" and body["clicker_playing"] is True and body["soloed"] == "a"
+    assert ctl.calls[-1] == ("clicker", f"http://bridge/api/v1/sync/signal/{sid}/noise.wav")
+    assert api_client.put(f"{base}/sound", json={"sound": "music"}).status_code == 422
+
+
+def test_the_measurement_refuses_a_listening_sound(api_client, sync_env):
+    sid = _ready(api_client)
+    resp = api_client.put(f"/api/v1/sync/sessions/{sid}/sound", json={"sound": "accent"})
+    assert resp.status_code == 409 and resp.json()["code"] == "session_state"
+    assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["sound"] is None
+
+
+def test_after_a_semi_automatic_apply_the_editor_has_the_listening_sounds(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = _measured_session(api_client)
+    base = f"/api/v1/sync/sessions/{sid}"
+    assert api_client.post(f"{base}/proposal").status_code == 200
+    proposed = api_client.put(f"{base}/sound", json={"sound": "clicks"})
+    assert proposed.status_code == 409 and proposed.json()["code"] == "session_state"
+    applied = api_client.post(f"{base}/apply", json={}).json()
+    assert applied["state"] == "tuning" and applied["sound"] == "clicks"
+    assert ctl.calls[-1] == ("clicker", f"http://bridge/api/v1/sync/signal/{sid}/clicks.wav")
+    assert api_client.put(f"{base}/sound", json={"sound": "accent"}).json()["sound"] == "accent"
+    assert ctl.calls[-1] == ("clicker", f"http://bridge/api/v1/sync/signal/{sid}/accent.wav")
+
+
+def test_a_sound_file_that_cannot_be_written_is_a_clear_problem(api_client, sync_env):
+    store = sync_env[1]
+    sid = _ready(api_client, mode="manual")
+
+    def full(track="measure"):
+        raise ControlError("disk_full", "No space left for the sound file")
+
+    store._host.prepare = full
+    resp = api_client.put(f"/api/v1/sync/sessions/{sid}/sound", json={"sound": "noise"})
+    assert resp.status_code == 507 and resp.json()["code"] == "disk_full"

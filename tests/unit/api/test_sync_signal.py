@@ -51,3 +51,62 @@ def test_signal_streams_the_prepared_file_without_compressing_it(monkeypatch, tm
     assert int(resp.headers["content-length"]) == ct.wav_size(duration_s=3)
     assert resp.content == track.path().read_bytes() == ct.render_wav(duration_s=3)
     assert resp.headers["Cache-Control"] == "no-store"
+
+
+def test_listening_sounds_are_served_under_the_session_token(monkeypatch, tmp_path):
+    from sendspin_sync import listening_tracks as lt
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+    monkeypatch.setattr(
+        host, "tracks", {kind: host.ClickTrackFile(kind, directory=lambda: tmp_path, duration_s=2) for kind in lt.KINDS}
+    )
+    token = tokens.issue("s1")
+    client = make_client({"AUTH_ENABLED": True})  # Music Assistant fetches without credentials
+    for kind in lt.KINDS:
+        resp = client.get(f"/api/v1/sync/signal/{token}/{kind}.wav")
+        assert resp.status_code == 200 and resp.headers["content-type"] == "audio/wav", kind
+        assert resp.content == lt.render_wav(kind, duration_s=2) and resp.headers["Cache-Control"] == "no-store"
+    assert client.get(f"/api/v1/sync/signal/{token}/measure.wav").status_code == 404
+    assert client.get(f"/api/v1/sync/signal/{token}/other.wav").status_code == 404
+    assert client.get("/api/v1/sync/signal/" + "0" * 64 + "/clicks.wav").status_code == 404
+    tokens.release("s1")
+    assert client.get(f"/api/v1/sync/signal/{token}/clicks.wav").status_code == 404
+
+
+def test_a_sound_file_that_cannot_be_written_is_a_problem_not_a_crash(monkeypatch):
+    from sendspin_sync.ports import ControlError
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+
+    class Full:
+        def ensure(self):
+            raise ControlError("disk_full", "No space left for the sound file")
+
+    monkeypatch.setattr(host, "tracks", {"clicks": Full()})
+    token = tokens.issue("s1")
+    resp = make_client().get(f"/api/v1/sync/signal/{token}/clicks.wav")
+    assert resp.status_code == 507 and resp.json()["code"] == "disk_full"
+
+
+def test_a_track_that_cannot_be_written_answers_without_paths(monkeypatch):
+    """The signal route is public (token only): its errors name no file, directory or OS error."""
+    from sendspin_sync.ports import ControlError
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+    token = tokens.issue("s1")
+
+    class Broken:
+        def __init__(self, code: str) -> None:
+            self.code = code
+
+        def ensure(self):
+            raise ControlError(self.code, "[Errno 28] No space left on device: '/var/tmp/sendspin-sync/x.wav.part'")
+
+    for code, status in (("disk_full", 507), ("track_unavailable", 503)):
+        monkeypatch.setattr(host, "current_track", lambda _kind, c=code: Broken(c))
+        resp = make_client().get(f"/api/v1/sync/signal/{token}.wav")
+        assert resp.status_code == status and resp.json()["code"] == code
+        assert "/var/tmp" not in resp.text and "Errno" not in resp.text

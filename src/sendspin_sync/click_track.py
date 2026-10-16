@@ -70,9 +70,9 @@ def _sample(v: float) -> int:
     return int(max(-32767, min(32767, round(v * PEAK * 32767))))
 
 
-def _info_chunk() -> bytes:
+def _info_chunk(title: str = TITLE) -> bytes:
     """A RIFF LIST/INFO chunk naming the track (NUL-terminated, padded to an even size)."""
-    name = TITLE.encode("ascii") + b"\0"
+    name = title.encode("ascii") + b"\0"
     if len(name) % 2:
         name += b"\0"
     inam = b"INAM" + struct.pack("<I", len(name)) + name
@@ -80,11 +80,11 @@ def _info_chunk() -> bytes:
     return b"LIST" + struct.pack("<I", len(body)) + body
 
 
-def wav_header(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE) -> bytes:
+def wav_header(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE, title: str = TITLE) -> bytes:
     """RIFF header, fmt (16-bit stereo PCM), the title, then the data chunk header."""
     data_size = round(duration_s * sample_rate) * 4
     fmt = struct.pack("<HHIIHH", 1, 2, sample_rate, sample_rate * 4, 4, 16)
-    chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt + _info_chunk() + b"data" + struct.pack("<I", data_size)
+    chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt + _info_chunk(title) + b"data" + struct.pack("<I", data_size)
     return b"RIFF" + struct.pack("<I", 4 + len(chunks) + data_size) + b"WAVE" + chunks
 
 

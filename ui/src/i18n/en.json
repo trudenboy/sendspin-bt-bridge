@@ -1467,7 +1467,7 @@
       "ab": "Compare two",
       "abA": "A",
       "abB": "B",
-      "abHelp": "Two speakers take turns every two clicks.",
+      "abHelp": "Two speakers take turns every four seconds.",
       "idle": "Clicks stopped.",
       "playing": "Clicks playing on every speaker.",
       "soloed": "Clicks playing on {name} only.",
@@ -1475,6 +1475,17 @@
       "failed": "That did not work ({code}).",
       "needsClicks": "Play the clicks to hear speakers alone or compare them.",
       "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). It replaces the group’s queue. Stop clicks stops only the click track."
+    },
+    "sound": {
+      "label": "Sound",
+      "clicks": "Clicks",
+      "accent": "Clicks with accent",
+      "noise": "Noise",
+      "hint": {
+        "clicks": "One click a second: shift the delays until every speaker’s click sounds as one.",
+        "accent": "Every 4th click is louder and higher: shows when a speaker is hundreds of ms off.",
+        "noise": "For two speakers: stand midway; aligned, the noise sounds centred, otherwise hollow and phasey."
+      }
     },
     "manual": {
       "title": "Delays",

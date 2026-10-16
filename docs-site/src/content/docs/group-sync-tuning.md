@@ -50,9 +50,22 @@ Listening controls:
 
 - **Play clicks** starts the 3-minute click track on the whole group again from the start; *Clicks: 2:41 left* counts it down. **Stop clicks** stops only the click track (music someone started meanwhile plays on).
 - **Only this speaker**: pick a speaker to hear it alone (the others are muted), or **Everyone**.
-- **Compare two**: two speakers take turns every two clicks.
+- **Compare two**: two speakers take turns every four seconds.
+- **Sound**: what the clicks play — **Clicks**, **Clicks with accent** or **Noise** (see *Which sound to listen to*). Switching while it plays starts the new sound from the start; the speakers you muted or soloed stay that way.
 
 Each member has a delay field, a slider and −10/−1/+1/+10 ms buttons. Changes are written to Music Assistant at once. **Put back the delays from the start** returns every changed speaker to where this tuning started.
+
+#### Which sound to listen to
+
+| Sound | What it is | When to use it |
+|---|---|---|
+| **Clicks** (default) | One short woodblock-like click a second | Bring every speaker to one hit |
+| **Clicks with accent** | The same, every 4th click louder and higher | A speaker is far off (an echo of hundreds of ms), or you are not sure which click belongs with which |
+| **Noise** | Steady pink noise (a soft hiss) | The last few milliseconds between two speakers |
+
+How an offset sounds: up to about 1 ms the speakers sound as one, in the middle; 1–5 ms pulls the sound towards the earlier speaker; 5–30 ms smears it (a thick click, a hollow, "phasey" hiss); beyond 30–40 ms you hear two separate clicks, an echo. Sound covers about a third of a metre per millisecond, so every metre of difference between your distances to two speakers is ~3 ms: tune where you listen.
+
+A good order: **Clicks with accent** while the speakers are far apart, **Clicks** until every speaker's click is one, then **Noise** for each pair of speakers (hear only the two, with **Only this speaker** or **Compare two**): stand midway and nudge 1 ms at a time until the hiss sits in the middle as one solid sound. While speakers are being measured (with a microphone or the phone) the measurement's own click track plays; the choice of sound returns once the measured delays are applied.
 
 Leaving the tab finishes the tuning: the delays stay; the clicks stop, every speaker the bridge muted is unmuted and the volumes go back to what they were. If anything changed, the screen first offers to save the delays as a profile.
 
@@ -66,7 +79,7 @@ The wizard has four stages; the heading says where you are, for example *Prepare
    - **Start the clicks**: **Start the clicks** plays the click track on every speaker of the group through Music Assistant, with a countdown. **Next** waits until the bridge sees the clicks playing and says so.
    - **Set the volume**: a volume slider per speaker, and the **Microphone** meter, which should jump with each click. A speaker at 0 % is flagged *Silent: turn it up to measure it*. *Volumes go back to what they were when you finish.*
 2. **Measure: Speaker by speaker.** Each speaker plays alone while you record it (6 s at the speakers, 12 s from the listening position); the others are muted. A speaker shows **Heard**, **Not heard** or **Unstable**, with what to do: *Not heard: turn it up or move closer, then Repeat — or Skip it.* The order is only for your convenience; it does not change the result. If the clicks stopped, **Start the clicks again**; every speaker is then recorded once more. **Apply the measured delays and listen** opens once every speaker is recorded or skipped (the page says how many are left).
-3. **Tune: Listen and adjust.** The measured delays are applied and the clicks keep playing. This is the same screen as Manual tuning: listen to each speaker alone or compare two, and adjust any delay by hand. Each measured speaker shows *Measured: X ms (+Δ)* and **Reset to measured**; speakers not heard or skipped keep their delay. The page shows the largest gap between speakers as measured and what remains. **Finish** keeps the delays; **Finish and save as profile…** saves them first, with the gap in the notes. **Cancel** asks first, then puts back the delays from before the measurement.
+3. **Tune: Listen and adjust.** The measured delays are applied and the clicks keep playing. This is the same screen as Manual tuning: listen to each speaker alone or compare two, pick the **Sound** (the clicks change to the listening clicks here), and adjust any delay by hand. Each measured speaker shows *Measured: X ms (+Δ)* and **Reset to measured**; speakers not heard or skipped keep their delay. The page shows the largest gap between speakers as measured and what remains. **Finish** keeps the delays; **Finish and save as profile…** saves them first, with the gap in the notes. **Cancel** asks first, then puts back the delays from before the measurement.
 4. **Done.** The group is restored. **Quick listen** plays clicks on the whole group for 10 s; **Measure again** starts over.
 
 **Cancel** asks before recordings or applied delays are lost, and step 1 then says *Measurement cancelled. Speakers unmuted, volumes put back, clicks stopped.* After a page reload the screen says once that the tuning ended with it.

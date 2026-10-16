@@ -6005,6 +6005,25 @@
         "title": "SoloIn",
         "type": "object"
       },
+      "SoundIn": {
+        "properties": {
+          "sound": {
+            "description": "clicks: one a second; accent: every 4th click accented; noise: pink noise (fine alignment).",
+            "enum": [
+              "clicks",
+              "accent",
+              "noise"
+            ],
+            "title": "Sound",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sound"
+        ],
+        "title": "SoundIn",
+        "type": "object"
+      },
       "StartupProgress": {
         "additionalProperties": true,
         "properties": {
@@ -6404,6 +6423,23 @@
             ],
             "title": "Soloed"
           },
+          "sound": {
+            "anyOf": [
+              {
+                "enum": [
+                  "clicks",
+                  "accent",
+                  "noise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The manual editor's listening sound (clicks, accent: every 4th click accented, noise: pink noise) in state tuning (manual tuning, or semi-automatic once applied); null while measuring, when the clicker always plays the measurement's click track.",
+            "title": "Sound"
+          },
           "state": {
             "enum": [
               "created",
@@ -6462,6 +6498,7 @@
           "volumes",
           "volumes_before",
           "clicker_left_s",
+          "sound",
           "muted",
           "soloed",
           "reference",
@@ -13172,6 +13209,7 @@
     },
     "/api/v1/sync/sessions/{session_id}/apply": {
       "post": {
+        "description": "Clicks that play give way to the editor's listening sound (clicks, unless one was picked).",
         "operationId": "apply_api_v1_sync_sessions__session_id__apply_post",
         "parameters": [
           {
@@ -14007,6 +14045,71 @@
         ]
       }
     },
+    "/api/v1/sync/sessions/{session_id}/sound": {
+      "put": {
+        "description": "clicks, accent or noise, in the manual editor (state tuning: manual tuning, or semi-automatic tuning once applied). While the clicker plays it starts over with the new sound (the queue is replaced); mutes and the solo stay. 409 session_state while measuring (measuring, proposed), whose clicker always plays the measurement's click track. 507 disk_full / 503 track_unavailable when the sound's file cannot be written.",
+        "operationId": "session_sound_api_v1_sync_sessions__session_id__sound_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoundIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Pick the manual editor's listening sound",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/api/v1/sync/sessions/{session_id}/volumes/{member}": {
       "put": {
         "operationId": "session_volume_api_v1_sync_sessions__session_id__volumes__member__put",
@@ -14110,6 +14213,51 @@
           }
         },
         "summary": "Click track for a running session (public)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/signal/{token}/{sound}.wav": {
+      "get": {
+        "description": "sound: clicks, accent or noise; the same token as the session's click track.",
+        "operationId": "listening_signal_api_v1_sync_signal__token___sound__wav_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sound",
+            "required": true,
+            "schema": {
+              "title": "Sound",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A listening sound of manual tuning for a running session (public)",
         "tags": [
           "sync"
         ]

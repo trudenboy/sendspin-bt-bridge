@@ -73,7 +73,8 @@ def test_the_clicker_can_be_started_again_while_it_plays_or_after_it_ended():
     s.start_clicker()  # manual: just play it again from the start
     ctl.clicker_ends()
     s.start_clicker()
-    assert [c for c in ctl.calls if c[0] == "clicker"] == [("clicker", URL)] * 3 and s.clicker_starts == 3
+    clicks = "http://bridge/api/v1/sync/signal/s1/clicks.wav"  # manual tuning plays its listening clicks
+    assert [c for c in ctl.calls if c[0] == "clicker"] == [("clicker", clicks)] * 3 and s.clicker_starts == 3
 
 
 def test_music_started_meanwhile_blocks_the_clicker_again():

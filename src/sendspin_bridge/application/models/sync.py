@@ -12,6 +12,8 @@ from sendspin_bridge.application.models.base import ResponseModel
 DelayMs = Annotated[int, Field(ge=0, le=5000)]
 
 Mode = Literal["manual", "semi"]
+#: Manual tuning's listening sound: one click a second, the same with every 4th accented, or pink noise.
+Sound = Literal["clicks", "accent", "noise"]
 Point = Literal["device", "position"]
 ProfileKind = Literal["device", "position"]
 
@@ -37,6 +39,9 @@ ErrorCode = Literal[
     "no_sequence",
     "sequence_running",
     "upload_running",
+    # a click track or listening sound file that cannot be written
+    "disk_full",
+    "track_unavailable",
 ]
 
 
@@ -157,6 +162,13 @@ class SyncSessionOut(ResponseModel):
     clicker_left_s: float | None = Field(
         description="Seconds of the click track left while it plays (from its last start); null otherwise."
     )
+    sound: Sound | None = Field(
+        description=(
+            "The manual editor's listening sound (clicks, accent: every 4th click accented, noise: pink noise) "
+            "in state tuning (manual tuning, or semi-automatic once applied); null while measuring, when the "
+            "clicker always plays the measurement's click track."
+        )
+    )
     muted: list[str] = Field(description="Members this session muted; they are unmuted when it ends.")
     soloed: str | None
     reference: str | None
@@ -172,6 +184,12 @@ class SessionCreate(BaseModel):
 class SignalIn(BaseModel):
     action: Literal["start", "stop", "stop_clicker"] = Field(
         description="start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker."
+    )
+
+
+class SoundIn(BaseModel):
+    sound: Sound = Field(
+        description="clicks: one a second; accent: every 4th click accented; noise: pink noise (fine alignment)."
     )
 
 
@@ -311,6 +329,7 @@ CONTRACT_MODELS: dict[str, type[BaseModel]] = {
         CaptureStateOut,
         CaptureResultOut,
         SignalIn,
+        SoundIn,
         SoloIn,
         AbIn,
         ReferenceIn,

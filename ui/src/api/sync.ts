@@ -10,6 +10,7 @@ import type {
   SyncProfileApplied,
   SyncProposal,
   SyncSession,
+  SyncSound,
 } from './types'
 
 const sessionPath = (id: string) => ({ params: { path: { session_id: id } } })
@@ -84,6 +85,14 @@ export function endSessionOnPageHide(id: string): void {
  */
 export function sessionSignal(id: string, action: 'start' | 'stop' | 'stop_clicker'): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/signal', { ...sessionPath(id), body: { action } }))
+}
+
+/**
+ * The manual editor's listening sound (state ``tuning``). While the clicker plays it starts over with the new
+ * sound (mutes and the solo stay); 409 ``session_state`` while measuring, which plays the measurement track.
+ */
+export function sessionSound(id: string, sound: SyncSound): Promise<SyncSession> {
+  return unwrap(api().PUT('/api/v1/sync/sessions/{session_id}/sound', { ...sessionPath(id), body: { sound } }))
 }
 
 /** Set one member's volume (0–100). */

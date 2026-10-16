@@ -8,7 +8,7 @@ FastAPI must run them in its threadpool, never on the event loop.
 from __future__ import annotations
 
 import secrets
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
@@ -41,11 +41,16 @@ from sendspin_bridge.application.models.sync import (
     SignalIn,
     SkipIn,
     SoloIn,
+    SoundIn,
     SyncGroup,
     SyncSessionOut,
 )
 from sendspin_bridge.sync_tuning import capture_page
 from sendspin_bridge.sync_tuning import click_track_host as host
+from sendspin_sync.ports import ControlError
+
+if TYPE_CHECKING:
+    from sendspin_sync.ports import Track
 
 public = APIRouter(tags=["sync"])
 #: The phone capture page, outside /api/v1 (registered before the SPA's catch-all).
@@ -54,17 +59,40 @@ page = APIRouter(include_in_schema=False)
 capture = APIRouter(tags=["sync"])
 
 
-@public.get("/sync/signal/{token}.wav", response_class=Response, summary="Click track for a running session (public)")
-def signal(token: str) -> Response:
+def _serve(token: str, kind: str) -> Response:
     if len(token) != 64 or host.tokens.session_for(token) is None:
         raise ApiError(404, "not_found", "No such signal")
-    # Streamed from the file written when the session started (no render, nothing held in memory);
+    # Streamed from the file written when the clicker started (no render, nothing held in memory);
     # "identity" keeps the gzip middleware from compressing 35 MB on the event loop.
+    try:
+        path = host.current_track(cast("Track", kind)).ensure()  # the callers checked *kind*
+    except ControlError as exc:
+        # public route: a fixed message; the path and the OS error stay in the log
+        if exc.code == "disk_full":
+            raise ApiError(507, exc.code, "The bridge has no disk space left for the click track") from exc
+        raise ApiError(503, exc.code, "The click track is not available right now") from exc
     return FileResponse(
-        host.track.ensure(),
+        path,
         media_type="audio/wav",
         headers={"Cache-Control": "no-store", "Content-Encoding": "identity"},
     )
+
+
+@public.get("/sync/signal/{token}.wav", response_class=Response, summary="Click track for a running session (public)")
+def signal(token: str) -> Response:
+    return _serve(token, "measure")
+
+
+@public.get(
+    "/sync/signal/{token}/{sound}.wav",
+    response_class=Response,
+    summary="A listening sound of manual tuning for a running session (public)",
+    description="sound: clicks, accent or noise; the same token as the session's click track.",
+)
+def listening_signal(token: str, sound: str) -> Response:
+    if sound not in host.tracks:
+        raise ApiError(404, "not_found", "No such signal")
+    return _serve(token, sound)
 
 
 async def _capture_body(request: Request, token: str) -> bytes:
@@ -239,6 +267,22 @@ def session_signal(session_id: str, body: SignalIn) -> SyncSessionOut:
 
 
 @router.put(
+    "/sessions/{session_id}/sound",
+    response_model=SyncSessionOut,
+    summary="Pick the manual editor's listening sound",
+    description=(
+        "clicks, accent or noise, in the manual editor (state tuning: manual tuning, or semi-automatic tuning "
+        "once applied). While the clicker plays it starts over with the new sound (the queue is replaced); "
+        "mutes and the solo stay. 409 session_state while measuring (measuring, proposed), whose clicker "
+        "always plays the measurement's click track. 507 disk_full / 503 track_unavailable when the sound's "
+        "file cannot be written."
+    ),
+)
+def session_sound(session_id: str, body: SoundIn) -> SyncSessionOut:
+    return uc.session_sound(session_id, body.sound)
+
+
+@router.put(
     "/sessions/{session_id}/volumes/{member}",
     response_model=SyncSessionOut,
     summary="Set one member's volume",
@@ -343,6 +387,7 @@ def compute_proposal(session_id: str) -> ProposalOut:
     "/sessions/{session_id}/apply",
     response_model=SyncSessionOut,
     summary="Write the proposal (or rows); the session goes on as the manual editor",
+    description="Clicks that play give way to the editor's listening sound (clicks, unless one was picked).",
 )
 def apply(session_id: str, body: ApplyIn) -> SyncSessionOut:
     return uc.apply(session_id, body.rows)
