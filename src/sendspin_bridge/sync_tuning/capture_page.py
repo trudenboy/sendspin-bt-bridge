@@ -122,7 +122,7 @@ def content_security_policy(nonce: str) -> str:
 _STYLE = """
 :root{--bg:#fff;--fg:#14161a;--muted:#5b6170;--card:#f3f4f6;--line:#d6d9df;--accent:#0b63ce;--ok:#137a3a;--warn:#9a5b00;--err:#b42318}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#eef0f3;--muted:#a3a9b6;--card:#1d2025;--line:#323843;--accent:#5aa2ff;--ok:#5fd18a;--warn:#f0b35a;--err:#ff7b6e}}
-*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+*{box-sizing:border-box}[hidden]{display:none!important}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 main{max-width:560px;margin:0 auto;padding:16px}
 h1{font-size:1.4rem;margin:.2rem 0 .3rem}.group{color:var(--muted);margin:0 0 1rem}
@@ -164,7 +164,7 @@ _SCRIPT = r"""
     if (!state.measuring) now = T.not_measuring;
     else if (!seq) now = T.waiting;
     else if (seq.phase === 'starting' || seq.phase === 'lead') now = T.lead;
-    else if (seq.phase === 'solo') { now = fmt(T.now, { name: seq.member, n: seq.index + 1, total: seq.members.length }); sub = state.point === 'position' ? T.position : T.device; }
+    else if (seq.phase === 'solo') now = fmt(T.now, { name: seq.member, n: seq.index + 1, total: seq.members.length });
     else if (seq.phase === 'gap') { const nx = seq.members[seq.index + 1]; now = nx ? fmt(T.next, { name: nx }) : T.pause; }
     else if (seq.phase === 'done') now = seq.uploaded || live ? T.done : T.done_file;
     else if (seq.phase === 'failed') now = fmt(T.failed, { code: seq.error || '' });
@@ -235,6 +235,7 @@ def render(token: str, lang: str, nonce: str) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:,">
 <title>{e(t["title"])}</title>
 <style>{_STYLE}</style>
 </head>
