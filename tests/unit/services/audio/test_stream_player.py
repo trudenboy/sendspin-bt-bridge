@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 import sendspin_bridge.services.audio.player.player as player_module
@@ -364,10 +366,125 @@ def test_resync_after_clear_or_before_start_pushes_nothing():
     player.clear()
     handed.clear()
 
+    assert player.resync(-10_000) is True
+
+    time.sleep(0.05)  # nothing may arrive; there is no event to wait for
+    assert handed == []
+    player.stop()
+
+
+@requires_gst
+def test_resync_reports_whether_it_rebuilt_the_output():
+    player = StreamPlayer(sink_factory=_fakesink, raw_now_us=lambda: 0, clock=_test_clock())
+    assert player.resync(-10_000) is False
+    player.start(PCM_S16_STEREO_48K)
+    assert player.resync(-10_000) is True
+    player.stop()
+
+
+@requires_gst
+def test_stream_end_forgets_queued_audio_of_the_old_stream():
+    handed: list[int] = []
+    player = StreamPlayer(sink_factory=_recording_fakesink(handed), raw_now_us=lambda: 0, clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(1_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 1)
+    player.stop()
+    assert player.metrics()["queued_chunks"] == 0  # the old stream's audio is released
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(2_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 2)
+    handed.clear()
+
     player.resync(-10_000)
 
-    import time
+    _wait_until(lambda: len(handed) == 1)
+    assert handed == [(2_000_000 - 10_000) * 1000]
+    player.stop()
 
-    time.sleep(0.05)
-    assert handed == []
+
+@requires_gst
+def test_format_change_forgets_queued_audio_of_the_old_format():
+    handed: list[int] = []
+    pcm_44k = PcmFormat(sample_rate=44100, channels=2, bit_depth=16)
+    player = StreamPlayer(sink_factory=_recording_fakesink(handed), raw_now_us=lambda: 0, clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(1_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 1)
+    player.start(pcm_44k)
+    player.submit(2_000_000, _silence(pcm_44k, frames=441))
+    _wait_until(lambda: len(handed) == 2)
+    handed.clear()
+
+    player.resync(-10_000)
+
+    _wait_until(lambda: len(handed) == 1)
+    assert handed == [(2_000_000 - 10_000) * 1000]
+    player.stop()
+
+
+@requires_gst
+def test_played_audio_is_forgotten_as_time_passes():
+    now = {"us": 0}
+    player = StreamPlayer(sink_factory=_fakesink, raw_now_us=lambda: now["us"], clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    for i in range(5):
+        player.submit(i * _CHUNK_US, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    assert player.metrics()["queued_chunks"] == 5
+
+    now["us"] = 30_000  # chunks 0-10, 10-20 and 20-30 ms have played
+    player.submit(5 * _CHUNK_US, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+
+    assert player.metrics()["queued_chunks"] == 3
+    player.stop()
+
+
+@requires_gst
+def test_queued_audio_record_is_bounded(monkeypatch):
+    monkeypatch.setattr(player_module, "_MAX_QUEUED_CHUNKS", 3)
+    player = StreamPlayer(sink_factory=_fakesink, raw_now_us=lambda: 0, clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    for i in range(5):
+        player.submit(1_000_000 + i * _CHUNK_US, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+
+    assert player.metrics()["queued_chunks"] == 3
+    player.stop()
+
+
+def _failing_fakesink():
+    sink = _fakesink()
+    sink.set_property("state-error", 3)  # paused-to-playing
+    return sink
+
+
+@requires_gst
+def test_failed_start_leaves_no_dead_pipeline_behind():
+    sinks = iter([_failing_fakesink, _fakesink])
+    player = StreamPlayer(sink_factory=lambda: next(sinks)(), raw_now_us=lambda: 0, clock=_test_clock())
+
+    with pytest.raises(RuntimeError):
+        player.start(PCM_S16_STEREO_48K)
+
+    player.start(PCM_S16_STEREO_48K)  # rebuilds instead of keeping the failed one
+    player.submit(1_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    player.stop()
+
+
+@requires_gst
+def test_player_recovers_after_a_failed_resync_rebuild():
+    """A sink that is briefly unavailable during a resync must not leave the
+    speaker silent for the rest of the stream: the next chunk rebuilds."""
+    handed: list[int] = []
+    ok_sink = _recording_fakesink(handed)
+    sinks = iter([ok_sink, _failing_fakesink, ok_sink])
+    player = StreamPlayer(sink_factory=lambda: next(sinks)(), raw_now_us=lambda: 0, clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(1_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+
+    with pytest.raises(RuntimeError):
+        player.resync(-10_000)
+
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(1_010_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: (1_010_000 * 1000) in handed)
     player.stop()

@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 # Player commands the bridge accepts. Sendspin 1.0.0-rc1 declares them in
 # client/state (never the hello) and names the delay command set_output_delay.
+# Delay changes closer together than this are applied as one resync.
+_DELAY_RESYNC_QUIET_S = 0.15
 _PLAYER_COMMANDS = [PlayerCommand.VOLUME, PlayerCommand.MUTE, PlayerCommand.SET_OUTPUT_DELAY]
 
 
@@ -111,8 +113,11 @@ class BridgeDaemon:
         self._muted = args.initial_muted
         self._volume_controller: Any = None
         self._static_delay_ms = max(0.0, min(5000.0, args.static_delay_ms))
-        # The output delay the queued audio was timed with (see _on_output_delay_change).
+        # The output delay the queued audio is timed with, the latest one set,
+        # and the pending coalesced resync (see _on_output_delay_change).
         self._player_delay_ms: float | None = None
+        self._target_delay_ms: float | None = None
+        self._delay_resync_handle: asyncio.TimerHandle | None = None
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
@@ -181,6 +186,9 @@ class BridgeDaemon:
         except asyncio.CancelledError:
             logger.debug("Daemon cancelled")
         finally:
+            if self._delay_resync_handle is not None:
+                self._delay_resync_handle.cancel()
+                self._delay_resync_handle = None
             if self._pairing_window_task is not None:
                 self._pairing_window_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -455,7 +463,11 @@ class BridgeDaemon:
         client.add_disconnect_listener(self._on_server_disconnect)
         client.add_server_command_listener(self._handle_server_command)
         if hasattr(client, "add_output_delay_listener"):
+            if self._delay_resync_handle is not None:
+                self._delay_resync_handle.cancel()
+                self._delay_resync_handle = None
             self._player_delay_ms = float(getattr(client, "output_delay_ms", static_delay_ms))
+            self._target_delay_ms = self._player_delay_ms
             client.add_output_delay_listener(self._on_output_delay_change)
 
         # Register visualizer listener if available
@@ -812,30 +824,59 @@ class BridgeDaemon:
             self._notify()
 
     def _on_output_delay_change(self, delay_ms: float) -> None:
-        """Re-time the audio already queued when the output delay changes.
+        """Re-time the queued audio once the output delay stops changing.
 
         aiosendspin calls this for every change, whether Music Assistant sent
         set_output_delay or the bridge set it (set_static_delay_ms). Only later
         chunks get the new play time from ``compute_play_time``; the queued ones
         keep the old one, and GStreamer would absorb a step under 40 ms as
-        jitter. A larger delay plays earlier (play time = client time - delay).
+        jitter. Each resync rebuilds the output, so a burst of changes (a
+        slider being dragged) is applied once, after a short quiet period.
         """
-        old_ms = self._player_delay_ms
-        self._player_delay_ms = delay_ms
-        if old_ms is None or old_ms == delay_ms:
+        self._target_delay_ms = delay_ms
+        if self._delay_resync_handle is not None:
+            self._delay_resync_handle.cancel()
+            self._delay_resync_handle = None
+        if self._player_delay_ms is None or delay_ms == self._player_delay_ms:
             return
-        shift_us = round((old_ms - delay_ms) * 1000)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._apply_output_delay()
+            return
+        self._delay_resync_handle = loop.call_later(_DELAY_RESYNC_QUIET_S, self._apply_output_delay)
+
+    def _queued_delay_correction_us(self) -> int:
+        """What keeps a new chunk on the queued audio's timeline until the resync.
+
+        ``compute_play_time`` already uses the new delay; the queue still has
+        the old one. A larger delay plays earlier (play time = client time -
+        delay), so the chunk moves later by the difference.
+        """
+        if self._player_delay_ms is None or self._target_delay_ms is None:
+            return 0
+        return round((self._target_delay_ms - self._player_delay_ms) * 1000)
+
+    def _apply_output_delay(self) -> None:
+        self._delay_resync_handle = None
+        old_ms, new_ms = self._player_delay_ms, self._target_delay_ms
+        if old_ms is None or new_ms is None or old_ms == new_ms:
+            return
+        shift_us = round((old_ms - new_ms) * 1000)
+        self._player_delay_ms = new_ms
         if self._pending_play_time_us is not None:
             self._pending_play_time_us += shift_us
         if self._next_play_time_us is not None:
             self._next_play_time_us += shift_us
+        resynced = False
         if self._player is not None:
             try:
-                self._player.resync(shift_us)
+                resynced = bool(self._player.resync(shift_us))
             except Exception:
                 logger.exception("Player resync after an output delay change failed")
                 return
-        logger.info("Output delay changed %g→%g ms; player resynchronised", old_ms, delay_ms)
+        outcome = "player resynchronised" if resynced else "applies to the next stream"
+        logger.info("Output delay changed %g→%g ms; %s", old_ms, new_ms, outcome)
 
     # ── MA group updates ─────────────────────────────────────────────────────
 
@@ -1077,6 +1118,7 @@ class BridgeDaemon:
             if client is not None and hasattr(client, "compute_play_time")
             else server_timestamp_us
         )
+        play_time_us += self._queued_delay_correction_us()
         if codec_name != "pcm":
             if self._decoder is None:
                 return

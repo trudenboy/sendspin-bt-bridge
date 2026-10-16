@@ -75,6 +75,10 @@ class StreamPlayer:
         self._apply_volume()
         self._set_caps(audio_format)
         if pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
+            # Keep nothing of it: a half-built pipeline would make every later
+            # submit fail until the next stream, instead of the next start
+            # building a fresh one.
+            self.stop()
             raise RuntimeError("failed to set GStreamer pipeline to PLAYING")
         if self._clock is None:
             pipeline.get_state(Gst.SECOND)
@@ -107,7 +111,7 @@ class StreamPlayer:
         self._queued.append((play_time_us, play_time_us + duration_ns // 1000, payload))
         self._poll_bus()
 
-    def resync(self, shift_us: int) -> None:
+    def resync(self, shift_us: int) -> bool:
         """Move all audio not yet played by ``shift_us`` on the play timeline, now.
 
         A changed output delay shifts every later play time, but buffers already
@@ -119,9 +123,13 @@ class StreamPlayer:
         stream start takes), and the kept audio is handed back with the shifted
         play times. Audio whose new time has already passed is dropped: the
         cost is a short silence, never misaligned audio.
+
+        Returns whether the output was rebuilt (False when nothing is playing).
+        If the rebuild fails, ``start`` keeps nothing of it, so the next
+        chunk's ``start`` builds a fresh output.
         """
         if self._pipeline is None or self._format is None:
-            return
+            return False
         audio_format = self._format
         now_us = self._raw_now_us()
         keep = [(start_us + shift_us, payload) for start_us, _end_us, payload in self._queued]
@@ -131,6 +139,7 @@ class StreamPlayer:
         for play_time_us, payload in keep:
             self.submit(play_time_us, payload)
         self._resyncs += 1
+        return True
 
     def _forget_played(self, raw_now_us: int) -> None:
         while self._queued and self._queued[0][1] <= raw_now_us:
@@ -217,6 +226,7 @@ class StreamPlayer:
             "discontinuity_count": self._discontinuities,
             "rendered_buffers": self._rendered,
             "resync_count": self._resyncs,
+            "queued_chunks": len(self._queued),
         }
 
     def _set_caps(self, audio_format: PcmFormat) -> None:

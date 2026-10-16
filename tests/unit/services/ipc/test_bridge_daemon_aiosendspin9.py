@@ -480,19 +480,34 @@ async def test_an_outbound_connection_is_reported_as_connected(tmp_path: Path):
 #
 # A delay change moves every later play time, but audio already handed to the
 # player keeps the old timing (and GStreamer absorbs steps under 40 ms as
-# jitter). Every change, whatever its source, must resync the player once by
-# the matching shift: a larger delay means earlier play times.
+# jitter). Every change, whatever its source, must resync the player by the
+# matching shift: a larger delay means earlier play times. Changes arriving
+# close together (a slider being dragged) are applied as one rebuild.
+
+_QUIET_S = 0.02
+
+
+@pytest.fixture
+def quick_delay_quiet(monkeypatch: pytest.MonkeyPatch):
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_module
+
+    monkeypatch.setattr(bridge_daemon_module, "_DELAY_RESYNC_QUIET_S", _QUIET_S)
+
+
+async def _settle() -> None:
+    await asyncio.sleep(_QUIET_S * 5)
 
 
 async def _daemon_with_real_client(tmp_path: Path, delay_ms: float = 300.0) -> BridgeDaemon:
     daemon = _daemon(tmp_path)
+    daemon._player.resync.return_value = True
     await daemon._load_identity_and_pairing_store()
     daemon._client = daemon._create_client(delay_ms)
     return daemon
 
 
 @pytest.mark.asyncio
-async def test_music_assistant_delay_change_resyncs_the_player_once(tmp_path: Path, caplog):
+async def test_music_assistant_delay_change_resyncs_the_player_once(tmp_path: Path, caplog, quick_delay_quiet):
     from aiosendspin.models.player import PlayerCommandPayload
     from aiosendspin.models.types import PlayerCommand
 
@@ -504,13 +519,14 @@ async def test_music_assistant_delay_change_resyncs_the_player_once(tmp_path: Pa
     daemon._handle_server_command(
         SimpleNamespace(player=PlayerCommandPayload(command=PlayerCommand.SET_OUTPUT_DELAY, output_delay_ms=310))
     )
+    await _settle()
 
     daemon._player.resync.assert_called_once_with(-10_000)
     assert "Output delay changed 300→310 ms; player resynchronised" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_an_unchanged_delay_does_not_resync(tmp_path: Path):
+async def test_an_unchanged_delay_does_not_resync(tmp_path: Path, quick_delay_quiet):
     from aiosendspin.models.player import PlayerCommandPayload
     from aiosendspin.models.types import PlayerCommand
 
@@ -520,26 +536,86 @@ async def test_an_unchanged_delay_does_not_resync(tmp_path: Path):
     daemon._handle_server_command(
         SimpleNamespace(player=PlayerCommandPayload(command=PlayerCommand.SET_OUTPUT_DELAY, output_delay_ms=300))
     )
+    await _settle()
 
     daemon._player.resync.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_a_smaller_delay_moves_audio_later(tmp_path: Path):
+async def test_a_smaller_delay_moves_audio_later(tmp_path: Path, quick_delay_quiet):
     daemon = await _daemon_with_real_client(tmp_path)
 
     daemon._client.set_output_delay_ms(200.0)
+    await _settle()
 
     daemon._player.resync.assert_called_once_with(100_000)
 
 
 @pytest.mark.asyncio
-async def test_delay_change_shifts_audio_held_by_the_decoder(tmp_path: Path):
+async def test_a_burst_of_changes_rebuilds_once_with_the_total_shift(tmp_path: Path, caplog, quick_delay_quiet):
+    daemon = await _daemon_with_real_client(tmp_path)
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    for value in (305.0, 310.0, 320.0):
+        daemon._client.set_output_delay_ms(value)
+    daemon._player.resync.assert_not_called()  # waits for the burst to end
+    await _settle()
+
+    daemon._player.resync.assert_called_once_with(-20_000)
+    assert "Output delay changed 300→320 ms; player resynchronised" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_burst_that_returns_to_the_old_delay_does_not_resync(tmp_path: Path, quick_delay_quiet):
+    daemon = await _daemon_with_real_client(tmp_path)
+
+    daemon._client.set_output_delay_ms(310.0)
+    daemon._client.set_output_delay_ms(300.0)
+    await _settle()
+
+    daemon._player.resync.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_chunks_arriving_before_the_resync_keep_the_queued_timeline(tmp_path: Path, quick_delay_quiet):
+    """Until the rebuild, new chunks join a queue timed with the old delay, so
+    they must use it too; the rebuild then moves them with everything else."""
+    daemon = await _daemon_with_real_client(tmp_path)
+    client = daemon._client
+    client.compute_play_time = lambda ts: ts - client.output_delay_us  # synchronised clock stand-in
+    pcm = b"\x00\x00\x00\x00" * 480
+
+    daemon._client.set_output_delay_ms(310.0)
+    daemon._on_audio_chunk(10_000_000, pcm, _audio_format(AudioCodec.PCM))
+    await _settle()
+    daemon._on_audio_chunk(10_010_000, pcm, _audio_format(AudioCodec.PCM))
+
+    submitted = [c.args[0] for c in daemon._player.submit.call_args_list]
+    assert submitted == [10_000_000 - 300_000, 10_010_000 - 310_000]
+    daemon._player.resync.assert_called_once_with(-10_000)
+
+
+@pytest.mark.asyncio
+async def test_delay_change_shifts_audio_held_by_the_decoder(tmp_path: Path, quick_delay_quiet):
     """A compressed packet whose PCM is not out of the decoder yet keeps its
     play time in the daemon; it must move with the rest of the queue."""
     daemon = await _daemon_with_real_client(tmp_path)
     daemon._pending_play_time_us = 5_000_000
 
     daemon._client.set_output_delay_ms(350.0)
+    await _settle()
 
     assert daemon._pending_play_time_us == 5_000_000 - 50_000
+
+
+@pytest.mark.asyncio
+async def test_delay_change_with_nothing_playing_says_it_applies_later(tmp_path: Path, caplog, quick_delay_quiet):
+    daemon = await _daemon_with_real_client(tmp_path)
+    daemon._player.resync.return_value = False
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._client.set_output_delay_ms(310.0)
+    await _settle()
+
+    assert "Output delay changed 300→310 ms; applies to the next stream" in caplog.text
+    assert "resynchronised" not in caplog.text

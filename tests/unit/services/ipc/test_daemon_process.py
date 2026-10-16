@@ -1139,11 +1139,13 @@ async def test_read_commands_reconnect_says_goodbye_with_restart():
 
 
 @pytest.mark.asyncio
-async def test_read_commands_set_static_delay_resyncs_the_player_once(tmp_path):
+async def test_read_commands_set_static_delay_resyncs_the_player_once(tmp_path, monkeypatch):
     """A delay set on the bridge (its UI or API) must resync the player just
     like one pushed by Music Assistant; repeating the value must not."""
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_module
     from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon, DaemonArgs
 
+    monkeypatch.setattr(bridge_daemon_module, "_DELAY_RESYNC_QUIET_S", 0.02)
     args = DaemonArgs(client_id="legacy-id", client_name="Speaker", identity_path=str(tmp_path / "identity.key"))
     daemon = BridgeDaemon(args, {}, None)
     daemon._player = MagicMock()
@@ -1152,6 +1154,7 @@ async def test_read_commands_set_static_delay_resyncs_the_player_once(tmp_path):
 
     await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 40})
     await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 40})
+    await asyncio.sleep(0.1)
 
     daemon._player.resync.assert_called_once_with(-40_000)
     assert daemon._bridge_status["static_delay_ms"] == 40
