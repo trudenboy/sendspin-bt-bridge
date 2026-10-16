@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   group from the bridge — manual sliders with a click track and solo
   listening, a phone-microphone measurement with a reviewable proposal or
   one-shot apply with verification and undo, and named delay profiles
-  (`SYNC_PROFILES`). New `/api/v1/sync/*` endpoints and `sync` events.
+  (`SYNC_PROFILES`). The group is stopped for a session, the click track
+  plays from its queue and solo mutes the other members; a player that cannot
+  be muted is named on the page. New `/api/v1/sync/*` endpoints and `sync`
+  events.
 
 ## [3.1.0-beta.4] - 2026-10-15
 

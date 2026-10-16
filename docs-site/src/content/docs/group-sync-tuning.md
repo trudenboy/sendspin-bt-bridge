@@ -29,9 +29,11 @@ Writing a delay needs a Music Assistant token with administrator rights, because
 
 Choose **Manual tuning**. Each member has a slider and ±1 ms and ±10 ms nudge buttons. Changes are written to Music Assistant at once, and the slider in Music Assistant follows.
 
+Before you listen, the tab walks the same three preparation steps as the wizard: **Stop playback**, **Start the clicker** and **Set volume** (see below). It skips them when the clicker already plays.
+
 To judge by ear, use the **Listen** controls:
 
-- **Play clicks** plays the 3-minute click track once on the whole group. **Stop clicks** silences every speaker until the track ends (Music Assistant cannot stop it early); then the music comes back. The page says how long that takes.
+- **Play clicks** starts the 3-minute click track on the whole group again from the start. **Stop clicks** stops the group.
 - **Solo** plays the clicks on one member only.
 - **A/B** alternates two members every two clicks.
 
@@ -42,10 +44,12 @@ To judge by ear, use the **Listen** controls:
 Choose **Measure and suggest** to measure with the microphone of the device that shows the page, review the proposal, then apply it. Steps of the wizard:
 
 1. **Preparation**. Choose where you measure (see below) and allow the microphone. Recordings stay in memory and are sent only to this bridge.
-2. **Level check**. Clicks play on every speaker; the meter must move with each click and the screen says whether the level is too quiet, too loud or fine.
-3. **Speaker by speaker**. Each member plays alone while you record it (6 s at the speakers, 12 s from the listening position). You can reorder the speakers, repeat a step or skip a speaker. A member shows **Heard**, **Not heard** or **Unstable**.
-4. **Proposal**. A table of before, after and change per speaker, and the spread before and the predicted spread after. Warnings cover delays clamped to 0–5000 ms, delays above 2000 ms, and members that could not be verified. Computing the proposal does not change anything.
-5. **Done**. **Apply**, or **Apply and save as profile…**. **Check again after applying** measures every speaker once more with the new delays. **Quick listen** plays clicks on the whole group for 10 s; the speakers then stay silent until the click track ends.
+2. **Stop playback**. The page shows whether the group plays; **Stop group** stops it. You go on once the group no longer plays.
+3. **Start the clicker**. **Start the clicker** plays the click track on every speaker of the group through Music Assistant. You go on once the bridge sees it playing.
+4. **Set volume**. A volume slider per speaker. Clicks should be clearly audible where you measure; the microphone meter must move with each click and says whether the level is too quiet, too loud or fine.
+5. **Speaker by speaker**. Each member plays alone while you record it (6 s at the speakers, 12 s from the listening position): the other members are muted. You can reorder the speakers, repeat a step or skip a speaker. A member shows **Heard**, **Not heard** or **Unstable**. If the clicker stopped (the 3-minute track ended, or someone stopped the group), **Start the clicker again**; every speaker is then measured once more.
+6. **Proposal**. A table of before, after and change per speaker, and the spread before and the predicted spread after. Warnings cover delays clamped to 0–5000 ms, delays above 2000 ms, and members that could not be verified. Computing the proposal does not change anything.
+7. **Done**. **Apply**, or **Apply and save as profile…**. **Check again after applying** measures every speaker once more with the new delays. **Quick listen** plays clicks on the whole group for 10 s, then stops.
 
 The result does not depend on which speaker is measured first, so the wizard has no reference speaker to choose.
 
@@ -56,11 +60,13 @@ Where you measure:
 
 ### Measure and apply
 
-Choose **Measure and apply** to measure, apply and verify in one run. The result shows the spread before and after. **Undo** puts the earlier delays back; it stays available until 30 s after the check round's clicks start (the check may first wait for the previous click track to end).
+Choose **Measure and apply** to measure, apply and verify in one run. The result shows the spread before and after. **Undo** puts the earlier delays back; it stays available for 30 s after the delays are applied.
 
 ## What you hear during a measurement
 
-Playback of the group is interrupted for the session. Music Assistant plays a 3-minute click track on the group as an announcement, and the other members are turned down to volume 0 while one is measured. A check round needs a fresh click track, so it starts when the previous one ends. The click track cannot be stopped early: when the session ends (done, cancelled, failed or timed out) every speaker stays silent until it has played out, then Music Assistant brings back what was playing and the bridge checks that every volume is back where it was. The page shows **Music returns in N s** meanwhile, and a new tuning of the group waits for it. Keep the room quiet and hold the phone still while it records.
+No music plays during a session. You stop the group first; then the click track replaces the group's queue in Music Assistant and plays on every speaker, and while one member is measured the others are muted. When the session ends (done, cancelled, failed or timed out) the bridge unmutes every speaker it muted and stops the click track. Your music does not come back by itself: start it again in Music Assistant. The bridge does not change the volumes you set during the session. Keep the room quiet and hold the phone still while it records.
+
+Soloing needs every other member to be muted through Music Assistant. A player that cannot be muted (web kiosks today) is named on the page, for example *Kiosk cannot be muted*: the other speakers cannot be heard alone while it is in the group. Take it out of the group in Music Assistant to measure the others; it can still be measured itself.
 
 ## Profiles
 
@@ -89,9 +95,9 @@ iOS needs a tap on the page to start recording, and a page sent to the backgroun
 
 ## Another tuning in progress
 
-Only one tuning runs per group. If another device started one, this page shows **Tuning in progress on another device** and is read-only. **End that session** stops the other device's test signal and restores the group; delays already written stay.
+Only one tuning runs per group. If another device started one, this page shows **Tuning in progress on another device** and is read-only. **End that session** unmutes the speakers the other device muted and stops its click track; delays already written stay.
 
-If the bridge restarts during a session, it keeps trying to restore the group, and the screen shows **Could not restore the group** with a **Retry** button until Music Assistant answers. Until then some speakers may still be at volume 0.
+If the bridge restarts during a session, it unmutes the speakers that session muted and stops its click track if the group still plays it. While Music Assistant does not answer, the screen shows **Could not restore the group** with a **Retry** button; until then some speakers may still be muted.
 
 ## Troubleshooting
 
@@ -99,6 +105,8 @@ If the bridge restarts during a session, it keeps trying to restore the group, a
 |---|---|
 | A member is **Cannot be adjusted** | Its client does not declare `set_output_delay`, or it is not a Sendspin player. |
 | Delays are not written, `ma_forbidden` | The Music Assistant token lacks administrator rights. |
-| **Not heard** | Level too low, or phone too far; repeat the step closer or turn the group up. |
+| **Not heard** | Level too low, or phone too far; repeat the step closer or turn the speaker up. |
+| *… cannot be muted* | That player offers no mute in Music Assistant; take it out of the group to measure the others. |
+| **Start the clicker** is refused | The group plays something else; stop it first. |
 | **Unstable** | Noise during the recording; repeat it in a quiet room. |
 | The wizard cannot record | Page is not on HTTPS or `localhost`; see Microphone requirements. |

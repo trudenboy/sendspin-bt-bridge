@@ -146,17 +146,18 @@ if it imports anything from `sendspin_bridge`.
 - **SyncSession** — the state machine of one tuning session (see Session).
 - **Ports** (`typing.Protocol`):
   - `GroupControl`: `members(group_id)`, `delays(members)`,
-    `snapshot(group_id) -> Snapshot`, `start_signal(group_id, url)`,
-    `stop_signal(group_id)`, `solo(group_id, member | None)`,
-    `set_delay(member, ms)`, `restore(snapshot)`.
+    `snapshot(group_id) -> Snapshot`, `playback(group_id) -> GroupPlayback`,
+    `stop_group(group_id)`, `start_clicker(group_id, url)`,
+    `mute(member, muted)`, `set_volume(member, level)`, `set_delay(member, ms)`.
   - `ProfileRepository`: `list(group_id)`, `get(id)`, `save(profile)`,
     `delete(id)`.
   - `ClickTrackHost`: `url_for(track) -> str` (tokenised; the token is valid for
     the session, not single-use — Music Assistant's renderer may fetch the URL more
     than once).
-- `Snapshot` holds original delays, per-member volume and mute, whether the group
-  was playing, and an opaque `restore_token` owned by the adapter (queue state,
-  announcement handle). It is JSON-serialisable so the adapter can persist it.
+- `Snapshot` holds the original delays (for reset and undo) and which members were
+  muted before the session (never touched). `GroupPlayback` is one reading of the
+  group: its playback state, the current media's uri and every member's volume;
+  `plays(url)` tells whether the group plays the session's click track.
 
 ### Bridge adapters `sendspin_bridge.sync_tuning`
 
@@ -164,13 +165,12 @@ if it imports anything from `sendspin_bridge`.
   bridge already keeps (`get_ma_api_credentials()`): group members from the cached
   sync groups plus `players/all` with `return_protocol_players: true` for their
   protocols, `config/players/get_entries` / `get_value` for the current delay,
-  `config/players/save` to write `sendspin_static_delay`, the signal and solo
-  mechanism chosen in stage 0, restore. Short commands may go through
-  `MaMonitor.execute_cmd` (3 s reply timeout); `play_announcement` blocks for the
-  whole clip, so the adapter sends it on a session-owned `MusicAssistantClient`
-  connection with `send_command_no_wait` (or a dedicated `send_command` with no
-  deadline) and treats the group's `playback_state` events, or the late reply, as
-  "signal ended".
+  `config/players/save` to write `sendspin_static_delay`, and the signal path and
+  solo decided after stage 0 (option C, see "Signal path and solo"): the group's
+  playback (`players/all`: state, current media, member volumes), `players/cmd/stop`
+  on the group, the click track queued with `player_queues/play_media`,
+  `players/cmd/volume_mute` per member, `players/cmd/volume_set` for the volume
+  step. Each session owns its own connection.
 - `ConfigProfileRepository`: `SYNC_PROFILES` list in `config.json`. The key must be
   registered in three places or it is silently dropped: `DEFAULT_CONFIG` (which
   defines `CONFIG_ALLOWED_KEYS`; unknown keys are filtered on load), `config/schema.json`
@@ -213,12 +213,11 @@ separate spec covers it after the bridge version ships.
   (A single marker every 10 s would be missed by 40 % of 6 s recordings.) Gaps
   start at 40 ms so that room echoes of the first chirp, which arrive within the
   first ~20 ms, cannot be mistaken for the second one.
-- The track starts with 1 s of silence. Music Assistant plays it once per
-  `play_announcement`, so one clip covers one measurement round (see "Signal path
-  and solo"). Phases are only comparable within one playback: a new clip in the
-  middle of a round starts the round again, and a round that needs a fresh clip
-  (the check round) waits for the previous one to end. Between two clips Music
-  Assistant restores the music for a moment.
+- The track starts with 1 s of silence. Music Assistant plays it once from the
+  group's queue (the "clicker", see "Signal path and solo"); 180 s covers a round,
+  and the operator starts it again whenever it stopped. Phases are only comparable
+  within one playback: a clicker started again in the middle of a round starts the
+  round again (every member is measured once more).
 
 ## Capture (browser)
 
@@ -295,85 +294,87 @@ separate spec covers it after the bridge version ships.
 
 ## Session
 
-States: `created → signal_starting → measuring → proposed → applying → verifying →
-restoring → done`, plus `cancelled` and `failed` (both go through `restoring`).
+States: `created → measuring → proposed → applying → verifying → restoring → done`,
+plus `cancelled` and `failed` (both go through `restoring`).
 
-- **created**: members resolved; snapshot taken and persisted.
-- **signal_starting**: click track started on the group; a level check plays the
-  whole group so the operator can position the phone.
-- **measuring**: for each member in the operator's order: `solo(member)`, prompt
-  ("hold the phone 30–50 cm from Kitchen" or "stay where you are"), receive the
-  recording, estimate. A step can be repeated or skipped; members can be reordered.
+- **created**: members resolved; snapshot (delays, and which members were muted
+  before) taken. Starting a session reads the group and writes nothing to it.
+- **measuring**: first the preparation, driven by the operator: stop the group's
+  playback, start the clicker (refused with `group_playing` while the group plays
+  anything else), set the volumes. The session reads the group's playback every
+  2 s (`group_state`, `clicker_playing`, `volumes` in the session resource). Then,
+  for each member in the operator's order: `solo(member)`, prompt ("hold the phone
+  30–50 cm from Kitchen" or "stay where you are"), receive the recording, estimate.
+  Solo and recordings need the clicker playing (`clicker_stopped` otherwise). A
+  step can be repeated or skipped; members can be reordered.
 - **proposed**: proposal computed (semi-automatic waits here for the operator).
 - **applying**: `set_delay` for each changed member; automatic mode keeps an undo
-  until 30 s after the check round's clicks are audible (its clip may first wait for
-  the previous one to end; a check clip that fails to start is retried by the tick and
-  the undo window moves with it).
-- **verifying**: optional repeat round (automatic: always).
-- **restoring**: while the clip still plays, every member is kept at volume 0
-  (`stop_signal`) and the restore waits for the clip's end — a wait, not a failed
-  attempt; then `restore(snapshot)` puts the snapshot's volumes back where they
-  differ, retried with backoff until it succeeds. Also triggered by cancel, an
-  error, a 15-minute inactivity timeout and, after a bridge restart, by a
-  persisted snapshot (which records the clip's end on the wall clock and whether
-  it is silenced). Restore never touches the delays (applied delays are the point)
-  or the mutes (the session never mutes), and leaves playback to Music
-  Assistant's resume. A clip that ends while the session still runs gets the same
-  volume check on the next tick (best effort, retried each tick; the solo is
-  cleared), so a protocol player MA left at 0 is not silent for the music or the
-  next clip.
+  for 30 s from the apply.
+- **verifying**: optional repeat round (automatic: always), with the clicker that
+  still plays, or started again by the operator if it stopped.
+- **restoring**: every member the session muted is unmuted, then the group is
+  stopped if this session's clicker is what it plays (music someone started
+  meanwhile plays on). Retried with backoff until it succeeds; a member already
+  unmuted is not unmuted again. Also triggered by cancel, an error, a 15-minute
+  inactivity timeout and, after a bridge restart, by the persisted entry (the
+  members the session muted and its clicker URL). Restore never touches the delays
+  (applied delays are the point) and does not start the music again.
 
 Only one session per group. A second client sees "tuning in progress" and gets a
-read-only view. Manual mode is a session without measuring: it can start the signal
-and solo/A–B on demand and writes delays live (debounced 300 ms).
+read-only view. Manual mode is a session without measuring: the same preparation,
+then the clicker, solo and A–B on demand, and delays written live (debounced 300 ms).
 
-## Signal path and solo (decided in stage 0)
+## Signal path and solo (decided after stage 0)
 
-The core only calls `start_signal`, `solo`, `stop_signal`, `restore`.
+The core calls `playback`, `stop_group`, `start_clicker`, `mute`, `set_volume` (and
+`set_delay`); everything Music Assistant-specific sits in the adapter.
 
-**Decision (2026-10-16, option A).** Found on Music Assistant dev: `play_announcement`
-on the sync group plays the bridge-served click track on every member and Music
-Assistant restores music and volumes at the clip's end; `players/cmd/stop` does
-**not** end an announcement (it blocks until the clip ends); `players/cmd/volume_mute`
-is unsupported on Web Kiosk players (`UnsupportedFeaturedException`);
-`players/cmd/volume_set` 0 during the announcement silences a member and Music
-Assistant restores the pre-announcement volume at the clip's end. So:
+**Stage 0 findings (Music Assistant dev, 2026-10-16).** `play_announcement` on the
+sync group plays the bridge-served click track on every member and Music Assistant
+restores music and volumes at the clip's end; `players/cmd/stop` does **not** end an
+announcement (it blocks until the clip ends); `players/cmd/volume_mute` is
+unsupported on Web Kiosk players (`UnsupportedFeaturedException`, `volume_muted`
+null); `players/cmd/volume_set` 0 during the announcement silences a member and Music
+Assistant restores the pre-announcement volume at the clip's end, but never a
+member's Sendspin protocol player's (E5). Later the same day:
+`player_queues/play_media` with the click track's URL on the sync group plays it
+(media type `sound_effect`, the file's duration) and `players/cmd/stop` stops it at
+once (the group goes idle).
 
-- **Signal.** One announcement (`pre_announce` off, fired, never awaited) covers a
-  whole round: the clip is the track's 180 s, plus a 5 s tail for Music Assistant's
-  start and restore. The session tracks when it ends and exposes
-  `music_returns_in_s`; `signal_running` means audible — 3 s after the start (the
-  announcement settles before any solo) and not silenced. A clip that ended mid-round
-  is started again on request (a new round); the check round needs a fresh clip and,
-  while the previous one plays, waits for its end (`signal_waiting`; solo and
-  recordings answer `signal_waiting`), then the store's tick starts it.
-- **Stop.** `stop_signal` sets every member's volume to 0; the clip plays on silently
-  and Music Assistant brings the music back at its end. `players/cmd/stop` is never
-  sent. "Play" while a silenced clip still runs un-silences it (no new announcement).
-- **Solo by volume, never mute.** `solo(member)` sets every other member to 0 and the
-  member to its level from the session's snapshot; `solo(None)` puts every level back.
-  Only while the clicks are audible (`signal_starting` / `signal_stopped` otherwise).
-  Members without a volume are left alone. Music Assistant's end-of-announcement
-  restore covers the members' own volumes only, never their Sendspin protocol
-  players' (E5), so the snapshot records both and the session restores both.
-- **Both levels (E5, 2026-10-16).** A Web Kiosk member's Sendspin protocol player keeps
-  a volume of its own: a volume set on the member during an announcement did not
-  always reach it, and a level set on the protocol player alone while idle did not
-  stick (the kiosk re-reports its own). Setting both during the announcement worked
-  on every member, so solo and stop set the member and its protocol player (0 for a
-  silenced member, the snapshot's levels for an audible one), and restore sets both.
-- **Restore order.** Never while the clip plays (members stay at 0 until its end, so
-  our restore and Music Assistant's do not fight); after the end, the snapshot's
-  volumes (members, then protocol players) are checked and fixed where they differ,
-  and checked once more 5 s later. The clip's end is the bridge clock's estimate
-  (fire time + 180 s + 5 s); past it the clip still counts as playing while Music
-  Assistant reports an announcement under way (the `announcement_in_progress` flag
-  if a version exposes it, or `current_media` of type `announcement`), for at most
-  60 s more. A new session on the group while the clip plays out is refused with
-  `signal_playing`. Cost: up to ~3 min of silence after a session ends; the page
-  says when the music returns. A shutdown while a clip plays puts every level back
-  instead of silencing (nothing stays at 0 if the bridge never restarts); the next
-  boot silences the rest of the clip and restores after it.
+**Decision (2026-10-16, option C; supersedes option A).** Music must not play during
+calibration, and the announcement path was too complex. So:
+
+- **Stop the group.** The operator stops the group's playback first
+  (`players/cmd/stop` on the group, "Stop group" in the UI); the session refuses to
+  start the clicker (`group_playing`) while the group plays anything else.
+- **The clicker.** `player_queues/play_media` (`queue_id` = the group, `media` = the
+  click-track URL, `option` = `replace`): Music Assistant plays it as a normal item
+  on every member. "Playing" means the group's `playback_state` is `playing` and its
+  `current_media.uri` contains the click-track URL or its token. Starting it again
+  (while it plays, or after it ended) starts it over; in a measuring round that
+  starts the round again. The group's queue is replaced; the music does not come
+  back by itself.
+- **Volumes.** The operator sets each member's volume (`players/cmd/volume_set`)
+  until the clicks are clearly audible where they measure. The bridge does not
+  snapshot or restore volumes.
+- **Solo by mute, no fallback.** `solo(member)` mutes every other member with
+  `players/cmd/volume_mute` (never a member that was muted before the session) and
+  unmutes the member if the session had muted it; `solo(None)` unmutes every member
+  the session muted. A member whose `supported_features` lacks `volume_mute`, or
+  whose mute Music Assistant refuses, fails the solo with `sync_mute_unsupported`
+  naming it (problem field `member`); the mutes that solo already sent are taken
+  back. There is no volume fallback: a group with a member that cannot be muted can
+  only solo that member.
+- **The end.** Finish, cancel, an error, the inactivity timeout and shutdown unmute
+  every member the session muted, then stop the group only if the session's clicker
+  is what it plays. The members the session muted (added before the mute is sent)
+  and its clicker URL are persisted, so a bridge restart unmutes them and stops the
+  click track if the group still plays it.
+
+Option A (one announcement per round, solo and stop by volume, the restore waiting
+for the clip's end, "music returns in N s") was implemented and dropped: it left
+the speakers silent for up to three minutes after every session and needed the
+protocol players' volumes fixed by hand.
 
 Candidates the spike evaluated on Music Assistant dev:
 
@@ -408,8 +409,10 @@ bridge are generated to match it.
 - `PUT /api/v1/sync/groups/{group_id}/delays` — manual write `{ma_player_id: ms}`.
 - `POST /api/v1/sync/sessions` `{group_id, mode: manual|semi|auto, point:
   device|position}` → session; `GET`/`DELETE /api/v1/sync/sessions/{id}`.
-- `POST /api/v1/sync/sessions/{id}/signal` `{action: start|stop}`;
-  `POST .../solo` `{member | null}`; `POST .../ab` `{a, b}`.
+- `POST /api/v1/sync/sessions/{id}/signal` `{action: start|stop}` (start: the
+  clicker on the group; stop: stop whatever the group plays);
+  `PUT .../volumes/{member}` `{level: 0–100}`; `POST .../solo` `{member | null}`;
+  `POST .../ab` `{a, b}`.
 - `POST /api/v1/sync/sessions/{id}/recordings?member=…&start_time_s=…&sample_rate=…`
   (binary body) → measurement.
 - `GET .../proposal` (read-only: the current proposal, or `no_measurement`);
@@ -431,8 +434,9 @@ bridge are generated to match it.
 Error codes: `ma_unavailable`, `ma_forbidden` (the token lacks a required scope,
 typically `CONFIG_PLAYERS_WRITE`), `session_active`, `session_expired`,
 `member_gone`, `not_adjustable`, `recording_invalid`, `restore_pending`, and for the
-signal `signal_playing` (the last clip still plays out), `signal_waiting`,
-`signal_starting`, `signal_stopped`.
+signal path `group_playing` (stop the group before the clicker), `clicker_stopped`
+(solo or a recording without the clicker) and `sync_mute_unsupported` (with
+`member`: the player that cannot be muted).
 
 ## UX
 
@@ -448,23 +452,31 @@ drawer's Timing tab. Route `/sync/:groupId`, designed for a phone in portrait.
 
 **Manual tuning**
 - Per member: slider 0–5000, −10/−1/+1/+10 buttons, number field; applied live.
-- Listening bar: **Play clicks** on the group, **Solo** per member, **A/B** (two
-  members alternate every two clicks).
+- First the same preparation as the wizard (stop the group, start the clicker, set
+  the volumes); skipped when the clicker already plays.
+- Listening bar: **Play clicks** (the clicker) and **Stop clicks** (stops the
+  group), **Solo** per member, **A/B** (two members alternate every two clicks).
 - **Reset to session start**; on leaving, offer to save as a profile.
 
 **Measurement wizard**
-1. Preparation: warning that playback is interrupted and restored; measuring point
-   (at each speaker — default; from the listening position); microphone permission;
-   tip to hold the phone still.
-2. Level check: clicks on the whole group with a level meter; too quiet / too loud
-   hints.
-3. Member by member: prompt, solo, 6 s (12 s) recording with progress, result
+1. Preparation: nothing plays while measuring (the group's queue is replaced by the
+   click track; the music does not come back by itself); measuring point (at each
+   speaker — default; from the listening position); microphone permission; tip to
+   hold the phone still.
+2. Stop playback: the group's live state and **Stop group**; Next once the group no
+   longer plays.
+3. Start the clicker: **Start the clicker**; Next once the bridge sees it playing.
+4. Set volume: a volume slider per member with "clicks should be clearly audible
+   where you measure", and the microphone's level meter (too quiet / too loud).
+5. Member by member: prompt, solo, 6 s (12 s) recording with progress, result
    (✓ with confidence, or not heard / unstable with **Repeat** / **Skip**). Steps
-   can be redone; members reordered.
-4. Proposal: table before → after (Δ), before/after spread chart; **Apply**,
+   can be redone; members reordered. When the clicker stopped: **Start the clicker
+   again** (every member is redone). A member that cannot be muted is named inline.
+6. Proposal: table before → after (Δ), before/after spread chart; **Apply**,
    **Apply and save as profile…**, **Cancel**. Automatic mode applies and shows
    **Undo (30 s)**.
-5. Done: group restored; optional quick listen with clicks on the whole group.
+7. Done: speakers unmuted and the clicker stopped; optional quick listen with
+   clicks on the whole group for 10 s.
 
 **Failure handling in the UI**
 - A member leaves the group or disconnects mid-session: its step is marked; the plan
@@ -481,8 +493,8 @@ drawer's Timing tab. Route `/sync/:groupId`, designed for a phone in portrait.
 - `SYNC_PROFILES` in `config.json`: list of profile objects (see Models). Registered
   in `DEFAULT_CONFIG` (`[]`), `config/schema.json` and the HA option translation's
   preserved keys (see Bridge adapters); migration not needed (absent = empty list).
-- `sync_snapshot.json` in the config directory while a session holds a snapshot;
-  removed after a successful restore.
+- `sync_snapshot.json` in the config directory while a session has something to put
+  back (members it muted, its clicker URL); removed after a successful restore.
 - Recordings are kept in memory for the session only, never written to disk.
 
 ## Security
@@ -607,3 +619,13 @@ aiosendspin 10.0.2. Decisions in the table above are unchanged. Changes:
   once; the undo window survives a check clip that fails to start; the clip's end
   waits for Music Assistant's announcement (bounded) and the volumes are checked
   again 5 s after a restore; a shutdown mid-clip hands the levels back.
+- **Option C (2026-10-16, user decision; supersedes option A).** No music during a
+  session: the operator stops the group, starts the clicker (`play_media` with
+  `option=replace` on the group's queue) and sets the volumes; solo mutes the other
+  members and a member without mute is a visible `sync_mute_unsupported` error (no
+  volume fallback); the end unmutes what the session muted and stops our clicker.
+  Removed with option A: the announcement, the volume snapshot/restore (members and
+  protocol players), the clip clock and settle time, `signal_waiting`,
+  `music_returns_in_s`, the post-restore recheck, the restart restore that waited
+  for the clip, `announcement_active` and `signal_playing`. The auto-mode undo
+  window is a plain 30 s from the apply again.
