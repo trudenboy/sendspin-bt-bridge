@@ -24,6 +24,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from sendspin_bridge.sync_tuning import capture_tokens
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_sync.ports import ControlError
 from sendspin_sync.session import RESTORE_GIVE_UP_S, SyncSession
@@ -324,6 +325,7 @@ class SessionStore:
         with self._lock:
             if s.id not in self._finished_at:
                 self._finished_at[s.id] = now
+                capture_tokens.current().revoke(s.id)  # the phone link dies with the session
             close = s.id not in self._closed
             evict = now - self._finished_at[s.id] > FINISHED_TTL_S
             control = self._controls.get(s.id)
@@ -479,6 +481,7 @@ class SessionStore:
                 except Exception:
                     logger.warning("Restoring sync session %s at shutdown failed", s.id, exc_info=True)
             for s in sessions:
+                capture_tokens.current().revoke(s.id)
                 if s.state not in _ENDED:  # an ended session released its token in restore_tick()
                     self._host.release(s.id)
             with self._lock:

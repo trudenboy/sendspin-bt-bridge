@@ -78,6 +78,7 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
     app.include_router(v1)
     app.include_router(compat_ha.router)
     app.include_router(compat_ha.protected)
+    app.include_router(sync.page)
     if serve_spa:
         mount_spa(app, spa_dir)
 

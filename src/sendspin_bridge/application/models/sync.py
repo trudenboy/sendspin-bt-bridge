@@ -33,6 +33,9 @@ ErrorCode = Literal[
     "group_playing",
     "clicker_stopped",
     "sync_mute_unsupported",
+    # the phone capture's sequence
+    "no_sequence",
+    "sequence_running",
 ]
 
 
@@ -99,6 +102,21 @@ class ProposalOut(ResponseModel):
     warnings: list[str]
 
 
+class SequenceOut(ResponseModel):
+    """The phone capture's sequence: every member alone in turn while the phone records once."""
+
+    members: list[str]
+    phase: Literal["starting", "lead", "solo", "gap", "done", "failed"]
+    index: int = Field(description="The member playing alone (0-based) in solo; -1 before the first.")
+    member: str | None = Field(description="The member playing alone right now (solo only).")
+    error: str | None
+    error_member: str | None
+    solo_s: float
+    gap_s: float
+    lead_s: float
+    uploaded: bool = Field(description="A recording of this sequence was measured.")
+
+
 class SyncSessionOut(ResponseModel):
     """The session resource; also the payload of ``sync`` events."""
 
@@ -141,6 +159,7 @@ class SyncSessionOut(ResponseModel):
     muted: list[str] = Field(description="Members this session muted; they are unmuted when it ends.")
     soloed: str | None
     reference: str | None
+    sequence: SequenceOut | None = Field(description="The phone capture's sequence, once one was started.")
 
 
 class SessionCreate(BaseModel):
@@ -170,6 +189,43 @@ class ReferenceIn(BaseModel):
 
 class SkipIn(BaseModel):
     member: str
+
+
+class SequenceIn(BaseModel):
+    members: list[str] = Field(min_length=1, max_length=32, description="The members to play alone, in order.")
+
+
+class CaptureLinkIn(BaseModel):
+    lang: Literal["en", "ru"] | None = Field(default=None, description="The page's language (the UI's).")
+
+
+class CaptureLinkOut(ResponseModel):
+    url: str = Field(description="The phone capture page on the bridge's LAN address, with the token.")
+    token: str
+    expires_in_s: float
+
+
+class CaptureMemberOut(ResponseModel):
+    id: str
+    name: str
+    status: Literal["ok", "not_heard", "unstable", "skipped"] | None = Field(
+        description="This member's last measurement, if any."
+    )
+
+
+class CaptureStateOut(ResponseModel):
+    """What the phone page shows: no delays, no session id, nothing to change."""
+
+    group: str
+    point: Literal["device", "position"]
+    measuring: bool = Field(description="The session still takes recordings (not tuning by ear yet).")
+    clicks_playing: bool
+    members: list[CaptureMemberOut]
+    sequence: SequenceOut | None
+
+
+class CaptureResultOut(ResponseModel):
+    results: list[MeasurementOut]
 
 
 class ApplyIn(BaseModel):
@@ -234,6 +290,13 @@ CONTRACT_MODELS: dict[str, type[BaseModel]] = {
         ProposalOut,
         SyncSessionOut,
         SessionCreate,
+        SequenceOut,
+        SequenceIn,
+        CaptureLinkIn,
+        CaptureLinkOut,
+        CaptureMemberOut,
+        CaptureStateOut,
+        CaptureResultOut,
         SignalIn,
         SoloIn,
         AbIn,

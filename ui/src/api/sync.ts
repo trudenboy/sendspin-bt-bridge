@@ -150,6 +150,19 @@ export function finishSession(id: string): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/finish', sessionPath(id)))
 }
 
+/**
+ * A link to the phone capture page of this measurement (its token allows only reading the capture
+ * state and uploading a recording; a new link revokes the previous one).
+ */
+export function captureLink(id: string, lang?: 'en' | 'ru'): Promise<{ url: string; token: string; expires_in_s: number }> {
+  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/capture-link', { ...sessionPath(id), body: lang ? { lang } : {} }))
+}
+
+/** Play the sequence for the phone: every member alone in turn while the phone records once. */
+export function startSequence(id: string, members: string[]): Promise<SyncSession> {
+  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/sequence', { ...sessionPath(id), body: { members } }))
+}
+
 /** One capture as int16 little-endian PCM (raw body, so not through the JSON client). */
 export async function uploadRecording(
   id: string,

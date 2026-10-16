@@ -7,10 +7,11 @@ FastAPI must run them in its threadpool, never on the event loop.
 
 from __future__ import annotations
 
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from sendspin_bridge.api.auth import require_principal
 from sendspin_bridge.api.errors import PROBLEM_RESPONSES, ApiError
@@ -19,6 +20,10 @@ from sendspin_bridge.application.models.sync import (
     AbIn,
     ApplyIn,
     CaptureIn,
+    CaptureLinkIn,
+    CaptureLinkOut,
+    CaptureResultOut,
+    CaptureStateOut,
     DelaysIn,
     MeasurementOut,
     MemberDelayIn,
@@ -30,6 +35,7 @@ from sendspin_bridge.application.models.sync import (
     ProfilePatch,
     ProposalOut,
     ReferenceIn,
+    SequenceIn,
     SessionCreate,
     SignalIn,
     SkipIn,
@@ -37,9 +43,12 @@ from sendspin_bridge.application.models.sync import (
     SyncGroup,
     SyncSessionOut,
 )
+from sendspin_bridge.sync_tuning import capture_page
 from sendspin_bridge.sync_tuning import click_track_host as host
 
 public = APIRouter(tags=["sync"])
+#: The phone capture page, outside /api/v1 (registered before the SPA's catch-all).
+page = APIRouter(include_in_schema=False)
 
 
 @public.get("/sync/signal/{token}.wav", response_class=Response, summary="Click track for a running session (public)")
@@ -53,6 +62,64 @@ def signal(token: str) -> Response:
         media_type="audio/wav",
         headers={"Cache-Control": "no-store", "Content-Encoding": "identity"},
     )
+
+
+async def _capture_body(request: Request) -> bytes:
+    """The raw upload, refused once it passes the cap instead of being read in full."""
+    limit = uc.MAX_CAPTURE_BYTES
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise ApiError(400, "recording_invalid", f"A recording is at most {limit // 1_000_000} MB")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise ApiError(400, "recording_invalid", f"A recording is at most {limit // 1_000_000} MB")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+_CAPTURE_BODY = {
+    "requestBody": {
+        "required": True,
+        "description": "The phone's recording of the sequence: any audio file FFmpeg reads (m4a/AAC, wav, webm, …).",
+        "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}},
+    }
+}
+
+
+@public.get(
+    "/sync/capture/{token}",
+    response_model=CaptureStateOut,
+    summary="Capture state for the phone page (capture token, no sign-in)",
+    responses={404: {"description": "Unknown, expired or revoked token"}},
+)
+def capture_state(token: str) -> CaptureStateOut:
+    return uc.capture_state(token)
+
+
+@public.post(
+    "/sync/capture/{token}/recording",
+    response_model=CaptureResultOut,
+    summary="Upload the phone's recording of the sequence (capture token, no sign-in)",
+    openapi_extra=_CAPTURE_BODY,
+)
+def capture_upload(token: str, body: Annotated[bytes, Depends(_capture_body)]) -> CaptureResultOut:
+    return uc.capture_upload(token, body)
+
+
+@page.get("/sync/capture/{token}", response_class=HTMLResponse)
+def capture_page_html(request: Request, token: str, lang: str | None = None) -> HTMLResponse:
+    chosen = capture_page.pick_lang(lang, request.headers.get("accept-language"))
+    headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"}
+    try:
+        uc.capture_state(token)
+    except uc.UseCaseError:
+        return HTMLResponse(capture_page.render_gone(chosen), status_code=404, headers=headers)
+    nonce = secrets.token_urlsafe(16)
+    headers["Content-Security-Policy"] = capture_page.content_security_policy(nonce)
+    return HTMLResponse(capture_page.render(token, chosen, nonce), headers=headers)
 
 
 router = APIRouter(
@@ -261,6 +328,31 @@ def apply(session_id: str, body: ApplyIn) -> SyncSessionOut:
 )
 def finish(session_id: str) -> SyncSessionOut:
     return uc.finish(session_id)
+
+
+@router.post(
+    "/sessions/{session_id}/capture-link",
+    response_model=CaptureLinkOut,
+    status_code=201,
+    summary="A link (and QR) to the phone capture page of this measurement",
+    description=(
+        "The link carries a short-lived, unguessable token for this session only; it allows reading the "
+        "capture state and uploading a recording, nothing else. A new link revokes the previous one; the "
+        "token is revoked when the session ends."
+    ),
+)
+def capture_link(session_id: str, body: CaptureLinkIn) -> CaptureLinkOut:
+    return uc.capture_link(session_id, body.lang)
+
+
+@router.post(
+    "/sessions/{session_id}/sequence",
+    response_model=SyncSessionOut,
+    status_code=202,
+    summary="Play the sequence for the phone: every member alone in turn",
+)
+def start_sequence(session_id: str, body: SequenceIn) -> SyncSessionOut:
+    return uc.start_sequence(session_id, body.members)
 
 
 # -- profiles -----------------------------------------------------------------------------

@@ -1605,7 +1605,16 @@
       "proposalFailed": "Could not work out the delays ({code}).",
       "retry": "Try again",
       "applying": "Applying the measured delays…",
-      "applyFailed": "Could not apply the delays ({code})."
+      "applyFailed": "Could not apply the delays ({code}).",
+      "capture": {
+        "legend": "What will record?",
+        "device": "This device’s microphone",
+        "deviceHelp": "Carry this device to each speaker. Needs HTTPS (or localhost) for the microphone.",
+        "phone": "A phone (scan a QR code)",
+        "phoneHelp": "Open the capture page on a phone; it records every speaker in one go and sends the recording. Works over plain HTTP too (with the phone’s recorder).",
+        "usePhone": "Measure with a phone instead"
+      },
+      "startPhone": "Start"
     },
     "tune": {
       "help": "The measured delays are applied and the clicks keep playing. Listen to each speaker alone or compare two, adjust any delay by hand, then finish.",
@@ -1723,6 +1732,29 @@
       "unavailable": "Unavailable",
       "silent": "Volume 0 %",
       "muted": "Muted"
+    },
+    "phone": {
+      "help": "Open the capture page on a phone. The bridge then plays the clicks on each speaker alone, one after the other, while the phone records once.",
+      "qr": "QR code of the phone capture link",
+      "scan": "Scan with the phone’s camera, or open the link on it",
+      "copy": "Copy link",
+      "newLink": "New link",
+      "linkFailed": "Could not make a link ({code}).",
+      "security": "The link only lets the phone see which speaker plays and send its recording for this measurement. It works for {min} minutes and stops when the measurement ends.",
+      "sameNetwork": "The phone must be on the same network as the bridge.",
+      "step1": "On the phone, start recording (the page says how).",
+      "step2": "Press “Play the sequence” below and hold the phone as the page on it says.",
+      "step3": "When the sequence has finished, the phone sends the recording; the results appear here.",
+      "play": "Play the sequence ({n})",
+      "again": "Play every speaker again",
+      "measureIt": "Measure it",
+      "notYet": "Not measured yet",
+      "lead": "Starting: every speaker is quiet for a moment…",
+      "now": "Now: {name} alone ({n}/{total})",
+      "pause": "Pause: move to the next speaker…",
+      "measured": "The phone’s recording is measured.",
+      "waitingUpload": "The sequence has finished: waiting for the phone’s recording…",
+      "failed": "The sequence stopped ({code})."
     }
   }
 }

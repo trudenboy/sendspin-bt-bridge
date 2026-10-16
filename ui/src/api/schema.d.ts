@@ -1656,6 +1656,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/capture/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capture state for the phone page (capture token, no sign-in) */
+        get: operations["capture_state_api_v1_sync_capture__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/capture/{token}/recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload the phone's recording of the sequence (capture token, no sign-in) */
+        post: operations["capture_upload_api_v1_sync_capture__token__recording_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/groups": {
         parameters: {
             query?: never;
@@ -1880,6 +1914,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/sessions/{session_id}/capture-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A link (and QR) to the phone capture page of this measurement
+         * @description The link carries a short-lived, unguessable token for this session only; it allows reading the capture state and uploading a recording, nothing else. A new link revokes the previous one; the token is revoked when the session ends.
+         */
+        post: operations["capture_link_api_v1_sync_sessions__session_id__capture_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/sessions/{session_id}/delays/{member}": {
         parameters: {
             query?: never;
@@ -1960,6 +2014,23 @@ export interface paths {
         put?: never;
         /** Pick the reference member */
         post: operations["set_reference_api_v1_sync_sessions__session_id__reference_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/sequence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Play the sequence for the phone: every member alone in turn */
+        post: operations["start_sequence_api_v1_sync_sessions__session_id__sequence_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2817,6 +2888,66 @@ export interface components {
              * @default
              */
             notes?: string;
+        };
+        /** CaptureLinkIn */
+        CaptureLinkIn: {
+            /**
+             * Lang
+             * @description The page's language (the UI's).
+             */
+            lang?: ("en" | "ru") | null;
+        };
+        /** CaptureLinkOut */
+        CaptureLinkOut: {
+            /** Expires In S */
+            expires_in_s: number;
+            /** Token */
+            token: string;
+            /**
+             * Url
+             * @description The phone capture page on the bridge's LAN address, with the token.
+             */
+            url: string;
+        };
+        /** CaptureMemberOut */
+        CaptureMemberOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @description This member's last measurement, if any.
+             */
+            status: ("ok" | "not_heard" | "unstable" | "skipped") | null;
+        };
+        /** CaptureResultOut */
+        CaptureResultOut: {
+            /** Results */
+            results: components["schemas"]["MeasurementOut"][];
+        };
+        /**
+         * CaptureStateOut
+         * @description What the phone page shows: no delays, no session id, nothing to change.
+         */
+        CaptureStateOut: {
+            /** Clicks Playing */
+            clicks_playing: boolean;
+            /** Group */
+            group: string;
+            /**
+             * Measuring
+             * @description The session still takes recordings (not tuning by ear yet).
+             */
+            measuring: boolean;
+            /** Members */
+            members: components["schemas"]["CaptureMemberOut"][];
+            /**
+             * Point
+             * @enum {string}
+             */
+            point: "device" | "position";
+            sequence: components["schemas"]["SequenceOut"] | null;
         };
         /** CheckIn */
         CheckIn: {
@@ -4290,6 +4421,52 @@ export interface components {
             /** Sendspin Server */
             SENDSPIN_SERVER?: string | null;
         };
+        /** SequenceIn */
+        SequenceIn: {
+            /**
+             * Members
+             * @description The members to play alone, in order.
+             */
+            members: string[];
+        };
+        /**
+         * SequenceOut
+         * @description The phone capture's sequence: every member alone in turn while the phone records once.
+         */
+        SequenceOut: {
+            /** Error */
+            error: string | null;
+            /** Error Member */
+            error_member: string | null;
+            /** Gap S */
+            gap_s: number;
+            /**
+             * Index
+             * @description The member playing alone (0-based) in solo; -1 before the first.
+             */
+            index: number;
+            /** Lead S */
+            lead_s: number;
+            /**
+             * Member
+             * @description The member playing alone right now (solo only).
+             */
+            member: string | null;
+            /** Members */
+            members: string[];
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "starting" | "lead" | "solo" | "gap" | "done" | "failed";
+            /** Solo S */
+            solo_s: number;
+            /**
+             * Uploaded
+             * @description A recording of this sequence was measured.
+             */
+            uploaded: boolean;
+        };
         /** SessionCreate */
         SessionCreate: {
             /** Group Id */
@@ -4582,6 +4759,8 @@ export interface components {
              * @description Code of the last failed restore attempt.
              */
             restore_error: string | null;
+            /** @description The phone capture's sequence, once one was started. */
+            sequence: components["schemas"]["SequenceOut"] | null;
             /** Soloed */
             soloed: string | null;
             /**
@@ -9106,6 +9285,80 @@ export interface operations {
             };
         };
     };
+    capture_state_api_v1_sync_capture__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureStateOut"];
+                };
+            };
+            /** @description Unknown, expired or revoked token */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_upload_api_v1_sync_capture__token__recording_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** @description The phone's recording of the sequence: any audio file FFmpeg reads (m4a/AAC, wav, webm, …). */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_groups_api_v1_sync_groups_get: {
         parameters: {
             query?: never;
@@ -9794,6 +10047,52 @@ export interface operations {
             };
         };
     };
+    capture_link_api_v1_sync_sessions__session_id__capture_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureLinkOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     session_delay_api_v1_sync_sessions__session_id__delays__member__put: {
         parameters: {
             query?: never;
@@ -10038,6 +10337,52 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    start_sequence_api_v1_sync_sessions__session_id__sequence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

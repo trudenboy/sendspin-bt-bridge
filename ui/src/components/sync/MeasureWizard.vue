@@ -29,6 +29,7 @@ import StepClicker from './StepClicker.vue'
 import StepVolume from './StepVolume.vue'
 import StepMembers, { type MemberPhase } from './StepMembers.vue'
 import StepTune from './StepTune.vue'
+import PhoneCapture from './PhoneCapture.vue'
 import StepDone from './StepDone.vue'
 
 /**
@@ -82,6 +83,8 @@ const sync = useSyncStore()
 
 const step = ref<Step>('prepare')
 const point = ref<SessionPoint>('device')
+/** Record here (this device's microphone) or with a phone through the capture page. */
+const capture = ref<'device' | 'phone'>('device')
 const starting = ref(false)
 const startError = ref('')
 /** The session this wizard started; null before the start and after it ended. */
@@ -99,6 +102,8 @@ let progressTimer: ReturnType<typeof setInterval> | null = null
 const PROGRESS_TICK_MS = 100
 
 const supported = props.recorderFactory ? true : SyncRecorder.supported()
+// No microphone here (plain HTTP, an old browser): a phone is the way to measure.
+if (!supported) capture.value = 'phone'
 
 /* -- members ------------------------------------------------------------------------ */
 
@@ -166,10 +171,15 @@ const complete = computed(
     ordered.value.every((m) => {
       const id = m.ma_player_id
       if (departed.value.includes(id)) return true
+      if (capture.value === 'phone') {
+        const s = session.value?.measurements?.[id]?.status
+        return s === 'ok' || s === 'skipped'
+      }
       const r = results[id]
       return !!r && (r.status === 'ok' || r.status === 'skipped') && !stale.value.includes(id)
     }),
 )
+const phoneMembers = computed(() => ordered.value.filter((m) => !departed.value.includes(m.ma_player_id)))
 
 function measurement(member: string, status: SyncMeasurement['status'], reason = ''): SyncMeasurement {
   return { member, status, reason, confidence: 0, clicks: 0, phase_ms: null, spread_ms: null }
@@ -335,23 +345,26 @@ async function begin() {
   startError.value = ''
   ended.value = false
   starting.value = true
-  const rec = props.recorderFactory?.() ?? new SyncRecorder()
+  // With a phone, nothing is recorded here: no microphone to open.
+  const rec = capture.value === 'device' ? (props.recorderFactory?.() ?? new SyncRecorder()) : null
   recorder = rec
   try {
-    try {
-      await rec.open()
-    } catch (e) {
-      startError.value = `${t('sync.wizard.micDenied')} ${captureText(e)}`
-      closeRecorder()
-      return
+    if (rec) {
+      try {
+        await rec.open()
+      } catch (e) {
+        startError.value = `${t('sync.wizard.micDenied')} ${captureText(e)}`
+        closeRecorder()
+        return
+      }
+      if (disposed || rec !== recorder) return
     }
-    if (disposed || rec !== recorder) return
     let id: string
     try {
       id = (await sync.start(props.groupId, 'semi', point.value)).id
     } catch (e) {
       startError.value = t('sync.wizard.startFailed', { code: errorCode(e) })
-      if (rec === recorder) closeRecorder()
+      if (rec && rec === recorder) closeRecorder()
       return
     }
     if (disposed) {
@@ -362,7 +375,7 @@ async function begin() {
     trackedId.value = id
     notice.value = ''
     setActiveFlag()
-    attach(rec)
+    if (rec) attach(rec)
     resetMeasurements()
     // The speakers the operator chose to skip on step 1 (unavailable, silent, muted).
     for (const member of props.preSkip ?? []) {
@@ -382,7 +395,7 @@ async function begin() {
       autoNote.value = message.value
     }
     // iOS may leave a fresh context suspended until a tap: offer it right away.
-    if (rec.needsResume) interrupt()
+    if (rec?.needsResume) interrupt()
   } finally {
     starting.value = false
   }
@@ -906,7 +919,7 @@ async function again() {
 async function backToMembers() {
   proposalError.value = ''
   await goTo('members')
-  await reopenRecorder()
+  if (capture.value === 'device') await reopenRecorder()
 }
 
 /** What the end of a measurement did, said on step 1 (Cancel, or the session ended under it). */
@@ -918,7 +931,9 @@ const notice = ref('')
  */
 async function cancel() {
   const id = sessionId.value
-  const recorded = Object.values(results).some((r) => r.status !== 'skipped')
+  const recorded =
+    Object.values(results).some((r) => r.status !== 'skipped') ||
+    Object.values(session.value?.measurements ?? {}).some((r) => r.status !== 'skipped')
   if (applied.value || recorded) {
     const ok = await confirmDialog({
       title: t(applied.value ? 'sync.cancel.tuneTitle' : 'sync.cancel.title'),
@@ -1059,6 +1074,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
     <StepPrepare
       v-if="step === 'prepare'"
       v-model:point="point"
+      v-model:capture="capture"
       :busy="starting"
       :error="startError"
       :supported="supported"
@@ -1096,12 +1112,22 @@ const volumes = computed(() => session.value?.volumes ?? {})
       v-else-if="step === 'volume'"
       :members="allMembers"
       :volumes="volumes"
-      :read="readLevel"
+      :read="capture === 'device' ? readLevel : undefined"
       :disabled="micLost"
       :error="prepError"
       @volume="setVolume"
       @next="toMembers"
       @back="toStep('clicker')"
+      @cancel="cancel"
+    />
+    <PhoneCapture
+      v-else-if="step === 'members' && capture === 'phone' && session"
+      :session="session"
+      :members="phoneMembers"
+      :clicker-left-s="leftS"
+      @restart="restartClicker"
+      @next="toTune"
+      @back="backToVolume"
       @cancel="cancel"
     />
     <StepMembers

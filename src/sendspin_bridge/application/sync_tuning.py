@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -19,6 +20,10 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.models.sync import (
     CaptureIn,
+    CaptureLinkOut,
+    CaptureMemberOut,
+    CaptureResultOut,
+    CaptureStateOut,
     MeasurementOut,
     PendingRestoreOut,
     ProfileApplyOut,
@@ -32,10 +37,12 @@ from sendspin_bridge.application.models.sync import (
     SyncSessionOut,
 )
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_groups
+from sendspin_bridge.sync_tuning import capture_tokens
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_bridge.sync_tuning.profiles import ConfigProfileRepository
-from sendspin_bridge.sync_tuning.session_store import get_store
+from sendspin_bridge.sync_tuning.session_store import get_store, run_in_background
 from sendspin_sync import estimator
+from sendspin_sync import sequence as seq
 from sendspin_sync.models import Profile, Recording, to_dict
 from sendspin_sync.ports import ControlError
 
@@ -60,11 +67,18 @@ _STATUS = {
     "group_playing": 409,
     "clicker_stopped": 409,
     "sync_mute_unsupported": 409,
+    "no_sequence": 409,
+    "sequence_running": 409,
     "not_found": 404,
 }
 
 #: Largest recording body accepted: 20 s of 48 kHz int16 mono is 1.92 MB.
 MAX_RECORDING_BYTES = 2_000_000
+#: Largest phone upload: a few minutes of a phone recorder's AAC, or of WAV at 16 kHz.
+MAX_CAPTURE_BYTES = 20_000_000
+
+#: The phone capture's sequence waits with this (tests swap it for a clock that does not wait).
+_sequence_sleep = time.sleep
 
 
 def _raise(exc: ControlError | MaApiError, *, extra: dict[str, Any] | None = None) -> NoReturn:
@@ -351,6 +365,131 @@ def upload_recording(sid: str, member: str, start_time_s: float, sample_rate: in
     if m.status == "ok":
         get_store().mark_measured(session.group_id, m.member, _now())
     return MeasurementOut.model_validate(to_dict(m))
+
+
+# -- the phone capture page ----------------------------------------------------------------
+
+
+def _capture_base_url() -> str:
+    """The bridge as a phone on the LAN reaches it (the address Music Assistant fetches the clicks from)."""
+    from sendspin_bridge.sync_tuning.click_track_host import default_base_url
+
+    return default_base_url()
+
+
+def capture_link(sid: str, lang: str | None) -> CaptureLinkOut:
+    """A link (and its token) to the phone capture page of a measuring session; a new link revokes
+    the session's previous one."""
+    session = _session(sid)
+    if session.mode != "semi" or session.state not in ("measuring", "proposed"):
+        raise UseCaseError(409, "session_state", "A capture link is only for a running measurement")
+    tokens = capture_tokens.current()
+    token = tokens.issue(session.id)
+    url = f"{_capture_base_url().rstrip('/')}/sync/capture/{token}"
+    if lang in ("en", "ru"):
+        url += f"?lang={lang}"
+    return CaptureLinkOut(url=url, token=token, expires_in_s=tokens.expires_in(session.id) or 0.0)
+
+
+def start_sequence(sid: str, members: list[str]) -> SyncSessionOut:
+    """Play the sequence for the phone (every member alone in turn), on a worker thread."""
+    session = _session(sid)
+    try:
+        session.start_sequence(members)
+    except (ControlError, MaApiError) as exc:
+        _raise(exc)
+    run_in_background(lambda: session.run_sequence(sleep=_sequence_sleep), name=f"sync-sequence-{sid[:8]}")
+    return _session_out(session)
+
+
+def _capture_session(token: str) -> SyncSession:
+    """The live measuring session a capture token stands for; 404 for anything else (unknown, expired,
+    revoked, or a session that ended)."""
+    sid = capture_tokens.current().session_for(token) if 20 <= len(token) <= 128 else None
+    if sid is None:
+        _not_found("This capture link is not valid any more")
+    try:
+        session = get_store().get(sid)
+    except ControlError:
+        _not_found("This capture link is not valid any more")
+    if session.state in ("restoring", "done", "cancelled", "failed"):
+        _not_found("This capture link is not valid any more")
+    return session
+
+
+def short_name(name: str) -> str:
+    """A speaker's name without the bridge suffix and trailing technical ids (as the UI shows it)."""
+    import re
+
+    out = name.strip()
+    at = out.rfind(" @ ")
+    if at > 0:
+        out = out[:at]
+    while True:
+        nxt = re.sub(r"\s*\[[^\]\s]*\]$", "", out)
+        nxt = re.sub(r"\s*\([^()\s]*[\d_.][^()\s]*\)$", "", nxt).strip()
+        if nxt == out or not nxt:
+            break
+        out = nxt
+    return out or name
+
+
+def capture_state(token: str) -> CaptureStateOut:
+    session = _capture_session(token)
+    data = session.to_dict()
+    names = {m["ma_player_id"]: short_name(str(m["name"])) for m in data["members"]}
+    sequence = data["sequence"]
+    if sequence is not None and sequence.get("member"):
+        sequence = {**sequence, "member": names.get(sequence["member"], sequence["member"])}
+    if sequence is not None:
+        sequence = {**sequence, "members": [names.get(m, m) for m in sequence["members"]]}
+    return CaptureStateOut(
+        group=_group_name(session.group_id),
+        point=session.point,
+        measuring=session.state in ("measuring", "proposed"),
+        clicks_playing=bool(data["clicker_playing"]),
+        members=[
+            CaptureMemberOut(
+                id=m["ma_player_id"],
+                name=names[m["ma_player_id"]],
+                status=(data["measurements"].get(m["ma_player_id"]) or {}).get("status"),
+            )
+            for m in data["members"]
+            if m["adjustable"]
+        ],
+        sequence=sequence,
+    )
+
+
+def _group_name(group_id: str) -> str:
+    for g in get_ma_groups():
+        if str(g.get("id")) == group_id:
+            return str(g.get("name") or group_id)
+    return group_id
+
+
+def capture_upload(token: str, body: bytes) -> CaptureResultOut:
+    """Decode the phone's recording of the last sequence (any container FFmpeg reads) and measure
+    every member of it."""
+    from sendspin_bridge.sync_tuning.audio_decode import decode_to_mono
+
+    session = _capture_session(token)
+    if not body or len(body) > MAX_CAPTURE_BYTES:
+        _invalid_recording(f"A recording is a non-empty audio file of at most {MAX_CAPTURE_BYTES // 1_000_000} MB")
+    current = session.sequence
+    if current is None:
+        raise UseCaseError(409, "no_sequence", "Play the sequence on the bridge page first")
+    if current["phase"] != "done":
+        raise UseCaseError(409, "sequence_running", "Wait until the sequence has finished")
+    try:
+        pcm, rate = decode_to_mono(body, max_seconds=seq.max_duration_s(len(current["members"]), session.point))
+        results = session.record_sequence(pcm, rate)
+    except (ControlError, MaApiError) as exc:
+        _raise(exc)
+    for m in results.values():
+        if m.status == "ok":
+            get_store().mark_measured(session.group_id, m.member, _now())
+    return CaptureResultOut(results=[MeasurementOut.model_validate(to_dict(m)) for m in results.values()])
 
 
 # -- profiles ----------------------------------------------------------------------------

@@ -1584,6 +1584,158 @@
         "title": "CaptureIn",
         "type": "object"
       },
+      "CaptureLinkIn": {
+        "properties": {
+          "lang": {
+            "anyOf": [
+              {
+                "enum": [
+                  "en",
+                  "ru"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The page's language (the UI's).",
+            "title": "Lang"
+          }
+        },
+        "title": "CaptureLinkIn",
+        "type": "object"
+      },
+      "CaptureLinkOut": {
+        "properties": {
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "number"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "description": "The phone capture page on the bridge's LAN address, with the token.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "token",
+          "expires_in_s"
+        ],
+        "title": "CaptureLinkOut",
+        "type": "object"
+      },
+      "CaptureMemberOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ok",
+                  "not_heard",
+                  "unstable",
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "This member's last measurement, if any.",
+            "title": "Status"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status"
+        ],
+        "title": "CaptureMemberOut",
+        "type": "object"
+      },
+      "CaptureResultOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementOut"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "CaptureResultOut",
+        "type": "object"
+      },
+      "CaptureStateOut": {
+        "description": "What the phone page shows: no delays, no session id, nothing to change.",
+        "properties": {
+          "clicks_playing": {
+            "title": "Clicks Playing",
+            "type": "boolean"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "measuring": {
+            "description": "The session still takes recordings (not tuning by ear yet).",
+            "title": "Measuring",
+            "type": "boolean"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/CaptureMemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "point": {
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Point",
+            "type": "string"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SequenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "group",
+          "point",
+          "measuring",
+          "clicks_playing",
+          "members",
+          "sequence"
+        ],
+        "title": "CaptureStateOut",
+        "type": "object"
+      },
       "CheckIn": {
         "properties": {
           "device_names": {
@@ -5371,6 +5523,119 @@
         "title": "SendspinTestIn",
         "type": "object"
       },
+      "SequenceIn": {
+        "properties": {
+          "members": {
+            "description": "The members to play alone, in order.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "SequenceIn",
+        "type": "object"
+      },
+      "SequenceOut": {
+        "description": "The phone capture's sequence: every member alone in turn while the phone records once.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "error_member": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Member"
+          },
+          "gap_s": {
+            "title": "Gap S",
+            "type": "number"
+          },
+          "index": {
+            "description": "The member playing alone (0-based) in solo; -1 before the first.",
+            "title": "Index",
+            "type": "integer"
+          },
+          "lead_s": {
+            "title": "Lead S",
+            "type": "number"
+          },
+          "member": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The member playing alone right now (solo only).",
+            "title": "Member"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "starting",
+              "lead",
+              "solo",
+              "gap",
+              "done",
+              "failed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "solo_s": {
+            "title": "Solo S",
+            "type": "number"
+          },
+          "uploaded": {
+            "description": "A recording of this sequence was measured.",
+            "title": "Uploaded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "members",
+          "phase",
+          "index",
+          "member",
+          "error",
+          "error_member",
+          "solo_s",
+          "gap_s",
+          "lead_s",
+          "uploaded"
+        ],
+        "title": "SequenceOut",
+        "type": "object"
+      },
       "SessionCreate": {
         "properties": {
           "group_id": {
@@ -6092,6 +6357,17 @@
             "description": "Code of the last failed restore attempt.",
             "title": "Restore Error"
           },
+          "sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SequenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The phone capture's sequence, once one was started."
+          },
           "soloed": {
             "anyOf": [
               {
@@ -6163,7 +6439,8 @@
           "clicker_left_s",
           "muted",
           "soloed",
-          "reference"
+          "reference",
+          "sequence"
         ],
         "title": "SyncSessionOut",
         "type": "object"
@@ -11824,6 +12101,105 @@
         ]
       }
     },
+    "/api/v1/sync/capture/{token}": {
+      "get": {
+        "operationId": "capture_state_api_v1_sync_capture__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown, expired or revoked token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture state for the phone page (capture token, no sign-in)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/capture/{token}/recording": {
+      "post": {
+        "operationId": "capture_upload_api_v1_sync_capture__token__recording_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "The phone's recording of the sequence: any audio file FFmpeg reads (m4a/AAC, wav, webm, …).",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload the phone's recording of the sequence (capture token, no sign-in)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/api/v1/sync/groups": {
       "get": {
         "operationId": "list_groups_api_v1_sync_groups_get",
@@ -12706,6 +13082,71 @@
         ]
       }
     },
+    "/api/v1/sync/sessions/{session_id}/capture-link": {
+      "post": {
+        "description": "The link carries a short-lived, unguessable token for this session only; it allows reading the capture state and uploading a recording, nothing else. A new link revokes the previous one; the token is revoked when the session ends.",
+        "operationId": "capture_link_api_v1_sync_sessions__session_id__capture_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "A link (and QR) to the phone capture page of this measurement",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/api/v1/sync/sessions/{session_id}/delays/{member}": {
       "put": {
         "operationId": "session_delay_api_v1_sync_sessions__session_id__delays__member__put",
@@ -13097,6 +13538,70 @@
           }
         },
         "summary": "Pick the reference member",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/sequence": {
+      "post": {
+        "operationId": "start_sequence_api_v1_sync_sessions__session_id__sequence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Play the sequence for the phone: every member alone in turn",
         "tags": [
           "sync"
         ]

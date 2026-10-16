@@ -21,11 +21,14 @@ const props = defineProps<{
   supported: boolean
 }>()
 const point = defineModel<SessionPoint>('point', { required: true })
+/** Record with this device's microphone, or with a phone through the capture page (link + QR). */
+const capture = defineModel<'device' | 'phone'>('capture', { default: 'device' })
 const emit = defineEmits<{ next: []; manual: []; skip: [member: string, skip: boolean] }>()
 
 const { t } = useI18n()
 const uid = useId()
 const points = ['device', 'position'] as const
+const captures = ['device', 'phone'] as const
 /** About a minute per speaker (record, maybe repeat), plus two for getting the group ready. */
 const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
 </script>
@@ -76,14 +79,45 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
       </label>
     </fieldset>
 
-    <p class="flex gap-2 text-sm text-text-secondary">
+    <fieldset class="flex flex-col gap-2">
+      <legend class="mb-2 text-sm font-medium text-text-primary">{{ t('sync.wizard.capture.legend') }}</legend>
+      <label
+        v-for="c in captures"
+        :key="c"
+        :class="[
+          'flex cursor-pointer gap-3 rounded-(--radius-card) border px-4 py-3 focus-within:ring-2 focus-within:ring-primary/40',
+          capture === c ? 'border-primary bg-primary/5' : 'border-border',
+        ]"
+      >
+        <input
+          v-model="capture"
+          type="radio"
+          :name="`${uid}-capture`"
+          :value="c"
+          :data-capture="c"
+          :aria-describedby="`${uid}-${c}-capture-help`"
+          class="mt-1 accent-primary"
+        />
+        <span class="flex flex-col">
+          <span class="text-sm font-medium text-text-primary">{{ t(`sync.wizard.capture.${c}`) }}</span>
+          <span :id="`${uid}-${c}-capture-help`" class="text-xs text-text-secondary">{{ t(`sync.wizard.capture.${c}Help`) }}</span>
+        </span>
+      </label>
+    </fieldset>
+
+    <p v-if="capture === 'device'" class="flex gap-2 text-sm text-text-secondary">
       <Mic class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ t('sync.wizard.micPermission') }}
     </p>
     <p class="text-sm text-text-secondary">{{ t('sync.wizard.holdStill') }}</p>
     <p data-estimate class="text-sm text-text-secondary">{{ t('sync.wizard.estimate', { min: minutes }) }}</p>
 
-    <div v-if="!supported || error" role="alert" class="flex flex-col gap-2 text-sm">
-      <p class="text-error">{{ !supported ? t('sync.capture.errors.unsupported') : error }}</p>
+    <div v-if="(!supported && capture === 'device') || error" role="alert" class="flex flex-col gap-2 text-sm">
+      <p class="text-error">{{ error || t('sync.capture.errors.unsupported') }}</p>
+      <p v-if="capture === 'device'" class="text-text-secondary">
+        <button type="button" data-use-phone class="font-medium text-primary underline underline-offset-2" @click="capture = 'phone'">
+          {{ t('sync.wizard.capture.usePhone') }}
+        </button>
+      </p>
       <p class="text-text-secondary">
         {{ t('sync.wizard.byEar') }}
         <button type="button" data-to-manual class="font-medium text-primary underline underline-offset-2" @click="emit('manual')">
@@ -93,8 +127,8 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
     </div>
 
     <div class="flex justify-end">
-      <SbButton type="button" data-next :loading="busy" :disabled="!supported" @click="emit('next')">
-        {{ t('sync.wizard.start') }}
+      <SbButton type="button" data-next :loading="busy" :disabled="!supported && capture === 'device'" @click="emit('next')">
+        {{ capture === 'phone' ? t('sync.wizard.startPhone') : t('sync.wizard.start') }}
       </SbButton>
     </div>
   </div>

@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING, Any, Literal
 
 from sendspin_sync import click_track, estimator, planner
+from sendspin_sync import sequence as seq
 from sendspin_sync.models import Measurement, Member, to_dict
 from sendspin_sync.ports import ControlError
 
@@ -133,6 +134,10 @@ class SyncSession:
         # each member's volume before this session first changed it; put back at the end
         self.volumes_before: dict[str, int] = {}
         self._clicker_started: float | None = None  # clock at the last clicker start
+        # the phone capture's sequence (every member alone in turn, recorded once); None before one
+        self.sequence: dict[str, Any] | None = None
+        self._seq_slots: list[seq.Slot] = []
+        self._seq_clicks = 0  # clicker starts when the sequence began: its recording needs that playback
         self._live_muted: dict[str, bool] = {}  # mutes as last read from Music Assistant
         self._restore_since: float | None = None
         self._polled_at: float | None = None
@@ -328,6 +333,7 @@ class SyncSession:
                     raise
                 logger.warning("Sync session %s gives up unmuting %s: Music Assistant does not list it", self.id, mid)
             self.muted.discard(mid)
+            self._live_muted[mid] = False  # our own unmute: never mistaken for someone else's mute
 
     @_locked
     def solo(self, member: str | None) -> None:
@@ -344,10 +350,18 @@ class SyncSession:
             return
         self._member(member)
         self._require_clicker()
+        self._silence(member)
+        self.touch()
+        self._changed()
+
+    def _silence(self, keep: str | None) -> None:
+        """Mute every member but *keep* (``None``: every member), then unmute *keep* if this session
+        muted it. Members muted by someone else are left alone. On a failure the mutes this call sent
+        are taken back and the error raised (``sync_mute_unsupported`` names the member)."""
         wanted = [
             m.ma_player_id
             for m in self.members
-            if m.ma_player_id != member and m.ma_player_id not in self.muted and not self._user_muted(m.ma_player_id)
+            if m.ma_player_id != keep and m.ma_player_id not in self.muted and not self._user_muted(m.ma_player_id)
         ]
         self.muted.update(wanted)
         self._changed()  # persisted before any mute is sent
@@ -372,11 +386,150 @@ class SyncSession:
                 logger.warning("Taking back the mutes of sync session %s failed: %s", self.id, undo_exc)
             self._changed()
             raise
-        if member in self.muted:
-            self._unmute([member])
-        self.soloed = member
+        if keep is not None and keep in self.muted:
+            self._unmute([keep])
+        self.soloed = keep
+
+    # -- one recording for every member (the phone capture page) ---------------------------------
+    @_locked
+    def start_sequence(self, members: list[str]) -> None:
+        """Get a sequence ready: *members* will play alone in turn (``run_sequence`` plays it) while a
+        phone records once. Needs the clicks; refused while another sequence runs."""
+        self._require(*_MEASURING)
+        if self.sequence is not None and self.sequence["phase"] in ("starting", "lead", "solo", "gap"):
+            raise ControlError("sequence_running", "a sequence is playing")
+        if not members:
+            raise ControlError("member_gone", "no member to measure")
+        for mid in members:
+            m = self._member(mid)
+            if not m.adjustable:
+                raise ControlError("not_adjustable", m.name, member=mid)
+        self._require_clicker()
+        self._seq_slots = []
+        self._seq_clicks = self.clicker_starts
+        self.sequence = {
+            "members": list(dict.fromkeys(members)),
+            "phase": "starting",
+            "index": -1,
+            "member": None,
+            "error": None,
+            "error_member": None,
+            "solo_s": seq.solo_seconds(self.point),
+            "gap_s": seq.gap_seconds(self.point),
+            "lead_s": seq.LEAD_S,
+            "uploaded": False,
+        }
         self.touch()
         self._changed()
+
+    def _sequence_alive(self, current: dict[str, Any]) -> bool:
+        return self.sequence is current and self.state in _MEASURING and self.clicker_starts == self._seq_clicks
+
+    def _sequence_failed(self, current: dict[str, Any], exc: ControlError) -> None:
+        current.update(phase="failed", error=exc.code, error_member=exc.member, member=None)
+        try:
+            self._unmute(sorted(self.muted))
+            self.soloed = None
+        except ControlError as undo_exc:  # left in ``muted``: the end unmutes them
+            logger.warning("Sync session %s: unmuting after a failed sequence failed: %s", self.id, undo_exc)
+        self._changed()
+
+    def run_sequence(self, sleep: Callable[[float], None] = time.sleep) -> None:
+        """Play the sequence (blocking; run it on a worker thread): everyone muted for a lead-in, then
+        each member alone for ``solo_s`` with everyone muted ``gap_s`` in between, then everyone back.
+        The lock is held for each step, never across the waits. Stops quietly when the session ends or
+        the clicks start over; a failure is recorded in the sequence and everyone is unmuted."""
+        with self._lock:
+            current = self.sequence
+            if current is None or current["phase"] != "starting" or not self._sequence_alive(current):
+                return
+            try:
+                self._silence(None)
+            except ControlError as exc:
+                self._sequence_failed(current, exc)
+                return
+            t0 = self._clock()
+            current["phase"] = "lead"
+            self.touch()
+            self._changed()
+        sleep(seq.LEAD_S)
+        for i, mid in enumerate(current["members"]):
+            with self._lock:
+                if not self._sequence_alive(current):
+                    return
+                try:
+                    self._member(mid)
+                    self._require_clicker()
+                    self._silence(mid)
+                except ControlError as exc:
+                    self._sequence_failed(current, exc)
+                    return
+                start = self._clock() - t0
+                current.update(phase="solo", index=i, member=mid)
+                self.touch()
+                self._changed()
+            sleep(current["solo_s"])
+            with self._lock:
+                if not self._sequence_alive(current):
+                    return
+                try:
+                    self._silence(None)
+                except ControlError as exc:
+                    self._sequence_failed(current, exc)
+                    return
+                self._seq_slots.append(seq.Slot(member=mid, start_s=start, end_s=self._clock() - t0))
+                current.update(phase="gap", member=None)
+                self._changed()
+            sleep(current["gap_s"])
+        with self._lock:
+            if not self._sequence_alive(current):
+                return
+            try:
+                self._unmute(sorted(self.muted))
+                self.soloed = None
+            except ControlError as exc:  # left in ``muted``: the end unmutes them
+                logger.warning("Sync session %s: unmuting after the sequence failed: %s", self.id, exc)
+            current.update(phase="done", member=None)
+            self.touch()
+            self._changed()
+
+    def record_sequence(self, pcm: bytes, sample_rate: int) -> dict[str, Measurement]:
+        """Measure every member of the finished sequence from one recording of it (int16 mono PCM):
+        the clicks are lined up against the sequence's timing and each member's stretch is estimated
+        on the recording's one clock. Refused (``session_state``) when the clicks started over since."""
+        current_members = self._membership()
+        with self._lock:
+            self._require(*_MEASURING)
+            self._apply_membership(current_members)
+            current = self.sequence
+            if current is None:
+                raise ControlError("no_sequence", "play the sequence first")
+            if current["phase"] != "done":
+                raise ControlError("sequence_running", "the sequence has not finished")
+            if self.clicker_starts != self._seq_clicks:
+                raise ControlError("session_state", "the clicks started over since the sequence")
+            slots = list(self._seq_slots)
+            clicks = self._seq_clicks
+        events = seq.click_times(pcm, sample_rate)  # slow: outside the lock
+        offset = seq.align(events, slots, len(pcm) / 2 / sample_rate)
+        results: dict[str, Measurement] = {}
+        if offset is None:
+            for s in slots:
+                results[s.member] = Measurement(member=s.member, status="not_heard", reason="no_clicks")
+        else:
+            for rec in seq.windows(pcm, sample_rate, slots, offset):
+                results[rec.member] = estimator.estimate(rec)
+        with self._lock:
+            self._require(*_MEASURING)
+            if self.sequence is not current or self.clicker_starts != clicks:
+                raise ControlError("session_state", "the measurement changed while estimating")
+            present = {m.ma_player_id for m in self.members}
+            results = {mid: m for mid, m in results.items() if mid in present}
+            self.measurements.update(results)
+            current["uploaded"] = True
+            self.touch()
+            self._changed()
+        return results
 
     @_locked
     def tick(self) -> None:
@@ -665,4 +818,5 @@ class SyncSession:
             "muted": sorted(self.muted),
             "soloed": self.soloed,
             "reference": self.reference,
+            "sequence": dict(self.sequence) if self.sequence is not None else None,
         }

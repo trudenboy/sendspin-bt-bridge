@@ -123,6 +123,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body", "f
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/translate_landing.py" = ["RUF001"]  # Cyrillic strings are intentional
+"src/sendspin_bridge/sync_tuning/capture_page.py" = ["RUF001"]  # the phone page's Russian texts
 # FastAPI resolves annotations at runtime (dependencies, bodies, responses),
 # so type-only imports would break the routers.
 "src/sendspin_bridge/api/**" = ["TC001", "TC002", "TC003"]
