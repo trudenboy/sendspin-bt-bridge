@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { ArrowDown, ArrowUp, Check } from 'lucide-vue-next'
 import { SbBadge, SbButton, SbSpinner } from '@/kit'
 import type { SessionPoint, SyncMeasurement, SyncMember } from '@/api/types'
+import { speakerName } from '@/sync/names'
 
 export type MemberPhase = 'soloing' | 'recording'
 
@@ -42,6 +43,23 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const ready = computed(() => props.clickerPlaying ?? true)
+const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
+/** Members still to record or skip before the next stage opens. */
+const left = computed(
+  () =>
+    props.members.filter((m) => {
+      const id = m.ma_player_id
+      if (props.departed.includes(id)) return false
+      const r = props.results[id]
+      return !r || (r.status !== 'ok' && r.status !== 'skipped') || props.stale.includes(id)
+    }).length,
+)
+/** What to do about a result that does not count (not heard, unstable). */
+function hint(m: SyncMember, r: SyncMeasurement) {
+  if (r.status === 'not_heard') return t('sync.wizard.hint.notHeard', { name: nameOf(m) })
+  if (r.status === 'unstable') return t('sync.wizard.hint.unstable', { name: nameOf(m) })
+  return ''
+}
 const isDeparted = (id: string) => props.departed.includes(id)
 const isStale = (id: string) => props.stale.includes(id)
 const pct = (r: SyncMeasurement) => Math.round((r.confidence ?? 0) * 100)
@@ -54,6 +72,7 @@ const label = (status: SyncMeasurement['status']) =>
 <template>
   <div class="flex flex-col gap-4">
     <p class="text-sm text-text-secondary">{{ t('sync.wizard.members.help') }}</p>
+    <p class="text-xs text-text-secondary">{{ t('sync.wizard.members.order') }}</p>
     <div
       v-if="!ready"
       data-clicker-stopped
@@ -82,14 +101,14 @@ const label = (status: SyncMeasurement['status']) =>
       >
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-sm tabular-nums text-text-secondary" aria-hidden="true">{{ i + 1 }}.</span>
-          <span class="min-w-0 flex-1 font-medium text-text-primary">{{ m.name }}</span>
+          <span :title="m.name" class="min-w-0 flex-1 truncate font-medium text-text-primary">{{ nameOf(m) }}</span>
           <SbButton
             type="button"
             variant="ghost"
             size="sm"
             icon
             :data-move-up="m.ma_player_id"
-            :aria-label="t('sync.wizard.members.moveUp', { name: m.name })"
+            :aria-label="t('sync.wizard.members.moveUp', { name: nameOf(m) })"
             :disabled="i === 0 || !!active"
             @click="emit('move', m.ma_player_id, -1)"
           >
@@ -101,7 +120,7 @@ const label = (status: SyncMeasurement['status']) =>
             size="sm"
             icon
             :data-move-down="m.ma_player_id"
-            :aria-label="t('sync.wizard.members.moveDown', { name: m.name })"
+            :aria-label="t('sync.wizard.members.moveDown', { name: nameOf(m) })"
             :disabled="i === members.length - 1 || !!active"
             @click="emit('move', m.ma_player_id, 1)"
           >
@@ -115,18 +134,18 @@ const label = (status: SyncMeasurement['status']) =>
         </template>
         <template v-else>
           <p class="text-sm text-text-primary">
-            {{ point === 'device' ? t('sync.wizard.holdNear', { name: m.name }) : t('sync.wizard.stayPut') }}
+            {{ point === 'device' ? t('sync.wizard.holdNear', { name: nameOf(m) }) : t('sync.wizard.stayPut') }}
           </p>
 
           <div class="flex flex-wrap items-center gap-2">
             <div v-if="active?.member === m.ma_player_id" class="flex min-w-0 flex-1 flex-col gap-1">
               <p class="flex items-center gap-2 text-sm text-text-secondary">
-                <SbSpinner size="sm" />{{ t(`sync.wizard.${active.phase}`, { name: m.name }) }}
+                <SbSpinner size="sm" />{{ t(`sync.wizard.${active.phase}`, { name: nameOf(m) }) }}
               </p>
               <div
                 v-if="active.phase === 'recording'"
                 role="progressbar"
-                :aria-label="t('sync.wizard.recording', { name: m.name })"
+                :aria-label="t('sync.wizard.recording', { name: nameOf(m) })"
                 aria-valuemin="0"
                 aria-valuemax="100"
                 :aria-valuenow="Math.round(progress * 100)"
@@ -154,7 +173,7 @@ const label = (status: SyncMeasurement['status']) =>
                 type="button"
                 size="sm"
                 :data-record="m.ma_player_id"
-                :aria-label="t('sync.wizard.recordMember', { name: m.name })"
+                :aria-label="t('sync.wizard.recordMember', { name: nameOf(m) })"
                 :disabled="!!active || !ready"
                 @click="emit('record', m.ma_player_id)"
               >
@@ -166,7 +185,7 @@ const label = (status: SyncMeasurement['status']) =>
                 size="sm"
                 :variant="results[m.ma_player_id]!.status === 'ok' && !isStale(m.ma_player_id) ? 'outline' : 'primary'"
                 :data-repeat="m.ma_player_id"
-                :aria-label="t('sync.wizard.repeatMember', { name: m.name })"
+                :aria-label="t('sync.wizard.repeatMember', { name: nameOf(m) })"
                 :disabled="!!active || !ready"
                 @click="emit('record', m.ma_player_id)"
               >
@@ -178,7 +197,7 @@ const label = (status: SyncMeasurement['status']) =>
                 size="sm"
                 variant="ghost"
                 :data-skip="m.ma_player_id"
-                :aria-label="t('sync.wizard.skipMember', { name: m.name })"
+                :aria-label="t('sync.wizard.skipMember', { name: nameOf(m) })"
                 :disabled="!!active"
                 @click="emit('skip', m.ma_player_id)"
               >
@@ -186,6 +205,13 @@ const label = (status: SyncMeasurement['status']) =>
               </SbButton>
             </span>
           </div>
+          <p
+            v-if="results[m.ma_player_id] && hint(m, results[m.ma_player_id]!) && active?.member !== m.ma_player_id"
+            :data-hint="m.ma_player_id"
+            class="text-sm text-text-secondary"
+          >
+            {{ hint(m, results[m.ma_player_id]!) }}
+          </p>
           <p v-if="errors[m.ma_player_id]" role="alert" class="text-sm text-error">{{ errors[m.ma_player_id] }}</p>
         </template>
       </li>
@@ -202,9 +228,18 @@ const label = (status: SyncMeasurement['status']) =>
       <SbButton type="button" variant="outline" data-back :disabled="!!active" @click="emit('back')">
         {{ t('sync.wizard.back') }}
       </SbButton>
-      <SbButton type="button" data-to-proposal :disabled="!complete || !!active" @click="emit('next')">
-        {{ t('sync.wizard.toProposal') }}
+      <SbButton
+        type="button"
+        data-to-tune
+        :disabled="!complete || !!active"
+        :aria-describedby="!complete ? 'sync-members-next-why' : undefined"
+        @click="emit('next')"
+      >
+        {{ t('sync.wizard.toTune') }}
       </SbButton>
     </div>
+    <p v-if="!complete" id="sync-members-next-why" data-why class="text-right text-xs text-text-secondary">
+      {{ t('sync.wizard.members.left', { n: left }, left) }}
+    </p>
   </div>
 </template>

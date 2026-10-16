@@ -55,7 +55,6 @@ _STATUS = {
     "not_adjustable": 409,
     "recording_invalid": 400,
     "restore_pending": 409,
-    "undo_expired": 409,
     "session_state": 409,
     "no_measurement": 409,
     "group_playing": 409,
@@ -303,16 +302,14 @@ def session_delay(sid: str, member: str, ms: int) -> SyncSessionOut:
     return _act(sid, lambda s: s.write_delay(member, ms))
 
 
-def apply(sid: str, rows: Mapping[str, int] | None, *, verify: bool = False) -> SyncSessionOut:
-    return _act(sid, lambda s: s.apply(rows, verify=verify))
+def apply(sid: str, rows: Mapping[str, int] | None) -> SyncSessionOut:
+    """Write the proposal (or ``rows``); the session goes on as the manual editor ("tuning")."""
+    return _act(sid, lambda s: s.apply(rows))
 
 
-def undo(sid: str) -> SyncSessionOut:
-    return _act(sid, lambda s: s.undo())
-
-
-def verify(sid: str) -> SyncSessionOut:
-    return _act(sid, lambda s: s.verify())
+def finish(sid: str) -> SyncSessionOut:
+    """The operator is done: the delays stay, the group is restored and the session ends "done"."""
+    return _act(sid, lambda s: s.finish())
 
 
 def proposal(sid: str) -> ProposalOut:
@@ -324,8 +321,7 @@ def proposal(sid: str) -> ProposalOut:
 
 
 def compute_proposal(sid: str) -> ProposalOut:
-    """Plan from the round's measurements. A write: it moves the session on (proposed; in a
-    verification round it ends the round, and automatic mode may apply a refinement)."""
+    """Plan from the measurements so far. A write: it moves the session on (proposed)."""
     session = _session(sid)
     try:
         result = session.propose()

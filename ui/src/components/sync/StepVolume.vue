@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { SbButton } from '@/kit'
+import { SbBadge, SbButton } from '@/kit'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import type { SyncMember } from '@/api/types'
+import { speakerName } from '@/sync/names'
 import LevelMeter from './LevelMeter.vue'
 
 /**
@@ -24,6 +25,7 @@ defineProps<{
 const emit = defineEmits<{ volume: [member: string, level: number]; next: []; back: []; cancel: [] }>()
 
 const { t } = useI18n()
+const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
 </script>
 
 <template>
@@ -31,11 +33,16 @@ const { t } = useI18n()
     <p class="text-sm text-text-primary">{{ t('sync.prep.volume.help') }}</p>
     <ul class="flex flex-col gap-2">
       <li v-for="m in members" :key="m.ma_player_id" :data-volume-row="m.ma_player_id" class="flex flex-col gap-1">
-        <span class="text-sm font-medium text-text-primary">{{ m.name }}</span>
+        <span class="flex flex-wrap items-center gap-2">
+          <span :title="m.name" class="min-w-0 truncate text-sm font-medium text-text-primary">{{ nameOf(m) }}</span>
+          <SbBadge v-if="volumes[m.ma_player_id] === 0" :data-silent="m.ma_player_id" tone="warning" size="sm">
+            {{ t('sync.prep.volume.silent') }}
+          </SbBadge>
+        </span>
         <VolumeSlider
           v-if="volumes[m.ma_player_id] != null"
           :mac="m.ma_player_id"
-          :name="m.name"
+          :name="nameOf(m)"
           :volume="volumes[m.ma_player_id]!"
           :muted="false"
           :mutable="false"
@@ -55,7 +62,7 @@ const { t } = useI18n()
         {{ cancelLabel === 'skip' ? t('sync.prep.skip') : t('sync.wizard.cancel') }}
       </SbButton>
       <SbButton type="button" variant="outline" data-back @click="emit('back')">{{ t('sync.wizard.back') }}</SbButton>
-      <SbButton type="button" data-next :disabled="disabled" @click="emit('next')">{{ t('sync.prep.volume.done') }}</SbButton>
+      <SbButton type="button" data-next :disabled="disabled" @click="emit('next')">{{ t('sync.wizard.next') }}</SbButton>
     </div>
   </div>
 </template>

@@ -18,12 +18,12 @@ describe('StepMembers: the clicker', () => {
     expect(playing.find('[data-clicker-stopped]').exists()).toBe(false)
     const stopped = mountStep({ clickerPlaying: false })
     expect(stopped.get('[data-record="a"]').attributes('disabled')).toBeDefined()
-    expect(stopped.get('[data-clicker-stopped]').text()).toContain('The clicker is not playing.')
+    expect(stopped.get('[data-clicker-stopped]').text()).toContain('Clicks are not playing.')
   })
 
   it('offers to start the clicker again once it stopped', async () => {
     const w = mountStep({ clickerPlaying: false })
-    expect(w.get('[data-restart-clicker]').text()).toContain('Start the clicker again')
+    expect(w.get('[data-restart-clicker]').text()).toContain('Start the clicks again')
     await w.get('[data-restart-clicker]').trigger('click')
     expect(w.emitted('restart')).toHaveLength(1)
   })

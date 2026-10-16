@@ -80,7 +80,6 @@ class SessionStore:
         self._next_restore: dict[str, float] = {}
         self._attempts: dict[str, int] = {}
         self._finished_at: dict[str, float] = {}
-        self._hold_until: dict[str, float] = {}  # end of the undo window a finished session had
         self._entries: dict[str, dict[str, Any]] = {}  # what sync_snapshot.json holds, by session id
         self._pending: dict[str, dict[str, Any]] = {}  # entries from before a restart, not restored yet
         self._pending_next: dict[str, float] = {}
@@ -321,15 +320,13 @@ class SessionStore:
         with self._lock:
             if s.id not in self._finished_at:
                 self._finished_at[s.id] = now
-                self._hold_until[s.id] = max(now, s.undo_until or now)
-            undo_open = s.undo_until is not None and now <= s.undo_until
-            close = s.id not in self._closed and not undo_open
-            evict = now - self._hold_until[s.id] > FINISHED_TTL_S
+            close = s.id not in self._closed
+            evict = now - self._finished_at[s.id] > FINISHED_TTL_S
             control = self._controls.get(s.id)
             if close:
                 self._closed.add(s.id)
             if evict:
-                for d in (self._next_restore, self._attempts, self._finished_at, self._hold_until, self._controls):
+                for d in (self._next_restore, self._attempts, self._finished_at, self._controls):
                     d.pop(s.id, None)
                 self._sessions.pop(s.id, None)
                 self._closed.discard(s.id)

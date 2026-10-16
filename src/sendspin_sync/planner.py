@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
 MAX_DELAY_MS = 5000
 WARN_ABOVE_MS = 2000
-VERIFY_SPREAD_MS = 5.0
 
 
 class PlanError(ValueError):

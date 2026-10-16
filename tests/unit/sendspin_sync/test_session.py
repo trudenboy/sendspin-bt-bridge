@@ -3,7 +3,7 @@ import json
 import pytest
 
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import UNDO_WINDOW_S, SyncSession
+from sendspin_sync.session import SyncSession
 from tests.support.sync_fakes import FakeControl, FakeHost
 from tests.support.sync_synth import synth
 
@@ -62,33 +62,14 @@ def test_semi_session_runs_measure_propose_apply_restore():
     assert p.unverified == ("cast",)
     s.apply()
     assert ("set", "b", 30) in ctl.calls and ("set", "a", 0) not in ctl.calls  # unchanged rows are not written
+    # the measured delays are applied and the session goes on in the manual editor, clicks still playing
+    assert s.state == "tuning" and s.clicker_playing
+    s.finish()
     assert s.state == "restoring"
     assert s.restore_tick() is True and s.state == "done"
     # every member muted for the solo is unmuted, then the clicker is stopped
     assert ctl.calls[-3:] == [("mute", "a", False), ("mute", "cast", False), ("stop_group",)]
     assert ctl.muted_now == {"a": False, "b": False, "cast": False}
-
-
-def test_auto_session_verifies_and_keeps_undo():
-    clock = Clock(100.0)
-    s, ctl, _ = started(mode="auto", clock=clock)
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.030))
-    s.propose()
-    t0 = clock.t
-    s.apply()
-    # a plain window from the apply; the check round measures with the clicker that still plays
-    assert s.state == "verifying" and s.round == 2 and s.undo_until == t0 + UNDO_WINDOW_S == t0 + 30.0
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.0))  # now aligned
-    s.propose()
-    assert s.state == "restoring" and s.history[-1]["spread_after_ms"] == pytest.approx(0.0, abs=1.0)
-    clock.t = t0 + 25.0
-    s.undo()
-    assert ctl.delays_now == {"a": 0, "b": 0}
-    clock.t = t0 + 31.0
-    with pytest.raises(ControlError):
-        s.undo()
 
 
 def test_restore_retries_until_it_succeeds_and_cancel_goes_through_restoring():
@@ -105,7 +86,7 @@ def test_restore_retries_until_it_succeeds_and_cancel_goes_through_restoring():
 def test_manual_mode_writes_live_and_resets():
     s, ctl, _ = make(mode="manual")
     s.start()
-    assert s.state == "measuring" and not s.clicker_playing
+    assert s.state == "tuning" and not s.clicker_playing
     s.write_delay("b", 250)
     assert ctl.delays_now["b"] == 250
     with pytest.raises(ControlError) as exc:
@@ -163,26 +144,15 @@ def _measured_and_proposed(mode="semi"):
     return s, ctl, events
 
 
-def test_cancel_after_a_successful_apply_keeps_the_outcome_done():
+def test_cancel_after_a_finish_keeps_the_outcome_done():
     s, _ctl, _ = _measured_and_proposed()
     s.apply()
+    s.finish()
     assert s.state == "restoring"
     s.cancel()  # a DELETE or Retry while restoring is a no-op
     assert s.restore_tick() is True and s.state == "done"
     s.cancel()  # and after the restore too
     assert s.state == "done"
-
-
-def test_semi_mode_can_verify_after_apply():
-    s, ctl, _ = _measured_and_proposed()
-    s.apply(verify=True)
-    assert s.state == "verifying" and s.round == 2 and s.undo_until is None
-    assert ctl.delays_now["b"] == 30
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.0))
-    s.propose()
-    assert s.state == "restoring" and s.history[-1]["spread_after_ms"] == pytest.approx(0.0, abs=1.0)
-    assert s.restore_tick() is True and s.state == "done"
 
 
 def test_operations_while_restoring_answer_restore_pending():
@@ -210,28 +180,6 @@ def test_write_delay_clamps_to_the_allowed_range():
 
 def _delay_of(s, mid):
     return next(m.delay_ms for m in s.members if m.ma_player_id == mid)
-
-
-def _auto_applied(clock=None):
-    s, ctl, events = started(mode="auto", clock=clock)
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.030))
-    s.propose()
-    s.apply()
-    return s, ctl, events
-
-
-def test_undo_during_verification_restores_members_and_ends_without_refining():
-    s, ctl, _ = _auto_applied()
-    assert s.state == "verifying" and _delay_of(s, "b") == 30
-    s.undo()
-    assert ctl.delays_now["b"] == 0 and _delay_of(s, "b") == 0
-    assert s.state == "restoring"
-    with pytest.raises(ControlError) as exc:  # no refinement on top of an undone apply
-        s.record(synth("b", lag_s=0.030))
-    assert exc.value.code == "restore_pending"
-    assert s.restore_tick() is True and s.state == "done"
-    assert [c for c in ctl.calls if c[0] == "set"] == [("set", "b", 30), ("set", "b", 0)]
 
 
 SIDE_METHODS = [
@@ -318,31 +266,8 @@ def test_concurrent_apply_and_cancel_leave_a_consistent_outcome():
     ticker.start()
     ticker.join(2.0)
     applier.join(2.0)
-    # apply finished first, cancel was a no-op on the restoring session, the tick restored: one outcome
-    assert s.state == "done" and ctl.delays_now["b"] == 30 and ctl.calls[-1] == ("stop_group",)
-
-
-def test_auto_refines_once_when_the_residual_is_above_5_ms_then_restores():
-    clock = Clock(100.0)
-    s, ctl, _ = _auto_applied(clock=clock)
-    t0 = clock.t
-    assert s.round == 2 and s.undo_until == t0 + 30.0
-    clock.t = t0 + 10.0
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.012))  # 12 ms residual
-    s.propose()
-    assert s.state == "verifying" and s.round == 3
-    # the undo window restarts with the refinement
-    assert s.undo_until == t0 + 10.0 + 30.0
-    assert s.history[0]["spread_after_ms"] == pytest.approx(12.0, abs=1.0)
-    assert s.history[-1]["round"] == 2 and s.history[-1]["spread_before_ms"] == pytest.approx(12.0, abs=1.0)
-    assert ctl.delays_now["b"] == pytest.approx(42, abs=1)
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.012))  # still off: no third apply
-    s.propose()
-    assert s.state == "restoring"
-    assert s.history[-1]["spread_after_ms"] == pytest.approx(12.0, abs=1.0)
-    assert len([c for c in ctl.calls if c[0] == "set"]) == 2
+    # apply finished first (the session tunes on), then the cancel ended it, the tick restored: one outcome
+    assert s.state == "cancelled" and ctl.delays_now["b"] == 30 and ctl.calls[-1] == ("stop_group",)
 
 
 def test_start_failure_leaves_the_session_created_and_touches_nothing():
@@ -359,34 +284,6 @@ def test_start_failure_leaves_the_session_created_and_touches_nothing():
     ctl.playback = real
     s.start()
     assert s.state == "measuring" and s.group_state == "playing" and not s.clicker_playing
-
-
-def test_refine_with_an_unplannable_reference_answers_no_measurement():
-    s, _ctl, _ = _auto_applied()
-    s.set_reference("cast")  # not adjustable, so never measured "ok" for the planner
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.012))
-    with pytest.raises(ControlError) as exc:
-        s.propose()
-    assert exc.value.code == "no_measurement"
-    assert s.state == "verifying"
-
-
-def test_undo_falls_back_to_the_snapshot_delay_when_the_member_has_none():
-    from sendspin_sync.models import Member
-
-    s, ctl, _ = make(mode="auto")
-    ctl.member_list[1] = Member("b", "B", True, "sendspin", delay_ms=None)
-    ctl.delays_now["b"] = 100
-    s.start()
-    s.stop_group()
-    s.start_clicker()
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.030))
-    s.propose()
-    s.apply(rows={"b": 130})
-    s.undo()
-    assert ctl.delays_now["b"] == 100 and _delay_of(s, "b") == 100
 
 
 def test_apply_clamps_operator_rows():
@@ -426,43 +323,6 @@ def test_propose_counts_as_activity():
 
 
 # -- review fix round 2 --------------------------------------------------------------------------
-
-
-def test_a_recording_from_before_an_apply_is_not_stored_in_the_next_round(monkeypatch):
-    import threading
-
-    from sendspin_sync import estimator
-
-    s, _ctl, _ = started(mode="auto")
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.030))
-    real_estimate = estimator.estimate
-    entered, go = threading.Event(), threading.Event()
-
-    def slow_estimate(recording, **kw):
-        entered.set()
-        assert go.wait(2.0)
-        return real_estimate(recording, **kw)
-
-    monkeypatch.setattr(estimator, "estimate", slow_estimate)
-    outcome = {}
-
-    def late_record():
-        try:
-            outcome["m"] = s.record(synth("b", lag_s=0.030))  # round-1 audio
-        except ControlError as exc:
-            outcome["code"] = exc.code
-
-    t = threading.Thread(target=late_record)
-    t.start()
-    assert entered.wait(2.0)
-    s.propose()
-    s.apply()  # auto: round 2 starts with cleared measurements
-    assert s.state == "verifying" and s.round == 2
-    go.set()
-    t.join(2.0)
-    assert outcome == {"code": "session_state"}
-    assert s.measurements == {}
 
 
 def test_a_clicker_started_when_on_change_fails_is_still_stopped_by_the_restore():
@@ -514,14 +374,6 @@ def test_a_departed_member_is_refused_when_its_recording_arrives():
     assert exc.value.code == "member_gone" and s.to_dict()["departed"] == ["b"]
 
 
-def test_undo_still_reaches_a_member_that_left_after_the_apply():
-    s, ctl, _ = _auto_applied()
-    ctl.member_list = [m for m in ctl.member_list if m.ma_player_id != "b"]
-    s.record(synth("a", lag_s=0.0))  # the next step notices "b" left
-    s.undo()
-    assert ctl.delays_now["b"] == 0
-
-
 def test_membership_refresh_is_best_effort_when_music_assistant_is_down():
     s, ctl, _ = started()
 
@@ -566,7 +418,7 @@ def test_a_write_failing_mid_apply_puts_back_what_this_apply_wrote():
     assert s.state == "proposed" and s.proposal is not None
     assert _delay_of(s, "a") == 0
     ctl.set_delay = real
-    s.apply()  # a later apply still works and keeps an exact undo baseline
+    s.apply()  # a later apply still works
     assert ctl.delays_now == {"a": 0, "b": 30}
 
 
@@ -587,3 +439,99 @@ def test_when_the_rollback_fails_too_members_show_what_music_assistant_holds():
     assert ctl.delays_now["a"] == 10
     assert _delay_of(s, "a") == 10 and _delay_of(s, "b") == 0
     assert s.state == "proposed"
+
+
+# -- UX round: no automatic mode; semi-automatic ends in the manual editor ----------------------------
+
+
+def test_after_apply_the_operator_tunes_by_ear_and_reset_puts_back_the_delays_from_before():
+    s, ctl, _ = _measured_and_proposed()
+    s.apply()
+    assert s.state == "tuning" and ctl.delays_now["b"] == 30
+    s.solo("b")  # solo and A/B as in manual tuning
+    assert s.soloed == "b"
+    s.write_delay("b", 42)  # a hand adjustment on top of the measured value
+    assert ctl.delays_now["b"] == 42 and _delay_of(s, "b") == 42
+    s.reset()
+    assert ctl.delays_now == {"a": 0, "b": 0}
+    s.finish()
+    assert s.restore_tick() is True and s.state == "done" and ctl.delays_now == {"a": 0, "b": 0}
+
+
+def test_recordings_and_a_new_proposal_are_refused_while_tuning_by_ear():
+    s, _ctl, _ = _measured_and_proposed()
+    s.apply()
+    for call in (lambda: s.record(synth("a", lag_s=0.0)), lambda: s.skip("a"), s.propose, s.apply):
+        with pytest.raises(ControlError) as exc:
+            call()
+        assert exc.value.code == "session_state"
+
+
+def test_a_member_can_be_measured_again_after_the_proposal_before_applying():
+    s, ctl, _ = _measured_and_proposed()
+    s.record(synth("b", lag_s=0.040))
+    p = s.propose()
+    assert {r.member: r.after_ms for r in p.rows}["b"] == pytest.approx(40, abs=1)
+    s.apply()
+    assert ctl.delays_now["b"] == pytest.approx(40, abs=1)
+
+
+def test_finish_is_refused_before_the_session_started_and_while_restoring():
+    s, _ctl, _ = make()
+    with pytest.raises(ControlError) as exc:
+        s.finish()
+    assert exc.value.code == "session_state"
+    s.start()
+    s.cancel()
+    with pytest.raises(ControlError) as exc:
+        s.finish()
+    assert exc.value.code == "restore_pending"
+
+
+def test_a_manual_session_finishes_done():
+    s, _ctl, _ = make(mode="manual")
+    s.start()
+    s.write_delay("b", 120)
+    s.finish()
+    assert s.restore_tick() is True and s.state == "done"
+
+
+def test_the_session_no_longer_reports_rounds_or_an_undo_window():
+    s, _ctl, _ = started()
+    d = s.to_dict()
+    assert "round" not in d and "undo_until_s" not in d
+    assert not hasattr(s, "undo") and not hasattr(s, "verify")
+
+
+def test_a_recording_from_before_a_clicker_restart_is_not_stored(monkeypatch):
+    import threading
+
+    from sendspin_sync import estimator
+
+    s, _ctl, _ = started()
+    s.record(synth("a", lag_s=0.0))
+    real_estimate = estimator.estimate
+    entered, go = threading.Event(), threading.Event()
+
+    def slow_estimate(recording, **kw):
+        entered.set()
+        assert go.wait(2.0)
+        return real_estimate(recording, **kw)
+
+    monkeypatch.setattr(estimator, "estimate", slow_estimate)
+    outcome = {}
+
+    def late_record():
+        try:
+            outcome["m"] = s.record(synth("b", lag_s=0.030))  # audio of the earlier playback
+        except ControlError as exc:
+            outcome["code"] = exc.code
+
+    t = threading.Thread(target=late_record)
+    t.start()
+    assert entered.wait(2.0)
+    s.start_clicker()  # a new playback: the round starts again
+    go.set()
+    t.join(2.0)
+    assert outcome == {"code": "session_state"}
+    assert s.measurements == {}

@@ -163,7 +163,8 @@ def test_a_session_that_restores_by_itself_is_driven_by_the_store(tmp_path):
     s.solo("b")
     s.record(synth("b", lag_s=0.030))
     s.propose()
-    s.apply()  # semi without verify: restores and ends
+    s.apply()  # the measured delays are written; the operator finishes from the editor
+    s.finish()
     assert s.state == "restoring"
     store.tick()
     assert s.state == "done" and host.released == [s.id] and not _file(tmp_path).exists()
@@ -198,38 +199,6 @@ def test_inactivity_ends_the_session(tmp_path):
     store.tick()
     store.tick()
     assert s.state == "cancelled" and made[0].calls[-1] == ("stop_group",)
-
-
-def test_an_auto_session_keeps_its_undo_and_its_control_until_the_window_closed(tmp_path):
-    # the session finishes within the 30 s undo window: the control stays open until the window closed,
-    # then the finished session is evicted after a while
-    store, made, _, t, _ = make(tmp_path)
-    s = soloed(store, mode="auto")
-    s.record(synth("a", lag_s=0.0))
-    s.solo("b")
-    s.record(synth("b", lag_s=0.030))
-    s.propose()
-    s.apply()  # undo until 30
-    s.record(synth("b", lag_s=0.0))
-    s.solo("a")
-    s.record(synth("a", lag_s=0.0))
-    s.propose()
-    store.tick()
-    assert s.state == "done" and made[0].closed == 0
-    t["now"] = 25.0
-    store.tick()
-    s.undo()
-    assert made[0].delays_now["b"] == 0
-    t["now"] = 31.0
-    store.tick()
-    assert made[0].closed == 1
-    t["now"] = 30.0 + 59.0
-    store.tick()
-    assert store.get(s.id) is s
-    t["now"] = 30.0 + 61.0
-    store.tick()
-    with pytest.raises(ControlError):
-        store.get(s.id)
 
 
 def test_a_failed_start_frees_the_group_releases_the_token_and_removes_the_snapshot(tmp_path):
@@ -483,7 +452,7 @@ def test_a_new_session_waits_for_the_pending_restore_of_its_group(tmp_path):
     with pytest.raises(ControlError) as exc:
         store.create("g", "semi", "device")
     assert exc.value.code == "restore_pending"
-    assert store.create("other", "manual", "device").state == "measuring"  # other groups are free
+    assert store.create("other", "manual", "device").state == "tuning"  # other groups are free
 
 
 def test_pending_restores_are_listed_with_their_last_error_and_can_be_retried_now(tmp_path):
@@ -496,7 +465,7 @@ def test_pending_restores_are_listed_with_their_last_error_and_can_be_retried_no
     assert store.retry_pending("g") is True and store.retry_pending("other") is False
     store.tick()  # tried at once
     assert store.pending_for("g") is None and made[0].calls[-1] == ("mute", "b", False)
-    assert store.create("g", "manual", "device").state == "measuring"
+    assert store.create("g", "manual", "device").state == "tuning"
 
 
 def test_shutdown_without_music_assistant_makes_no_calls_and_keeps_the_snapshot(tmp_path):
@@ -522,7 +491,7 @@ def test_shutdown_store_restores_only_when_music_assistant_is_connected(monkeypa
 
 def test_a_slow_membership_read_on_one_group_does_not_stall_another_groups_restore(tmp_path):
     store, made, _, _, _ = make(tmp_path)
-    slow = store.create("g1", "manual", "device")
+    slow = store.create("g1", "semi", "device")  # skip() reads the membership while measuring
     other = store.create("g2", "manual", "device")
     release = threading.Event()
     reading = threading.Event()

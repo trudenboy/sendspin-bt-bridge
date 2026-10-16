@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { SbBadge } from '@/kit'
 import { useNow } from '@/composables/useNow'
 import type { SyncMember } from '@/api/types'
+import { speakerName } from '@/sync/names'
 
 defineProps<{ members: SyncMember[] }>()
 
@@ -30,17 +31,17 @@ function age(iso: string): string {
 
 <template>
   <p v-if="members.length === 0" class="text-sm text-text-secondary">{{ t('sync.noMembers') }}</p>
-  <ul v-else class="divide-y divide-border">
+  <template v-else>
+  <p data-sign-hint class="mb-1 text-xs text-text-secondary">{{ t('sync.delayHeading') }}</p>
+  <ul class="divide-y divide-border">
     <li
       v-for="m in members"
       :key="m.ma_player_id"
       data-member
       class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
     >
-      <span class="min-w-0 flex-1 truncate text-text-primary">{{ m.name }}</span>
-      <SbBadge :tone="m.adjustable ? 'neutral' : 'warning'" size="sm">
-        {{ t(`sync.origin.${m.adjustable ? m.origin : 'other'}`) }}
-      </SbBadge>
+      <span :title="m.name" class="min-w-0 flex-1 truncate text-text-primary">{{ speakerName(m.name, m.ma_player_id) }}</span>
+      <SbBadge v-if="!m.adjustable" tone="warning" size="sm">{{ t('sync.origin.other') }}</SbBadge>
       <span class="w-16 text-right text-sm tabular-nums text-text-secondary">
         <template v-if="m.adjustable && m.delay_ms != null">{{ t('sync.delay', { ms: m.delay_ms }) }}</template>
         <template v-else><span aria-hidden="true">—</span><span class="sr-only">{{ t('sync.noDelay') }}</span></template>
@@ -50,4 +51,5 @@ function age(iso: string): string {
       </span>
     </li>
   </ul>
+  </template>
 </template>

@@ -170,8 +170,12 @@ def test_session_flow_over_http(api_client, sync_env):
     again = api_client.get(f"{base}/proposal")  # reading it twice is fine
     assert again.status_code == 200 and again.json() == prop.json()
     applied = api_client.post(f"{base}/apply", json={})
-    assert applied.status_code == 200 and applied.json()["state"] == "restoring"
-    assert ctl.delays_now["b"] == 30
+    # applied, and the session goes on as the manual editor while the clicks play
+    assert applied.status_code == 200 and applied.json()["state"] == "tuning"
+    assert ctl.delays_now["b"] == 30 and applied.json()["clicker_playing"] is True
+    assert api_client.put(f"{base}/delays/b", json={"ms": 34}).json()["state"] == "tuning"
+    finished = api_client.post(f"{base}/finish")
+    assert finished.status_code == 200 and finished.json()["state"] == "restoring"
     assert events and events[-1]["id"] == sid and events[-1]["state"] == "restoring"
     assert api_client.delete(base).status_code == 204
     store.tick()
@@ -237,7 +241,7 @@ def test_a_clicker_that_stopped_answers_clicker_stopped_on_record(api_client, sy
     assert _upload(api_client, sid, "a", 0.0).json()["status"] == "ok"
 
 
-def test_skip_and_semi_apply_with_verification(api_client, sync_env):
+def test_skip_and_semi_apply_of_operator_rows(api_client, sync_env):
     sid = _ready(api_client)
     base = f"/api/v1/sync/sessions/{sid}"
     assert _upload(api_client, sid, "a", 0.0).json()["status"] == "ok"
@@ -246,9 +250,8 @@ def test_skip_and_semi_apply_with_verification(api_client, sync_env):
     assert skipped.status_code == 200 and skipped.json()["measurements"]["b"]["status"] == "skipped"
     assert _upload(api_client, sid, "b", 0.03).json()["status"] == "ok"
     api_client.post(f"{base}/proposal")
-    verifying = api_client.post(f"{base}/apply", json={"rows": {"b": 25}, "verify": True})
-    assert verifying.status_code == 200 and verifying.json()["state"] == "verifying"
-    assert verifying.json()["round"] == 2 and verifying.json()["measurements"] == {}
+    applied = api_client.post(f"{base}/apply", json={"rows": {"b": 25}})
+    assert applied.status_code == 200 and applied.json()["state"] == "tuning"
     assert sync_env[0].delays_now["b"] == 25
 
 
@@ -270,24 +273,34 @@ def test_errors_of_the_session_state_machine(api_client, sync_env):
     assert nothing.status_code == 409 and nothing.json()["code"] == "no_measurement"
     computed = api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
     assert computed.status_code == 409 and computed.json()["code"] == "no_measurement"
-    undo = api_client.post(f"/api/v1/sync/sessions/{sid}/undo")
-    assert undo.status_code == 409 and undo.json()["code"] == "undo_expired"
-    api_client.delete(f"/api/v1/sync/sessions/{sid}")
+    early_finish = api_client.post(f"/api/v1/sync/sessions/{sid}/finish")
+    assert early_finish.status_code == 200  # a session may be finished at any point while it runs
     late = api_client.post(f"/api/v1/sync/sessions/{sid}/solo", json={"member": "a"})
     assert late.status_code == 409 and late.json()["code"] == "restore_pending"
 
 
-def test_auto_apply_keeps_an_undo(api_client, sync_env):
-    ctl = sync_env[0]
-    sid = _ready(api_client, "auto")
-    for member, lag in (("a", 0.0), ("b", 0.03)):
-        _upload(api_client, sid, member, lag)
-    api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
-    applied = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).json()
-    # a plain 30 s window from the apply
-    assert applied["state"] == "verifying" and applied["undo_until_s"] == pytest.approx(30.0)
-    undone = api_client.post(f"/api/v1/sync/sessions/{sid}/undo")
-    assert undone.status_code == 200 and undone.json()["undo_until_s"] is None and ctl.delays_now["b"] == 0
+def test_the_automatic_mode_and_its_endpoints_are_gone(api_client, sync_env):
+    """UX round (user decision 2026-10-16): measuring always ends in the operator's hands."""
+    auto = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "auto"})
+    assert auto.status_code == 422
+    sid = _ready(api_client)
+    for path in ("undo", "verify"):
+        assert api_client.post(f"/api/v1/sync/sessions/{sid}/{path}").status_code in (404, 405)
+    body = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    assert "round" not in body and "undo_until_s" not in body
+
+
+def test_finish_keeps_the_delays_and_ends_done(api_client, sync_env):
+    ctl, store, _events, _clock = sync_env
+    sid = _ready(api_client, "manual")
+    base = f"/api/v1/sync/sessions/{sid}"
+    assert api_client.get(base).json()["state"] == "tuning"
+    api_client.put(f"{base}/delays/b", json={"ms": 80})
+    assert api_client.post(f"{base}/finish").json()["state"] == "restoring"
+    store.tick()
+    assert api_client.get(base).json()["state"] == "done" and ctl.delays_now["b"] == 80
+    again = api_client.post(f"{base}/finish")
+    assert again.status_code == 409 and again.json()["code"] == "session_state"
 
 
 def test_garbage_recordings_are_400_not_500(api_client, sync_env):
@@ -493,7 +506,7 @@ def test_apply_failing_on_the_second_member_puts_the_first_back(api_client, sync
 
 def test_get_proposal_never_changes_the_session(api_client, sync_env):
     ctl = sync_env[0]
-    sid = _ready(api_client, "auto")
+    sid = _ready(api_client)
     for member, lag in (("a", 0.0), ("b", 0.03)):
         _upload(api_client, sid, member, lag)
     before = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
@@ -501,10 +514,6 @@ def test_get_proposal_never_changes_the_session(api_client, sync_env):
     assert read.status_code == 409 and read.json()["code"] == "no_measurement"
     assert api_client.get(f"/api/v1/sync/sessions/{sid}").json() == before  # still measuring
     api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
-    verifying = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).json()  # auto: verifies
-    assert verifying["state"] == "verifying"
-    for member, lag in (("a", 0.0), ("b", 0.05)):  # residual above the refine threshold
-        _upload(api_client, sid, member, lag)
     writes = list(ctl.calls)
     snapshot = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
     assert api_client.get(f"/api/v1/sync/sessions/{sid}/proposal").status_code == 200

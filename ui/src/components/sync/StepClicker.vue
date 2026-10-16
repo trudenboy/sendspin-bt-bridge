@@ -16,6 +16,8 @@ defineProps<{
   error: string
   /** ``skip`` where Cancel only skips the preparation (the Manual tab) instead of ending the session. */
   cancelLabel?: 'cancel' | 'skip'
+  /** A line about the step before (e.g. "The group is not playing — moving on."), already translated. */
+  note?: string
 }>()
 const emit = defineEmits<{ start: []; next: []; back: []; cancel: [] }>()
 
@@ -24,6 +26,7 @@ const { t } = useI18n()
 
 <template>
   <div class="flex flex-col gap-4">
+    <p v-if="note" data-auto-note role="status" class="text-sm text-text-primary">{{ note }}</p>
     <p class="text-sm text-text-secondary">{{ t('sync.prep.clicker.help') }}</p>
     <div class="flex flex-wrap items-center gap-3">
       <SbButton
@@ -48,7 +51,18 @@ const { t } = useI18n()
         {{ cancelLabel === 'skip' ? t('sync.prep.skip') : t('sync.wizard.cancel') }}
       </SbButton>
       <SbButton type="button" variant="outline" data-back @click="emit('back')">{{ t('sync.wizard.back') }}</SbButton>
-      <SbButton type="button" data-next :disabled="!clickerPlaying || busy" @click="emit('next')">{{ t('sync.wizard.next') }}</SbButton>
+      <SbButton
+        type="button"
+        data-next
+        :disabled="!clickerPlaying || busy"
+        :aria-describedby="!clickerPlaying ? 'sync-clicker-next-why' : undefined"
+        @click="emit('next')"
+      >
+        {{ t('sync.wizard.next') }}
+      </SbButton>
     </div>
+    <p v-if="!clickerPlaying" id="sync-clicker-next-why" data-why class="text-right text-xs text-text-secondary">
+      {{ t('sync.prep.clicker.whyDisabled') }}
+    </p>
   </div>
 </template>

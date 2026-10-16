@@ -1872,7 +1872,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Write the proposal (or rows) */
+        /** Write the proposal (or rows); the session goes on as the manual editor */
         post: operations["apply_api_v1_sync_sessions__session_id__apply_post"];
         delete?: never;
         options?: never;
@@ -1897,6 +1897,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/sessions/{session_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish: keep the delays, restore the group, end the session as done */
+        post: operations["finish_api_v1_sync_sessions__session_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/sessions/{session_id}/proposal": {
         parameters: {
             query?: never;
@@ -1907,7 +1924,7 @@ export interface paths {
         /** The current proposal (read-only) */
         get: operations["proposal_api_v1_sync_sessions__session_id__proposal_get"];
         put?: never;
-        /** Compute the proposal from the round's measurements */
+        /** Compute the proposal from the measurements so far */
         post: operations["compute_proposal_api_v1_sync_sessions__session_id__proposal_post"];
         delete?: never;
         options?: never;
@@ -2000,40 +2017,6 @@ export interface paths {
          * @description Mutes every other member; 409 clicker_stopped while the clicker does not play, 409 sync_mute_unsupported (with member) when a member's player cannot be muted.
          */
         post: operations["solo_api_v1_sync_sessions__session_id__solo_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sync/sessions/{session_id}/undo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Undo an automatic apply */
-        post: operations["undo_api_v1_sync_sessions__session_id__undo_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sync/sessions/{session_id}/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Measure again */
-        post: operations["verify_api_v1_sync_sessions__session_id__verify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2222,12 +2205,6 @@ export interface components {
             rows?: {
                 [key: string]: number;
             } | null;
-            /**
-             * Verify
-             * @description Semi-automatic: measure again after applying.
-             * @default false
-             */
-            verify?: boolean;
         };
         /** AreasIn */
         AreasIn: {
@@ -4321,7 +4298,7 @@ export interface components {
              * Mode
              * @enum {string}
              */
-            mode: "manual" | "semi" | "auto";
+            mode: "manual" | "semi";
             /**
              * Point
              * @default device
@@ -4561,7 +4538,7 @@ export interface components {
              * Mode
              * @enum {string}
              */
-            mode: "manual" | "semi" | "auto";
+            mode: "manual" | "semi";
             /**
              * Muted
              * @description Members this session muted; they are unmuted when it ends.
@@ -4580,20 +4557,13 @@ export interface components {
              * @description Code of the last failed restore attempt.
              */
             restore_error: string | null;
-            /** Round */
-            round: number;
             /** Soloed */
             soloed: string | null;
             /**
              * State
              * @enum {string}
              */
-            state: "created" | "measuring" | "proposed" | "applying" | "verifying" | "restoring" | "done" | "cancelled" | "failed";
-            /**
-             * Undo Until S
-             * @description Seconds left to undo an automatic apply; null when closed.
-             */
-            undo_until_s: number | null;
+            state: "created" | "measuring" | "proposed" | "applying" | "tuning" | "restoring" | "done" | "cancelled" | "failed";
             /**
              * Volumes
              * @description Each member's volume as last read or set.
@@ -9839,6 +9809,48 @@ export interface operations {
             };
         };
     };
+    finish_api_v1_sync_sessions__session_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     proposal_api_v1_sync_sessions__session_id__proposal_get: {
         parameters: {
             query?: never;
@@ -10129,90 +10141,6 @@ export interface operations {
                 "application/json": components["schemas"]["SoloIn"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncSessionOut"];
-                };
-            };
-            /** @description Client error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": unknown;
-                };
-            };
-            /** @description Server error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": unknown;
-                };
-            };
-        };
-    };
-    undo_api_v1_sync_sessions__session_id__undo_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncSessionOut"];
-                };
-            };
-            /** @description Client error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": unknown;
-                };
-            };
-            /** @description Server error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": unknown;
-                };
-            };
-        };
-    };
-    verify_api_v1_sync_sessions__session_id__verify_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

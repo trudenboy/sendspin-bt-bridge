@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Play, Square } from 'lucide-vue-next'
+import { CircleStop, Play } from 'lucide-vue-next'
 import { SbButton } from '@/kit'
 import type { SyncMember } from '@/api/types'
+import { speakerName } from '@/sync/names'
 
 const props = defineProps<{
   members: SyncMember[]
@@ -37,8 +38,10 @@ watch(
   { immediate: true },
 )
 
+const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
+
 const selectClass =
-  'h-8 min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40'
+  'h-8 min-w-[8rem] flex-1 basis-32 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40'
 </script>
 
 <template>
@@ -51,14 +54,15 @@ const selectClass =
       @click="emit('signal', signalRunning ? 'stop' : 'start')"
     >
       <template #icon-left>
-        <Square v-if="signalRunning" aria-hidden="true" />
+        <CircleStop v-if="signalRunning" aria-hidden="true" />
         <Play v-else aria-hidden="true" />
       </template>
       {{ t(signalRunning ? 'sync.listen.stop' : 'sync.listen.play') }}
     </SbButton>
     <p data-play-help class="-mt-2 text-xs text-text-secondary">{{ t('sync.listen.playHelp') }}</p>
 
-    <div role="group" :aria-label="t('sync.listen.solo')" class="flex flex-wrap gap-1">
+    <p class="text-xs text-text-secondary">{{ t('sync.listen.soloHelp') }}</p>
+    <div role="group" :aria-label="t('sync.listen.solo')" class="flex min-w-0 flex-wrap gap-1">
       <SbButton
         type="button"
         size="sm"
@@ -77,26 +81,28 @@ const selectClass =
         :data-solo="m.ma_player_id"
         :variant="soloed === m.ma_player_id && !alternating ? 'primary' : 'secondary'"
         :aria-pressed="soloed === m.ma_player_id && !alternating"
-        :aria-label="t('sync.listen.soloMember', { name: m.name })"
+        :aria-label="t('sync.listen.soloMember', { name: nameOf(m) })"
+        :title="m.name"
         :disabled="!ready"
+        class="max-w-full"
         @click="emit('solo', m.ma_player_id)"
       >
-        {{ m.name }}
+        <span class="truncate">{{ nameOf(m) }}</span>
       </SbButton>
     </div>
 
     <div v-if="members.length >= 2" class="flex flex-col gap-1">
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <label :for="`${uid}-a`" class="text-sm text-text-secondary">{{ t('sync.listen.abA') }}</label>
         <select :id="`${uid}-a`" v-model="a" data-ab-a :class="selectClass">
           <option v-for="m in members" :key="m.ma_player_id" :value="m.ma_player_id" :disabled="m.ma_player_id === b">
-            {{ m.name }}
+            {{ nameOf(m) }}
           </option>
         </select>
         <label :for="`${uid}-b`" class="text-sm text-text-secondary">{{ t('sync.listen.abB') }}</label>
         <select :id="`${uid}-b`" v-model="b" data-ab-b :class="selectClass">
           <option v-for="m in members" :key="m.ma_player_id" :value="m.ma_player_id" :disabled="m.ma_player_id === a">
-            {{ m.name }}
+            {{ nameOf(m) }}
           </option>
         </select>
         <SbButton

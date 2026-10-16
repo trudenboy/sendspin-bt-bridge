@@ -7,8 +7,9 @@ const props = defineProps<{
   read: () => number
 }>()
 
-/** Below this the clicks will likely not be found; above it the microphone may clip. */
-const TOO_QUIET = 0.02
+/** Below this the clicks will likely not be found; above it the microphone may clip. (RMS: a click
+ * track is mostly silence, so a level that only just clears room noise is not "fine".) */
+const TOO_QUIET = 0.05
 const TOO_LOUD = 0.7
 const POLL_MS = 200
 
@@ -42,6 +43,7 @@ const barClass = computed(() =>
 <template>
   <div data-level-meter class="flex flex-col gap-2">
     <div class="flex items-center gap-3">
+      <span class="w-24 shrink-0 text-sm font-medium text-text-primary" aria-hidden="true">{{ t('sync.wizard.level.meter') }}</span>
       <div
         role="meter"
         :aria-label="t('sync.wizard.level.meter')"

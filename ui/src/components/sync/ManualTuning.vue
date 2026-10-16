@@ -6,9 +6,19 @@ import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
 import ListeningBar from './ListeningBar.vue'
+import { speakerName } from '@/sync/names'
 import StepStopGroup from './StepStopGroup.vue'
 import StepClicker from './StepClicker.vue'
 import StepVolume from './StepVolume.vue'
+
+const props = defineProps<{
+  /** The group is ready already (the measurement prepared it): straight to listening and editing. */
+  skipPrep?: boolean
+  /** Member id -> the delay the measurement found (semi-automatic): shown next to the field, with a reset. */
+  measured?: Record<string, number>
+  /** Member id -> the delay before this session changed anything: "Reset" goes back to it. */
+  before?: Record<string, number>
+}>()
 
 const emit = defineEmits<{
   /** Whether any delay differs from where this session started (the view offers a profile on leaving). */
@@ -25,7 +35,7 @@ const session = computed(() => sync.session)
 const departed = computed(() => new Set(session.value?.departed ?? []))
 const members = computed(() => session.value?.members ?? [])
 const present = computed(() => members.value.filter((m) => !departed.value.has(m.ma_player_id)))
-const nameOf = (id: string) => members.value.find((m) => m.ma_player_id === id)?.name ?? id
+const nameOf = (id: string) => speakerName(members.value.find((m) => m.ma_player_id === id)?.name, id)
 
 /* -- delays ------------------------------------------------------------------------ */
 
@@ -40,7 +50,7 @@ watch(
       if (!m.adjustable) continue
       const id = m.ma_player_id
       if (!(id in initial)) {
-        initial[id] = m.delay_ms ?? 0
+        initial[id] = props.before?.[id] ?? m.delay_ms ?? 0
         values[id] = m.delay_ms ?? 0
       } else if (m.delay_ms != null && !sync.hasPendingWrite(id)) {
         // Another tab, or the bridge: follow it unless this screen has an edit on the way.
@@ -97,7 +107,13 @@ function reset() {
 
 type Prep = 'stop' | 'clicker' | 'volume' | 'ready'
 /** Where the preparation stands; a page opened on a session whose clicker plays goes straight to tuning. */
-const prep = ref<Prep>(session.value?.clicker_playing ? 'ready' : 'stop')
+const PREP_STEPS = ['stop', 'clicker', 'volume'] as const
+/** Where the preparation stands; a session whose clicks play already goes straight to tuning. */
+const prep = ref<Prep>(
+  props.skipPrep || session.value?.clicker_playing ? 'ready' : session.value && session.value.group_state !== 'playing' ? 'clicker' : 'stop',
+)
+/** The stop step was skipped because nothing played: say so on the clicks step. */
+const autoNote = ref(prep.value === 'clicker' ? t('sync.prep.stop.notPlaying') : '')
 const prepBusy = ref(false)
 const prepError = ref('')
 
@@ -105,7 +121,7 @@ function failText(e: unknown) {
   const code = errorCode(e)
   if (code === 'group_playing') return t('sync.prep.clicker.groupPlaying')
   if (code === 'clicker_stopped') return t('sync.prep.clicker.stopped')
-  if (code === 'sync_mute_unsupported') return t('sync.mute.unsupported', { name: nameOf(errorMember(e) ?? '') })
+  if (code === 'sync_mute_unsupported') return t('sync.mute.unsupportedManual', { name: nameOf(errorMember(e) ?? '') })
   return t('sync.listen.failed', { code })
 }
 
@@ -124,6 +140,7 @@ async function prepCall(call: () => Promise<unknown>) {
 
 function toPrep(next: Prep) {
   prepError.value = ''
+  autoNote.value = ''
   prep.value = next
 }
 
@@ -228,7 +245,9 @@ const listenStatus = computed(() => {
 <template>
   <div class="mt-4 flex flex-col gap-4">
     <SbCard v-if="prep !== 'ready'" data-manual-prep>
-      <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t(`sync.wizard.steps.${prep}`) }}</h2>
+      <h2 class="mb-3 text-sm font-medium text-text-secondary">
+        {{ t('sync.manual.prepOf', { n: (PREP_STEPS as readonly string[]).indexOf(prep) + 1, total: PREP_STEPS.length, name: t(`sync.wizard.steps.${prep}`) }) }}
+      </h2>
       <StepStopGroup
         v-if="prep === 'stop'"
         :group-state="session?.group_state ?? null"
@@ -244,6 +263,7 @@ const listenStatus = computed(() => {
         v-else-if="prep === 'clicker'"
         :clicker-playing="!!session?.clicker_playing"
         :started="(session?.clicker_starts ?? 0) > 0"
+        :note="autoNote"
         :busy="prepBusy"
         :error="prepError"
         @start="prepCall(() => sync.signal('start'))"
@@ -300,17 +320,19 @@ const listenStatus = computed(() => {
             :data-departed="m.ma_player_id"
             class="flex items-center justify-between gap-3 py-3 text-text-secondary"
           >
-            <span class="min-w-0 flex-1 truncate line-through">{{ m.name }}</span>
+            <span :title="m.name" class="min-w-0 flex-1 truncate line-through">{{ nameOf(m.ma_player_id) }}</span>
             <SbBadge tone="warning" size="sm">{{ t('sync.manual.departed') }}</SbBadge>
           </div>
           <DelayRow
             v-else-if="m.adjustable"
             :member="m"
             :model-value="values[m.ma_player_id] ?? 0"
+            :measured="measured?.[m.ma_player_id]"
+            :before="initial[m.ma_player_id]"
             @update:model-value="write(m.ma_player_id, $event)"
           />
           <div v-else data-fixed-row class="flex items-center justify-between gap-3 py-3">
-            <span class="min-w-0 flex-1 truncate text-text-primary">{{ m.name }}</span>
+            <span :title="m.name" class="min-w-0 flex-1 truncate text-text-primary">{{ nameOf(m.ma_player_id) }}</span>
             <SbBadge tone="warning" size="sm">{{ t('sync.origin.other') }}</SbBadge>
           </div>
         </li>

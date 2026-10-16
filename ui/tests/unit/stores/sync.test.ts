@@ -5,8 +5,8 @@ vi.mock('@/api/sync', () => ({
   getSyncGroups: vi.fn(), getSyncGroup: vi.fn(), writeGroupDelays: vi.fn(), createSession: vi.fn(), getSession: vi.fn(),
   endSession: vi.fn(), sessionDelay: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), applyProfile: vi.fn(),
   patchProfile: vi.fn(), deleteProfile: vi.fn(), sessionSignal: vi.fn(), sessionSolo: vi.fn(), sessionAb: vi.fn(),
-  sessionReference: vi.fn(), sessionSkip: vi.fn(), computeProposal: vi.fn(), applyProposal: vi.fn(), undoApply: vi.fn(),
-  verifySession: vi.fn(), listRestores: vi.fn(), retryRestore: vi.fn(),
+  sessionReference: vi.fn(), sessionSkip: vi.fn(), computeProposal: vi.fn(), applyProposal: vi.fn(), finishSession: vi.fn(),
+  listRestores: vi.fn(), retryRestore: vi.fn(),
 }))
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'
@@ -108,21 +108,19 @@ describe('sync store', () => {
     vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', state: 'proposed' } as never)
     await store.start('g', 'semi', 'position')
     expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'semi', point: 'position' })
-    for (const fn of ['sessionReference', 'sessionSkip', 'computeProposal', 'applyProposal', 'undoApply', 'verifySession'] as const) {
+    for (const fn of ['sessionReference', 'sessionSkip', 'computeProposal', 'applyProposal', 'finishSession'] as const) {
       vi.mocked(api[fn]).mockResolvedValue({} as never)
     }
     await store.reference('a')
     await store.skip('b')
     await store.propose()
-    await store.apply({ a: 12 }, true)
-    await store.undo()
-    await store.verify()
+    await store.apply({ a: 12 })
+    await store.finish()
     expect(api.sessionReference).toHaveBeenCalledWith('s1', 'a')
     expect(api.sessionSkip).toHaveBeenCalledWith('s1', 'b')
     expect(api.computeProposal).toHaveBeenCalledWith('s1')
-    expect(api.applyProposal).toHaveBeenCalledWith('s1', { a: 12 }, true)
-    expect(api.undoApply).toHaveBeenCalledWith('s1')
-    expect(api.verifySession).toHaveBeenCalledWith('s1')
+    expect(api.applyProposal).toHaveBeenCalledWith('s1', { a: 12 })
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
     expect(store.session?.state).toBe('proposed')
   })
 
@@ -352,5 +350,25 @@ describe('sync store live writes', () => {
     expect([...ENDED].sort()).toEqual(['cancelled', 'done', 'failed'])
     expect(errorCode(new ApiError({ status: 403, code: 'ma_forbidden' }))).toBe('ma_forbidden')
     expect(errorCode(new Error('x'))).toBe('error')
+  })
+
+  it('writes delays live through a semi-automatic session once it tunes by ear', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', mode: 'semi', state: 'measuring' } as never)
+    await store.start('g', 'semi', 'device')
+    store.applyEvent({ id: 's1', group_id: 'g', mode: 'semi', state: 'tuning' } as never)
+    vi.mocked(api.sessionDelay).mockResolvedValue({ id: 's1', group_id: 'g', mode: 'semi', state: 'tuning' } as never)
+    store.setDelay('a', 40); vi.advanceTimersByTime(300)
+    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 40)
+    expect(api.writeGroupDelays).not.toHaveBeenCalled()
+  })
+
+  it('takes over a session only when the operator joins it', async () => {
+    const store = useSyncStore()
+    expect(store.owns('x')).toBe(false)
+    store.join('x')
+    expect(store.owns('x')).toBe(true)
   })
 })

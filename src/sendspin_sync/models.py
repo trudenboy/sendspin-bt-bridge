@@ -78,7 +78,7 @@ class Profile:
 
 @dataclass
 class Snapshot:
-    """What the session reads when it starts: the delays (for reset and undo) and which members were
+    """What the session reads when it starts: the delays (for reset) and which members were
     muted already (the session never touches those)."""
 
     group_id: str

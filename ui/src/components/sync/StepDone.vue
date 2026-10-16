@@ -8,17 +8,15 @@ import { formatMs } from '@/sync/format'
 import { ENDED } from '@/stores/sync'
 
 /**
- * The last step: the group is being restored (the mutes taken back, the clicker stopped), then restored. Shows the spread before → after, what
- * happened to the delays (undone, saved as a profile), and offers a quick listen on the whole group.
+ * The last stage: the group is being restored (mutes taken back, volumes put back, the clicks
+ * stopped), then restored. Shows the measured gap before → the predicted one after, whether the
+ * delays were saved as a profile, and offers a quick listen on the whole group.
  */
 const props = defineProps<{
   /** The measuring session's last known state (``restoring`` until the bridge reports ``done``). */
   state: SessionStateName | null
   before: number | null
   after: number | null
-  /** ``after`` is the planner's prediction (no check round measured it). */
-  predicted: boolean
-  undone: boolean
   saved: string | null
   saveError: string
   listening: boolean
@@ -43,9 +41,8 @@ const restored = computed(() => !!props.state && ENDED.has(props.state))
       </div>
     </div>
 
-    <p v-if="undone" data-undone class="text-sm text-text-primary">{{ t('sync.done.undone') }}</p>
-    <p v-else-if="before != null && after != null" data-spread class="text-sm text-text-primary">
-      {{ t(predicted ? 'sync.done.spreadPredicted' : 'sync.done.spread', { before: formatMs(before), after: formatMs(after) }) }}
+    <p v-if="before != null && after != null" data-spread class="text-sm text-text-primary">
+      {{ t('sync.done.spread', { before: formatMs(before), after: formatMs(after) }) }}
     </p>
     <p v-if="saved" data-saved role="status" class="text-sm text-text-primary">{{ t('sync.done.saved', { name: saved }) }}</p>
     <p v-if="saveError" role="alert" class="text-sm text-error">{{ saveError }}</p>

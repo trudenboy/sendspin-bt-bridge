@@ -9,7 +9,7 @@ import { defineComponent, h, nextTick, ref } from 'vue'
 
 vi.mock('@/api/sync', () => ({
   getSyncGroup: vi.fn(), getSession: vi.fn(), listRestores: vi.fn(), retryRestore: vi.fn(), listProfiles: vi.fn(),
-  createSession: vi.fn(), endSession: vi.fn(), captureProfile: vi.fn(), sessionDelay: vi.fn(), sessionSignal: vi.fn(),
+  createSession: vi.fn(), endSession: vi.fn(), finishSession: vi.fn(), captureProfile: vi.fn(), sessionDelay: vi.fn(), sessionSignal: vi.fn(),
   sessionSolo: vi.fn(), sessionAb: vi.fn(), writeGroupDelays: vi.fn(), endSessionOnPageHide: vi.fn(),
 }))
 import * as api from '@/api/sync'
@@ -23,7 +23,7 @@ const members = [
   { ma_player_id: 'cast', name: 'TV', origin: 'other', adjustable: false, delay_ms: null },
 ]
 const group = { id: 'g', name: 'Downstairs', session_id: null, restore_pending: null, error: null, members }
-const session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members, departed: [], clicker_playing: false, clicker_starts: 0, group_state: 'idle', volumes: {}, muted: [], soloed: null }
+const session = { id: 's1', group_id: 'g', mode: 'manual', state: 'tuning', members, departed: [], clicker_playing: false, clicker_starts: 0, group_state: 'idle', volumes: {}, muted: [], soloed: null }
 
 async function mountView() {
   const router = createRouter({
@@ -56,6 +56,7 @@ describe('SyncView manual tuning', () => {
     vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
     vi.mocked(api.createSession).mockResolvedValue(structuredClone(session) as never)
     vi.mocked(api.endSession).mockResolvedValue(undefined)
+    vi.mocked(api.finishSession).mockResolvedValue({ ...structuredClone(session), state: 'restoring' } as never)
     vi.mocked(api.sessionDelay).mockResolvedValue({} as never)
     vi.mocked(api.writeGroupDelays).mockResolvedValue({} as never)
     vi.mocked(api.captureProfile).mockResolvedValue({ id: 'p9', name: 'Evening', group_id: 'g', kind: 'device', delays: {}, notes: '', created_at: '' } as never)
@@ -71,52 +72,65 @@ describe('SyncView manual tuning', () => {
     w.unmount()
   })
 
-  it('does not start a second session when this group already has a manual one', async () => {
+  it('never takes over a manual session another device started: it offers to join it (M10)', async () => {
     vi.mocked(api.getSyncGroup).mockResolvedValue({ ...structuredClone(group), session_id: 's1' } as never)
     vi.mocked(api.getSession).mockResolvedValue(structuredClone(session) as never)
     const { w } = await mountView()
     await openManual(w)
     expect(api.createSession).not.toHaveBeenCalled()
+    expect(w.find('[data-delay-row]').exists()).toBe(false)
+    expect(w.get('[data-read-only]').text()).toContain('Manual tuning is open on another device')
+    // Leaving the tab never ends someone else's tuning.
+    await w.get('[role="tab"][data-tab-id="group"]').trigger('click'); await flushPromises()
+    expect(api.finishSession).not.toHaveBeenCalled()
+    expect(api.endSession).not.toHaveBeenCalled()
+    await openManual(w)
+    await w.get('[data-join-manual]').trigger('click'); await flushPromises()
     expect(w.findAll('[data-delay-row]')).toHaveLength(1)
+    // Joined: now this page finishes it when the tab is left.
+    await w.get('[role="tab"][data-tab-id="group"]').trigger('click'); await flushPromises()
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
     w.unmount()
   })
 
   it('does not take over a measurement in progress', async () => {
     vi.mocked(api.getSyncGroup).mockResolvedValue({ ...structuredClone(group), session_id: 's2' } as never)
-    vi.mocked(api.getSession).mockResolvedValue({ ...structuredClone(session), id: 's2', mode: 'semi' } as never)
+    vi.mocked(api.getSession).mockResolvedValue({ ...structuredClone(session), id: 's2', mode: 'semi', state: 'measuring' } as never)
     const { w } = await mountView()
     await openManual(w)
     expect(api.createSession).not.toHaveBeenCalled()
     expect(w.find('[data-delay-row]').exists()).toBe(false)
-    expect(w.get('[data-manual-busy]').text()).toContain('Another tuning')
+    expect(w.get('[data-read-only]').text()).toContain('Tuning in progress on another device')
     w.unmount()
   })
 
-  it('ends the session without asking when nothing changed', async () => {
+  it('finishes the session without asking when nothing changed, and says what happened', async () => {
     const { w } = await mountView()
     await openManual(w)
     await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
     await flushPromises()
     expect(confirmDialog).not.toHaveBeenCalled()
-    expect(api.endSession).toHaveBeenCalledWith('s1')
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
+    expect(api.endSession).not.toHaveBeenCalled()
+    expect(w.get('[data-left-notice]').text()).toContain('Manual tuning ended')
     w.unmount()
   })
 
   it('offers to save the changed delays as a profile, then ends the session', async () => {
     const { w } = await mountView()
     await openManual(w)
-    await w.get('[data-delay-row] [aria-label="+10 ms"]').trigger('click')
+    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
     await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
     await flushPromises()
     expect(confirmDialog).toHaveBeenCalledTimes(1)
-    expect(api.endSession).not.toHaveBeenCalled()
+    expect(api.finishSession).not.toHaveBeenCalled()
     const name = document.body.querySelector<HTMLInputElement>('[data-manual-profile-name]')!
     name.value = 'Evening'
     name.dispatchEvent(new Event('input'))
     ;(document.body.querySelector('[data-manual-profile-save]') as HTMLElement).click()
     await flushPromises()
     expect(api.captureProfile).toHaveBeenCalledWith('g', { name: 'Evening', kind: 'device' })
-    expect(api.endSession).toHaveBeenCalledWith('s1')
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
     w.unmount()
   })
 
@@ -124,11 +138,11 @@ describe('SyncView manual tuning', () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
     const { w } = await mountView()
     await openManual(w)
-    await w.get('[data-delay-row] [aria-label="+10 ms"]').trigger('click')
+    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
     await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
     await flushPromises()
     expect(api.captureProfile).not.toHaveBeenCalled()
-    expect(api.endSession).toHaveBeenCalledWith('s1')
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
     w.unmount()
   })
 
@@ -136,11 +150,11 @@ describe('SyncView manual tuning', () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
     const { w, router } = await mountView()
     await openManual(w)
-    await w.get('[data-delay-row] [aria-label="+10 ms"]').trigger('click')
+    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
     await router.push('/groups')
     await flushPromises()
     expect(confirmDialog).toHaveBeenCalledTimes(1)
-    expect(api.endSession).toHaveBeenCalledWith('s1')
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
     expect(router.currentRoute.value.name).toBe('groups')
     w.unmount()
   })
@@ -166,20 +180,20 @@ describe('SyncView manual tuning', () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
     const { w } = await mountView()
     await openManual(w)
-    await w.get('[data-delay-row] [aria-label="+10 ms"]').trigger('click')
+    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
     expect(api.sessionDelay).not.toHaveBeenCalled()
     await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
     await flushPromises()
     expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 130)
     const wrote = vi.mocked(api.sessionDelay).mock.invocationCallOrder[0]!
     expect(wrote).toBeLessThan(vi.mocked(confirmDialog).mock.invocationCallOrder[0]!)
-    expect(wrote).toBeLessThan(vi.mocked(api.endSession).mock.invocationCallOrder[0]!)
+    expect(wrote).toBeLessThan(vi.mocked(api.finishSession).mock.invocationCallOrder[0]!)
     w.unmount()
   })
 
   it('ends the manual session when the page is hidden for good, and stops listening once gone', async () => {
     // The session outlives the view (its DELETE is still on the way): only the removed listener keeps quiet.
-    vi.mocked(api.endSession).mockReturnValue(new Promise(() => {}))
+    vi.mocked(api.finishSession).mockReturnValue(new Promise(() => {}))
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -203,5 +217,12 @@ describe('SyncView manual tuning', () => {
     expect(api.endSessionOnPageHide).not.toHaveBeenCalled()
     w.unmount()
   })
-})
 
+  it('says once, after a reload, that the manual tuning ended with it', async () => {
+    sessionStorage.setItem('sync:active', JSON.stringify({ group: 'g', kind: 'manual' }))
+    const { w } = await mountView()
+    expect(w.get('[data-reload-notice]').text()).toContain('Manual tuning ended when the page was reloaded')
+    expect(sessionStorage.getItem('sync:active')).toBeNull()
+    w.unmount()
+  })
+})

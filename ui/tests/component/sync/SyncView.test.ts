@@ -99,30 +99,29 @@ describe('SyncView group tab', () => {
     expect(api.listProfiles).toHaveBeenCalledWith('g')
   })
 
-  it('opens manual tuning and the measurement in the chosen mode', async () => {
+  it('offers the two ways to tune with when to choose each, and opens the chosen tab', async () => {
     const w = await mountView()
+    expect(w.findAll('[data-action]').map((b) => b.attributes('data-action'))).toEqual(['manual', 'semi'])
+    expect(w.text()).toContain('No microphone needed. Best for small fixes you can hear.')
+    expect(w.text()).toContain('About a minute per speaker.')
+    expect(w.text()).not.toContain('Measure and apply')
     await w.get('[data-action="manual"]').trigger('click')
     expect(w.get('[role="tab"][aria-selected="true"]').text()).toBe('Manual')
     await w.get('[role="tab"]').trigger('click')
-    await w.get('[data-action="auto"]').trigger('click')
-    expect(w.get('[role="tab"][aria-selected="true"]').text()).toBe('Measure')
-    expect(w.get('[data-measure-mode]').attributes('data-measure-mode')).toBe('auto')
-    await w.get('[role="tab"]').trigger('click')
     await w.get('[data-action="semi"]').trigger('click')
-    expect(w.get('[data-measure-mode]').attributes('data-measure-mode')).toBe('semi')
+    expect(w.get('[role="tab"][aria-selected="true"]').text()).toBe('Measure')
+    await w.get('[data-switch-manual]').trigger('click')
+    expect(w.get('[role="tab"][aria-selected="true"]').text()).toBe('Manual')
   })
 
-  it('mounts the measurement wizard in the chosen mode only while the Measure tab is open', async () => {
+  it('mounts the measurement wizard only while the Measure tab is open', async () => {
     const w = await mountView()
     expect(w.findComponent(MeasureWizard).exists()).toBe(false)
-    await w.get('[data-action="auto"]').trigger('click')
-    expect(w.findComponent(MeasureWizard).props('mode')).toBe('auto')
+    await w.get('[data-action="semi"]').trigger('click')
     expect(w.findComponent(MeasureWizard).props('groupId')).toBe('g')
-    expect(w.text()).toContain('Nothing plays while you measure')
+    expect(w.text()).toContain('Nothing else plays while you measure')
     await w.get('[role="tab"]').trigger('click')
     expect(w.findComponent(MeasureWizard).exists()).toBe(false)
-    await w.get('[data-action="semi"]').trigger('click')
-    expect(w.findComponent(MeasureWizard).props('mode')).toBe('semi')
   })
 
   it('polls a pending restore until it clears, then reads the group again', async () => {

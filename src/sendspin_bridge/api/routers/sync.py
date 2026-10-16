@@ -239,25 +239,28 @@ def proposal(session_id: str) -> ProposalOut:
 @router.post(
     "/sessions/{session_id}/proposal",
     response_model=ProposalOut,
-    summary="Compute the proposal from the round's measurements",
+    summary="Compute the proposal from the measurements so far",
 )
 def compute_proposal(session_id: str) -> ProposalOut:
     return uc.compute_proposal(session_id)
 
 
-@router.post("/sessions/{session_id}/apply", response_model=SyncSessionOut, summary="Write the proposal (or rows)")
+@router.post(
+    "/sessions/{session_id}/apply",
+    response_model=SyncSessionOut,
+    summary="Write the proposal (or rows); the session goes on as the manual editor",
+)
 def apply(session_id: str, body: ApplyIn) -> SyncSessionOut:
-    return uc.apply(session_id, body.rows, verify=body.verify)
+    return uc.apply(session_id, body.rows)
 
 
-@router.post("/sessions/{session_id}/undo", response_model=SyncSessionOut, summary="Undo an automatic apply")
-def undo(session_id: str) -> SyncSessionOut:
-    return uc.undo(session_id)
-
-
-@router.post("/sessions/{session_id}/verify", response_model=SyncSessionOut, summary="Measure again")
-def verify(session_id: str) -> SyncSessionOut:
-    return uc.verify(session_id)
+@router.post(
+    "/sessions/{session_id}/finish",
+    response_model=SyncSessionOut,
+    summary="Finish: keep the delays, restore the group, end the session as done",
+)
+def finish(session_id: str) -> SyncSessionOut:
+    return uc.finish(session_id)
 
 
 # -- profiles -----------------------------------------------------------------------------

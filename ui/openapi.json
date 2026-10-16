@@ -273,12 +273,6 @@
             ],
             "description": "Delays to write instead of the proposal.",
             "title": "Rows"
-          },
-          "verify": {
-            "default": false,
-            "description": "Semi-automatic: measure again after applying.",
-            "title": "Verify",
-            "type": "boolean"
           }
         },
         "title": "ApplyIn",
@@ -5386,8 +5380,7 @@
           "mode": {
             "enum": [
               "manual",
-              "semi",
-              "auto"
+              "semi"
             ],
             "title": "Mode",
             "type": "string"
@@ -5981,8 +5974,7 @@
           "mode": {
             "enum": [
               "manual",
-              "semi",
-              "auto"
+              "semi"
             ],
             "title": "Mode",
             "type": "string"
@@ -6036,10 +6028,6 @@
             "description": "Code of the last failed restore attempt.",
             "title": "Restore Error"
           },
-          "round": {
-            "title": "Round",
-            "type": "integer"
-          },
           "soloed": {
             "anyOf": [
               {
@@ -6057,7 +6045,7 @@
               "measuring",
               "proposed",
               "applying",
-              "verifying",
+              "tuning",
               "restoring",
               "done",
               "cancelled",
@@ -6065,18 +6053,6 @@
             ],
             "title": "State",
             "type": "string"
-          },
-          "undo_until_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Seconds left to undo an automatic apply; null when closed.",
-            "title": "Undo Until S"
           },
           "volumes": {
             "additionalProperties": {
@@ -6113,9 +6089,7 @@
           "volumes",
           "muted",
           "soloed",
-          "reference",
-          "round",
-          "undo_until_s"
+          "reference"
         ],
         "title": "SyncSessionOut",
         "type": "object"
@@ -12652,7 +12626,7 @@
             "description": "Server error"
           }
         },
-        "summary": "Write the proposal (or rows)",
+        "summary": "Write the proposal (or rows); the session goes on as the manual editor",
         "tags": [
           "sync"
         ]
@@ -12726,6 +12700,60 @@
           }
         },
         "summary": "Write one member's delay live (manual tuning)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/finish": {
+      "post": {
+        "operationId": "finish_api_v1_sync_sessions__session_id__finish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Finish: keep the delays, restore the group, end the session as done",
         "tags": [
           "sync"
         ]
@@ -12831,7 +12859,7 @@
             "description": "Server error"
           }
         },
-        "summary": "Compute the proposal from the round's measurements",
+        "summary": "Compute the proposal from the measurements so far",
         "tags": [
           "sync"
         ]
@@ -13189,114 +13217,6 @@
           }
         },
         "summary": "Hear one member (null: all)",
-        "tags": [
-          "sync"
-        ]
-      }
-    },
-    "/api/v1/sync/sessions/{session_id}/undo": {
-      "post": {
-        "operationId": "undo_api_v1_sync_sessions__session_id__undo_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncSessionOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {}
-            },
-            "description": "Client error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {}
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Undo an automatic apply",
-        "tags": [
-          "sync"
-        ]
-      }
-    },
-    "/api/v1/sync/sessions/{session_id}/verify": {
-      "post": {
-        "operationId": "verify_api_v1_sync_sessions__session_id__verify_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncSessionOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {}
-            },
-            "description": "Client error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {}
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Measure again",
         "tags": [
           "sync"
         ]

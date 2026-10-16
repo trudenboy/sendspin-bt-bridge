@@ -22,22 +22,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-Mode = Literal["manual", "semi", "auto"]
+Mode = Literal["manual", "semi"]
 Point = Literal["device", "position"]
 State = Literal[
     "created",
     "measuring",
     "proposed",
     "applying",
-    "verifying",
+    "tuning",
     "restoring",
     "done",
     "cancelled",
     "failed",
 ]
-UNDO_WINDOW_S = 30.0
 INACTIVITY_S = 900.0
-MAX_ROUNDS = 2
 MIN_DELAY_MS = 0
 MAX_DELAY_MS = planner.MAX_DELAY_MS
 # The signal path (option C, user decision 2026-10-16): no music plays during a session. The operator
@@ -49,7 +47,10 @@ PLAYBACK_POLL_S = 2.0
 # its unmute owed this long after the restore began; then the restore gives it up and finishes.
 RESTORE_GIVE_UP_S = 600.0
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
-_ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "verifying")
+_ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "tuning")
+# Recordings, skips and proposals: while measuring, and after a proposal (a member measured again
+# before the operator applies). Once applied, the session is the manual editor (state "tuning").
+_MEASURING: tuple[State, ...] = ("measuring", "proposed")
 
 
 def _locked[**P, R](fn: Callable[Concatenate[SyncSession, P], R]) -> Callable[Concatenate[SyncSession, P], R]:
@@ -132,11 +133,8 @@ class SyncSession:
         self._live_muted: dict[str, bool] = {}  # mutes as last read from Music Assistant
         self._restore_since: float | None = None
         self._polled_at: float | None = None
-        self.undo_until: float | None = None
-        self.round = 1
         self.reference: str | None = None
         self._final: State = "done"
-        self._undo_delays: dict[str, int] = {}
         self._written: dict[str, int] = {}
         self._lock = threading.RLock()
         self._generation = 0  # bumped whenever a new measurement round starts
@@ -201,7 +199,8 @@ class SyncSession:
             self.members, self.snapshot = [], None
             raise
         self._polled_at = self._clock()
-        self._set("measuring")
+        # manual tuning edits by ear from the start; semi-automatic measures first, then edits the same way
+        self._set("tuning" if self.mode == "manual" else "measuring")
 
     # -- the group and the clicker ---------------------------------------------------
     def _observe(self, playback: GroupPlayback) -> bool:
@@ -248,7 +247,7 @@ class SyncSession:
         self._control.start_clicker(self.group_id, url)
         self.clicker_playing, self.group_state = True, "playing"
         self.clicker_starts += 1
-        if self.mode != "manual" and self.state in ("measuring", "verifying") and self.measurements:
+        if self.state in _MEASURING and self.measurements:
             # phases from two playbacks cannot be compared: the round starts again
             self.measurements = {}
             self._generation += 1
@@ -384,7 +383,7 @@ class SyncSession:
     def _membership(self) -> set[str] | None:
         """Read the group's membership without the lock (it is Music Assistant I/O); None when unknown
         or when the session is not measuring."""
-        if self.state not in ("measuring", "verifying"):
+        if self.state not in _MEASURING:
             return None
         try:
             return {m.ma_player_id for m in self._control.members(self.group_id)}
@@ -417,14 +416,14 @@ class SyncSession:
     def record(self, recording: Recording) -> Measurement:
         current = self._membership()
         with self._lock:
-            self._require("measuring", "verifying")
+            self._require(*_MEASURING)
             self._apply_membership(current)
             self._member(recording.member)
             self._require_clicker()
             generation = self._generation
         m = estimator.estimate(recording)  # slow: outside the lock
         with self._lock:
-            self._require("measuring", "verifying")
+            self._require(*_MEASURING)
             if self._generation != generation:
                 raise ControlError("session_state", "the measurement round changed while estimating")
             self._member(recording.member)
@@ -439,7 +438,7 @@ class SyncSession:
 
     @_locked
     def _skip(self, current: set[str] | None, member: str) -> None:
-        self._require("measuring", "verifying")
+        self._require(*_MEASURING)
         self._apply_membership(current)
         self._member(member)
         self.measurements[member] = Measurement(member=member, status="skipped", reason="skipped")
@@ -452,37 +451,23 @@ class SyncSession:
 
     @_locked
     def _propose(self, current: set[str] | None) -> Proposal:
-        self._require("measuring", "verifying")
+        self._require(*_MEASURING)
         self._apply_membership(current)
         self.touch()
         spread = planner.spread_ms(self.measurements.values())
-        if self.state == "verifying":
-            self.history[-1]["spread_after_ms"] = round(spread, 1)
-            assert self.proposal is not None
-            if self.mode == "auto" and spread > planner.VERIFY_SPREAD_MS and self.round <= MAX_ROUNDS:
-                try:
-                    self.proposal = planner.plan(self.measurements.values(), self.members, reference=self.reference)
-                except planner.PlanError as exc:
-                    raise ControlError("no_measurement", str(exc)) from exc
-                self.history.append({"round": self.round, "spread_before_ms": round(spread, 1)})
-                self._set("proposed")
-                self.apply()
-                return self.proposal
-            self._begin_restore("done")
-            return self.proposal
         try:
             self.proposal = planner.plan(self.measurements.values(), self.members, reference=self.reference)
         except planner.PlanError as exc:
             raise ControlError("no_measurement", str(exc)) from exc
-        self.history.append({"round": self.round, "spread_before_ms": round(spread, 1)})
+        self.history.append({"spread_before_ms": round(spread, 1)})
         self._set("proposed")
         return self.proposal
 
     # -- applying ------------------------------------------------------------------
     @_locked
-    def apply(self, rows: Mapping[str, int] | None = None, *, verify: bool = False) -> None:
-        """Write the proposal (or ``rows``). Automatic mode always verifies and keeps an undo;
-        semi-automatic verifies when asked to, otherwise the session restores and ends."""
+    def apply(self, rows: Mapping[str, int] | None = None) -> None:
+        """Write the proposal (or ``rows``); the session then goes on as the manual editor ("tuning"):
+        the clicks keep playing, the operator listens (solo, A/B), adjusts by hand and finishes."""
         self._require("proposed")
         assert self.proposal is not None
         source = rows if rows is not None else {r.member: r.after_ms for r in self.proposal.rows}
@@ -505,60 +490,23 @@ class SyncSession:
             self._roll_back(done, wanted)
             self._set("proposed")
             raise
-        for member, before in done:
-            self._undo_delays.setdefault(member.ma_player_id, before)
+        for member, _before in done:
             self._written[member.ma_player_id] = wanted[member.ma_player_id]
         self.members = [dataclasses.replace(m, delay_ms=wanted.get(m.ma_player_id, m.delay_ms)) for m in self.members]
         self.touch()
-        if self.mode == "auto" and self.round <= MAX_ROUNDS:
-            # a plain window from the apply; the check round measures with the clicker (started
-            # again by the operator if it stopped meanwhile)
-            self.undo_until = self._clock() + UNDO_WINDOW_S
-            self.verify()
-        elif verify:
-            self.verify()
-        else:
-            self._begin_restore("done")
+        self._set("tuning")
 
     def _roll_back(self, done: list[tuple[Member, int]], wanted: Mapping[str, int]) -> None:
         """Best effort: put back what a failed apply already wrote. A member whose value cannot be put
-        back keeps the written value in ``members`` (and in the undo/reset bookkeeping), so the session
+        back keeps the written value in ``members`` (and in the reset bookkeeping), so the session
         shows what Music Assistant holds."""
         for member, before in reversed(done):
             mid = member.ma_player_id
             try:
                 self._control.set_delay(member, before)
             except ControlError:
-                self._undo_delays.setdefault(mid, before)
                 self._written[mid] = wanted[mid]
                 self._set_member_delay(mid, wanted[mid])
-
-    @_locked
-    def verify(self) -> None:
-        self._require("applying", "proposed")
-        self.round += 1
-        self.measurements = {}
-        self._generation += 1
-        self._set("verifying")
-
-    @_locked
-    def undo(self) -> None:
-        """Put back the delays from before the automatic apply(s). Allowed in any state while the
-        window is open (including restoring); during verification it ends the session without
-        refining, since a refinement would be planned against the undone delays."""
-        if self.undo_until is None or self._clock() > self.undo_until:
-            raise ControlError("undo_expired")
-        for mid, ms in list(self._undo_delays.items()):
-            self._control.set_delay(self._known(mid), ms)
-            self._set_member_delay(mid, ms)
-            self._written.pop(mid, None)
-            del self._undo_delays[mid]
-        self.undo_until = None
-        self.touch()
-        if self.state == "verifying":
-            self._begin_restore("done")
-        else:
-            self._changed()
 
     # -- manual --------------------------------------------------------------------
     @_locked
@@ -591,6 +539,12 @@ class SyncSession:
         self._final = final
         self._restore_since = self._clock()
         self._set("restoring")
+
+    @_locked
+    def finish(self) -> None:
+        """The operator is done: the delays stay as they are now, the group is restored ("done")."""
+        self._require(*_ACTIVE)
+        self._begin_restore("done")
 
     @_locked
     def cancel(self) -> None:
@@ -661,6 +615,4 @@ class SyncSession:
             "muted": sorted(self.muted),
             "soloed": self.soloed,
             "reference": self.reference,
-            "round": self.round,
-            "undo_until_s": None if self.undo_until is None else max(0.0, self.undo_until - self._clock()),
         }

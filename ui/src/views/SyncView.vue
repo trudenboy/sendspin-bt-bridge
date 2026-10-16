@@ -37,18 +37,11 @@ const sessionRestore = computed(() => {
 })
 const root = ref<HTMLElement | null>(null)
 
-/** Which measurement the Measure tab runs: suggest (review first) or apply (with undo). */
-const measureMode = ref<'semi' | 'auto'>('semi')
+/** The two ways to tune: by ear (Manual tab) or measured with a microphone, then by ear (Measure tab). */
+const actions = ['manual', 'semi'] as const
 
-const actions = ['manual', 'semi', 'auto'] as const
-
-async function choose(action: 'manual' | 'semi' | 'auto') {
-  if (action === 'manual') {
-    activeTab.value = 'manual'
-  } else {
-    measureMode.value = action
-    activeTab.value = 'measure'
-  }
+async function choose(action: 'manual' | 'semi') {
+  activeTab.value = action === 'manual' ? 'manual' : 'measure'
   await nextTick()
   root.value?.querySelector<HTMLElement>(`[role="tab"][data-tab-id="${activeTab.value}"]`)?.focus()
 }
@@ -105,8 +98,23 @@ onBeforeUnmount(() => {
   stopPolling()
 })
 
-/** Step status, announced to screen readers as it changes. */
-const status = computed(() => t(`sync.state.${sync.session?.state ?? 'idle'}`))
+/** The measuring wizard's stage while it holds a session (from the wizard). */
+const wizardStage = ref<'prepare' | 'measure' | 'tune' | 'done' | null>(null)
+
+/**
+ * Where the tuning stands, in words (announced to screen readers as it changes): derived from what
+ * the operator is doing, not only from the session's state, which reads "measuring" all through the
+ * preparation and in manual tuning.
+ */
+const status = computed(() => {
+  const s = sync.session
+  const live = s && s.group_id === groupId.value ? s : null
+  if (live && ['restoring', 'done', 'cancelled', 'failed'].includes(live.state)) return t(`sync.state.${live.state}`)
+  if (live && wizardSession.value === live.id && wizardStage.value) return t(`sync.status.${wizardStage.value}`)
+  if (live && live.mode === 'manual') return t('sync.status.tune')
+  if (live) return t('sync.status.elsewhere')
+  return t('sync.state.idle')
+})
 
 /*
  * Manual tuning is a session (mode "manual"): started when the Manual tab opens, ended when the
@@ -118,21 +126,58 @@ const liveSession = computed(() => {
   return s && s.group_id === groupId.value && !ENDED.has(s.state) ? s : null
 })
 /**
- * Another client tunes this group: its session is live (or could not be read) and this page did not
- * start it. Manual sessions stay usable from the Manual tab, as before.
+ * Another client tunes this group: its session is live (or could not be read) and this page neither
+ * started nor joined it. Nothing here may end it by accident; the operator can join a manual one.
  */
 const readOnly = computed(() => {
   const g = group.value
   if (!g || sync.starting) return false
   if (g.session_id && !sync.session) return true
   const s = liveSession.value
-  return !!s && s.mode !== 'manual' && !sync.owns(s.id)
+  return !!s && !sync.owns(s.id)
 })
 /** The session the measuring wizard holds: the wizard is never unmounted under it (B1). */
 const wizardSession = ref<string | null>(null)
-const manualSession = computed(() => (liveSession.value?.mode === 'manual' ? liveSession.value : null))
+/** This page's manual session (started here, or joined). */
+const manualSession = computed(() =>
+  liveSession.value?.mode === 'manual' && sync.owns(liveSession.value.id) ? liveSession.value : null,
+)
+/** A manual session another tab or device started: offered to join, never ended by leaving this tab. */
+const foreignManual = computed(() =>
+  liveSession.value?.mode === 'manual' && !sync.owns(liveSession.value.id) ? liveSession.value : null,
+)
+function joinManual() {
+  const s = foreignManual.value
+  if (!s) return
+  sync.join(s.id)
+  manualError.value = ''
+  manualChanged.value = false
+  setActiveFlag('manual')
+}
 /** A measurement already runs for this group: manual tuning must not take it over. */
 const manualBusy = computed(() => !!liveSession.value && liveSession.value.mode !== 'manual')
+/** Said on the Group tab after manual tuning ended (the clicks stop, the speakers are unmuted). */
+const leftNotice = ref('')
+/** Said once after a reload ended a tuning that ran in this tab. */
+const reloadNotice = ref('')
+
+const ACTIVE_KEY = 'sync:active'
+function setActiveFlag(kind: 'manual' | 'measure') {
+  try {
+    sessionStorage.setItem(ACTIVE_KEY, JSON.stringify({ group: groupId.value, kind }))
+  } catch {
+    /* private mode: no notice after a reload */
+  }
+}
+function takeActiveFlag(): { group: string; kind: string } | null {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_KEY)
+    sessionStorage.removeItem(ACTIVE_KEY)
+    return raw ? (JSON.parse(raw) as { group: string; kind: string }) : null
+  } catch {
+    return null
+  }
+}
 const manualChanged = ref(false)
 const manualError = ref('')
 const manualStarting = ref(false)
@@ -143,14 +188,16 @@ let leaving: Promise<void> | null = null
 const isLeaving = ref(false)
 
 async function enterManual() {
-  if (leaving || manualStarting.value || manualSession.value || manualBusy.value || !group.value) return
+  if (leaving || manualStarting.value || manualSession.value || foreignManual.value || manualBusy.value || !group.value) return
   manualError.value = ''
   manualEnded.value = false
+  leftNotice.value = ''
   manualStarting.value = true
   const id = groupId.value
   try {
     await sync.start(id, 'manual')
     manualChanged.value = false
+    setActiveFlag('manual')
   } catch (e) {
     manualError.value = errorCode(e)
     // Another tab may hold this group's session: show it rather than a dead end.
@@ -224,9 +271,16 @@ async function doLeave() {
   }
   await sync.flushDelays()
   try {
-    await sync.end()
+    // Finished, not cancelled: the delays stay; the bridge unmutes and stops the clicks.
+    await sync.finish()
+    leftNotice.value = t('sync.manual.endedNotice')
   } catch {
     /* the failure is kept in the store's error; the session times out on the bridge */
+  }
+  try {
+    sessionStorage.removeItem(ACTIVE_KEY)
+  } catch {
+    /* nothing stored */
   }
   manualChanged.value = false
 }
@@ -289,6 +343,8 @@ onBeforeUnmount(() => {
 
 async function load(id: string) {
   if (!id) return
+  const flag = takeActiveFlag()
+  reloadNotice.value = flag && flag.group === id ? t(`sync.reloaded.${flag.kind === 'manual' ? 'manual' : 'measure'}`) : ''
   await Promise.allSettled([sync.open(id), sync.fetchRestores()])
 }
 
@@ -395,15 +451,35 @@ watch(groupId, (id) => void load(id), { immediate: true })
     >
       <div class="flex flex-wrap items-center gap-3">
         <div class="min-w-0 flex-1">
-          <p class="font-medium">{{ t('sync.readOnly') }}</p>
-          <p class="text-text-secondary">{{ t('sync.readOnlyHelp') }}</p>
+          <p class="font-medium">{{ foreignManual ? t('sync.joinManual.title') : t('sync.readOnly') }}</p>
+          <p class="text-text-secondary">{{ foreignManual ? t('sync.joinManual.help') : t('sync.readOnlyHelp') }}</p>
         </div>
+        <SbButton v-if="foreignManual" size="sm" data-join-manual @click="joinManual">
+          {{ t('sync.joinManual.join') }}
+        </SbButton>
         <SbButton variant="outline" size="sm" data-end-foreign :loading="endingForeign" @click="endForeign">
           {{ t('sync.endForeign') }}
         </SbButton>
       </div>
       <p v-if="endForeignError" role="alert" class="mt-1 text-error">{{ endForeignError }}</p>
     </div>
+
+    <p
+      v-if="reloadNotice"
+      data-reload-notice
+      role="status"
+      class="mb-4 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+    >
+      {{ reloadNotice }}
+    </p>
+    <p
+      v-if="leftNotice && activeTab !== 'manual'"
+      data-left-notice
+      role="status"
+      class="mb-4 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+    >
+      {{ leftNotice }}
+    </p>
 
     <div v-if="sync.loading && !group" class="flex justify-center py-8">
       <SbSpinner />
@@ -435,11 +511,11 @@ watch(groupId, (id) => void load(id), { immediate: true })
             </SbCard>
             <SbCard>
               <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.actions.title') }}</h2>
-              <ul class="grid gap-3 sm:grid-cols-3">
+              <ul class="grid gap-3 sm:grid-cols-2">
                 <li v-for="action in actions" :key="action" class="flex flex-col gap-1">
                   <SbButton
                     type="button"
-                    :variant="action === 'manual' ? 'outline' : action === 'semi' ? 'primary' : 'secondary'"
+                    :variant="action === 'semi' ? 'primary' : 'outline'"
                     :data-action="action"
                     :aria-describedby="`sync-action-${action}-help`"
                     :disabled="readOnly"
@@ -459,7 +535,12 @@ watch(groupId, (id) => void load(id), { immediate: true })
           </div>
         </template>
         <template #manual>
-          <p class="mt-4 text-sm text-text-secondary">{{ t('sync.manualIntro') }}</p>
+          <p class="mt-4 text-sm text-text-secondary">
+            {{ t('sync.manualIntro') }}
+            <button type="button" data-switch-measure class="font-medium text-primary underline underline-offset-2" @click="choose('semi')">
+              {{ t('sync.switchToMeasure') }}
+            </button>
+          </p>
           <ManualTuning
             v-if="activeTab === 'manual' && manualSession && !isLeaving"
             :key="manualSession.id"
@@ -496,17 +577,19 @@ watch(groupId, (id) => void load(id), { immediate: true })
           </div>
         </template>
         <template #measure>
-          <p class="mt-4 text-sm text-text-secondary">{{ t('sync.measureIntro') }}</p>
-          <p class="mt-1 text-sm text-text-primary" :data-measure-mode="measureMode">
-            {{ t(`sync.measureMode.${measureMode}`) }}
+          <p class="mt-4 text-sm text-text-secondary">
+            {{ t('sync.measureIntro') }}
+            <button type="button" data-switch-manual class="font-medium text-primary underline underline-offset-2" @click="choose('manual')">
+              {{ t('sync.switchToManual') }}
+            </button>
           </p>
           <!-- Mounted only while the tab is open: leaving it closes the microphone and ends the measurement. -->
           <MeasureWizard
             v-if="activeTab === 'measure' && (!readOnly || wizardSession)"
-            :key="measureMode"
             :group-id="group.id"
-            :mode="measureMode"
             @session="wizardSession = $event"
+            @stage="wizardStage = $event"
+            @manual="choose('manual')"
           />
         </template>
       </SbTabs>

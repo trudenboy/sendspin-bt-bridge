@@ -11,7 +11,7 @@ from sendspin_bridge.application.models.base import ResponseModel
 #: A Sendspin static delay Music Assistant accepts, in milliseconds.
 DelayMs = Annotated[int, Field(ge=0, le=5000)]
 
-Mode = Literal["manual", "semi", "auto"]
+Mode = Literal["manual", "semi"]
 Point = Literal["device", "position"]
 ProfileKind = Literal["device", "position"]
 
@@ -27,7 +27,6 @@ ErrorCode = Literal[
     "not_adjustable",
     "recording_invalid",
     "restore_pending",
-    "undo_expired",
     "no_measurement",
     "not_found",
     # the clicker on the group (option C)
@@ -106,7 +105,7 @@ class SyncSessionOut(ResponseModel):
         "measuring",
         "proposed",
         "applying",
-        "verifying",
+        "tuning",
         "restoring",
         "done",
         "cancelled",
@@ -130,8 +129,6 @@ class SyncSessionOut(ResponseModel):
     muted: list[str] = Field(description="Members this session muted; they are unmuted when it ends.")
     soloed: str | None
     reference: str | None
-    round: int
-    undo_until_s: float | None = Field(description="Seconds left to undo an automatic apply; null when closed.")
 
 
 class SessionCreate(BaseModel):
@@ -165,7 +162,6 @@ class SkipIn(BaseModel):
 
 class ApplyIn(BaseModel):
     rows: dict[str, DelayMs] | None = Field(default=None, description="Delays to write instead of the proposal.")
-    verify: bool = Field(default=False, description="Semi-automatic: measure again after applying.")
 
 
 class DelaysIn(BaseModel):

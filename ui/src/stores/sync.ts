@@ -322,10 +322,19 @@ export const useSyncStore = defineStore('sync', () => {
   const ab = (a: string, b: string) => control((id) => api.sessionAb(id, a, b))
   const reference = (member: string) => control((id) => api.sessionReference(id, member))
   const skip = (member: string) => control((id) => api.sessionSkip(id, member))
-  const apply = (rows?: Record<string, number>, verify?: boolean) =>
-    control((id) => api.applyProposal(id, rows, verify))
-  const undo = () => control((id) => api.undoApply(id))
-  const verify = () => control((id) => api.verifySession(id))
+  const apply = (rows?: Record<string, number>) => control((id) => api.applyProposal(id, rows))
+
+  /** Finish the open session: the delays stay, the group is restored (``done``). */
+  async function finish() {
+    const current = session.value
+    if (!current) return
+    applyEvent(await track(() => api.finishSession(current.id)))
+  }
+
+  /** Take over a session another tab or device started (the operator chose to join it). */
+  function join(id: string) {
+    owned.value = new Set([...owned.value, id])
+  }
 
   /** Compute a proposal from the measurements; the session event carries it too. */
   async function propose() {
@@ -346,7 +355,8 @@ export const useSyncStore = defineStore('sync', () => {
     if (value === undefined) return null
     const s = session.value
     let call: Promise<unknown>
-    if (s && s.mode === 'manual' && !ENDED.has(s.state)) {
+    // Live through the session while it edits by ear (manual, or semi-automatic after the apply).
+    if (s && !ENDED.has(s.state) && (s.mode === 'manual' || s.state === 'tuning')) {
       call = api.sessionDelay(s.id, member, value).then((answer) => applyEvent(answer))
     } else if (group.value) {
       call = api.writeGroupDelays(group.value.id, { [member]: value })
@@ -467,8 +477,8 @@ export const useSyncStore = defineStore('sync', () => {
     skip,
     propose,
     apply,
-    undo,
-    verify,
+    finish,
+    join,
     setDelay,
     flushDelays,
     hasPendingWrite,

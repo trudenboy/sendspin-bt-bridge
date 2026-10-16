@@ -37,12 +37,6 @@
           "default": null,
           "description": "Delays to write instead of the proposal.",
           "title": "Rows"
-        },
-        "verify": {
-          "default": false,
-          "description": "Semi-automatic: measure again after applying.",
-          "title": "Verify",
-          "type": "boolean"
         }
       },
       "title": "ApplyIn",
@@ -113,8 +107,7 @@
         "session_active",
         "session_expired",
         "session_state",
-        "sync_mute_unsupported",
-        "undo_expired"
+        "sync_mute_unsupported"
       ],
       "title": "ErrorCode",
       "type": "string"
@@ -500,8 +493,7 @@
         "mode": {
           "enum": [
             "manual",
-            "semi",
-            "auto"
+            "semi"
           ],
           "title": "Mode",
           "type": "string"
@@ -791,8 +783,7 @@
         "mode": {
           "enum": [
             "manual",
-            "semi",
-            "auto"
+            "semi"
           ],
           "title": "Mode",
           "type": "string"
@@ -847,10 +838,6 @@
           "description": "Code of the last failed restore attempt.",
           "title": "Restore Error"
         },
-        "round": {
-          "title": "Round",
-          "type": "integer"
-        },
         "soloed": {
           "anyOf": [
             {
@@ -868,7 +855,7 @@
             "measuring",
             "proposed",
             "applying",
-            "verifying",
+            "tuning",
             "restoring",
             "done",
             "cancelled",
@@ -876,18 +863,6 @@
           ],
           "title": "State",
           "type": "string"
-        },
-        "undo_until_s": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Seconds left to undo an automatic apply; null when closed.",
-          "title": "Undo Until S"
         },
         "volumes": {
           "additionalProperties": {
@@ -924,9 +899,7 @@
         "volumes",
         "muted",
         "soloed",
-        "reference",
-        "round",
-        "undo_until_s"
+        "reference"
       ],
       "title": "SyncSessionOut",
       "type": "object"

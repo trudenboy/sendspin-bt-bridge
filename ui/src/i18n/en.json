@@ -1375,28 +1375,37 @@
     },
     "members": "Members",
     "delay": "{ms} ms",
+    "delayHeading": "Delay (larger = earlier)",
+    "sign": "+ plays earlier · − plays later",
     "noMembers": "This group has no members.",
     "loadError": "Could not read the group members ({code}).",
     "restoreFailed": "Could not restore the group",
     "restoreFailedHelp": "Tuning was interrupted by a restart, so some speakers may still be muted ({code}). The bridge keeps trying.",
-    "manualIntro": "Play a test signal and adjust each speaker by ear.",
-    "measureIntro": "Measure each speaker with this device's microphone.",
+    "manualIntro": "Play clicks on the group and adjust each speaker by ear.",
+    "measureIntro": "Measure each speaker with a microphone, then fine-tune by ear.",
+    "switchToManual": "No microphone? Tune by ear instead.",
+    "switchToMeasure": "Have a phone or laptop with a microphone? Measure instead.",
     "state": {
       "idle": "No tuning in progress",
       "created": "Starting",
       "measuring": "Measuring",
-      "proposed": "Proposal ready",
+      "proposed": "Measured",
       "applying": "Applying the delays",
-      "verifying": "Checking the result",
+      "tuning": "Tuning by ear",
       "restoring": "Restoring the group",
       "done": "Done",
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
+    "status": {
+      "prepare": "Getting the group ready",
+      "measure": "Measuring",
+      "tune": "Tuning by ear",
+      "done": "Done",
+      "elsewhere": "Tuning on another device"
+    },
     "groupError": "Could not open this group ({code}). Check that Music Assistant is reachable and the group still exists.",
     "origin": {
-      "bridge": "Bridge",
-      "sendspin": "Sendspin",
       "other": "Cannot be adjusted"
     },
     "measuredAgo": "Measured {age}",
@@ -1404,15 +1413,9 @@
     "actions": {
       "title": "Tune",
       "manual": "Manual tuning",
-      "semi": "Measure and suggest",
-      "auto": "Measure and apply",
-      "manualHelp": "Play a test signal and adjust each speaker by ear.",
-      "semiHelp": "Measure with this device's microphone, then review the proposed delays.",
-      "autoHelp": "Measure, apply and check in one go. Undo stays available until 30 s after the check clicks start."
-    },
-    "measureMode": {
-      "semi": "Mode: measure and suggest",
-      "auto": "Mode: measure and apply"
+      "semi": "Measure with a microphone",
+      "manualHelp": "No microphone needed. Best for small fixes you can hear.",
+      "semiHelp": "About a minute per speaker. You hear and adjust the measured delays before you finish."
     },
     "profiles": {
       "title": "Profiles",
@@ -1452,10 +1455,11 @@
       "title": "Listen",
       "play": "Play clicks",
       "stop": "Stop clicks",
-      "solo": "Solo",
-      "soloMember": "Solo {name}",
+      "solo": "Only this speaker",
+      "soloHelp": "Pick a speaker to hear it alone (the others are muted), or Everyone.",
+      "soloMember": "Only {name}",
       "everyone": "Everyone",
-      "ab": "A/B",
+      "ab": "Compare two",
       "abA": "A",
       "abB": "B",
       "abHelp": "Two speakers take turns every two clicks.",
@@ -1464,21 +1468,21 @@
       "soloed": "Clicks playing on {name} only.",
       "alternating": "Alternating {a} and {b}.",
       "failed": "That did not work ({code}).",
-      "needsClicks": "Play the clicks to solo or compare speakers.",
-      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Stop clicks stops the click track only."
+      "needsClicks": "Play the clicks to hear speakers alone or compare them.",
+      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Stop clicks stops only the click track."
     },
     "manual": {
       "title": "Delays",
-      "help": "A larger delay makes a speaker sound earlier. Changes are written at once.",
-      "reset": "Reset to session start",
-      "resetDone": "Delays are back to where this session started.",
-      "minus": "−{n} ms",
-      "plus": "+{n} ms",
+      "help": "A larger delay makes a speaker play earlier. Changes are written at once.",
+      "reset": "Put back the delays from the start",
+      "resetDone": "Delays are back to where this tuning started.",
+      "minus": "−{n} ms (later)",
+      "plus": "+{n} ms (earlier)",
       "valueLabel": "Delay of {name} in ms",
       "departed": "Left the group",
       "starting": "Starting manual tuning…",
       "startFailed": "Could not start manual tuning ({code}).",
-      "busy": "Another tuning is in progress for this group. Finish it on the Measure tab first.",
+      "busy": "A measurement is running for this group. Finish it on the Measure tab first.",
       "saveOnLeave": "Save these delays as a profile?",
       "saveOnLeaveHelp": "The delays stay as they are either way.",
       "saveConfirm": "Save as profile",
@@ -1487,10 +1491,15 @@
       "skip": "Skip",
       "defaultName": "Manual {date}",
       "nudges": "Adjust {name}",
-      "writeForbidden": "Music Assistant refused to change {name}: this account has no permission to change player settings (ma_forbidden).",
+      "writeForbidden": "Music Assistant refused to change {name}: this account has no permission to change player settings.",
       "writeFailed": "Could not change {name} ({code}). The delay shown is what Music Assistant holds.",
-      "ended": "This tuning session ended (it timed out, or was closed elsewhere). The delays stay as they are.",
-      "startAgain": "Start again"
+      "ended": "This tuning ended (it timed out, or was closed on another device). The delays stay as they are.",
+      "startAgain": "Start again",
+      "measured": "Measured: {ms} ms ({change})",
+      "resetMeasured": "Reset to measured",
+      "resetMeasuredMember": "Reset {name} to the measured delay",
+      "endedNotice": "Manual tuning ended: the delays stay, the clicks stopped and every speaker is unmuted.",
+      "prepOf": "Before you listen ({n}/{total}) · {name}"
     },
     "capture": {
       "errors": {
@@ -1501,27 +1510,33 @@
         "worklet": "The recording module could not be loaded. Reload the page and try again.",
         "not_open": "The microphone is not open.",
         "busy": "A recording is already running.",
-        "interrupted": "Audio was interrupted (the page was in the background or another app took the audio). Tap to continue; the affected steps are measured again.",
+        "interrupted": "Audio was interrupted (the page was in the background or another app took the audio). Tap to continue; the affected speakers are measured again.",
         "timeout": "The recording did not finish in time.",
-        "mic_lost": "The microphone stopped (unplugged, or access was withdrawn). Open it again to continue; the affected steps are measured again.",
+        "mic_lost": "The microphone stopped (unplugged, or access was withdrawn). Open it again to continue; the affected speakers are measured again.",
         "failed": "Recording failed."
-      },
-      "resume": "Continue recording",
-      "epochBroken": "The audio clock was reset. Measurements taken before the interruption are repeated."
+      }
     },
     "wizard": {
-      "stepOf": "Step {n} of {total}: {name}",
-      "steps": {
-        "prepare": "Preparation",
-        "stop": "Stop playback",
-        "clicker": "Start the clicker",
-        "volume": "Set volume",
-        "members": "Speaker by speaker",
-        "proposal": "Proposal",
+      "stageOf": "{stage} ({n}/{total}) · {name}",
+      "stages": {
+        "prepare": "Prepare",
+        "measure": "Measure",
+        "tune": "Tune",
         "done": "Done"
       },
-      "interrupted": "Nothing plays while you measure.",
-      "interruptedHelp": "You stop the group first; then a click track replaces the group's queue in Music Assistant and the speakers are muted one by one. When the measurement ends, every speaker the bridge muted is unmuted and the click track is stopped. Your music does not come back by itself.",
+      "steps": {
+        "prepare": "Where and how",
+        "stop": "Stop the music",
+        "clicker": "Start the clicks",
+        "volume": "Set the volume",
+        "members": "Speaker by speaker",
+        "tune": "Listen and adjust",
+        "done": "Finished"
+      },
+      "notice": {
+        "title": "Nothing else plays while you measure.",
+        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted and the clicks stop."
+      },
       "point": {
         "legend": "Where will you measure?",
         "device": "At each speaker",
@@ -1531,21 +1546,30 @@
       },
       "micPermission": "The browser will ask for the microphone. Recordings stay in memory and are only sent to this bridge.",
       "holdStill": "Tip: keep the room quiet and hold the phone still while it records.",
+      "estimate": "Takes about {min} minutes.",
+      "byEar": "You can still tune by ear:",
+      "start": "Allow microphone and start",
       "micDenied": "Could not use the microphone.",
       "startFailed": "Could not start the measurement ({code}).",
       "level": {
-        "help": "The meter should jump with each click.",
-        "meter": "Microphone level",
+        "help": "The microphone meter should jump with each click.",
+        "meter": "Microphone",
         "tooQuiet": "Too quiet: turn the group up or move closer.",
         "tooLoud": "Too loud: turn the group down a little or move away.",
-        "fine": "The level is fine.",
+        "fine": "The microphone hears the clicks.",
         "value": "{pct} %"
       },
       "members": {
-        "help": "Measure each speaker on its own. You can change the order and repeat any step.",
+        "help": "Measure each speaker on its own. You can repeat any speaker.",
+        "order": "The order is only for your convenience (walk the room); it does not change the result.",
         "moveUp": "Move {name} up",
         "moveDown": "Move {name} down",
-        "notMeasured": "Not measured (cannot be adjusted): {names}"
+        "notMeasured": "Not measured (cannot be adjusted): {names}",
+        "left": "Record or skip every speaker to continue ({n} left). | Record or skip every speaker to continue ({n} left)."
+      },
+      "hint": {
+        "notHeard": "Not heard: turn {name} up or move closer, then Repeat — or Skip it.",
+        "unstable": "Unstable: keep the room quiet and the phone still, then Repeat — or Skip it."
       },
       "holdNear": "Hold the phone 30–50 cm from {name}",
       "stayPut": "Stay where you are",
@@ -1565,92 +1589,86 @@
       "confidence": "{pct} %",
       "redo": "Record again",
       "result": "{name}: {result}",
-      "restartRound": "The microphone clock was interrupted, so start the measurement again for the speakers marked “Record again”.",
+      "restartRound": "The microphone clock was interrupted, so record the speakers marked “Record again” once more.",
       "tapToContinue": "Tap to continue",
       "micLost": "The microphone stopped (unplugged, or access was withdrawn).",
       "reopen": "Open the microphone again",
       "failed": "That did not work ({code}).",
-      "ended": "The measurement session ended (it timed out, or was closed elsewhere). The speakers it muted are unmuted and its click track stopped.",
+      "ended": "The measurement ended (it timed out, or was closed on another device). The speakers it muted are unmuted and its clicks stopped.",
       "next": "Next",
       "back": "Back",
       "cancel": "Cancel",
-      "toProposal": "Continue to the proposal",
-      "measured": "Every speaker is measured. The proposal comes next.",
-      "verifying": "Check round",
-      "verifyingHelp": "The delays are applied. Measure each speaker once more to check the result.",
-      "refined": "A refinement was applied. Measure each speaker once more.",
+      "toTune": "Apply the measured delays and listen",
       "memberGone": "{name} left the group; the measurement goes on without it.",
-      "undo": "Undo ({s} s)",
-      "undoClosed": "Undo is no longer available",
-      "undoFailed": "Could not undo ({code}).",
-      "computing": "Computing the proposal…",
-      "proposalFailed": "Could not compute the proposal ({code}).",
+      "computing": "Working out the delays…",
+      "proposalFailed": "Could not work out the delays ({code}).",
       "retry": "Try again",
-      "applying": "Applying the delays…",
-      "applyFailed": "Could not apply the delays ({code}).",
-      "undoHelp": "The new delays are applied. You can put the earlier ones back for a short while."
+      "applying": "Applying the measured delays…",
+      "applyFailed": "Could not apply the delays ({code})."
+    },
+    "tune": {
+      "help": "The measured delays are applied and the clicks keep playing. Listen to each speaker alone or compare two, adjust any delay by hand, then finish.",
+      "spread": "Largest gap between speakers: {before} ms measured → about {after} ms now.",
+      "kept": "Not heard or skipped, so their delay is unchanged: {names}",
+      "ready": "The measured delays are applied. Listen and adjust.",
+      "finish": "Finish",
+      "finishSave": "Finish and save as profile…",
+      "saveTitle": "Finish and save as profile",
+      "saveConfirm": "Save and finish"
+    },
+    "cancel": {
+      "title": "Stop measuring?",
+      "message": "Recordings so far will be lost. Speakers the bridge muted are unmuted and the clicks stop.",
+      "tuneTitle": "Stop and put the delays back?",
+      "tuneMessage": "The delays go back to what they were before you measured. Speakers the bridge muted are unmuted and the clicks stop.",
+      "confirm": "Stop",
+      "keep": "Keep going",
+      "done": "Measurement cancelled. Speakers unmuted, clicks stopped."
+    },
+    "reloaded": {
+      "manual": "Manual tuning ended when the page was reloaded. The delays stay as they were.",
+      "measure": "The measurement ended when the page was reloaded."
+    },
+    "joinManual": {
+      "title": "Manual tuning is open on another device",
+      "help": "Join it to listen and adjust from here, or end it. Leaving this page never ends it.",
+      "join": "Join"
     },
     "readOnly": "Tuning in progress on another device",
     "readOnlyHelp": "This page only shows the group until that tuning ends.",
-    "restoreRetrying": "Music Assistant could not be reached ({code}), so some speakers may still be muted or playing the test signal. The bridge keeps trying.",
+    "restoreRetrying": "Music Assistant could not be reached ({code}), so some speakers may still be muted or playing clicks. The bridge keeps trying.",
     "proposal": {
-      "help": "Review the new delays. A larger delay makes a speaker sound earlier.",
-      "caption": "Proposed delays",
-      "member": "Speaker",
-      "before": "Before",
-      "after": "After",
-      "change": "Change",
-      "ms": "{ms} ms",
-      "clamped": "Clamped to the 0–5000 ms range",
-      "departed": "Left the group",
-      "chart": "Spread between the speakers",
-      "chartLabel": "Spread before: {before} ms; after: {after} ms",
-      "spreadBefore": "Before",
-      "spreadAfter": "After",
-      "spreadPredicted": "After (predicted)",
-      "predicted": "Predicted spread after applying: {ms} ms",
-      "noData": "–",
-      "warnings": "Warnings",
-      "clampedWarning": "Some delays were clamped to 0–5000 ms; the predicted remaining spread is {ms} ms.",
-      "largeWarning": "A delay above 2000 ms needs Music Assistant to send audio far ahead; speakers with small buffers may drop out.",
-      "unverified": "Could not be verified: {names}",
-      "checkAgain": "Check again after applying",
-      "checkAgainHelp": "Measures every speaker once more with the new delays.",
-      "apply": "Apply",
-      "applySave": "Apply and save as profile…",
-      "cancel": "Cancel",
-      "saveTitle": "Apply and save as profile",
       "name": "Profile name",
       "nameRequired": "Enter a name.",
       "defaultName": "Measured {date}",
-      "save": "Apply and save",
-      "forbidden": "Music Assistant refused to change the delays: this account may not change player settings (ma_forbidden). Set these values by hand in Music Assistant:",
-      "forbiddenHint": "Or reconnect Music Assistant with an administrator account in the bridge settings and apply again.",
+      "warnings": "Warnings",
+      "clampedWarning": "Some delays were clamped to 0–5000 ms; the gap that remains is about {ms} ms.",
+      "largeWarning": "A delay above 2000 ms needs Music Assistant to send audio far ahead; speakers with small buffers may drop out.",
+      "forbidden": "Music Assistant refused to change the delays: this account may not change player settings. Set these values by hand in Music Assistant:",
+      "forbiddenHint": "Or reconnect Music Assistant with an administrator account in the bridge settings and try again.",
       "copy": "Copy values",
       "copied": "Copied.",
       "copyFailed": "Could not copy; select the values and copy them by hand."
     },
     "done": {
       "restoring": "Restoring the group…",
-      "restoringHelp": "Unmuting the speakers and stopping the click track. The delays stay as applied.",
+      "restoringHelp": "Unmuting the speakers and stopping the clicks. The delays stay as you left them.",
       "restored": "Group restored",
-      "restoredHelp": "Every speaker is unmuted and the click track stopped. The new delays stay; start your music again in Music Assistant.",
-      "spread": "Spread: {before} ms → {after} ms",
-      "undone": "Undone: the delays are back to where they were before.",
+      "restoredHelp": "Every speaker is unmuted and the clicks stopped. The new delays stay; start your music again in Music Assistant.",
+      "spread": "Largest gap between speakers: {before} ms → about {after} ms",
       "saved": "Saved as profile “{name}”.",
-      "saveFailed": "The delays are applied, but the profile could not be saved ({code}).",
+      "saveFailed": "The delays are kept, but the profile could not be saved ({code}).",
       "listen": "Quick listen",
       "listenHelp": "Clicks play on the whole group for 10 s, then stop.",
       "listening": "Clicks playing on the whole group…",
       "listenFailed": "Could not play the clicks ({code}).",
-      "again": "Measure again",
-      "spreadPredicted": "Spread: {before} ms → {after} ms (predicted)"
+      "again": "Measure again"
     },
     "endForeign": "End that session",
     "endForeignTitle": "End the tuning on the other device?",
-    "endForeignMessage": "Its test signal stops and the group is restored. Delays already written stay as they are.",
+    "endForeignMessage": "Its clicks stop and the group is restored. Delays already written stay as they are.",
     "signal": {
-      "restarted": "The clicker started again: measure every member once more."
+      "restarted": "The clicks started again: record every speaker once more."
     },
     "prep": {
       "failed": "That did not work ({code}).",
@@ -1663,26 +1681,29 @@
       "stop": {
         "help": "The group must be silent before the clicks start: nothing else may play while the speakers are measured.",
         "state": "Group:",
-        "button": "Stop group",
-        "stillPlaying": "The group is still playing. Stop it to go on."
+        "button": "Stop the music",
+        "stillPlaying": "The group is still playing. Stop it to go on.",
+        "notPlaying": "The group is not playing — moving on."
       },
       "clicker": {
         "help": "The click track plays on every speaker of the group through Music Assistant for 3 minutes. If it stops, start it again.",
-        "start": "Start the clicker",
-        "again": "Start the clicker again",
-        "playing": "The clicker is playing.",
-        "stopped": "The clicker is not playing.",
-        "groupPlaying": "The group plays something else: stop it first."
+        "start": "Start the clicks",
+        "again": "Start the clicks again",
+        "playing": "Clicks are playing.",
+        "stopped": "Clicks are not playing.",
+        "groupPlaying": "The group plays something else: stop it first.",
+        "whyDisabled": "Start the clicks to go on."
       },
       "volume": {
-        "help": "Clicks should be clearly audible where you measure.",
+        "help": "Set a level where the clicks are clearly audible where you measure.",
         "noVolume": "No volume control",
-        "done": "Done"
+        "silent": "Silent: turn it up to measure it"
       },
       "skip": "Skip"
     },
     "mute": {
-      "unsupported": "{name} cannot be muted, so no other speaker can be heard alone. Take {name} out of the group in Music Assistant to measure the others."
+      "unsupported": "{name} cannot be muted, so the other speakers cannot be measured one at a time while it is in the group. Skip them, or tune by ear in Manual tuning.",
+      "unsupportedManual": "{name} cannot be muted, so the other speakers cannot be heard alone. Everyone and {name} alone still work."
     }
   }
 }

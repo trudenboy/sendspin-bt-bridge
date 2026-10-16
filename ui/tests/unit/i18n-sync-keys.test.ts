@@ -16,11 +16,25 @@ describe('sync texts', () => {
     expect(ruKeys).toEqual(enKeys)
   })
 
-  it('has the proposal, verification and done texts (with the administrator hint)', () => {
+  it('has the tune, cancel and done texts (with the administrator hint)', () => {
     const s = flatten((en as { sync: unknown }).sync)
-    for (const k of ['proposal.forbiddenHint', 'wizard.verifying', 'wizard.memberGone', 'readOnly', 'done.restored', 'done.listen'])
+    for (const k of ['proposal.forbiddenHint', 'tune.finish', 'cancel.message', 'wizard.memberGone', 'readOnly', 'done.restored', 'done.listen'])
       expect(s[k], k).toBeTruthy()
     expect(String(s['proposal.forbiddenHint'])).toContain('administrator')
     expect(String(flatten((ru as { sync: unknown }).sync)['proposal.forbiddenHint'])).toContain('администратор')
+  })
+
+  it('speaks of clicks and the click track only (no clicker, no test signal) in both languages', () => {
+    const enText = Object.values(flatten((en as { sync: unknown }).sync)).join('\n').toLowerCase()
+    const ruText = Object.values(flatten((ru as { sync: unknown }).sync)).join('\n').toLowerCase()
+    for (const word of ['clicker', 'test signal', 'automatic', 'undo']) expect(enText, word).not.toContain(word)
+    for (const word of ['кликер', 'тестовый сигнал', 'дорожка щелчков']) expect(ruText, word).not.toContain(word)
+  })
+
+  it('explains the sign of a delay the same way everywhere', () => {
+    const s = flatten((en as { sync: unknown }).sync)
+    expect(String(s['sign'])).toBe('+ plays earlier · − plays later')
+    expect(String(s['manual.help'])).toContain('larger delay makes a speaker play earlier')
+    expect(String(s['delayHeading'])).toContain('larger = earlier')
   })
 })

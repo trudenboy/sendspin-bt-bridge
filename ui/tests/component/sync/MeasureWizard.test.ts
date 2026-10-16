@@ -30,8 +30,8 @@ describe('MeasureWizard', () => {
     vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', mode: 'semi', point: 'device', state: 'measuring', members, measurements: {}, clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: { a: 40, b: 40, cast: null } } as never)
     vi.mocked(api.uploadRecording).mockResolvedValueOnce({ member: 'a', status: 'ok', confidence: 0.8, clicks: 3, phase_ms: 1, spread_ms: 0.4 } as never)
                                   .mockResolvedValueOnce({ member: 'b', status: 'not_heard', reason: 'no_clicks' } as never)
-    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never }, attachTo: document.body })
-    expect(w.text()).toContain('Nothing plays while you measure')
+    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never }, attachTo: document.body })
+    expect(w.text()).toContain('Nothing else plays while you measure')
     await w.find('[data-next]').trigger('click'); await flushPromises()
     expect(rec.opened).toBe(true); expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'semi', point: 'device' })
     expect(w.find('[data-group-state]').exists()).toBe(true)
@@ -54,17 +54,17 @@ describe('MeasureWizard', () => {
     await flushPromises()
     expect(w.find('[data-result="b"]').text()).toContain('Skipped')
     expect(w.find('[data-result="a"]').text()).not.toContain('Record again')
-    expect(w.find('[data-to-proposal]').attributes('disabled')).toBeUndefined()
+    expect(w.find('[data-to-tune]').attributes('disabled')).toBeUndefined()
   })
 
   it('restarts the round when the audio context stopped', async () => {
     const store = useSyncStore(); store.group = { id: 'g', name: 'G', session_id: null, members } as never
     vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', mode: 'semi', point: 'device', state: 'measuring', members, measurements: {}, clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: { a: 40, b: 40, cast: null } } as never)
-    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never } })
+    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never } })
     for (let i = 0; i < 4; i++) { await w.find('[data-next]').trigger('click'); await flushPromises() }
     rec.epochInvalidated = true
     await w.find('[data-record="a"]').trigger('click'); await flushPromises()
-    expect(w.text()).toContain('start the measurement again'); expect(api.uploadRecording).not.toHaveBeenCalled()
+    expect(w.text()).toContain('record the speakers marked'); expect(api.uploadRecording).not.toHaveBeenCalled()
   })
 })
 
@@ -130,14 +130,14 @@ describe('MeasureWizard rulings', () => {
   afterEach(() => { vi.useRealTimers() })
 
   const mountWizard = (props: Record<string, unknown> = {}) =>
-    mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never, ...props } })
+    mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never, ...props } })
 
   it('measures from the listening position for 12 s with a stay-put prompt', async () => {
     vi.mocked(api.createSession).mockResolvedValue(session({ point: 'position' }))
-    const w = mountWizard({ mode: 'auto' })
+    const w = mountWizard()
     await w.get('input[value="position"]').setValue(true)
     await toMembers(w)
-    expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'auto', point: 'position' })
+    expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'semi', point: 'position' })
     expect(w.text()).toContain('Stay where you are')
     expect(w.text()).not.toContain('Hold the phone')
     await recordMember(w, 'a')
@@ -210,12 +210,12 @@ describe('MeasureWizard rulings', () => {
     const w = mountWizard()
     await toMembers(w)
     await recordMember(w, 'a')
-    expect(w.find('[data-to-proposal]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-to-tune]').attributes('disabled')).toBeDefined()
     await recordMember(w, 'a', 'data-repeat')
     expect(api.uploadRecording).toHaveBeenCalledTimes(2)
     await recordMember(w, 'b')
-    await w.get('[data-to-proposal]').trigger('click')
-    expect(w.emitted('proposal')).toHaveLength(1)
+    await w.get('[data-to-tune]').trigger('click'); await flushPromises()
+    expect(w.get('[data-step-status]').text()).toContain('Tune (3/4)')
   })
 
   it('stops between members when the audio clock breaks, resumes from the tap and redoes earlier members', async () => {
@@ -224,9 +224,9 @@ describe('MeasureWizard rulings', () => {
     await recordMember(w, 'a')
     expect(w.get('[data-result="a"]').text()).toContain('90 %')
     rec.invalidate(); await flushPromises()
-    expect(w.text()).toContain('start the measurement again')
+    expect(w.text()).toContain('record the speakers marked')
     expect(w.get('[data-member-step="a"]').text()).toContain('Record again')
-    expect(w.get('[data-step-status]').text()).toContain('start the measurement again')
+    expect(w.get('[data-step-status]').text()).toContain('record the speakers marked')
     // Recording is refused until the tap.
     await w.get('[data-record="b"]').trigger('click'); await flushPromises()
     expect(rec.recorded).toHaveLength(1)
@@ -235,10 +235,10 @@ describe('MeasureWizard rulings', () => {
     expect(w.find('[data-resume]').exists()).toBe(false)
     await recordMember(w, 'b')
     // Kitchen's measurement is from the old clock: it must be redone before going on.
-    expect(w.get('[data-to-proposal]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeDefined()
     await recordMember(w, 'a', 'data-repeat')
     expect(w.get('[data-member-step="a"]').text()).not.toContain('Record again')
-    expect(w.get('[data-to-proposal]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeUndefined()
   })
 
   it('never keeps captures from two clocks in one round, even without an interruption notice', async () => {
@@ -249,7 +249,7 @@ describe('MeasureWizard rulings', () => {
     await recordMember(w, 'b')
     expect(w.get('[data-member-step="a"]').text()).toContain('Record again')
     expect(w.get('[data-member-step="b"]').text()).not.toContain('Record again')
-    expect(w.get('[data-to-proposal]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeDefined()
   })
 
   it('keeps earlier measurements valid when a member is skipped', async () => {
@@ -258,7 +258,7 @@ describe('MeasureWizard rulings', () => {
     await recordMember(w, 'a')
     await w.get('[data-skip="b"]').trigger('click'); await flushPromises()
     expect(w.get('[data-member-step="a"]').text()).not.toContain('Record again')
-    expect(w.get('[data-to-proposal]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeUndefined()
   })
 
   it('shows the recording progress over its duration and removes it when done', async () => {
@@ -311,7 +311,7 @@ describe('MeasureWizard rulings', () => {
   })
 
   it('keeps keyboard focus on the row button after a recording', async () => {
-    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never }, attachTo: document.body })
+    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never }, attachTo: document.body })
     await toMembers(w)
     ;(w.get('[data-record="a"]').element as HTMLElement).focus()
     await recordMember(w, 'a')
@@ -368,7 +368,7 @@ describe('MeasureWizard rulings', () => {
     expect(w.get('[data-member-step="b"]').text()).toContain('Left the group')
     expect(w.find('[data-record="b"]').exists()).toBe(false)
     await recordMember(w, 'a')
-    expect(w.get('[data-to-proposal]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeUndefined()
   })
 
   it('lists the members that cannot be measured', async () => {
@@ -391,7 +391,7 @@ describe('MeasureWizard rulings', () => {
     useSyncStore().applyEvent(session({ state: 'cancelled' }))
     await flushPromises()
     expect(rec.closed).toBe(1)
-    expect(w.text()).toContain('The measurement session ended')
+    expect(w.text()).toContain('The measurement ended')
     expect(w.text()).toContain('unmuted')
     expect(w.find('[data-member-step]').exists()).toBe(false)
   })
@@ -402,22 +402,22 @@ describe('MeasureWizard rulings', () => {
     await w.get('[data-cancel]').trigger('click'); await flushPromises()
     expect(rec.closed).toBe(1)
     expect(api.endSession).toHaveBeenCalledWith('s1')
-    expect(w.text()).toContain('Nothing plays while you measure')
+    expect(w.text()).toContain('Nothing else plays while you measure')
     expect(w.emitted('done')).toHaveLength(1)
   })
 
   it('announces the step and the results in the live region', async () => {
     const w = mountWizard()
     const status = () => w.get('[data-step-status]').text()
-    expect(status()).toContain('Step 1 of 7')
+    expect(status()).toContain('Prepare (1/4) · Where and how')
     await w.get('[data-next]').trigger('click'); await flushPromises()
-    expect(status()).toContain('Step 2 of 7: Stop playback')
+    expect(status()).toContain('Prepare (1/4) · Stop the music')
     await w.get('[data-next]').trigger('click'); await flushPromises()
-    expect(status()).toContain('Step 3 of 7: Start the clicker')
+    expect(status()).toContain('Prepare (1/4) · Start the clicks')
     await w.get('[data-next]').trigger('click'); await flushPromises()
-    expect(status()).toContain('Step 4 of 7: Set volume')
+    expect(status()).toContain('Prepare (1/4) · Set the volume')
     await w.get('[data-next]').trigger('click'); await flushPromises()
-    expect(status()).toContain('Step 5 of 7')
+    expect(status()).toContain('Measure (2/4) · Speaker by speaker')
     await recordMember(w, 'a')
     expect(status()).toContain('Kitchen')
     expect(status()).toContain('90 %')
@@ -435,14 +435,14 @@ describe('wizard texts', () => {
     expect(ruW).toBeDefined()
     expect(keys(ruW).sort()).toEqual(keys(enW).sort())
     const flat = JSON.stringify(enW)
-    for (const s of ['Nothing plays while you measure', '{pct} %', 'Not heard', 'start the measurement again']) expect(flat).toContain(s)
+    for (const s of ['Nothing else plays while you measure', '{pct} %', 'Not heard', 'record the speakers marked']) expect(flat).toContain(s)
     for (const part of ['prep', 'mute']) {
       const enP = (en as { sync: Record<string, unknown> }).sync[part]
       const ruP = (ru as { sync: Record<string, unknown> }).sync[part]
       expect(keys(ruP).sort()).toEqual(keys(enP).sort())
     }
     expect(JSON.stringify((en as { sync: Record<string, unknown> }).sync.prep)).toContain(
-      'Clicks should be clearly audible where you measure',
+      'Set a level where the clicks are clearly audible where you measure',
     )
   })
 })
@@ -461,7 +461,7 @@ describe('MeasureWizard: the clicker', () => {
   afterEach(() => { vi.useRealTimers() })
 
   const mountWizard = () =>
-    mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never } })
+    mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never } })
 
   it('goes on past "Stop playback" only once the group stopped playing', async () => {
     vi.mocked(api.createSession).mockResolvedValue(session({ clicker_playing: false, clicker_starts: 0, group_state: 'playing' }))
@@ -489,7 +489,7 @@ describe('MeasureWizard: the clicker', () => {
     vi.mocked(api.sessionSignal).mockResolvedValueOnce(session())
     await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
     expect(api.sessionSignal).toHaveBeenLastCalledWith('s1', 'start')
-    expect(w.get('[data-clicker-state]').text()).toContain('The clicker is playing.')
+    expect(w.get('[data-clicker-state]').text()).toContain('Clicks are playing.')
     expect(w.get('[data-next]').attributes('disabled')).toBeUndefined()
   })
 
@@ -497,7 +497,7 @@ describe('MeasureWizard: the clicker', () => {
     vi.mocked(api.sessionVolume).mockResolvedValue(session({ volumes: { a: 55, b: 40, cast: null } }))
     const w = mountWizard()
     await toVolume(w)
-    expect(w.text()).toContain('Clicks should be clearly audible where you measure.')
+    expect(w.text()).toContain('Set a level where the clicks are clearly audible where you measure.')
     expect(w.find('[data-volume-row="a"] [role="slider"], [data-volume-row="a"] input').exists()).toBe(true)
     expect(w.get('[data-volume-row="cast"]').text()).toContain('No volume control')
     w.findComponent({ name: 'VolumeSlider' }).vm.$emit('update:volume', 55)
@@ -524,7 +524,7 @@ describe('MeasureWizard: the clicker', () => {
     useSyncStore().applyEvent(session({ clicker_starts: 2 }))
     await flushPromises()
     expect(w.get('[data-result="a"]').text()).toContain('Record again')
-    expect(w.text()).toContain('measure every member once more')
+    expect(w.text()).toContain('record every speaker once more')
   })
 
   it('records only while the clicker plays and offers to start it again when it stopped', async () => {
@@ -534,7 +534,7 @@ describe('MeasureWizard: the clicker', () => {
     useSyncStore().applyEvent(session({ clicker_playing: false, group_state: 'idle' }))
     await flushPromises()
     expect(w.get('[data-record="a"]').attributes('disabled')).toBeDefined()
-    expect(w.get('[data-clicker-stopped]').text()).toContain('The clicker is not playing.')
+    expect(w.get('[data-clicker-stopped]').text()).toContain('Clicks are not playing.')
     await w.get('[data-restart-clicker]').trigger('click'); await flushPromises()
     expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'start')
     expect(w.find('[data-clicker-stopped]').exists()).toBe(false)

@@ -135,20 +135,19 @@ export function computeProposal(id: string): Promise<SyncProposal> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/proposal', sessionPath(id)))
 }
 
-/** Write the proposal, or ``rows`` instead of it; ``verify`` measures again afterwards. */
-export function applyProposal(id: string, rows?: Record<string, number>, verify?: boolean): Promise<SyncSession> {
-  const body: { rows?: Record<string, number>; verify?: boolean } = {}
+/**
+ * Write the proposal, or ``rows`` instead of it. The session then goes on as the manual editor
+ * (state ``tuning``): the clicks keep playing, solo and A/B work, delays are written live.
+ */
+export function applyProposal(id: string, rows?: Record<string, number>): Promise<SyncSession> {
+  const body: { rows?: Record<string, number> } = {}
   if (rows) body.rows = rows
-  if (verify !== undefined) body.verify = verify
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/apply', { ...sessionPath(id), body }))
 }
 
-export function undoApply(id: string): Promise<SyncSession> {
-  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/undo', sessionPath(id)))
-}
-
-export function verifySession(id: string): Promise<SyncSession> {
-  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/verify', sessionPath(id)))
+/** Finish: the delays stay as they are, the group is restored and the session ends as ``done``. */
+export function finishSession(id: string): Promise<SyncSession> {
+  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/finish', sessionPath(id)))
 }
 
 /** One capture as int16 little-endian PCM (raw body, so not through the JSON client). */
