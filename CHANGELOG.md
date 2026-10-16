@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restart, so Music Assistant and the bridge agree. This works for audio
   outputs as well as Bluetooth speakers.
 
+- Changing a speaker's delay, in Music Assistant or on the bridge, takes
+  effect at once and exactly, even for a few milliseconds. Small changes used
+  to do nothing and large ones arrived late, as a jump. The speaker may go
+  silent for a moment when the delay changes.
+
 ## [3.1.0-beta.4] - 2026-10-15
 
 ### Added
