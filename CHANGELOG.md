@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.7] - 2026-10-16
+
 ### Added
 
 - Timing diagnostics in the log, for setting beside a phone measurement:
@@ -6451,7 +6453,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.5...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.6...HEAD
+[3.1.0-beta.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.5...v3.1.0-beta.6
 [3.1.0-beta.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.4...v3.1.0-beta.5
 [3.1.0-beta.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.3...v3.1.0-beta.4
 [3.1.0-beta.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.2...v3.1.0-beta.3
