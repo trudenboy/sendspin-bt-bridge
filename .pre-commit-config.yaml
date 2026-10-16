@@ -52,7 +52,7 @@ repos:
         require_serial: true
         # Match CI's src-only mypy scope. Explicit filenames bypass mypy's
         # [tool.mypy].exclude policy, so retain its excluded source trees too.
-        files: ^src/sendspin_bridge/
+        files: ^src/(sendspin_bridge|sendspin_sync)/
         exclude: "(sendspin-cli/|scripts/|custom_components/)"
 
       - id: lint-changelog
