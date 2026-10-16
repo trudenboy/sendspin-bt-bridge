@@ -31,7 +31,7 @@ Choose **Manual tuning**. Each member has a slider and ±1 ms and ±10 ms nudge 
 
 To judge by ear, use the **Listen** controls:
 
-- **Play clicks** plays a click track on the whole group; **Stop clicks** ends it.
+- **Play clicks** plays the 3-minute click track once on the whole group. **Stop clicks** silences every speaker until the track ends (Music Assistant cannot stop it early); then the music comes back. The page says how long that takes.
 - **Solo** plays the clicks on one member only.
 - **A/B** alternates two members every two clicks.
 
@@ -45,7 +45,7 @@ Choose **Measure and suggest** to measure with the microphone of the device that
 2. **Level check**. Clicks play on every speaker; the meter must move with each click and the screen says whether the level is too quiet, too loud or fine.
 3. **Speaker by speaker**. Each member plays alone while you record it (6 s at the speakers, 12 s from the listening position). You can reorder the speakers, repeat a step or skip a speaker. A member shows **Heard**, **Not heard** or **Unstable**.
 4. **Proposal**. A table of before, after and change per speaker, and the spread before and the predicted spread after. Warnings cover delays clamped to 0–5000 ms, delays above 2000 ms, and members that could not be verified. Computing the proposal does not change anything.
-5. **Done**. **Apply**, or **Apply and save as profile…**. **Check again after applying** measures every speaker once more with the new delays. **Quick listen** plays clicks on the whole group for 10 s.
+5. **Done**. **Apply**, or **Apply and save as profile…**. **Check again after applying** measures every speaker once more with the new delays. **Quick listen** plays clicks on the whole group for 10 s; the speakers then stay silent until the click track ends.
 
 The result does not depend on which speaker is measured first, so the wizard has no reference speaker to choose.
 
@@ -60,7 +60,7 @@ Choose **Measure and apply** to measure, apply and verify in one run. The result
 
 ## What you hear during a measurement
 
-Playback of the group is interrupted for the session. The group plays a click track, and members are muted one by one so each is measured alone. When the session ends (done, cancelled, failed or timed out) the bridge stops the test signal, unmutes what it muted and restores what was playing. Keep the room quiet and hold the phone still while it records.
+Playback of the group is interrupted for the session. Music Assistant plays a 3-minute click track on the group as an announcement, and the other members are turned down to volume 0 while one is measured. A check round needs a fresh click track, so it starts when the previous one ends. The click track cannot be stopped early: when the session ends (done, cancelled, failed or timed out) every speaker stays silent until it has played out, then Music Assistant brings back what was playing and the bridge checks that every volume is back where it was. The page shows **Music returns in N s** meanwhile, and a new tuning of the group waits for it. Keep the room quiet and hold the phone still while it records.
 
 ## Profiles
 
@@ -91,7 +91,7 @@ iOS needs a tap on the page to start recording, and a page sent to the backgroun
 
 Only one tuning runs per group. If another device started one, this page shows **Tuning in progress on another device** and is read-only. **End that session** stops the other device's test signal and restores the group; delays already written stay.
 
-If the bridge restarts during a session, it keeps trying to restore the group, and the screen shows **Could not restore the group** with a **Retry** button until Music Assistant answers. Until then some speakers may still be muted or playing the test signal.
+If the bridge restarts during a session, it keeps trying to restore the group, and the screen shows **Could not restore the group** with a **Retry** button until Music Assistant answers. Until then some speakers may still be at volume 0.
 
 ## Troubleshooting
 

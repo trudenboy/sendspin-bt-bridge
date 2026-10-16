@@ -212,12 +212,12 @@ separate spec covers it after the bridge version ships.
   (A single marker every 10 s would be missed by 40 % of 6 s recordings.) Gaps
   start at 40 ms so that room echoes of the first chirp, which arrive within the
   first ~20 ms, cannot be mistaken for the second one.
-- The track starts with 1 s of silence; a session longer than the track starts it
-  again (phases stay valid because measurements are relative within one playback,
-  and a restart begins a new measurement round). With the announcement path a
-  restart means another `play_announcement` call, which Music Assistant precedes
-  with its restore (a short burst of the resumed playback is audible between
-  runs); the adapter starts it again only when the next measurement step needs it.
+- The track starts with 1 s of silence. Music Assistant plays it once per
+  `play_announcement`, so one clip covers one measurement round (see "Signal path
+  and solo"). Phases are only comparable within one playback: a new clip in the
+  middle of a round starts the round again, and a round that needs a fresh clip
+  (the check round) waits for the previous one to end. Between two clips Music
+  Assistant restores the music for a moment.
 
 ## Capture (browser)
 
@@ -307,13 +307,15 @@ restoring → done`, plus `cancelled` and `failed` (both go through `restoring`)
 - **applying**: `set_delay` for each changed member; automatic mode keeps an undo for
   30 s.
 - **verifying**: optional repeat round (automatic: always).
-- **restoring**: `solo(None)`, `stop_signal`, `restore(snapshot)`; retried with
-  backoff until it succeeds. Also triggered by cancel, an error, a 15-minute
-  inactivity timeout and, after a bridge restart, by a persisted snapshot. Restore
-  never touches the delays (applied delays are the point); it stops the signal,
-  re-asserts the volume and mute of every member the session changed (Music
-  Assistant's own announcement restore covers only what it changed itself) and
-  leaves playback to Music Assistant's resume.
+- **restoring**: while the clip still plays, every member is kept at volume 0
+  (`stop_signal`) and the restore waits for the clip's end — a wait, not a failed
+  attempt; then `restore(snapshot)` puts the snapshot's volumes back where they
+  differ, retried with backoff until it succeeds. Also triggered by cancel, an
+  error, a 15-minute inactivity timeout and, after a bridge restart, by a
+  persisted snapshot (which records the clip's end on the wall clock and whether
+  it is silenced). Restore never touches the delays (applied delays are the point)
+  or the mutes (the session never mutes), and leaves playback to Music
+  Assistant's resume.
 
 Only one session per group. A second client sees "tuning in progress" and gets a
 read-only view. Manual mode is a session without measuring: it can start the signal
@@ -321,8 +323,39 @@ and solo/A–B on demand and writes delays live (debounced 300 ms).
 
 ## Signal path and solo (decided in stage 0)
 
-The core only calls `start_signal`, `solo`, `stop_signal`, `restore`. Candidates the
-spike evaluates on Music Assistant dev:
+The core only calls `start_signal`, `solo`, `stop_signal`, `restore`.
+
+**Decision (2026-10-16, option A).** Found on Music Assistant dev: `play_announcement`
+on the sync group plays the bridge-served click track on every member and Music
+Assistant restores music and volumes at the clip's end; `players/cmd/stop` does
+**not** end an announcement (it blocks until the clip ends); `players/cmd/volume_mute`
+is unsupported on Web Kiosk players (`UnsupportedFeaturedException`);
+`players/cmd/volume_set` 0 during the announcement silences a member and Music
+Assistant restores the pre-announcement volume at the clip's end. So:
+
+- **Signal.** One announcement (`pre_announce` off, fired, never awaited) covers a
+  whole round: the clip is the track's 180 s, plus a 5 s tail for Music Assistant's
+  start and restore. The session tracks when it ends and exposes
+  `music_returns_in_s`; `signal_running` means audible — 3 s after the start (the
+  announcement settles before any solo) and not silenced. A clip that ended mid-round
+  is started again on request (a new round); the check round needs a fresh clip and,
+  while the previous one plays, waits for its end (`signal_waiting`; solo and
+  recordings answer `signal_waiting`), then the store's tick starts it.
+- **Stop.** `stop_signal` sets every member's volume to 0; the clip plays on silently
+  and Music Assistant brings the music back at its end. `players/cmd/stop` is never
+  sent. "Play" while a silenced clip still runs un-silences it (no new announcement).
+- **Solo by volume, never mute.** `solo(member)` sets every other member to 0 and the
+  member to its level from the session's snapshot; `solo(None)` puts every level back.
+  Only while the clicks are audible (`signal_starting` / `signal_stopped` otherwise),
+  so the session only changes volumes during an announcement, whose end Music
+  Assistant restores. Members without a volume are left alone.
+- **Restore order.** Never while the clip plays (members stay at 0 until its end, so
+  our restore and Music Assistant's do not fight); after the end, the snapshot's
+  volumes are checked and fixed where they differ. A new session on the group while
+  the clip plays out is refused with `signal_playing`. Cost: up to ~3 min of silence
+  after a session ends; the page says when the music returns.
+
+Candidates the spike evaluated on Music Assistant dev:
 
 - **(a) Announcement + mute after start.** `play_announcement(url,
   pre_announce=false)` on the group player, sent without waiting for the reply;
@@ -377,7 +410,9 @@ bridge are generated to match it.
 
 Error codes: `ma_unavailable`, `ma_forbidden` (the token lacks a required scope,
 typically `CONFIG_PLAYERS_WRITE`), `session_active`, `session_expired`,
-`member_gone`, `not_adjustable`, `recording_invalid`, `restore_pending`.
+`member_gone`, `not_adjustable`, `recording_invalid`, `restore_pending`, and for the
+signal `signal_playing` (the last clip still plays out), `signal_waiting`,
+`signal_starting`, `signal_stopped`.
 
 ## UX
 
@@ -540,3 +575,10 @@ aiosendspin 10.0.2. Decisions in the table above are unchanged. Changes:
 - **Scope note.** v1 groups are Music Assistant's persistent sync groups, as the
   Groups page lists them.
 - **Reference speaker.** The wizard has no reference choice: the planner's result is independent of the reference, so the line "the operator can change it" was dropped.
+- **Stage 0 (2026-10-16): signal and solo, option A.** `players/cmd/stop` does not end
+  an announcement and web kiosks refuse `volume_mute`, so mute-based solo and
+  stop-the-group are dropped: one announcement per round, solo and stop by volume
+  (0 / snapshot level), restore only after the clip ended (then check the volumes),
+  a check round waits for the previous clip, a new session waits with
+  `signal_playing`, and the UI says when the music returns ("Signal path and solo").
+  The persisted snapshot carries the clip's wall-clock end so a restart waits too.
