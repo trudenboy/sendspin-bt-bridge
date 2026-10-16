@@ -9,9 +9,11 @@ import pytest
 from sendspin_bridge.sync_tuning import session_store
 from sendspin_bridge.sync_tuning.session_store import SNAPSHOT_FILE, SessionStore
 from sendspin_sync.ports import ControlError
+from sendspin_sync.session import SIGNAL_CLIP_S, SIGNAL_SETTLE_S, SIGNAL_TAIL_S
 from tests.support.sync_fakes import FakeControl, FakeHost
 from tests.support.sync_synth import synth
 
+CLIP_END = SIGNAL_CLIP_S + SIGNAL_TAIL_S
 OCTET = {"content-type": "application/octet-stream"}
 GROUP = {"id": "g", "name": "Downstairs", "members": [{"id": m, "name": m.upper()} for m in ("a", "b", "cast")]}
 
@@ -134,11 +136,13 @@ def test_manual_delay_write_is_refused_while_the_group_is_tuned(api_client, sync
 
 
 def test_session_flow_over_http(api_client, sync_env):
-    ctl, store, events, _ = sync_env
+    ctl, store, events, clock = sync_env
     created = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "semi"})
     assert created.status_code == 201
     sid = created.json()["id"]
-    assert created.json()["state"] == "measuring" and created.json()["signal_running"] is True
+    # the announcement is starting: it runs a whole clip, and the session says when music returns
+    assert created.json()["state"] == "measuring" and created.json()["signal_running"] is False
+    assert created.json()["music_returns_in_s"] == pytest.approx(CLIP_END) and created.json()["signal_clip"] == 1
     second = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "manual"})
     assert second.status_code == 409 and second.json()["code"] == "session_active"
     for member, lag in (("a", 0.0), ("b", 0.03)):
@@ -154,15 +158,18 @@ def test_session_flow_over_http(api_client, sync_env):
     assert ctl.delays_now["b"] == 30
     assert events and events[-1]["id"] == sid and events[-1]["state"] == "restoring"
     assert api_client.delete(f"/api/v1/sync/sessions/{sid}").status_code == 204
+    clock.now += CLIP_END  # members stay silent until the clip ends
     store.tick()
     assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["state"] == "done"  # DELETE kept the outcome
 
 
 def test_side_controls_and_manual_live_write(api_client, sync_env):
-    ctl = sync_env[0]
+    ctl, clock = sync_env[0], sync_env[3]
     sid = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "manual"}).json()["id"]
     base = f"/api/v1/sync/sessions/{sid}"
-    assert api_client.post(f"{base}/signal", json={"action": "start"}).json()["signal_running"] is True
+    assert api_client.post(f"{base}/signal", json={"action": "start"}).json()["signal_clip"] == 1
+    clock.now += SIGNAL_SETTLE_S
+    assert api_client.get(base).json()["signal_running"] is True
     assert api_client.post(f"{base}/solo", json={"member": "a"}).json()["soloed"] == "a"
     assert api_client.post(f"{base}/solo", json={"member": None}).json()["soloed"] is None
     assert api_client.post(f"{base}/ab", json={"a": "b", "b": "a"}).json()["soloed"] == "b"
@@ -535,6 +542,7 @@ def test_a_group_shows_when_each_member_was_last_measured(api_client, sync_env):
     assert during["b"] is None and during["cast"] is None  # a failed measurement is not a measurement
     assert datetime.fromisoformat(during["a"]) >= before
     assert api_client.delete(f"/api/v1/sync/sessions/{sid}").status_code == 204
+    sync_env[3].now += CLIP_END
     store.tick()
     assert store.active_for("g") is None
     listed = api_client.get("/api/v1/sync/groups").json()[0]["members"]
@@ -548,3 +556,32 @@ def test_session_less_requests_use_the_shared_music_assistant_connection(monkeyp
     sentinel = object()
     monkeypatch.setattr(ma_api, "shared_ma_api", lambda: sentinel)
     assert uc._control()._api is sentinel and uc._control()._api is sentinel
+
+
+def test_a_new_session_while_the_last_clip_plays_out_is_409_signal_playing(api_client, sync_env):
+    _, store, _, clock = sync_env
+    sid = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "semi"}).json()["id"]
+    assert api_client.delete(f"/api/v1/sync/sessions/{sid}").status_code == 204
+    store.tick()
+    ending = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    assert ending["state"] == "restoring" and ending["music_returns_in_s"] == pytest.approx(CLIP_END)
+    refused = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "manual"})
+    assert refused.status_code == 409 and refused.json()["code"] == "signal_playing"
+    clock.now += CLIP_END
+    store.tick()
+    assert api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "manual"}).status_code == 201
+
+
+def test_a_check_round_waits_for_the_previous_clip_over_http(api_client, sync_env):
+    _, store, _, clock = sync_env
+    sid = _measured_session(api_client)
+    base = f"/api/v1/sync/sessions/{sid}"
+    api_client.post(f"{base}/proposal")
+    verifying = api_client.post(f"{base}/apply", json={"verify": True}).json()
+    assert verifying["state"] == "verifying" and verifying["signal_waiting"] is True
+    waiting = api_client.post(f"{base}/solo", json={"member": "a"})
+    assert waiting.status_code == 409 and waiting.json()["code"] == "signal_waiting"
+    clock.now += CLIP_END
+    store.tick()
+    started = api_client.get(base).json()
+    assert started["signal_waiting"] is False and started["signal_clip"] == 2

@@ -38,3 +38,12 @@ def test_contract_names_every_resource_and_error_code():
     }
     delays = doc["$defs"]["DelaysIn"]["properties"]["delays"]["additionalProperties"]
     assert delays["minimum"] == 0 and delays["maximum"] == 5000
+
+
+def test_every_code_the_use_cases_map_is_in_the_contract():
+    from typing import get_args
+
+    from sendspin_bridge.application import sync_tuning
+    from sendspin_bridge.application.models.sync import ErrorCode
+
+    assert set(sync_tuning._STATUS) <= set(get_args(ErrorCode))

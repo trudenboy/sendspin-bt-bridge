@@ -111,6 +111,10 @@
         "session_active",
         "session_expired",
         "session_state",
+        "signal_playing",
+        "signal_starting",
+        "signal_stopped",
+        "signal_waiting",
         "undo_expired"
       ],
       "title": "ErrorCode",
@@ -755,6 +759,18 @@
           "title": "Mode",
           "type": "string"
         },
+        "music_returns_in_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds until the current clip ends and Music Assistant restores music and volumes; null when no clip plays.",
+          "title": "Music Returns In S"
+        },
         "point": {
           "enum": [
             "device",
@@ -801,8 +817,19 @@
           "title": "Round",
           "type": "integer"
         },
+        "signal_clip": {
+          "description": "Clips started in this session; recordings from two clips are never mixed.",
+          "title": "Signal Clip",
+          "type": "integer"
+        },
         "signal_running": {
+          "description": "The clicks are audible: a clip plays, has settled and is not silenced.",
           "title": "Signal Running",
+          "type": "boolean"
+        },
+        "signal_waiting": {
+          "description": "A new round waits for the current clip to end before its own clip starts (it cannot be stopped).",
+          "title": "Signal Waiting",
           "type": "boolean"
         },
         "soloed": {
@@ -859,6 +886,9 @@
         "error",
         "restore_error",
         "signal_running",
+        "signal_waiting",
+        "signal_clip",
+        "music_returns_in_s",
         "soloed",
         "reference",
         "round",

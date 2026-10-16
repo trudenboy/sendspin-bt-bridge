@@ -7,6 +7,7 @@ from sendspin_bridge.sync_tuning import session_store as store_mod
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_bridge.sync_tuning.session_store import SNAPSHOT_FILE, SessionStore
 from sendspin_sync.ports import ControlError
+from sendspin_sync.session import SIGNAL_CLIP_S, SIGNAL_SETTLE_S, SIGNAL_TAIL_S
 from tests.support.sync_fakes import FakeControl, FakeHost
 from tests.support.sync_synth import synth
 
@@ -37,8 +38,13 @@ def make(tmp_path, *, controls=None):
         publish=events.append,
         snapshot_dir=lambda: tmp_path,
         clock=lambda: t["now"],
+        wall_clock=lambda: WALL0 + t["now"],
     )
     return store, made, events, t, host
+
+
+WALL0 = 1_700_000_000.0  # the wall clock when the store's monotonic clock reads 0
+CLIP_END = SIGNAL_CLIP_S + SIGNAL_TAIL_S
 
 
 def _file(tmp_path):
@@ -78,7 +84,7 @@ def test_one_session_per_group_and_events_are_published(tmp_path):
     assert exc.value.code == "session_active"
     assert len(made) == 1  # a refused create builds no control
     [entry] = _persisted(tmp_path)
-    assert (entry["session_id"], entry["group_id"], entry["signal_running"]) == (s.id, "g", True)
+    assert (entry["session_id"], entry["group_id"]) == (s.id, "g") and entry["signal_ends_at"] is not None
     assert entry["snapshot"]["volumes"] == {"a": 40, "b": 40}
 
 
@@ -95,26 +101,28 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
     s = store.create("g", "semi", "device")
     ctl = made[0]
     ctl.fail_restore = 2
+    b = CLIP_END  # the clip has played out: the restore itself is due
+    t["now"] = b
     store.end(s.id)
     assert s.state == "restoring" and _file(tmp_path).exists()
     store.tick()
     assert s.state == "restoring" and s.restore_error == "ma_unavailable"  # attempt 1 failed, next after 1 s
-    t["now"] = 0.5
+    t["now"] = b + 0.5
     store.tick()
     assert ("restore",) not in ctl.calls
-    t["now"] = 1.1
+    t["now"] = b + 1.1
     store.tick()  # attempt 2 fails, next after 2 s
-    t["now"] = 2.9
+    t["now"] = b + 2.9
     store.tick()
     assert s.state == "restoring"
-    t["now"] = 3.2
+    t["now"] = b + 3.2
     store.tick()
     assert s.state == "cancelled" and not _file(tmp_path).exists()
     assert host.released == [s.id] and ctl.closed == 1
-    t["now"] = 60.0
+    t["now"] = b + 60.0
     store.tick()
     assert store.get(s.id) is s  # finished sessions stay readable for a while
-    t["now"] = 70.0
+    t["now"] = b + 70.0
     store.tick()
     with pytest.raises(ControlError) as exc:
         store.get(s.id)
@@ -123,13 +131,16 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
 
 
 def test_a_session_that_restores_by_itself_is_driven_by_the_store(tmp_path):
-    store, _made, _, _, host = make(tmp_path)
+    store, _made, _, t, host = make(tmp_path)
     s = store.create("g", "semi", "device")
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.030))
     s.propose()
     s.apply()  # semi without verify: restores and ends
     assert s.state == "restoring"
+    store.tick()
+    assert s.state == "restoring"  # members silent until the clip ends
+    t["now"] = CLIP_END
     store.tick()
     assert s.state == "done" and host.released == [s.id] and not _file(tmp_path).exists()
 
@@ -163,29 +174,35 @@ def test_inactivity_ends_the_session(tmp_path):
     assert s.state == "cancelled" and ("restore",) in made[0].calls
 
 
-def test_a_finished_auto_session_keeps_its_undo_and_control_until_the_window_passes(tmp_path):
+def test_an_auto_session_keeps_its_undo_while_the_check_rounds_clip_plays_out(tmp_path):
+    # The check round's clip outlasts the 30 s undo window, so the session is still restoring
+    # (members silent until the clip ends) while the undo is possible; the control stays open
+    # until the session finished, then the finished session is evicted after a while.
     store, made, _, t, _ = make(tmp_path)
     s = store.create("g", "auto", "device")
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.030))
     s.propose()
-    s.apply()  # undo until t=30
+    b = CLIP_END
+    t["now"] = b  # the first clip played out: the check round starts its own at once
+    store.tick()
+    s.apply()  # undo until b + 30
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.0))
     s.propose()
     store.tick()
-    assert s.state == "done" and made[0].closed == 0  # undo still possible: the control stays open
-    t["now"] = 25.0
+    assert s.state == "restoring" and made[0].closed == 0
+    t["now"] = b + 25.0
     store.tick()
     s.undo()
     assert made[0].delays_now["b"] == 0
-    t["now"] = 31.0
+    t["now"] = b + CLIP_END  # the check round's clip ends: restored and finished
     store.tick()
-    assert made[0].closed == 1
-    t["now"] = 85.0  # 60 s after the finish, but only 55 s after the undo window
+    assert s.state == "done" and made[0].closed == 1
+    t["now"] = b + CLIP_END + 59.0
     store.tick()
     assert store.get(s.id) is s
-    t["now"] = 91.0
+    t["now"] = b + CLIP_END + 61.0
     store.tick()
     with pytest.raises(ControlError):
         store.get(s.id)
@@ -235,11 +252,13 @@ def test_ending_one_group_keeps_the_other_persisted(tmp_path):
     assert [e["group_id"] for e in _persisted(tmp_path)] == ["g2"]
 
 
-def test_restore_persisted_after_restart_stops_signal_and_unmutes(tmp_path):
+def test_restore_persisted_without_a_known_clip_end_puts_the_volumes_back_at_once(tmp_path):
+    # an entry from before the clip end was persisted: the volume restore covers the solo, and
+    # there is no stop to send (an announcement cannot be stopped)
     _file(tmp_path).write_text(json.dumps(_old_snapshot()))
     store, made, _, _, _ = make(tmp_path)
     store.restore_persisted()
-    assert made[0].calls == [("solo", None), ("stop",), ("restore",)] and not _file(tmp_path).exists()
+    assert made[0].calls == [("restore",)] and not _file(tmp_path).exists()
     assert made[0].closed == 1
     with pytest.raises(ControlError):
         store.get("old")
@@ -268,7 +287,7 @@ def test_restore_persisted_keeps_the_file_when_ma_is_down(tmp_path):
     assert not _file(tmp_path).exists() and made[0].calls == [("restore",)]
 
 
-def test_a_persisted_group_that_is_gone_still_gets_its_mutes_restored(tmp_path):
+def test_a_persisted_group_that_is_gone_still_gets_its_volumes_restored(tmp_path):
     _file(tmp_path).write_text(json.dumps(_old_snapshot()))
     store, made, _, _, _ = make(tmp_path)
     original = store._factory
@@ -284,7 +303,7 @@ def test_a_persisted_group_that_is_gone_still_gets_its_mutes_restored(tmp_path):
 
     store._factory = factory
     store.restore_persisted()
-    assert made[0].calls == [("stop",), ("restore",)] and not _file(tmp_path).exists()
+    assert made[0].calls == [("restore",)] and not _file(tmp_path).exists()
 
 
 def test_an_unreadable_snapshot_file_is_removed(tmp_path):
@@ -314,10 +333,20 @@ def test_a_new_session_does_not_drop_a_snapshot_still_waiting_from_before_the_re
 
 def test_shutdown_restores_live_sessions_and_releases_everything(tmp_path):
     store, made, _, _, host = make(tmp_path)
+    s = store.create("g", "manual", "device")  # no clip playing
+    store.shutdown()
+    assert s.state == "cancelled" and ("restore",) in made[0].calls
+    assert host.released == [s.id] and made[0].closed == 1 and not _file(tmp_path).exists()
+
+
+def test_shutdown_while_the_clip_plays_silences_it_and_leaves_the_restore_to_the_next_boot(tmp_path):
+    store, made, _, _, host = make(tmp_path)
     s = store.create("g", "semi", "device")
     store.shutdown()
-    assert s.state == "cancelled" and ("stop",) in made[0].calls and ("restore",) in made[0].calls
-    assert host.released == [s.id] and made[0].closed == 1 and not _file(tmp_path).exists()
+    assert s.state == "restoring" and made[0].calls[-1] == ("stop",) and ("restore",) not in made[0].calls
+    [entry] = _persisted(tmp_path)
+    assert entry["silenced"] is True and entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END)
+    assert host.released == [s.id] and made[0].closed == 1
 
 
 def test_shutdown_keeps_the_snapshot_when_the_restore_fails(tmp_path):
@@ -535,3 +564,109 @@ def test_a_leftover_tmp_that_cannot_be_removed_does_not_break_every_create(tmp_p
     s = store.create("other", "semi", "listening")
     assert s.group_id == "other"
     assert "sync_snapshot.tmp" in caplog.text
+
+
+# -- stage 0, option A: the clip cannot be stopped, the restore waits for its end -------------------
+
+
+def test_a_restore_waits_for_the_clip_to_end_without_an_error_or_backoff(tmp_path):
+    store, made, _, t, host = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    store.end(s.id)
+    store.tick()
+    ctl = made[0]
+    assert s.state == "restoring" and s.restore_error is None and ctl.calls[-1] == ("stop",)  # silenced
+    assert s.to_dict()["music_returns_in_s"] == pytest.approx(CLIP_END)
+    t["now"] = CLIP_END - 1
+    store.tick()
+    assert s.state == "restoring" and ("restore",) not in ctl.calls and host.released == []
+    t["now"] = CLIP_END
+    store.tick()  # waiting is not a failed attempt: no backoff delays the restore after the clip
+    assert s.state == "cancelled" and ctl.calls[-1] == ("restore",) and ctl.calls.count(("stop",)) == 1
+
+
+def test_a_new_session_while_the_last_clip_plays_out_is_refused_with_signal_playing(tmp_path):
+    store, _made, _, t, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    store.end(s.id)
+    store.tick()
+    with pytest.raises(ControlError) as exc:
+        store.create("g", "manual", "device")
+    assert exc.value.code == "signal_playing"
+    t["now"] = CLIP_END
+    store.tick()
+    assert store.create("g", "manual", "device").state == "measuring"
+
+
+def test_the_persisted_entry_says_when_the_clip_ends_and_whether_it_is_silenced(tmp_path):
+    store, _made, _, t, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    [entry] = _persisted(tmp_path)
+    assert entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END) and entry["silenced"] is False
+    t["now"] = 10.0
+    store.end(s.id)
+    store.tick()
+    [entry] = _persisted(tmp_path)
+    assert entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END) and entry["silenced"] is True
+
+
+def test_after_a_restart_the_restore_silences_waits_for_the_clip_end_then_restores(tmp_path):
+    ends = WALL0 + 100.0
+    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_ends_at=ends, silenced=False)))
+    store, made, _, t, _ = make(tmp_path)
+    store.restore_persisted()
+    assert made[0].calls == [("stop",)] and _file(tmp_path).exists()  # never restored while the clip plays
+    assert store.pending_for("g") == {"session_id": "old", "group_id": "g", "error": None}
+    assert _persisted(tmp_path)[0]["silenced"] is True
+    t["now"] = 99.0
+    store.tick()
+    assert len(made) == 1
+    t["now"] = 100.0
+    store.tick()
+    assert made[1].calls == [("restore",)] and not _file(tmp_path).exists()
+
+
+def test_after_a_restart_a_silenced_clip_is_not_silenced_again(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_ends_at=WALL0 + 50.0, silenced=True)))
+    store, made, _, t, _ = make(tmp_path)
+    store.restore_persisted()
+    assert made == []  # nothing to do before the clip ends: no Music Assistant call at all
+    t["now"] = 50.0
+    store.tick()
+    assert made[0].calls == [("restore",)]
+
+
+def test_after_a_restart_a_clip_on_a_group_that_is_gone_is_still_waited_out(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_ends_at=WALL0 + 50.0, silenced=False)))
+    store, made, _, t, _ = make(tmp_path)
+    original = store._factory
+
+    def factory():
+        ctl = original()
+
+        def gone(group_id):
+            raise ControlError("member_gone", "group g is not known")
+
+        ctl.stop_signal = gone
+        return ctl
+
+    store._factory = factory
+    store.restore_persisted()
+    assert store.pending_for("g")["error"] is None and _file(tmp_path).exists()
+    t["now"] = 50.0
+    store.tick()
+    assert made[1].calls == [("restore",)] and not _file(tmp_path).exists()
+
+
+def test_the_store_tick_starts_a_check_round_once_the_previous_clip_ended(tmp_path):
+    store, made, _, t, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    t["now"] = SIGNAL_SETTLE_S
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    s.apply(verify=True)
+    assert s.signal_waiting
+    t["now"] = CLIP_END
+    store.tick()
+    assert not s.signal_waiting and [c for c in made[0].calls if c[0] == "start"][1:]

@@ -30,6 +30,11 @@ ErrorCode = Literal[
     "undo_expired",
     "no_measurement",
     "not_found",
+    # the announcement signal (one clip per round, cannot be stopped early)
+    "signal_playing",
+    "signal_waiting",
+    "signal_starting",
+    "signal_stopped",
 ]
 
 
@@ -116,7 +121,14 @@ class SyncSessionOut(ResponseModel):
     history: list[dict[str, Any]]
     error: str | None
     restore_error: str | None = Field(default=None, description="Code of the last failed restore attempt.")
-    signal_running: bool
+    signal_running: bool = Field(description="The clicks are audible: a clip plays, has settled and is not silenced.")
+    signal_waiting: bool = Field(
+        description="A new round waits for the current clip to end before its own clip starts (it cannot be stopped)."
+    )
+    signal_clip: int = Field(description="Clips started in this session; recordings from two clips are never mixed.")
+    music_returns_in_s: float | None = Field(
+        description="Seconds until the current clip ends and Music Assistant restores music and volumes; null when no clip plays."
+    )
     soloed: str | None
     reference: str | None
     round: int

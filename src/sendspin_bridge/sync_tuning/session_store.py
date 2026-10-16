@@ -62,8 +62,10 @@ class SessionStore:
         publish: Callable[[dict[str, Any]], None],
         snapshot_dir: Callable[[], Path],
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self._factory = control_factory
+        self._wall = wall_clock  # the persisted clip end must survive a restart
         self._host = host
         self._publish = publish
         self._dir = snapshot_dir
@@ -189,6 +191,7 @@ class SessionStore:
         if data["state"] in _ENDED or snapshot is None:
             self._put_entry(session.id, None)
         else:
+            returns_in = data["music_returns_in_s"]
             self._put_entry(
                 session.id,
                 {
@@ -196,6 +199,9 @@ class SessionStore:
                     "group_id": session.group_id,
                     "signal_running": data["signal_running"],
                     "soloed": data["soloed"],
+                    # when the clip ends (wall clock): a restore after a restart waits for it
+                    "signal_ends_at": None if returns_in is None else self._wall() + returns_in,
+                    "silenced": bool(session.silenced),
                     "snapshot": to_dict(snapshot),
                 },
             )
@@ -226,7 +232,14 @@ class SessionStore:
     def create(self, group_id: str, mode: Mode, point: Point) -> SyncSession:
         self.load_persisted()
         with self._lock:
-            if self.active_for(group_id) is not None:
+            active = self.active_for(group_id)
+            if active is not None:
+                returns_in = active.music_returns_in_s() if active.state == "restoring" else None
+                if returns_in is not None:
+                    raise ControlError(
+                        "signal_playing",
+                        f"the last test clip is still playing; music returns in {round(returns_in)} s",
+                    )
                 raise ControlError("session_active", "tuning in progress for this group")
             if self.pending_for(group_id) is not None:
                 raise ControlError("restore_pending", "the group is still being restored from an earlier session")
@@ -292,14 +305,22 @@ class SessionStore:
         if s.state not in _ENDED and s.state != "restoring" and s.expired():
             logger.info("Sync session %s idle for too long; ending it", s.id)
             s.cancel()
+        if s.state not in _ENDED and s.state != "restoring":
+            try:
+                s.tick()  # a clip that ended; a check round waiting for it
+            except Exception:
+                logger.warning("Sync session %s tick failed", s.id, exc_info=True)
         if s.state == "restoring" and now >= self._next_restore.get(s.id, 0.0):
+            waiting = False
             try:
                 ok = s.restore_tick()
+                # the clip still plays out with every member silent: not a failed attempt
+                waiting = not ok and s.restore_error is None and s.clip_playing
             except Exception:
                 logger.warning("Restoring sync session %s failed", s.id, exc_info=True)
                 ok = False
             with self._lock:
-                if ok:
+                if ok or waiting:
                     self._next_restore.pop(s.id, None)
                     self._attempts.pop(s.id, None)
                 else:
@@ -350,8 +371,9 @@ class SessionStore:
             return bool(sids)
 
     def restore_persisted(self) -> None:
-        """On boot: restore what a session left behind (stop the signal, clear the solo, re-assert
-        volume and mute) and delete the file; while Music Assistant is unreachable, retry with backoff."""
+        """On boot: restore what a session left behind and delete the file: while its clip still plays,
+        keep the members silent and wait for its end, then put the volumes back; while Music Assistant
+        is unreachable, retry with backoff."""
         self.load_persisted()
         with self._tick_lock:
             for sid in list(self._pending):
@@ -364,19 +386,32 @@ class SessionStore:
         if entry is None:
             return
         group = str(entry["group_id"])
+        ends_at = entry.get("signal_ends_at")
+        wait_s = float(ends_at) - self._wall() if isinstance(ends_at, (int, float)) else 0.0
         control: GroupControl | None = None
         try:
+            if wait_s > 0 and entry.get("silenced"):
+                with self._lock:  # silent already: just wait for the clip to end
+                    self._pending_next[sid] = self._clock() + wait_s
+                return
             control = self._factory()
-            if entry.get("soloed") is not None:
+            if wait_s > 0:
+                # The clip still plays (it cannot be stopped): keep every member silent until it ends,
+                # when Music Assistant restores music and volumes; then check the volumes.
                 try:
-                    control.solo(group, None)
+                    control.stop_signal(group)
                 except ControlError as exc:
-                    if exc.code != "member_gone":  # the group is gone: restore() still unmutes
+                    if exc.code != "member_gone":  # the group is gone: nothing to silence
                         raise
-                entry["soloed"] = None
-            if entry.get("signal_running"):
-                control.stop_signal(group)
-                entry["signal_running"] = False
+                entry["silenced"] = True
+                with self._lock:
+                    if sid in self._pending:
+                        self._pending[sid] = entry
+                    self._pending_next[sid] = self._clock() + wait_s
+                    self._pending_errors.pop(sid, None)
+                self._put_entry(sid, entry)
+                return
+            # the volume restore covers a solo; a signal from before the clip end was known is over
             control.restore(snapshot_from_dict(entry["snapshot"]))
         except Exception as exc:
             with self._lock:

@@ -1,8 +1,12 @@
-"""GroupControl over Music Assistant: members, delays, mute-based solo and the signal path.
+"""GroupControl over Music Assistant: members, delays, volume-based solo and the signal path.
 
-The signal and solo mechanics sit behind two small strategies so the stage 0 finding
-(announcement vs queue playback, MA-side vs local mute) only changes the wiring in
-:func:`default_group_control`.
+Stage 0 (option A, checked on Music Assistant dev 2026-10-16): the click track plays as one
+announcement on the group per measurement round. Music Assistant restores music and volumes when
+the clip ends; ``players/cmd/stop`` does not end an announcement (it blocks until the clip ends)
+and web kiosks refuse ``players/cmd/volume_mute``, while ``players/cmd/volume_set`` 0 silences a
+member mid-announcement. So solo and stop work by volume only: solo sets every other member to 0
+and the soloed one to its level from the session's snapshot, stop sets every member to 0, and
+restore puts the snapshot's volumes back once the clip has ended.
 """
 
 from __future__ import annotations
@@ -21,9 +25,6 @@ if TYPE_CHECKING:
 
 DELAY_KEY = "sendspin_static_delay"
 SPLIT = "||protocol||"
-# During an announcement MA holds the group's playback lock for the whole clip and
-# cmd_stop waits up to PLAYER_LOCK_TIMEOUT (30 s) for it, so the stop reply can be slow.
-STOP_TIMEOUT_S = 40.0
 
 
 def _bridge_ids() -> set[str]:
@@ -36,20 +37,14 @@ def _wrap(exc: MaApiError) -> ControlError:
 
 class SignalStrategy(Protocol):
     def start(self, group_id: str, url: str) -> None: ...
-    def stop(self, group_id: str) -> None: ...
-
-
-class SoloStrategy(Protocol):
-    def solo(self, group_id: str, members: Sequence[Member], member: str | None) -> None:
-        """Make only *member* audible; ``None`` clears the solo."""
-        ...
 
 
 class AnnouncementSignal:
     """Music Assistant plays the clip as an announcement on the group.
 
     ``play_announcement`` replies only after the clip has played out, so it is fired,
-    never awaited; ``pre_announce`` is always off so no chime shifts the clicks.
+    never awaited; ``pre_announce`` is always off so no chime shifts the clicks. There is no
+    stop: an announcement cannot be ended early, the control silences the members instead.
     """
 
     def __init__(self, api: MaApi, volume_level: int | None = None) -> None:
@@ -62,36 +57,10 @@ class AnnouncementSignal:
             args["volume_level"] = self._volume
         self._api.fire("players/cmd/play_announcement", args)
 
-    def stop(self, group_id: str) -> None:
-        self._api.call("players/cmd/stop", {"player_id": group_id}, timeout=STOP_TIMEOUT_S)
 
-
-class MaMuteSolo:
-    """Solo = mute every other member through Music Assistant.
-
-    Remembers which members it muted and only ever unmutes those: a member the user
-    had muted beforehand stays muted.
-    """
-
-    def __init__(self, api: MaApi) -> None:
-        self._api = api
-        self._muted_by_us: dict[str, set[str]] = {}
-
-    def solo(self, group_id: str, members: Sequence[Member], member: str | None) -> None:
-        ours = self._muted_by_us.setdefault(group_id, set())
-        states = {p["player_id"]: p for p in self._api.call("players/all", {"return_protocol_players": True})}
-        for m in members:
-            pid = m.ma_player_id
-            want_muted = member is not None and pid != member
-            was_muted = bool(states.get(pid, {}).get("volume_muted"))
-            if want_muted and not was_muted:
-                self._api.call("players/cmd/volume_mute", {"player_id": pid, "muted": True})
-                ours.add(pid)
-            elif not want_muted and pid in ours:
-                self._api.call("players/cmd/volume_mute", {"player_id": pid, "muted": False})
-                ours.discard(pid)
-        if not ours:
-            self._muted_by_us.pop(group_id, None)
+def _volume(state: dict[str, Any]) -> int | None:
+    value = state.get("volume_level")
+    return None if value is None else int(value)
 
 
 class MaGroupControl:
@@ -100,7 +69,6 @@ class MaGroupControl:
         api: MaApi,
         *,
         signal: SignalStrategy,
-        solo: SoloStrategy,
         groups: Callable[[], list[dict[str, Any]]] = get_ma_groups,
         bridge_player_ids: Callable[[], set[str]] = _bridge_ids,
         owns_api: bool = True,
@@ -108,10 +76,10 @@ class MaGroupControl:
         self._api = api
         self._owns_api = owns_api
         self._signal = signal
-        self._solo = solo
         self._groups = groups
         self._bridge_ids = bridge_player_ids
         self._members_cache: dict[str, list[Member]] = {}
+        self._levels: dict[str, dict[str, int | None]] = {}  # group -> member volumes at the snapshot
 
     def _group(self, group_id: str) -> dict[str, Any]:
         for g in self._groups():
@@ -194,10 +162,12 @@ class MaGroupControl:
         states = self._states()
         members = self._cached_members(group_id)
         ids = [m.ma_player_id for m in members]
+        volumes = {i: _volume(states.get(i, {})) for i in ids}
+        self._levels[group_id] = dict(volumes)
         return Snapshot(
             group_id=group_id,
             delays={m.ma_player_id: m.delay_ms or 0 for m in members},
-            volumes={i: states.get(i, {}).get("volume_level") for i in ids},
+            volumes=volumes,
             muted={i: bool(states.get(i, {}).get("volume_muted")) for i in ids},
             playing=states.get(group_id, {}).get("playback_state") == "playing",
         )
@@ -208,43 +178,44 @@ class MaGroupControl:
         except MaApiError as exc:
             raise _wrap(exc) from exc
 
-    def stop_signal(self, group_id: str) -> None:
+    def _set_volumes(self, targets: dict[str, int]) -> None:
+        """Set each member's volume where Music Assistant reports a different one."""
+        states = self._states()
         try:
-            self._signal.stop(group_id)
+            for pid, level in targets.items():
+                if _volume(states.get(pid, {})) != level:
+                    self._api.call("players/cmd/volume_set", {"player_id": pid, "volume_level": level})
         except MaApiError as exc:
             raise _wrap(exc) from exc
 
+    def stop_signal(self, group_id: str) -> None:
+        """Silence every member (volume 0): the announcement plays on until its end, when Music
+        Assistant restores music and volumes. ``players/cmd/stop`` is never sent: it would block
+        until the clip ends anyway."""
+        states = self._states()
+        members = self._cached_members(group_id)
+        self._set_volumes({m.ma_player_id: 0 for m in members if _volume(states.get(m.ma_player_id, {})) is not None})
+
     def solo(self, group_id: str, member: str | None) -> None:
+        """Only *member* audible: every other member at volume 0 and *member* at its level from the
+        snapshot; ``None`` puts every member back to its level. Members without a volume are left alone."""
         members = self._cached_members(group_id)
         if member is not None and member not in {m.ma_player_id for m in members}:
             raise ControlError("member_gone", f"{member} is not in group {group_id}")
-        try:
-            self._solo.solo(group_id, members, member)
-        except MaApiError as exc:
-            raise _wrap(exc) from exc
+        levels = self._levels.get(group_id)
+        if levels is None:
+            levels = self.snapshot(group_id).volumes
+        targets: dict[str, int] = {}
+        for m in members:
+            level = levels.get(m.ma_player_id)
+            if level is not None:
+                targets[m.ma_player_id] = level if member is None or m.ma_player_id == member else 0
+        self._set_volumes(targets)
 
     def restore(self, snapshot: Snapshot) -> None:
-        """Re-assert the mute and volume the snapshot recorded; delays are never touched.
-
-        A solo still in place is cleared first, which also makes the solo strategy forget
-        what it muted, so a later clear cannot undo a mute the user set after the session.
-        """
-        members = self._members_cache.get(snapshot.group_id)
-        if members:
-            try:
-                self._solo.solo(snapshot.group_id, members, None)
-            except MaApiError as exc:
-                raise _wrap(exc) from exc
-        states = self._states()
-        try:
-            for mid, muted in snapshot.muted.items():
-                if mid in states and bool(states[mid].get("volume_muted")) != muted:
-                    self._api.call("players/cmd/volume_mute", {"player_id": mid, "muted": muted})
-            for mid, vol in snapshot.volumes.items():
-                if vol is not None and states.get(mid, {}).get("volume_level") not in (None, vol):
-                    self._api.call("players/cmd/volume_set", {"player_id": mid, "volume_level": vol})
-        except MaApiError as exc:
-            raise _wrap(exc) from exc
+        """Put the snapshot's volumes back where they differ; delays and mutes are never touched
+        (the session never mutes). Runs after the clip ended, so Music Assistant's own restore is done."""
+        self._set_volumes({mid: vol for mid, vol in snapshot.volumes.items() if vol is not None})
 
     def close(self) -> None:
         """Release the Music Assistant connection this control owns (the session store calls it);
@@ -259,23 +230,23 @@ class MaGroupControl:
 def default_group_control() -> MaGroupControl:
     """Build a fresh control for one tuning session.
 
-    Contract: one instance per session — the instance caches the session's members and
-    its solo strategy remembers what it muted, so it must not be shared between sessions.
-    Wires the stage 0 choice; today that is (a): announcement signal + MA-side mute solo.
+    Contract: one instance per session — the instance caches the session's members and the
+    volumes its solo returns to, so it must not be shared between sessions. Wires the stage 0
+    choice (option A): announcement signal + volume solo.
     """
     from sendspin_bridge.sync_tuning.ma_api import ma_api_from_config
 
     api = ma_api_from_config()
-    return MaGroupControl(api, signal=AnnouncementSignal(api), solo=MaMuteSolo(api))
+    return MaGroupControl(api, signal=AnnouncementSignal(api))
 
 
 def shared_group_control() -> MaGroupControl:
     """A control for one request outside a session, over the long-lived shared connection.
 
-    Built per request (its member cache and solo memory are not shared); ``close()`` leaves
+    Built per request (its member cache and solo levels are not shared); ``close()`` leaves
     the connection open for the next request.
     """
     from sendspin_bridge.sync_tuning import ma_api
 
     api = ma_api.shared_ma_api()
-    return MaGroupControl(api, signal=AnnouncementSignal(api), solo=MaMuteSolo(api), owns_api=False)
+    return MaGroupControl(api, signal=AnnouncementSignal(api), owns_api=False)

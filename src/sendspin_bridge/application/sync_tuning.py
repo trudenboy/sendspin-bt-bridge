@@ -58,6 +58,10 @@ _STATUS = {
     "undo_expired": 409,
     "session_state": 409,
     "no_measurement": 409,
+    "signal_playing": 409,
+    "signal_waiting": 409,
+    "signal_starting": 409,
+    "signal_stopped": 409,
     "not_found": 404,
 }
 

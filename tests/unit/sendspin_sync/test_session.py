@@ -3,9 +3,28 @@ import json
 import pytest
 
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import SyncSession
+from sendspin_sync.session import SIGNAL_CLIP_S, SIGNAL_SETTLE_S, SIGNAL_TAIL_S, SyncSession
 from tests.support.sync_fakes import FakeControl, FakeHost
 from tests.support.sync_synth import synth
+
+
+class Clock:
+    def __init__(self, t: float = 0.0) -> None:
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def settle(s):
+    """Let Music Assistant start the clip: the clicks count as running from then on."""
+    s._clock.t += SIGNAL_SETTLE_S
+
+
+def clip_over(s):
+    """Let the current clip play out (Music Assistant then restores music and volumes)."""
+    s._clock.t += SIGNAL_CLIP_S + SIGNAL_TAIL_S
+    s.tick()
 
 
 def make(mode="semi", **kw):
@@ -18,7 +37,7 @@ def make(mode="semi", **kw):
         point="device",
         control=ctl,
         host=FakeHost(),
-        clock=kw.pop("clock", None) or (lambda: 0.0),
+        clock=kw.pop("clock", None) or Clock(),
         on_change=lambda sess: events.append(sess.state),
     )
     return s, ctl, events
@@ -29,6 +48,7 @@ def test_semi_session_runs_measure_propose_apply_restore():
     s.start()
     assert s.state == "measuring" and ("start", "http://bridge/api/v1/sync/signal/s1.wav") in ctl.calls
     assert [m.ma_player_id for m in s.members] == ["a", "b", "cast"]
+    settle(s)
     s.solo("a")
     m = s.record(synth("a", lag_s=0.0))
     assert m.status == "ok"
@@ -40,27 +60,31 @@ def test_semi_session_runs_measure_propose_apply_restore():
     s.apply()
     assert ("set", "b", 30) in ctl.calls and ("set", "a", 0) not in ctl.calls  # unchanged rows are not written
     assert s.state == "restoring"
+    assert s.restore_tick() is False  # the clip still plays: every member stays silent until it ends
+    clip_over(s)
     assert s.restore_tick() is True and s.state == "done"
-    assert ctl.calls[-3:] == [("solo", None), ("stop",), ("restore",)]
+    assert ctl.calls[-2:] == [("stop",), ("restore",)]
 
 
 def test_auto_session_verifies_and_keeps_undo():
-    clock = {"t": 100.0}
-    s, ctl, _ = make(mode="auto", clock=lambda: clock["t"])
+    clock = Clock(100.0)
+    s, ctl, _ = make(mode="auto", clock=clock)
     s.start()
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.030))
     s.propose()
+    clip_over(s)  # the check round starts its own clip at once
+    t0 = clock.t
     s.apply()
-    assert s.state == "verifying" and s.round == 2 and s.undo_until == 130.0
+    assert s.state == "verifying" and s.round == 2 and s.undo_until == t0 + 30.0
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.0))  # now aligned
     s.propose()
     assert s.state == "restoring" and s.history[-1]["spread_after_ms"] == pytest.approx(0.0, abs=1.0)
-    clock["t"] = 125.0
+    clock.t = t0 + 25.0
     s.undo()
     assert ctl.delays_now == {"a": 0, "b": 0}
-    clock["t"] = 131.0
+    clock.t = t0 + 31.0
     with pytest.raises(ControlError):
         s.undo()
 
@@ -71,6 +95,7 @@ def test_restore_retries_until_it_succeeds_and_cancel_goes_through_restoring():
     ctl.fail_restore = 2
     s.cancel()
     assert s.state == "restoring"
+    clip_over(s)
     assert s.restore_tick() is False and s.restore_tick() is False and s.restore_tick() is True
     assert s.state == "cancelled" and ("restore",) in ctl.calls
 
@@ -85,6 +110,7 @@ def test_manual_mode_writes_live_and_resets():
         s.write_delay("cast", 10)
     assert exc.value.code == "not_adjustable"
     s.start_signal()
+    settle(s)
     s.ab("a", "b")
     assert ("solo", "a") in ctl.calls
     s.reset()
@@ -136,6 +162,7 @@ def _measured_and_proposed(mode="semi"):
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.030))
     s.propose()
+    clip_over(s)  # the measured clip has played out
     return s, ctl, events
 
 
@@ -158,6 +185,7 @@ def test_semi_mode_can_verify_after_apply():
     s.record(synth("b", lag_s=0.0))
     s.propose()
     assert s.state == "restoring" and s.history[-1]["spread_after_ms"] == pytest.approx(0.0, abs=1.0)
+    clip_over(s)
     assert s.restore_tick() is True and s.state == "done"
 
 
@@ -195,6 +223,7 @@ def _auto_applied(clock=None):
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.030))
     s.propose()
+    clip_over(s)  # the measured clip has played out: the check round starts its own at once
     s.apply()
     return s, ctl, events
 
@@ -208,6 +237,7 @@ def test_undo_during_verification_restores_members_and_ends_without_refining():
     with pytest.raises(ControlError) as exc:  # no refinement on top of an undone apply
         s.record(synth("b", lag_s=0.030))
     assert exc.value.code == "restore_pending"
+    clip_over(s)
     assert s.restore_tick() is True and s.state == "done"
     assert [c for c in ctl.calls if c[0] == "set"] == [("set", "b", 30), ("set", "b", 0)]
 
@@ -238,6 +268,7 @@ def test_side_operations_are_refused_once_the_session_ended(name, args):
     s, ctl, _ = make()
     s.start()
     s.cancel()
+    clip_over(s)
     assert s.restore_tick() is True and s.state == "cancelled"
     calls = list(ctl.calls)
     with pytest.raises(ControlError) as exc:
@@ -250,6 +281,7 @@ def test_fail_detail_survives_restore_retries():
     s, ctl, _ = make()
     s.start()
     s.fail("boom")
+    clip_over(s)
     ctl.fail_restore = 1
     assert s.restore_tick() is False
     assert s.error == "boom" and s.restore_error == "ma_unavailable"
@@ -263,6 +295,7 @@ def test_successful_retry_clears_the_transient_restore_error():
     s, ctl, _ = make()
     s.start()
     s.cancel()
+    clip_over(s)
     ctl.fail_restore = 1
     assert s.restore_tick() is False and s.restore_error == "ma_unavailable"
     assert s.restore_tick() is True
@@ -278,6 +311,7 @@ def test_concurrent_apply_and_cancel_leave_a_consistent_outcome():
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.030))
     s.propose()
+    clip_over(s)
     entered = threading.Event()
     real_set = ctl.set_delay
 
@@ -302,18 +336,20 @@ def test_concurrent_apply_and_cancel_leave_a_consistent_outcome():
 
 
 def test_auto_refines_once_when_the_residual_is_above_5_ms_then_restores():
-    clock = {"t": 100.0}
-    s, ctl, _ = _auto_applied(clock=lambda: clock["t"])
-    assert s.round == 2 and s.undo_until == 130.0
-    clock["t"] = 110.0
+    clock = Clock(100.0)
+    s, ctl, _ = _auto_applied(clock=clock)
+    t0 = clock.t
+    assert s.round == 2 and s.undo_until == t0 + 30.0
+    clock.t = t0 + 10.0
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.012))  # 12 ms residual
     s.propose()
     assert s.state == "verifying" and s.round == 3
-    assert s.undo_until == 140.0  # undo window restarts with the refinement
+    assert s.undo_until == t0 + 40.0  # undo window restarts with the refinement
     assert s.history[0]["spread_after_ms"] == pytest.approx(12.0, abs=1.0)
     assert s.history[-1]["round"] == 2 and s.history[-1]["spread_before_ms"] == pytest.approx(12.0, abs=1.0)
     assert ctl.delays_now["b"] == pytest.approx(42, abs=1)
+    clip_over(s)  # the refinement's check round waits for the previous clip to end
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.012))  # still off: no third apply
     s.propose()
@@ -335,7 +371,7 @@ def test_start_failure_in_the_signal_rolls_back_to_created():
     assert s.state == "created" and not s.signal_running
     ctl.start_signal = real
     s.start()
-    assert s.state == "measuring" and s.signal_running
+    assert s.state == "measuring" and s.clip_playing
 
 
 def test_refine_with_an_unplannable_reference_answers_no_measurement():
@@ -384,6 +420,7 @@ def test_fail_after_the_session_ended_is_a_no_op():
     s, _ctl, _ = make()
     s.start()
     s.cancel()
+    clip_over(s)
     assert s.restore_tick() is True
     s.fail("late")
     assert s.state == "cancelled" and s.error is None
@@ -456,16 +493,18 @@ def test_start_keeps_tracking_a_signal_that_started_when_on_change_fails():
         point="device",
         control=ctl,
         host=FakeHost(),
-        clock=lambda: 0.0,
+        clock=Clock(),
         on_change=on_change,
     )
     with pytest.raises(RuntimeError):
         s.start()
     assert ("start", "http://bridge/api/v1/sync/signal/s1.wav") in ctl.calls
     # the click track is playing: the session must not pretend it never started
-    assert s.signal_running and s.state != "created" and s.snapshot is not None
+    assert s.clip_playing and s.state != "created" and s.snapshot is not None
     s.cancel()
-    assert s.restore_tick() is True and ("stop",) in ctl.calls
+    assert s.restore_tick() is False and ("stop",) in ctl.calls  # silenced until the clip ends
+    clip_over(s)
+    assert s.restore_tick() is True
 
 
 def test_a_member_that_leaves_the_group_is_dropped_and_planning_continues_without_it():

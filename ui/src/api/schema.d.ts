@@ -4519,6 +4519,11 @@ export interface components {
              */
             mode: "manual" | "semi" | "auto";
             /**
+             * Music Returns In S
+             * @description Seconds until the current clip ends and Music Assistant restores music and volumes; null when no clip plays.
+             */
+            music_returns_in_s: number | null;
+            /**
              * Point
              * @enum {string}
              */
@@ -4533,8 +4538,21 @@ export interface components {
             restore_error: string | null;
             /** Round */
             round: number;
-            /** Signal Running */
+            /**
+             * Signal Clip
+             * @description Clips started in this session; recordings from two clips are never mixed.
+             */
+            signal_clip: number;
+            /**
+             * Signal Running
+             * @description The clicks are audible: a clip plays, has settled and is not silenced.
+             */
             signal_running: boolean;
+            /**
+             * Signal Waiting
+             * @description A new round waits for the current clip to end before its own clip starts (it cannot be stopped).
+             */
+            signal_waiting: boolean;
             /** Soloed */
             soloed: string | null;
             /**

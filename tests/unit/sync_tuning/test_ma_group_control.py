@@ -1,7 +1,7 @@
 import pytest
 
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
-from sendspin_bridge.sync_tuning.ma_group_control import AnnouncementSignal, MaGroupControl, MaMuteSolo
+from sendspin_bridge.sync_tuning.ma_group_control import AnnouncementSignal, MaGroupControl
 from sendspin_sync.ports import ControlError
 from tests.support.sync_fakes import GROUPS, FakeMa
 
@@ -11,7 +11,6 @@ def make(ma=None):
     ctl = MaGroupControl(
         ma,
         signal=AnnouncementSignal(ma),
-        solo=MaMuteSolo(ma),
         groups=lambda: GROUPS,
         bridge_player_ids=lambda: {"spk-bridge"},
     )
@@ -82,33 +81,6 @@ def test_forbidden_write_becomes_ma_forbidden():
     assert exc.value.code == "ma_forbidden"
 
 
-def test_snapshot_solo_and_restore_only_touch_what_changed():
-    ctl, ma = make()
-    snap = ctl.snapshot("grp")
-    assert snap.muted == {"spk-bridge": False, "spk-kiosk": True, "uni": False, "cast": False} and snap.playing
-    assert snap.delays == {"spk-bridge": 120, "spk-kiosk": 0, "uni": 0, "cast": 0}
-    ctl.solo("grp", "spk-bridge")
-    assert ma.players["uni"]["volume_muted"] and ma.players["cast"]["volume_muted"]
-    assert not ma.players["spk-bridge"]["volume_muted"]
-    ctl.solo("grp", None)
-    assert not ma.players["uni"]["volume_muted"] and ma.players["spk-kiosk"]["volume_muted"]  # kiosk stays muted
-    ma.players["uni"]["volume_muted"] = True  # pretend MA's own restore missed it
-    ctl.restore(snap)
-    assert not ma.players["uni"]["volume_muted"] and ma.players["spk-kiosk"]["volume_muted"]
-    assert ("players/cmd/volume_mute", {"player_id": "spk-kiosk", "muted": False}) not in ma.calls
-
-
-def test_solo_switch_unmutes_the_previous_soloist_target_only_if_we_muted_it():
-    ctl, ma = make()
-    ctl.solo("grp", "spk-bridge")
-    ctl.solo("grp", "uni")
-    assert not ma.players["uni"]["volume_muted"] and ma.players["spk-bridge"]["volume_muted"]
-    assert ma.players["spk-kiosk"]["volume_muted"]
-    ctl.solo("grp", None)
-    assert [p for p in ("spk-bridge", "uni", "cast") if ma.players[p]["volume_muted"]] == []
-    assert ma.players["spk-kiosk"]["volume_muted"]
-
-
 def test_restore_resets_a_changed_volume():
     ctl, ma = make()
     snap = ctl.snapshot("grp")
@@ -118,17 +90,6 @@ def test_restore_resets_a_changed_volume():
     assert [c for c in ma.calls if c[0] == "players/cmd/volume_set"] == [
         ("players/cmd/volume_set", {"player_id": "uni", "volume_level": 50})
     ]
-
-
-def test_announcement_signal_is_fired_not_awaited_and_stop_stops_the_group():
-    ctl, ma = make()
-    ctl.start_signal("grp", "http://192.168.1.2:8080/api/v1/sync/signal/abc.wav")
-    assert ma.calls[-1] == (
-        "players/cmd/play_announcement",
-        {"player_id": "grp", "url": "http://192.168.1.2:8080/api/v1/sync/signal/abc.wav", "pre_announce": False},
-    )
-    ctl.stop_signal("grp")
-    assert ma.calls[-1] == ("players/cmd/stop", {"player_id": "grp"}) and ma.players["grp"]["playback_state"] == "idle"
 
 
 def test_ma_errors_surface_as_control_errors():
@@ -155,33 +116,12 @@ def test_default_group_control_needs_credentials(monkeypatch):
     assert exc.value.code == "ma_unavailable"
 
 
-def test_stopping_the_signal_waits_out_the_group_playback_lock():
-    # MA holds the group's playback lock for the whole announcement; cmd_stop waits up to 30 s for it
-    ctl, ma = make()
-    ctl.start_signal("grp", "http://bridge/x.wav")
-    ctl.stop_signal("grp")
-    assert ma.timeouts["players/cmd/stop"] >= 40.0
-
-
-def test_solo_of_a_player_outside_the_group_is_member_gone_and_mutes_nobody():
+def test_solo_of_a_player_outside_the_group_is_member_gone_and_silences_nobody():
     ctl, ma = make()
     with pytest.raises(ControlError) as exc:
         ctl.solo("grp", "someone-else")
     assert exc.value.code == "member_gone"
-    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
-
-
-def test_restore_forgets_what_the_solo_muted():
-    ctl, ma = make()
-    snap = ctl.snapshot("grp")
-    ctl.solo("grp", "spk-bridge")
-    ctl.restore(snap)
-    assert [p for p in ("spk-bridge", "uni", "cast") if ma.players[p]["volume_muted"]] == []
-    ma.players["uni"]["volume_muted"] = True  # the user mutes the hall after the session
-    before = len(ma.calls)
-    ctl.solo("grp", None)  # a late clear must not undo the user's mute
-    assert ma.players["uni"]["volume_muted"]
-    assert not [c for c in ma.calls[before:] if c[0] == "players/cmd/volume_mute"]
+    assert not [c for c in ma.calls if c[0] in ("players/cmd/volume_mute", "players/cmd/volume_set")]
 
 
 def test_close_closes_the_music_assistant_connection():
@@ -214,3 +154,99 @@ def test_the_session_less_control_shares_one_connection_and_never_closes_it(monk
     a.close()
     b.close()
     assert shared.closed == 0  # the connection outlives the request
+
+
+# -- stage 0, option A: solo and stop by volume; the announcement is never stopped ------------------
+
+
+def volume_sets(ma, since=0):
+    return {c[1]["player_id"]: c[1]["volume_level"] for c in ma.calls[since:] if c[0] == "players/cmd/volume_set"}
+
+
+def test_snapshot_records_each_members_volume_and_mute():
+    ctl, _ = make()
+    snap = ctl.snapshot("grp")
+    assert snap.volumes == {"spk-bridge": 40, "spk-kiosk": 30, "uni": 50, "cast": 20}
+    assert snap.muted == {"spk-bridge": False, "spk-kiosk": True, "uni": False, "cast": False} and snap.playing
+    assert snap.delays == {"spk-bridge": 120, "spk-kiosk": 0, "uni": 0, "cast": 0}
+
+
+def test_solo_sets_every_other_member_to_volume_zero_and_the_soloed_one_to_its_level():
+    ctl, ma = make()
+    ctl.snapshot("grp")
+    ma.players["spk-bridge"]["volume_level"] = 0  # silenced by an earlier stop
+    ctl.solo("grp", "spk-bridge")
+    assert {p: ma.players[p]["volume_level"] for p in ("spk-bridge", "spk-kiosk", "uni", "cast")} == {
+        "spk-bridge": 40,
+        "spk-kiosk": 0,
+        "uni": 0,
+        "cast": 0,
+    }
+    ctl.solo("grp", "uni")
+    assert (ma.players["spk-bridge"]["volume_level"], ma.players["uni"]["volume_level"]) == (0, 50)
+    # web kiosks refuse volume_mute (UnsupportedFeaturedException): solo never uses it
+    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
+
+
+def test_clearing_the_solo_puts_every_member_back_to_its_session_level():
+    ctl, ma = make()
+    ctl.snapshot("grp")
+    ctl.solo("grp", "uni")
+    before = len(ma.calls)
+    ctl.solo("grp", None)
+    assert volume_sets(ma, before) == {"spk-bridge": 40, "spk-kiosk": 30, "cast": 20}  # uni is already there
+    assert ma.players["spk-kiosk"]["volume_muted"]  # a mute the user set is left alone
+
+
+def test_a_control_without_a_snapshot_reads_the_levels_before_it_solos():
+    ctl, ma = make()
+    ctl.solo("grp", "cast")
+    assert (ma.players["cast"]["volume_level"], ma.players["uni"]["volume_level"]) == (20, 0)
+    ctl.solo("grp", None)
+    assert ma.players["uni"]["volume_level"] == 50  # the level from before the solo, not 0
+
+
+def test_a_member_without_a_volume_is_left_alone():
+    ma = FakeMa()
+    ma.players["cast"]["volume_level"] = None
+    ctl, _ = make(ma)
+    ctl.snapshot("grp")
+    ctl.solo("grp", "uni")
+    ctl.stop_signal("grp")
+    assert "cast" not in volume_sets(ma)
+
+
+def test_the_announcement_is_fired_not_awaited_and_stop_silences_without_stopping_it():
+    # players/cmd/stop does not end an announcement: it blocks until the clip ends
+    ctl, ma = make()
+    ctl.start_signal("grp", "http://192.168.1.2:8080/api/v1/sync/signal/abc.wav")
+    assert ma.calls[-1] == (
+        "players/cmd/play_announcement",
+        {"player_id": "grp", "url": "http://192.168.1.2:8080/api/v1/sync/signal/abc.wav", "pre_announce": False},
+    )
+    ctl.stop_signal("grp")
+    assert volume_sets(ma) == {"spk-bridge": 0, "spk-kiosk": 0, "uni": 0, "cast": 0}
+    assert "players/cmd/stop" not in [c[0] for c in ma.calls]
+    assert ma.players["grp"]["playback_state"] == "playing"
+
+
+def test_restore_puts_back_the_snapshot_volumes_and_never_touches_mute():
+    ctl, ma = make()
+    snap = ctl.snapshot("grp")
+    ctl.solo("grp", "spk-bridge")
+    ma.players["uni"]["volume_muted"] = True  # the user muted the hall meanwhile
+    before = len(ma.calls)
+    ctl.restore(snap)
+    assert volume_sets(ma, before) == {"spk-kiosk": 30, "uni": 50, "cast": 20}
+    assert ma.players["uni"]["volume_muted"]
+    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
+
+
+def test_a_fresh_control_restores_from_the_persisted_snapshot_alone():
+    ctl, ma = make()
+    snap = ctl.snapshot("grp")
+    for p in ("spk-bridge", "uni"):
+        ma.players[p]["volume_level"] = 0  # left at 0 when the bridge restarted
+    fresh, _ = make(ma)
+    fresh.restore(snap)
+    assert (ma.players["spk-bridge"]["volume_level"], ma.players["uni"]["volume_level"]) == (40, 50)

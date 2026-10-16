@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import logging
 import threading
 import time
 from typing import TYPE_CHECKING, Any, Literal
 
-from sendspin_sync import estimator, planner
+from sendspin_sync import click_track, estimator, planner
 from sendspin_sync.models import Measurement, Member, to_dict
 from sendspin_sync.ports import ControlError
 
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
 
     from sendspin_sync.models import Proposal, Recording, Snapshot
     from sendspin_sync.ports import ClickTrackHost, GroupControl
+
+logger = logging.getLogger(__name__)
 
 Mode = Literal["manual", "semi", "auto"]
 Point = Literal["device", "position"]
@@ -38,6 +41,13 @@ INACTIVITY_S = 900.0
 MAX_ROUNDS = 2
 MIN_DELAY_MS = 0
 MAX_DELAY_MS = planner.MAX_DELAY_MS
+# The signal is one announcement of the click track per measurement round (stage 0, option A):
+# Music Assistant plays the clip once, cannot stop it early and restores music and volumes when it
+# ends. SIGNAL_TAIL_S covers its start latency and its own restore; the clicks count as running
+# once SIGNAL_SETTLE_S has passed, so a solo is never set while the announcement still starts.
+SIGNAL_CLIP_S = float(click_track.DURATION_S)
+SIGNAL_TAIL_S = 5.0
+SIGNAL_SETTLE_S = 3.0
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
 _ACTIVE: tuple[State, ...] = ("signal_starting", "measuring", "proposed", "applying", "verifying")
 
@@ -104,8 +114,13 @@ class SyncSession:
         self.history: list[dict[str, Any]] = []
         self.error: str | None = None
         self.restore_error: str | None = None
-        self.signal_running = False
         self.soloed: str | None = None
+        self.silenced = False  # stop_signal: every member at volume 0 until the clip ends
+        self.signal_waiting = False  # a new round's clip starts once the current one ended
+        self.signal_clip = 0  # clips started so far; measurements never mix two of them
+        self._clip_start: float | None = None
+        self._clip_end: float | None = None
+        self._published_running = False  # signal_running as the last change reported it
         self.undo_until: float | None = None
         self.round = 1
         self.reference: str | None = None
@@ -123,6 +138,7 @@ class SyncSession:
         self._changed()
 
     def _changed(self) -> None:
+        self._published_running = self.signal_running
         if self._on_change:
             self._on_change(self)
 
@@ -173,9 +189,9 @@ class SyncSession:
             return
         try:
             self._set("signal_starting")
-            self.start_signal()
+            self._start_clip()
         except Exception:
-            if self.signal_running:  # the click track plays: keep tracking it so a restore stops it
+            if self.clip_playing:  # the click track plays: keep tracking it so a restore waits for it
                 raise
             # nothing reached the group: back to created so start() can be retried
             self.members, self.snapshot = [], None
@@ -183,28 +199,113 @@ class SyncSession:
             raise
         self._set("measuring")
 
+    # -- the signal ------------------------------------------------------------------
+    @property
+    def clip_playing(self) -> bool:
+        """An announcement of the click track is under way (audible or silenced)."""
+        return self._clip_end is not None and self._clock() < self._clip_end
+
+    @property
+    def signal_running(self) -> bool:
+        """The clicks are audible: a clip plays, has settled and is not silenced."""
+        if not self.clip_playing or self.silenced:
+            return False
+        assert self._clip_start is not None
+        return self._clock() >= self._clip_start + SIGNAL_SETTLE_S
+
+    def music_returns_in_s(self) -> float | None:
+        """Seconds until the current clip ends and Music Assistant brings the music back."""
+        if not self.clip_playing:
+            return None
+        assert self._clip_end is not None
+        return max(0.0, self._clip_end - self._clock())
+
+    def _forget_ended_clip(self) -> bool:
+        if self._clip_end is None or self.clip_playing:
+            return False
+        self._clip_start = self._clip_end = None
+        self.silenced = False
+        return True
+
+    def _start_clip(self) -> None:
+        self._forget_ended_clip()
+        self._control.start_signal(self.group_id, self._host.url_for(self.id))
+        now = self._clock()
+        self._clip_start, self._clip_end = now, now + SIGNAL_CLIP_S + SIGNAL_TAIL_S
+        self.silenced = self.signal_waiting = False
+        self.soloed = None  # a new announcement starts from Music Assistant's volumes
+        self.signal_clip += 1
+        if self.mode != "manual" and self.state in ("measuring", "verifying") and self.measurements:
+            # phases from two playbacks cannot be compared: the round starts again
+            self.measurements = {}
+            self._generation += 1
+
+    def _silence(self) -> None:
+        if self.clip_playing and not self.silenced:
+            self._control.stop_signal(self.group_id)
+            self.silenced = True
+
     @_locked
     def start_signal(self) -> None:
+        """Play the clicks: unsilence a clip that still runs, else start a new announcement."""
         self._require_active()
-        self._control.start_signal(self.group_id, self._host.url_for(self.id))
-        self.signal_running = True
+        if self.signal_waiting:
+            pass  # the next clip starts by itself once the current one ended
+        elif self.clip_playing:
+            if self.silenced:
+                self._control.solo(self.group_id, self.soloed)
+                self.silenced = False
+        else:
+            self._start_clip()
         self.touch()
+        self._changed()
 
     @_locked
     def stop_signal(self) -> None:
+        """Silence every member until the clip ends: an announcement cannot be stopped early."""
         self._require_active()
-        self._control.stop_signal(self.group_id)
-        self.signal_running = False
+        self.signal_waiting = False
+        self._silence()
         self.touch()
+        self._changed()
 
     @_locked
     def solo(self, member: str | None) -> None:
         self._require_active()
-        if member is not None:
-            self._member(member)
+        if member is None:
+            if self.signal_running:
+                self._control.solo(self.group_id, None)
+            self.soloed = None
+            self.touch()
+            self._changed()
+            return
+        self._member(member)
+        if not self.signal_running:
+            if self.signal_waiting:
+                raise ControlError("signal_waiting", "the next round starts when the previous clip ends")
+            if self.clip_playing and not self.silenced:
+                raise ControlError("signal_starting", "Music Assistant is starting the clicks")
+            raise ControlError("signal_stopped", "play the clicks first")
         self._control.solo(self.group_id, member)
         self.soloed = member
         self.touch()
+        self._changed()
+
+    @_locked
+    def tick(self) -> None:
+        """Called about once a second: report clicks that became audible (settled) or a clip that
+        ended, and start the clip of a round that waited for the previous one."""
+        if self.state in _ENDED or self.state == "restoring":
+            return
+        changed = self._forget_ended_clip() or self.signal_running != self._published_running
+        if self.signal_waiting and not self.clip_playing:
+            try:
+                self._start_clip()
+                changed = True
+            except ControlError as exc:  # still waiting: the next tick tries again
+                logger.debug("Starting the next clip of sync session %s failed: %s", self.id, exc)
+        if changed:
+            self._changed()
 
     @_locked
     def ab(self, a: str, b: str) -> None:
@@ -258,6 +359,8 @@ class SyncSession:
         current = self._membership()
         with self._lock:
             self._require("measuring", "verifying")
+            if self.signal_waiting:
+                raise ControlError("signal_waiting", "the next round starts when the previous clip ends")
             self._apply_membership(current)
             self._member(recording.member)
             generation = self._generation
@@ -376,8 +479,17 @@ class SyncSession:
         self.round += 1
         self.measurements = {}
         self._generation += 1
-        if not self.signal_running:
-            self.start_signal()
+        if self.clip_playing:
+            # a round needs a clip of its own and this one cannot be stopped: silence it and start
+            # the next one when it ends (tick). Best effort: the delays are written already, and a
+            # member left audible only hears the old clicks until the clip ends.
+            try:
+                self._silence()
+            except ControlError as exc:
+                logger.warning("Silencing the clip of sync session %s failed: %s", self.id, exc)
+            self.signal_waiting = True
+        else:
+            self._start_clip()
         self._set("verifying")
 
     @_locked
@@ -451,14 +563,22 @@ class SyncSession:
 
     @_locked
     def restore_tick(self) -> bool:
+        """One restore attempt; True once the group is restored. While the clip still plays, every
+        member is kept at volume 0 and the attempt waits (False, no ``restore_error``): Music
+        Assistant restores music and volumes at the clip's end, then the volumes are checked."""
         self._require("restoring")
         try:
-            if self.soloed is not None:
-                self._control.solo(self.group_id, None)
-                self.soloed = None
-            if self.signal_running:
-                self._control.stop_signal(self.group_id)
-                self.signal_running = False
+            if self.clip_playing:
+                self.signal_waiting = False
+                silent = self.silenced
+                self._silence()
+                if self.restore_error is not None or not silent:
+                    self.restore_error = None
+                    self._changed()
+                return False
+            self._forget_ended_clip()
+            self.signal_waiting = False
+            self.soloed = None
             if self.snapshot is not None:
                 self._control.restore(self.snapshot)
         except ControlError as exc:
@@ -486,6 +606,9 @@ class SyncSession:
             "error": self.error,
             "restore_error": self.restore_error,
             "signal_running": self.signal_running,
+            "signal_waiting": self.signal_waiting,
+            "signal_clip": self.signal_clip,
+            "music_returns_in_s": self.music_returns_in_s(),
             "soloed": self.soloed,
             "reference": self.reference,
             "round": self.round,
