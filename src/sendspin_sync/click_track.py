@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import io
 import math
 import struct
-import wave
 from typing import IO
 
 SAMPLE_RATE = 48000
@@ -20,6 +18,10 @@ CHIRP_F1 = 6000.0
 GAP_BASE_MS = 40
 GAP_STEP_MS = 20
 PEAK = 0.25
+# The name Music Assistant shows for the track (its LIST/INFO "INAM" tag). A title alone keeps the
+# item a sound effect (MA treats a URL with artist/album tags as music), and the queue reads
+# "Sendspin sync clicks" instead of the URL's file hash.
+TITLE = "Sendspin sync clicks"
 
 
 def gap_ms(k: int) -> int:
@@ -68,9 +70,27 @@ def _sample(v: float) -> int:
     return int(max(-32767, min(32767, round(v * PEAK * 32767))))
 
 
+def _info_chunk() -> bytes:
+    """A RIFF LIST/INFO chunk naming the track (NUL-terminated, padded to an even size)."""
+    name = TITLE.encode("ascii") + b"\0"
+    if len(name) % 2:
+        name += b"\0"
+    inam = b"INAM" + struct.pack("<I", len(name)) + name
+    body = b"INFO" + inam
+    return b"LIST" + struct.pack("<I", len(body)) + body
+
+
+def wav_header(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE) -> bytes:
+    """RIFF header, fmt (16-bit stereo PCM), the title, then the data chunk header."""
+    data_size = round(duration_s * sample_rate) * 4
+    fmt = struct.pack("<HHIIHH", 1, 2, sample_rate, sample_rate * 4, 4, 16)
+    chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt + _info_chunk() + b"data" + struct.pack("<I", data_size)
+    return b"RIFF" + struct.pack("<I", 4 + len(chunks) + data_size) + b"WAVE" + chunks
+
+
 def wav_size(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE) -> int:
-    """Bytes of the WAV file: a 44-byte header and 16-bit stereo frames."""
-    return 44 + round(duration_s * sample_rate) * 4
+    """Bytes of the WAV file: the header (with the title) and 16-bit stereo frames."""
+    return len(wav_header(duration_s=duration_s, sample_rate=sample_rate)) + round(duration_s * sample_rate) * 4
 
 
 def write_wav(
@@ -89,31 +109,23 @@ def write_wav(
         for start in (round(t * sample_rate), round((t + gap_ms(k) / 1000) * sample_rate))
     )
     block = max(1, round(block_s * sample_rate))
-    with wave.open(out, "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.setnframes(total)
-        first = 0  # first chirp that may still reach into the current block
-        for lo in range(0, total, block):
-            hi = min(total, lo + block)
-            frames = bytearray((hi - lo) * 4)
-            while first < len(starts) and starts[first] + len(template) <= lo:
-                first += 1
-            for start in starts[first:]:
-                if start >= hi:
-                    break
-                for i in range(max(0, lo - start), min(len(template), hi - start)):
-                    s = template[i]
-                    struct.pack_into("<hh", frames, (start + i - lo) * 4, s, s)
-            w.writeframes(frames)
+    out.write(wav_header(duration_s=duration_s, sample_rate=sample_rate))
+    first = 0  # first chirp that may still reach into the current block
+    for lo in range(0, total, block):
+        hi = min(total, lo + block)
+        frames = bytearray((hi - lo) * 4)
+        while first < len(starts) and starts[first] + len(template) <= lo:
+            first += 1
+        for start in starts[first:]:
+            if start >= hi:
+                break
+            for i in range(max(0, lo - start), min(len(template), hi - start)):
+                s = template[i]
+                struct.pack_into("<hh", frames, (start + i - lo) * 4, s, s)
+        out.write(frames)
 
 
 def render_wav(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE) -> bytes:
-    out = io.BytesIO()
-    with wave.open(out, "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(render_pcm(duration_s=duration_s, sample_rate=sample_rate))
-    return out.getvalue()
+    return wav_header(duration_s=duration_s, sample_rate=sample_rate) + render_pcm(
+        duration_s=duration_s, sample_rate=sample_rate
+    )

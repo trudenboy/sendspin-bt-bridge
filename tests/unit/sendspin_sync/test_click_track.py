@@ -53,3 +53,16 @@ def test_write_wav_size_is_known_up_front():
     out = io.BytesIO()
     ct.write_wav(out, duration_s=4)
     assert len(out.getvalue()) == ct.wav_size(duration_s=4)
+
+
+def test_the_track_carries_a_readable_title_for_music_assistant():
+    """MA names a URL item after its title tag (and keeps an untagged one a sound effect without artist/album)."""
+    wav = ct.render_wav(duration_s=2)
+    assert wav[:4] == b"RIFF" and wav[8:12] == b"WAVE"
+    info = wav.index(b"LIST")
+    assert wav[info + 8 : info + 12] == b"INFO" and wav.index(b"INAM") > info
+    assert ct.TITLE.encode() in wav and b"IART" not in wav
+    assert info < wav.index(b"data")  # before the samples, where a streaming reader finds it
+    with wave.open(io.BytesIO(wav)) as w:
+        assert w.getnframes() == 96000
+    assert int.from_bytes(wav[4:8], "little") == len(wav) - 8

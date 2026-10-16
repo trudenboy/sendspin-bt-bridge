@@ -1469,7 +1469,7 @@
       "alternating": "Alternating {a} and {b}.",
       "failed": "That did not work ({code}).",
       "needsClicks": "Play the clicks to hear speakers alone or compare them.",
-      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Stop clicks stops only the click track."
+      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Your queue is kept. Stop clicks stops only the click track."
     },
     "manual": {
       "title": "Delays",
@@ -1535,7 +1535,8 @@
       },
       "notice": {
         "title": "Nothing else plays while you measure.",
-        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop."
+        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop.",
+        "queue": "Your queue is kept: the click track plays in between and is taken out of the queue at the end. If Music Assistant refuses that, it stays in the queue as “Sendspin sync clicks”."
       },
       "point": {
         "legend": "Where will you measure?",
@@ -1662,7 +1663,8 @@
       "listenHelp": "Clicks play on the whole group for 10 s, then stop.",
       "listening": "Clicks playing on the whole group…",
       "listenFailed": "Could not play the clicks ({code}).",
-      "again": "Measure again"
+      "again": "Measure again",
+      "queue": "Your queue is as it was. If a “Sendspin sync clicks” item is still in it, remove it in Music Assistant."
     },
     "endForeign": "End that session",
     "endForeignTitle": "End the tuning on the other device?",

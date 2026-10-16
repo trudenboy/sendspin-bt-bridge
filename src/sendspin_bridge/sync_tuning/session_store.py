@@ -415,6 +415,10 @@ class SessionStore:
                     playing = False
                 if playing:
                     control.stop_group(group)
+                try:
+                    control.forget_clicker(group, url)  # best effort: the user's queue without it
+                except ControlError as exc:
+                    logger.info("Could not take the click track out of the queue after a restart: %s", exc)
         except Exception as exc:
             with self._lock:
                 n = self._pending_attempts.get(sid, 0)

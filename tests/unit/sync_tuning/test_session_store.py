@@ -675,6 +675,7 @@ def test_restore_persisted_puts_the_volumes_back_then_unmutes_then_stops_the_cli
     store._factory = lambda: _playing_old_clicker(original())
     store.restore_persisted()
     assert made[0].calls == [("volume", "a", 35), ("mute", "b", False), ("stop_group",)]
+    assert made[0].forgotten == [(URL, 3)]  # taken out of the queue after the stop
     assert not _file(tmp_path).exists()
 
 
@@ -695,3 +696,18 @@ def test_a_persisted_volume_that_was_put_back_is_not_sent_again_after_a_later_fa
     t["now"] = 5.0
     store.tick()
     assert ("volume", "a", 35) not in made[1].calls and ("volume", "b", 20) in made[1].calls
+
+
+def test_a_refused_queue_cleanup_after_a_restart_never_blocks_the_restore(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
+    store, made, _, _, _ = make(tmp_path)
+    original = store._factory
+
+    def factory():
+        ctl = _playing_old_clicker(original())
+        ctl.fail_forget = True
+        return ctl
+
+    store._factory = factory
+    store.restore_persisted()
+    assert not _file(tmp_path).exists() and made[0].forgotten == [(URL, 2)]

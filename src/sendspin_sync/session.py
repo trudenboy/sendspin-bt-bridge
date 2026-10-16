@@ -596,6 +596,14 @@ class SyncSession:
             return
         self._begin_restore("failed")
 
+    def _forget_clicker(self) -> None:
+        """Best effort: the click track does not stay in the group's queue (the user's items are kept)."""
+        assert self.clicker_url is not None
+        try:
+            self._control.forget_clicker(self.group_id, self.clicker_url)
+        except ControlError as exc:
+            logger.info("Sync session %s could not take the click track out of the queue: %s", self.id, exc)
+
     @_locked
     def restore_tick(self) -> bool:
         """One restore attempt; True once the group is restored: the volumes this session changed are
@@ -617,6 +625,7 @@ class SyncSession:
                 if playing:
                     self._control.stop_group(self.group_id)
                 self.clicker_playing = False
+                self._forget_clicker()
         except ControlError as exc:
             self.restore_error = exc.code
             self._changed()

@@ -17,7 +17,12 @@ class GroupControl(Protocol):
     def playback(self, group_id: str) -> GroupPlayback: ...
     def stop_group(self, group_id: str) -> None: ...
     def start_clicker(self, group_id: str, url: str) -> None:
-        """Play the click track at *url* on the group, replacing what its queue holds."""
+        """Play the click track at *url* on the group now, keeping the rest of its queue."""
+        ...
+
+    def forget_clicker(self, group_id: str, url: str) -> None:
+        """Take the click track at *url* out of the group's queue (after it stopped); raises a
+        ``ControlError`` when Music Assistant refuses (the caller treats it as best effort)."""
         ...
 
     def mute(self, member: str, muted: bool) -> None:

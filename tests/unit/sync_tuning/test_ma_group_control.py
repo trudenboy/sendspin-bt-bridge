@@ -179,13 +179,36 @@ def test_stop_group_stops_the_group_player():
     assert ctl.playback("grp").state == "idle"
 
 
-def test_the_clicker_replaces_the_groups_queue_with_the_click_track():
+def test_the_clicker_plays_now_and_keeps_the_groups_queue():
     ctl, ma = make()
     ctl.stop_group("grp")
     ctl.start_clicker("grp", URL)
-    assert ("player_queues/play_media", {"queue_id": "grp", "media": URL, "option": "replace"}) in ma.calls
+    assert ("player_queues/play_media", {"queue_id": "grp", "media": URL, "option": "play"}) in ma.calls
     assert ma.timeouts["player_queues/play_media"] >= 20.0  # MA answers once the item is loaded
     assert ctl.playback("grp").plays(URL)
+    assert [i["name"] for i in ma.queue] == ["Song 1", "Song 2", "Sendspin sync clicks", "Song 3"]
+
+
+def test_forget_clicker_takes_every_click_track_item_out_of_the_queue():
+    ctl, ma = make()
+    ctl.start_clicker("grp", URL)
+    ctl.start_clicker("grp", URL)  # started again: a second item
+    ctl.stop_group("grp")
+    ctl.forget_clicker("grp", URL)
+    assert [i["name"] for i in ma.queue] == ["Song 1", "Song 2", "Song 3"]
+    assert ("player_queues/items", {"queue_id": "grp", "limit": 500, "offset": 0}) in ma.calls
+
+
+def test_forget_clicker_never_touches_other_items_and_reports_a_refusal():
+    ctl, ma = make()
+    ctl.start_clicker("grp", URL)
+    ma.queue.append({"queue_item_id": "x", "name": "x", "media_item": {"uri": "http://other/clicks.wav"}})
+    ma.fail_queue = True
+    with pytest.raises(ControlError):
+        ctl.forget_clicker("grp", URL)
+    ma.fail_queue = False
+    ctl.forget_clicker("grp", URL)
+    assert [i["queue_item_id"] for i in ma.queue] == ["q1", "q2", "q3", "x"]
 
 
 def test_mute_and_unmute_a_member_through_music_assistant():
@@ -299,6 +322,8 @@ def test_a_whole_session_over_music_assistant_leaves_the_group_stopped_and_unmut
     assert s.restore_tick() is True
     assert [ma.players[p]["volume_muted"] for p in ("spk-bridge", "uni", "cast")] == [False, False, False]
     assert ma.players["grp"]["playback_state"] == "idle"
+    # the user's queue is kept and the click track is not left in it
+    assert [i["name"] for i in ma.queue] == ["Song 1", "Song 2", "Song 3"]
 
 
 def test_a_member_whose_sendspin_player_left_music_assistant_does_not_break_the_group():

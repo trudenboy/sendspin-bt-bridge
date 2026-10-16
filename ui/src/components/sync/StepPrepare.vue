@@ -35,6 +35,7 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
       <div>
         <p class="font-medium">{{ t('sync.wizard.notice.title') }}</p>
         <p class="text-text-secondary">{{ t('sync.wizard.notice.help') }}</p>
+        <p data-queue-note class="mt-1 text-text-secondary">{{ t('sync.wizard.notice.queue') }}</p>
       </div>
     </div>
 

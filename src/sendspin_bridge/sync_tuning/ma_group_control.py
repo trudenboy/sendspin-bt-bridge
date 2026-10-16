@@ -1,8 +1,10 @@
 """GroupControl over Music Assistant: members, delays, the group's playback, the clicker and mutes.
 
 Option C (user decision 2026-10-16, checked on Music Assistant dev): no music plays during a
-session. ``players/cmd/stop`` on the group stops it at once; the click track is queued on the group
-with ``player_queues/play_media`` (option ``replace``) and plays as a normal item on every member;
+session. ``players/cmd/stop`` on the group stops it at once; the click track is played on the group
+with ``player_queues/play_media`` (option ``play``: inserted after the current item and played now,
+the rest of the queue kept) and plays as a normal item on every member; at the end it is taken out
+of the queue again (``player_queues/delete_item``, best effort);
 solo mutes the other members with ``players/cmd/volume_mute``. A player that cannot be muted (web
 kiosks today) is named in a ``sync_mute_unsupported`` error: there is no volume fallback.
 """
@@ -29,6 +31,8 @@ SPLIT = "||protocol||"
 MUTE_FEATURE = "volume_mute"
 # play_media answers once Music Assistant loaded the item and started it
 CLICKER_START_TIMEOUT_S = 30.0
+# the click track sits right after the item that was current when it started: well within this
+QUEUE_LIMIT = 500
 
 
 def _bridge_ids() -> set[str]:
@@ -181,13 +185,33 @@ class MaGroupControl:
             raise _wrap(exc) from exc
 
     def start_clicker(self, group_id: str, url: str) -> None:
-        """Queue the click track on the group in place of what it holds; it plays as a normal item."""
+        """Play the click track on the group now ("play": inserted after the current item, the rest of
+        the queue kept); it plays as a normal item."""
         try:
             self._api.call(
                 "player_queues/play_media",
-                {"queue_id": group_id, "media": url, "option": "replace"},
+                {"queue_id": group_id, "media": url, "option": "play"},
                 timeout=CLICKER_START_TIMEOUT_S,
             )
+        except MaApiError as exc:
+            raise _wrap(exc) from exc
+
+    def forget_clicker(self, group_id: str, url: str) -> None:
+        """Delete every item of the group's queue that is the click track at *url* (matched on its
+        unguessable token). Music Assistant ignores an item it has already handed to the player."""
+        token = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".wav")
+        try:
+            items = self._api.call("player_queues/items", {"queue_id": group_id, "limit": QUEUE_LIMIT, "offset": 0})
+            for item in items or []:
+                if not isinstance(item, dict) or not item.get("queue_item_id"):
+                    continue
+                media = item.get("media_item")
+                uri = str(media.get("uri") or "") if isinstance(media, dict) else ""
+                if url in uri or (len(token) >= 16 and token in uri):
+                    self._api.call(
+                        "player_queues/delete_item",
+                        {"queue_id": group_id, "item_id_or_index": str(item["queue_item_id"])},
+                    )
         except MaApiError as exc:
             raise _wrap(exc) from exc
 

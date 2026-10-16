@@ -38,6 +38,7 @@ const restored = computed(() => !!props.state && ENDED.has(props.state))
       <div class="flex flex-col gap-1 text-sm">
         <p class="font-medium text-text-primary">{{ restored ? t('sync.done.restored') : t('sync.done.restoring') }}</p>
         <p class="text-text-secondary">{{ restored ? t('sync.done.restoredHelp') : t('sync.done.restoringHelp') }}</p>
+        <p v-if="restored" data-queue-note class="text-text-secondary">{{ t('sync.done.queue') }}</p>
       </div>
     </div>
 

@@ -210,12 +210,13 @@ def test_the_member_list_marks_who_the_session_muted_before_the_mute_is_sent():
 # -- the end -----------------------------------------------------------------------------------
 
 
-def test_the_end_unmutes_then_stops_our_clicker():
+def test_the_end_unmutes_then_stops_our_clicker_and_takes_it_out_of_the_queue():
     s, ctl, _ = ready()
     s.solo("a")
     s.cancel()
     assert s.restore_tick() is True and s.state == "cancelled"
     assert ctl.calls[-3:] == [("mute", "b", False), ("mute", "cast", False), ("stop_group",)]
+    assert ctl.forgotten == [(URL, len(ctl.calls))]  # after the stop
 
 
 def test_the_end_never_stops_music_the_operator_started_meanwhile():
@@ -433,3 +434,18 @@ def test_the_clicks_count_down_while_they_play():
     ctl.clicker_ends()
     s._observe(ctl.playback("g"))
     assert s.to_dict()["clicker_left_s"] is None
+
+
+def test_a_click_track_that_ended_by_itself_is_still_taken_out_of_the_queue():
+    s, ctl, _ = ready()
+    ctl.clicker_ends()
+    s.finish()
+    assert s.restore_tick() is True
+    assert ("stop_group",) not in ctl.calls and [u for u, _ in ctl.forgotten] == [URL]
+
+
+def test_taking_the_click_track_out_of_the_queue_is_best_effort():
+    s, ctl, _ = ready()
+    ctl.fail_forget = True
+    s.cancel()
+    assert s.restore_tick() is True and s.state == "cancelled" and s.restore_error is None
