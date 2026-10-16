@@ -6,12 +6,15 @@ import hmac
 import logging
 import os
 import secrets
+import socket
 import tempfile
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import urlsplit
 
 from sendspin_bridge.config.network import get_local_ip, resolve_web_port
+from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
 from sendspin_sync import click_track as ct
 
 if TYPE_CHECKING:
@@ -126,10 +129,26 @@ tokens = ClickTrackTokens()
 _announced_base_url: str | None = None
 
 
+def _ip_towards_music_assistant() -> str:
+    """The local address the kernel would use to reach Music Assistant, or "" when unknown.
+
+    The default route (what ``get_local_ip`` probes) can belong to a VPN that Music Assistant
+    cannot reach back through; the route to Music Assistant itself picks its network's interface."""
+    host = urlsplit(get_ma_api_credentials()[0] or "").hostname
+    if not host:
+        return ""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect((host, 9))  # UDP connect sends nothing; it only selects the route
+            return str(s.getsockname()[0])
+    except OSError:
+        return ""
+
+
 def default_base_url() -> str:
     """The bridge as Music Assistant reaches it; logged once per value, with a warning on the loopback fallback."""
     global _announced_base_url
-    ip = get_local_ip()
+    ip = _ip_towards_music_assistant() or get_local_ip()
     url = f"http://{ip or '127.0.0.1'}:{resolve_web_port()}"
     if url != _announced_base_url:
         _announced_base_url = url

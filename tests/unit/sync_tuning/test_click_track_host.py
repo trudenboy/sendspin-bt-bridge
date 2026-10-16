@@ -97,3 +97,24 @@ def test_base_url_is_logged_once_and_the_loopback_fallback_warns(monkeypatch, ca
     with caplog.at_level(logging.INFO, logger=cth.__name__):
         assert cth.default_base_url() == "http://127.0.0.1:8080"
     assert [r.levelno for r in caplog.records] == [logging.WARNING]
+
+
+def test_base_url_uses_the_interface_that_routes_to_music_assistant(monkeypatch):
+    """A VPN can own the default route; Music Assistant must get the address on its own network."""
+    from sendspin_bridge.sync_tuning import click_track_host as cth
+
+    monkeypatch.setattr(cth, "_announced_base_url", None)
+    monkeypatch.setattr(cth, "resolve_web_port", lambda: 8080)
+    monkeypatch.setattr(cth, "get_local_ip", lambda: "10.252.122.246")  # the default route's (VPN) address
+    monkeypatch.setattr(cth, "get_ma_api_credentials", lambda: ("http://127.0.0.1:8095", "token"))
+    assert cth.default_base_url() == "http://127.0.0.1:8080"
+
+
+def test_base_url_falls_back_to_the_default_route_without_a_music_assistant_url(monkeypatch):
+    from sendspin_bridge.sync_tuning import click_track_host as cth
+
+    monkeypatch.setattr(cth, "_announced_base_url", None)
+    monkeypatch.setattr(cth, "resolve_web_port", lambda: 8080)
+    monkeypatch.setattr(cth, "get_local_ip", lambda: "192.168.1.5")
+    monkeypatch.setattr(cth, "get_ma_api_credentials", lambda: ("", ""))
+    assert cth.default_base_url() == "http://192.168.1.5:8080"
