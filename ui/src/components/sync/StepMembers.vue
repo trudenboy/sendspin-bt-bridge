@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowDown, ArrowUp, Check } from 'lucide-vue-next'
 import { SbBadge, SbButton, SbSpinner } from '@/kit'
@@ -23,6 +24,12 @@ const props = defineProps<{
   /** Members that cannot be measured (not adjustable), by name. */
   notMeasured: string[]
   complete: boolean
+  /**
+   * The test clip: ``ready`` (clicks audible), ``starting`` (Music Assistant starts it), ``waiting``
+   * (this round's clip starts when the previous one ends, in ``waitS``) or ``ended`` (start it again).
+   */
+  signal?: 'ready' | 'starting' | 'waiting' | 'ended'
+  waitS?: number | null
 }>()
 const emit = defineEmits<{
   record: [member: string]
@@ -31,10 +38,12 @@ const emit = defineEmits<{
   next: []
   back: []
   cancel: []
+  restart: []
 }>()
 
 const { t } = useI18n()
 
+const ready = computed(() => (props.signal ?? 'ready') === 'ready')
 const isDeparted = (id: string) => props.departed.includes(id)
 const isStale = (id: string) => props.stale.includes(id)
 const pct = (r: SyncMeasurement) => Math.round((r.confidence ?? 0) * 100)
@@ -47,6 +56,22 @@ const label = (status: SyncMeasurement['status']) =>
 <template>
   <div class="flex flex-col gap-4">
     <p class="text-sm text-text-secondary">{{ t('sync.wizard.members.help') }}</p>
+    <div
+      v-if="!ready"
+      data-signal-state
+      role="status"
+      class="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+    >
+      <SbSpinner v-if="signal === 'starting'" size="sm" />
+      <span class="min-w-0 flex-1">
+        <template v-if="signal === 'starting'">{{ t('sync.signal.starting') }}</template>
+        <template v-else-if="signal === 'waiting'">{{ t('sync.signal.waiting', { s: waitS ?? 0 }) }}</template>
+        <template v-else>{{ t('sync.signal.ended') }}</template>
+      </span>
+      <SbButton v-if="signal === 'ended'" type="button" size="sm" data-restart-signal :disabled="!!active" @click="emit('restart')">
+        {{ t('sync.signal.restart') }}
+      </SbButton>
+    </div>
 
     <ol class="flex flex-col gap-3">
       <li
@@ -130,7 +155,7 @@ const label = (status: SyncMeasurement['status']) =>
                 size="sm"
                 :data-record="m.ma_player_id"
                 :aria-label="t('sync.wizard.recordMember', { name: m.name })"
-                :disabled="!!active"
+                :disabled="!!active || !ready"
                 @click="emit('record', m.ma_player_id)"
               >
                 {{ t('sync.wizard.record') }}
@@ -142,7 +167,7 @@ const label = (status: SyncMeasurement['status']) =>
                 :variant="results[m.ma_player_id]!.status === 'ok' && !isStale(m.ma_player_id) ? 'outline' : 'primary'"
                 :data-repeat="m.ma_player_id"
                 :aria-label="t('sync.wizard.repeatMember', { name: m.name })"
-                :disabled="!!active"
+                :disabled="!!active || !ready"
                 @click="emit('record', m.ma_player_id)"
               >
                 {{ t('sync.wizard.repeat') }}

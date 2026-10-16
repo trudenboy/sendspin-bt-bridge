@@ -423,3 +423,42 @@ describe('wizard texts', () => {
     for (const s of ['Playback will be interrupted', '{pct} %', 'Not heard', 'start the measurement again']) expect(flat).toContain(s)
   })
 })
+
+describe('MeasureWizard: the test clip', () => {
+  let rec: EpochRecorder
+  beforeEach(() => {
+    setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks(); rec = new EpochRecorder()
+    useSyncStore().group = { id: 'g', name: 'G', session_id: null, members } as never
+    vi.mocked(api.createSession).mockResolvedValue(session({ signal_clip: 1, music_returns_in_s: 180 }))
+    vi.mocked(api.endSession).mockResolvedValue(undefined)
+    vi.mocked(api.uploadRecording).mockImplementation(async (_s, member) => ok(member))
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  const mountWizard = () =>
+    mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never } })
+
+  it('measures everyone again when a new clip starts mid-round (two playbacks do not compare)', async () => {
+    const w = mountWizard()
+    await toMembers(w)
+    await recordMember(w, 'a')
+    expect(w.get('[data-result="a"]').text()).not.toContain('Record again')
+    useSyncStore().applyEvent(session({ signal_clip: 2, music_returns_in_s: 180 }))
+    await flushPromises()
+    expect(w.get('[data-result="a"]').text()).toContain('Record again')
+    expect(w.text()).toContain('measure every member once more')
+  })
+
+  it('waits for the clicks: no recording while the clip starts or ended, and restarts it on request', async () => {
+    vi.mocked(api.sessionSignal).mockResolvedValue(session({ signal_clip: 2, signal_running: false, music_returns_in_s: 185 }))
+    const w = mountWizard()
+    await toMembers(w)
+    useSyncStore().applyEvent(session({ signal_running: false, music_returns_in_s: null }))
+    await flushPromises()
+    expect(w.get('[data-record="a"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-restart-signal]').trigger('click'); await flushPromises()
+    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'start')
+    expect(w.get('[data-signal-state]').text()).toContain('Starting the clicks')
+  })
+})
+

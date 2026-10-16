@@ -44,6 +44,7 @@ describe('ManualTuning', () => {
   it('plays clicks, solos and alternates A/B every four seconds', async () => {
     const w = setup()
     await w.find('[data-signal]').trigger('click'); expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'start')
+    await running()  // the bridge reports the clicks audible once the announcement settled
     await w.find('[data-solo="a"]').trigger('click'); expect(api.sessionSolo).toHaveBeenCalledWith('s1', 'a')
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     expect(api.sessionAb).toHaveBeenCalledWith('s1', 'a', 'b')
@@ -206,6 +207,7 @@ describe('ManualTuning', () => {
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
     expect(w.get('[data-ab]').attributes('disabled')).toBeDefined()
     await w.find('[data-signal]').trigger('click')
+    await running()  // offered once the bridge reports the clicks audible (the announcement settled)
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
     expect(w.get('[data-ab]').attributes('disabled')).toBeUndefined()
   })
@@ -223,4 +225,22 @@ describe('ManualTuning', () => {
     expect(group.attributes('aria-label')).toContain('A')
     expect(group.findAll('button')).toHaveLength(4)
   })
+
+  it('offers solo only once the bridge says the clicks are audible (the announcement settles first)', async () => {
+    const w = setup()
+    await w.find('[data-signal]').trigger('click'); await flushPromises()
+    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-listen-status]').text()).toContain('Starting the clicks')
+    await running()
+    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('explains the clip length, and after Stop says when the music returns', async () => {
+    const w = setup()
+    expect(w.text()).toContain('3-minute test clip')
+    useSyncStore().session = { ...useSyncStore().session!, signal_running: false, music_returns_in_s: 90 } as never
+    await flushPromises()
+    expect(w.get('[data-listen-status]').text()).toContain('Music returns in 90 s')
+  })
 })
+

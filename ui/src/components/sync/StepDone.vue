@@ -6,6 +6,7 @@ import { SbButton, SbSpinner } from '@/kit'
 import type { SessionStateName } from '@/api/types'
 import { formatMs } from '@/sync/format'
 import { ENDED } from '@/stores/sync'
+import { useCountdown } from './useCountdown'
 
 /**
  * Step 5: the group is being restored, then restored. Shows the spread before → after, what
@@ -23,6 +24,8 @@ const props = defineProps<{
   saveError: string
   listening: boolean
   listenError: string
+  /** Seconds until the test clip ends and Music Assistant brings the music back (the bridge's count). */
+  musicReturnsIn?: number | null
 }>()
 const emit = defineEmits<{ listen: []; again: [] }>()
 
@@ -30,6 +33,7 @@ const { t } = useI18n()
 
 /* Every end goes through a successful restore; the outcome itself (done, cancelled) is not shown here. */
 const restored = computed(() => !!props.state && ENDED.has(props.state))
+const musicLeft = useCountdown(() => (restored.value ? null : props.musicReturnsIn))
 </script>
 
 <template>
@@ -40,6 +44,9 @@ const restored = computed(() => !!props.state && ENDED.has(props.state))
       <div class="flex flex-col gap-1 text-sm">
         <p class="font-medium text-text-primary">{{ restored ? t('sync.done.restored') : t('sync.done.restoring') }}</p>
         <p class="text-text-secondary">{{ restored ? t('sync.done.restoredHelp') : t('sync.done.restoringHelp') }}</p>
+        <p v-if="!restored && musicLeft != null" data-music-returns role="status" class="text-text-primary">
+          {{ musicLeft > 0 ? t('sync.signal.musicReturns', { s: musicLeft }) : t('sync.signal.musicReturnsSoon') }}
+        </p>
       </div>
     </div>
 

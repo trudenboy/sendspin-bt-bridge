@@ -25,6 +25,7 @@ import StepLevel from './StepLevel.vue'
 import StepMembers, { type MemberPhase } from './StepMembers.vue'
 import StepProposal from './StepProposal.vue'
 import StepDone from './StepDone.vue'
+import { useCountdown } from './useCountdown'
 
 /**
  * The measurement wizard: preparation, level check, speaker by speaker, the proposal
@@ -81,6 +82,21 @@ const session = computed(() => (sync.session && sync.session.id === sessionId.va
 const allMembers = computed(() => session.value?.members ?? sync.group?.members ?? [])
 const adjustable = computed(() => allMembers.value.filter((m) => m.adjustable))
 const notMeasured = computed(() => allMembers.value.filter((m) => !m.adjustable).map((m) => m.name))
+/*
+ * The test clip (one Music Assistant announcement per round, ~3 min, cannot be stopped early):
+ * recordings only while its clicks are audible; a round that needs a fresh clip waits for the
+ * previous one to end; a clip that ended mid-round is started again on request.
+ */
+type SignalState = 'ready' | 'starting' | 'waiting' | 'ended'
+const signalState = computed<SignalState>(() => {
+  const s = session.value
+  if (!s) return 'ready'
+  if (s.signal_waiting) return 'waiting'
+  if (s.signal_running) return 'ready'
+  return s.music_returns_in_s != null ? 'starting' : 'ended'
+})
+const waitLeft = useCountdown(() => (session.value?.signal_waiting ? session.value.music_returns_in_s : null))
+
 /** Members that left the group: as the bridge says, and as a refused call just told us. */
 const gone = ref<string[]>([])
 const departed = computed(() => [...new Set([...(session.value?.departed ?? []), ...gone.value])])
@@ -306,7 +322,8 @@ async function begin() {
     try {
       id = (await sync.start(props.groupId, props.mode, point.value)).id
     } catch (e) {
-      startError.value = t('sync.wizard.startFailed', { code: errorCode(e) })
+      const code = errorCode(e)
+      startError.value = code === 'signal_playing' ? t('sync.signal.playingError') : t('sync.wizard.startFailed', { code })
       if (rec === recorder) closeRecorder()
       return
     }
@@ -364,7 +381,7 @@ function setResult(member: string, r: SyncMeasurement, epoch: number | undefined
 async function record(member: string) {
   const rec = recorder
   const sid = sessionId.value
-  if (active.value || !rec || !sid) return
+  if (active.value || !rec || !sid || signalState.value !== 'ready') return
   errors[member] = ''
   if (rec.needsReopen) return lostMic()
   if (rec.epochInvalidated || rec.needsResume) return interrupt()
@@ -464,6 +481,29 @@ function markGone(member: string, sid: string | null) {
   message.value = errors[member]!
   if (sid) void refresh(sid)
 }
+
+/** The clip ended mid-round: start a new one (the bridge starts the round again with it). */
+async function restartSignal() {
+  const sid = sessionId.value
+  if (!sid || active.value) return
+  try {
+    const answer = await sessionSignal(sid, 'start')
+    if (disposed || sid !== sessionId.value) return
+    sync.applyEvent(answer)
+  } catch (e) {
+    if (!disposed) message.value = t('sync.wizard.failed', { code: errorCode(e) })
+  }
+}
+
+/* A new clip is a new playback: phases from the old one do not compare, so every member is redone. */
+watch(
+  () => session.value?.signal_clip,
+  (clip, prev) => {
+    if (clip == null || prev == null || clip <= prev || Object.keys(results).length === 0) return
+    markAllStale()
+    message.value = t('sync.signal.restarted')
+  },
+)
 
 /* -- proposal, apply, undo, check round, done ------------------------------------------ */
 
@@ -977,6 +1017,9 @@ const signalStarting = computed(() => !session.value?.signal_running)
       :errors="errors"
       :not-measured="notMeasured"
       :complete="complete"
+      :signal="signalState"
+      :wait-s="waitLeft"
+      @restart="restartSignal"
       @record="record"
       @skip="skip"
       @move="move"
@@ -1022,6 +1065,7 @@ const signalStarting = computed(() => !session.value?.signal_running)
       :save-error="saveError"
       :listening="listening"
       :listen-error="listenError"
+      :music-returns-in="(session ?? lastSession)?.music_returns_in_s ?? null"
       @listen="quickListen"
       @again="again"
     />

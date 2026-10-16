@@ -1465,7 +1465,11 @@
       "soloed": "Clicks playing on {name} only.",
       "alternating": "Alternating {a} and {b}.",
       "failed": "That did not work ({code}).",
-      "needsClicks": "Play the clicks to solo or compare speakers."
+      "needsClicks": "Play the clicks to solo or compare speakers.",
+      "playHelp": "Plays the 3-minute test clip once. Stop clicks silences the speakers until the clip ends (Music Assistant cannot stop it early); then the music returns.",
+      "starting": "Starting the clicks…",
+      "silenced": "Clicks silenced. Music returns in {s} s.",
+      "clipLeft": "The clip ends in {s} s."
     },
     "manual": {
       "title": "Delays",
@@ -1631,15 +1635,15 @@
     },
     "done": {
       "restoring": "Restoring the group…",
-      "restoringHelp": "Stopping the test signal and putting the mutes back. The delays stay as applied.",
+      "restoringHelp": "The test clip cannot be stopped early: the speakers stay silent until it ends, then Music Assistant brings the music back and the volumes are checked. The delays stay as applied.",
       "restored": "Group restored",
-      "restoredHelp": "The test signal is stopped and the mutes are back. The new delays stay.",
+      "restoredHelp": "The music and the volumes are back. The new delays stay.",
       "spread": "Spread: {before} ms → {after} ms",
       "undone": "Undone: the delays are back to where they were before.",
       "saved": "Saved as profile “{name}”.",
       "saveFailed": "The delays are applied, but the profile could not be saved ({code}).",
       "listen": "Quick listen",
-      "listenHelp": "Clicks play on the whole group for 10 s.",
+      "listenHelp": "Clicks play on the whole group for 10 s; the speakers then stay silent until the 3-minute test clip ends.",
       "listening": "Clicks playing on the whole group…",
       "listenFailed": "Could not play the clicks ({code}).",
       "again": "Measure again",
@@ -1647,6 +1651,17 @@
     },
     "endForeign": "End that session",
     "endForeignTitle": "End the tuning on the other device?",
-    "endForeignMessage": "Its test signal stops and the group is restored. Delays already written stay as they are."
+    "endForeignMessage": "Its test signal stops and the group is restored. Delays already written stay as they are.",
+    "signal": {
+      "musicReturns": "Music returns in {s} s.",
+      "musicReturnsSoon": "Music returns in a moment.",
+      "clipEnding": "The last test clip is playing out with every speaker silent: Music Assistant cannot stop it early. Music returns in {s} s.",
+      "playingError": "The last test clip is still playing out on this group (Music Assistant cannot stop it early). Try again when the music is back.",
+      "starting": "Starting the clicks…",
+      "waiting": "This round needs a fresh test clip: it starts when the previous one ends, in {s} s.",
+      "ended": "The test clip has ended. Start it again to go on measuring.",
+      "restart": "Start the clicks again",
+      "restarted": "The clicks started again: measure every member once more."
+    }
   }
 }

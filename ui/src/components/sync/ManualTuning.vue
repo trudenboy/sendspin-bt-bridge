@@ -6,6 +6,7 @@ import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
 import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
 import ListeningBar from './ListeningBar.vue'
+import { useCountdown } from './useCountdown'
 
 const emit = defineEmits<{
   /** Whether any delay differs from where this session started (the view offers a profile on leaving). */
@@ -167,12 +168,19 @@ watch(
 
 onBeforeUnmount(stopAb)
 
+/** The bridge says the clicks are audible: the announcement settled (solo and A/B wait for it). */
+const soloReady = computed(() => !!session.value?.signal_running)
+/** The clip plays once (~3 min) and cannot be stopped early: Stop silences it until it ends. */
+const clipLeft = useCountdown(() => session.value?.music_returns_in_s)
+
 const listenStatus = computed(() => {
   const s = session.value
+  const left = clipLeft.value
   if (abPair.value) return t('sync.listen.alternating', { a: nameOf(abPair.value[0]), b: nameOf(abPair.value[1]) })
-  if (!signalRunning.value) return t('sync.listen.idle')
-  if (s?.soloed) return t('sync.listen.soloed', { name: nameOf(s.soloed) })
-  return t('sync.listen.playing')
+  if (signalRunning.value && !soloReady.value) return t('sync.listen.starting')
+  if (!signalRunning.value) return left ? t('sync.listen.silenced', { s: left }) : t('sync.listen.idle')
+  const playing = s?.soloed ? t('sync.listen.soloed', { name: nameOf(s.soloed) }) : t('sync.listen.playing')
+  return left ? `${playing} ${t('sync.listen.clipLeft', { s: left })}` : playing
 })
 </script>
 
@@ -183,6 +191,7 @@ const listenStatus = computed(() => {
       <ListeningBar
         :members="present"
         :signal-running="signalRunning"
+        :solo-ready="soloReady"
         :soloed="session?.soloed ?? null"
         :alternating="abPair"
         @signal="onSignal"

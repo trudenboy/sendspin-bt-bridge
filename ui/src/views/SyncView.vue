@@ -11,6 +11,7 @@ import GroupMembers from '@/components/sync/GroupMembers.vue'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
 import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import ProfilesPanel from '@/components/sync/ProfilesPanel.vue'
+import { useCountdown } from '@/components/sync/useCountdown'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -35,6 +36,17 @@ const sessionRestore = computed(() => {
   const s = sync.session
   return s && s.group_id === groupId.value && s.state === 'restoring' && s.restore_error ? s : null
 })
+/**
+ * This group's session ended but its test clip still plays out with every speaker silent (Music
+ * Assistant cannot stop an announcement early): nothing to take over, just say when music returns.
+ */
+const clipEnding = computed(() => {
+  const s = sync.session
+  return s && s.group_id === groupId.value && s.state === 'restoring' && !s.restore_error && s.music_returns_in_s != null
+    ? s
+    : null
+})
+const clipLeft = useCountdown(() => clipEnding.value?.music_returns_in_s)
 const root = ref<HTMLElement | null>(null)
 
 /** Which measurement the Measure tab runs: suggest (review first) or apply (with undo). */
@@ -126,6 +138,7 @@ const readOnly = computed(() => {
   if (!g) return false
   if (g.session_id && !sync.session) return true
   const s = liveSession.value
+  if (s && clipEnding.value?.id === s.id) return false
   return !!s && s.mode !== 'manual' && !sync.owns(s.id)
 })
 const manualSession = computed(() => (liveSession.value?.mode === 'manual' ? liveSession.value : null))
@@ -374,6 +387,14 @@ watch(groupId, (id) => void load(id), { immediate: true })
     </div>
 
     <div
+      v-if="clipEnding && clipLeft != null"
+      data-clip-ending
+      role="status"
+      class="mb-4 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+    >
+      {{ clipLeft > 0 ? t('sync.signal.clipEnding', { s: clipLeft }) : t('sync.signal.musicReturnsSoon') }}
+    </div>
+    <div
       v-if="sessionRestore"
       role="alert"
       class="mb-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
@@ -489,7 +510,9 @@ watch(groupId, (id) => void load(id), { immediate: true })
             role="alert"
             class="mt-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
           >
-            <span class="min-w-0 flex-1">{{ t('sync.manual.startFailed', { code: manualError }) }}</span>
+            <span class="min-w-0 flex-1">{{
+              manualError === 'signal_playing' ? t('sync.signal.playingError') : t('sync.manual.startFailed', { code: manualError })
+            }}</span>
             <SbButton variant="outline" size="sm" @click="enterManual">{{ t('common.retry') }}</SbButton>
           </div>
         </template>
