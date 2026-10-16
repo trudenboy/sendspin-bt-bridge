@@ -9,6 +9,7 @@ kiosks today) is named in a ``sync_mute_unsupported`` error: there is no volume 
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_groups, get_ma_player_ids
@@ -20,6 +21,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from sendspin_bridge.sync_tuning.ma_api import MaApi
+
+logger = logging.getLogger(__name__)
 
 DELAY_KEY = "sendspin_static_delay"
 SPLIT = "||protocol||"
@@ -106,7 +109,11 @@ class MaGroupControl:
                     if adjustable:
                         delay = self._read_delay(client_id)
                 except MaApiError as exc:
-                    raise _wrap(exc) from exc
+                    if exc.code != "ma_error":  # unreachable or forbidden: the whole group is unknown
+                        raise _wrap(exc) from exc
+                    # its Sendspin player left Music Assistant (a closed kiosk page): listed, not adjustable
+                    logger.warning("Sync: %s has no reachable Sendspin player in Music Assistant: %s", name, exc)
+                    adjustable, delay = False, None
             out.append(
                 Member(
                     ma_player_id=mid,

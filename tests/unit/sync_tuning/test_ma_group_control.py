@@ -282,3 +282,32 @@ def test_a_whole_session_over_music_assistant_leaves_the_group_stopped_and_unmut
     assert s.restore_tick() is True
     assert [ma.players[p]["volume_muted"] for p in ("spk-bridge", "uni", "cast")] == [False, False, False]
     assert ma.players["grp"]["playback_state"] == "idle"
+
+
+def test_a_member_whose_sendspin_player_left_music_assistant_does_not_break_the_group():
+    """A web kiosk page that closed leaves its Sendspin protocol player unknown to Music Assistant
+    (live, MA dev 2026-10-16: "Player MttX… not found"); the group must still open."""
+
+    class GoneProtocol(FakeMa):
+        def call(self, command, args, *, timeout=10.0):
+            if command.startswith("config/players/") and args.get("player_id") == "uni-sendspin":
+                raise MaApiError("ma_error", "Player uni-sendspin not found")
+            return super().call(command, args, timeout=timeout)
+
+    ctl, _ = make(GoneProtocol())
+    by = {m.ma_player_id: m for m in ctl.members("grp")}
+    assert (by["uni"].adjustable, by["uni"].delay_ms) == (False, None)
+    assert (by["spk-bridge"].adjustable, by["spk-bridge"].delay_ms) == (True, 120)
+
+
+def test_an_unreachable_music_assistant_still_fails_the_group():
+    class Down(FakeMa):
+        def call(self, command, args, *, timeout=10.0):
+            if command == "config/players/get_entries":
+                raise MaApiError("ma_unavailable", "connection refused")
+            return super().call(command, args, timeout=timeout)
+
+    ctl, _ = make(Down())
+    with pytest.raises(ControlError) as exc:
+        ctl.members("grp")
+    assert exc.value.code == "ma_unavailable"
