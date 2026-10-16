@@ -17,8 +17,10 @@ and other Sendspin players alike, from the bridge's web interface:
 
 - **Manual** — sliders and ±1/±10 ms nudges, applied live, with a click track and
   solo / A–B listening to judge by ear.
-- **Semi-automatic** — measure with the phone's microphone, review a proposal, apply.
-- **Automatic** — measure and apply in one go, with a verification pass and undo.
+- **Semi-automatic** ("Measure with a microphone") — measure with a microphone (this
+  device's, or a phone through the capture page), then the measured delays are applied
+  and the same session continues as the manual editor (listen, adjust, finish).
+- ~~**Automatic**~~ — removed in the UX round (2026-10-16, see "UX round" below).
 - **Profiles** — named snapshots of a group's delays, saved and re-applied manually.
 
 Decisions taken while designing:
@@ -39,6 +41,61 @@ them as "cannot be adjusted" and the planner leaves them out. Groups in v1 are
 Music Assistant's persistent sync groups (player `type` `group`, provider
 `sync_group`), the ones the Groups page already lists; a temporary sync (a leader
 with players synced to it) is not offered as a group.
+
+## UX round (2026-10-16) — supersedes the parts below where they differ
+
+User decisions (ledger "UX round"): fix the UX audit; remove the automatic mode;
+restore the volumes from before calibration; semi-automatic measuring can use a
+phone through a link + QR code; after a measurement the session switches to the
+manual editor with the measured delays applied (one editing surface).
+
+- **Modes.** `manual` and `semi` only. No automatic apply, check rounds, undo window,
+  `verify`/`undo` endpoints, `round`/`undo_until_s` fields or `verifying` state.
+- **Semi ends in the editor.** "Apply the measured delays and listen" computes the
+  proposal and applies it (explicit consent in the button; ruling: the editor is live,
+  so the measured values are written on entry rather than shown as pending values).
+  The session is then `tuning`: solo, A–B and live writes as in manual tuning; each
+  measured row shows the measured value and "Reset to measured"; members not heard or
+  skipped keep their delay; **Finish** (`POST .../finish`, `done`) keeps the delays;
+  **Cancel** writes back the delays from before the measurement, then ends.
+- **Volumes.** The first `set_volume` of a member records the volume it had (session
+  field `volumes_before`, persisted in the snapshot entry as `volumes`); restore puts
+  them back first, then unmutes, then stops our clicker. Failures retry; a player MA
+  no longer lists is given up after `RESTORE_GIVE_UP_S`.
+- **Queue.** The clicker starts with `option: play` (queue kept) and its items are
+  deleted from the group's queue at the end (best effort). The WAV carries a
+  LIST/INFO title "Sendspin sync clicks" (a title without artist/album keeps it a
+  sound effect in MA).
+- **Readiness.** Members carry `can_mute`, `available`, `volume`, `muted`; the Group
+  tab and step 1 warn before the music is stopped.
+- **Countdown.** `clicker_left_s` (3-minute track) is shown on the clicks step, the
+  members step and in Manual tuning.
+- **Phone capture.** See "Phone capture" below.
+
+### Phone capture
+
+A phone opens `http://<bridge LAN address>:<port>/sync/capture/<token>?lang=xx` (the
+same base URL Music Assistant fetches the clicks from). Separate recordings share no
+clock, so the phone records once while the bridge plays a **sequence**: everyone
+muted for 3 s, each member alone (7 s at the speakers / 13 s from the listening
+position) with everyone muted in between (5 s to walk / 2 s). The upload (any audio
+file; at most 20 MB and the sequence's length + 60 s) is recognised by its magic
+bytes (mp4/m4a/mov, wav, ogg, matroska/webm, mp3, ADTS AAC, flac; anything else is
+refused before FFmpeg sees it), decoded from memory with PyAV (forced demuxer,
+`format_whitelist` of those demuxers, `protocol_whitelist` none) to 16 kHz mono;
+click events (at most 6 per click period, at most 4000) are aligned against the
+solos as the bridge timed them, and each member's stretch is estimated with its file
+offset as the start time. At most 16 members per sequence.
+
+Security: the token is `secrets.token_urlsafe(32)`, one per session (a new link
+revokes the old), valid 30 minutes, refused as soon as the session restores or ends
+and dropped from the table when it finishes; it is accepted only by the two
+`/api/v1/sync/capture/{token}` endpoints and the page; the rest of the API ignores it
+(not a bearer token, no cookie). The state it reads has short names, statuses and
+the sequence progress — no delays, no session id. The page is standalone HTML with a
+per-response CSP nonce, `no-store`, `no-referrer`, `noindex`. In a secure context it
+records with MediaRecorder and uploads when the sequence ends; on plain HTTP it uses
+`<input type=file accept="audio/*" capture>` (the phone's recorder) or a picked file.
 
 ## Facts this design relies on (Music Assistant dev `d3258305`, checked 2026-10-15)
 
@@ -297,8 +354,9 @@ separate spec covers it after the bridge version ships.
 
 ## Session
 
-States: `created → measuring → proposed → applying → verifying → restoring → done`,
-plus `cancelled` and `failed` (both go through `restoring`).
+States (UX round): `created → measuring → proposed → applying → tuning → restoring →
+done`, plus `cancelled` and `failed` (both go through `restoring`). A manual session
+starts in `tuning`. `verifying`, rounds and the undo window are gone.
 
 - **created**: members resolved; snapshot (delays, and which members were muted
   before) taken. Starting a session reads the group and writes nothing to it.
@@ -310,12 +368,15 @@ plus `cancelled` and `failed` (both go through `restoring`).
   30–50 cm from Kitchen" or "stay where you are"), receive the recording, estimate.
   Solo and recordings need the clicker playing (`clicker_stopped` otherwise). A
   step can be repeated or skipped; members can be reordered.
-- **proposed**: proposal computed (semi-automatic waits here for the operator).
-- **applying**: `set_delay` for each changed member; automatic mode keeps an undo
-  for 30 s from the apply.
-- **verifying**: optional repeat round (automatic: always), with the clicker that
-  still plays, or started again by the operator if it stopped.
-- **restoring**: every member the session muted is unmuted, then the group is
+- **proposed**: proposal computed. Recordings, skips and proposals are still allowed
+  (a member measured again before applying).
+- **applying**: `set_delay` for each changed member (all rows validated first, a
+  failing write rolls back what this apply wrote).
+- **tuning**: the manual editor (solo, A–B, live writes, reset to the delays from
+  before); recordings are refused. `POST .../finish` ends it `done` (delays kept);
+  `DELETE` ends it `cancelled`.
+- **restoring**: the volumes the session changed are put back (while our clicker may
+  still play), every member the session muted is unmuted, then the group is
   stopped if this session's clicker is what it plays (music someone started
   meanwhile plays on). Retried with backoff until it succeeds; a member already
   unmuted is not unmuted again. Also triggered by cancel, an error, a 15-minute
@@ -351,15 +412,18 @@ calibration, and the announcement path was too complex. So:
   (`players/cmd/stop` on the group, "Stop group" in the UI); the session refuses to
   start the clicker (`group_playing`) while the group plays anything else.
 - **The clicker.** `player_queues/play_media` (`queue_id` = the group, `media` = the
-  click-track URL, `option` = `replace`): Music Assistant plays it as a normal item
+  click-track URL, `option` = `play` since the UX round, was `replace`; the item is
+  inserted after the current one and played, the queue kept, and deleted from the
+  queue at the end): Music Assistant plays it as a normal item
   on every member. "Playing" means the group's `playback_state` is `playing` and its
   `current_media.uri` contains the click-track URL or its token. Starting it again
   (while it plays, or after it ended) starts it over; in a measuring round that
   starts the round again. The group's queue is replaced; the music does not come
   back by itself.
 - **Volumes.** The operator sets each member's volume (`players/cmd/volume_set`)
-  until the clicks are clearly audible where they measure. The bridge does not
-  snapshot or restore volumes.
+  until the clicks are clearly audible where they measure. Since the UX round the
+  first change of a member records its volume from before (persisted) and the end
+  puts it back.
 - **Solo by mute, no fallback.** `solo(member)` mutes every other member with
   `players/cmd/volume_mute` (never a member that was muted before the session) and
   unmutes the member if the session had muted it; `solo(None)` unmutes every member
@@ -430,7 +494,7 @@ bridge are generated to match it.
   `adjustable`, `delay_ms`, `last_measured_at`).
 - `GET /api/v1/sync/groups/{group_id}` — one group.
 - `PUT /api/v1/sync/groups/{group_id}/delays` — manual write `{ma_player_id: ms}`.
-- `POST /api/v1/sync/sessions` `{group_id, mode: manual|semi|auto, point:
+- `POST /api/v1/sync/sessions` `{group_id, mode: manual|semi, point:
   device|position}` → session; `GET`/`DELETE /api/v1/sync/sessions/{id}`.
 - `POST /api/v1/sync/sessions/{id}/signal` `{action: start|stop|stop_clicker}`
   (start: the clicker on the group; stop: stop whatever the group plays;
@@ -441,7 +505,11 @@ bridge are generated to match it.
   (binary body) → measurement.
 - `GET .../proposal` (read-only: the current proposal, or `no_measurement`);
   `POST .../proposal` computes it (a write: auth + CSRF); `POST .../apply`
-  `{rows?, verify?}`; `POST .../undo`; `POST .../verify`.
+  `{rows?}` (then `tuning`); `POST .../finish`. (`undo` and `verify` removed.)
+- Phone capture: `POST .../capture-link` `{lang?}` → `{url, token, expires_in_s}`;
+  `POST .../sequence` `{members}` (202); public with the capture token only:
+  `GET /api/v1/sync/capture/{token}` and `POST /api/v1/sync/capture/{token}/recording`
+  (any audio file); the page `GET /sync/capture/{token}`.
 - `GET/POST /api/v1/sync/profiles?group_id=…`; `PATCH`/`DELETE
   /api/v1/sync/profiles/{id}`; `POST /api/v1/sync/profiles/{id}/apply`;
   `POST /api/v1/sync/groups/{group_id}/capture` `{name, kind}` → profile from the
@@ -472,7 +540,9 @@ drawer's Timing tab. Route `/sync/:groupId`, designed for a phone in portrait.
   delay, last measurement and its age.
 - Profiles: list, **Apply**, **Save current as…**, rename, delete. Applying shows the
   diff first and skips members no longer in the group (listed).
-- Actions: **Manual tuning**, **Measure and suggest**, **Measure and apply**.
+- Actions (UX round): **Manual tuning**, **Measure with a microphone**, each with a
+  "when to choose" line; warnings before anything is touched (cannot be muted,
+  unavailable, volume 0 %, muted) with Skip / Manual tuning.
 
 **Manual tuning**
 - Per member: slider 0–5000, −10/−1/+1/+10 buttons, number field; applied live.
@@ -496,11 +566,12 @@ drawer's Timing tab. Route `/sync/:groupId`, designed for a phone in portrait.
    (✓ with confidence, or not heard / unstable with **Repeat** / **Skip**). Steps
    can be redone; members reordered. When the clicker stopped: **Start the clicker
    again** (every member is redone). A member that cannot be muted is named inline.
-6. Proposal: table before → after (Δ), before/after spread chart; **Apply**,
-   **Apply and save as profile…**, **Cancel**. Automatic mode applies and shows
-   **Undo (30 s)**.
-7. Done: speakers unmuted and the clicker stopped; optional quick listen with
-   clicks on the whole group for 10 s.
+6. (UX round) Tune: the measured delays are applied; the manual editor with
+   "Measured: X ms (+Δ)" and "Reset to measured" per row; **Finish**, **Finish and
+   save as profile…**, **Cancel** (puts back the delays from before).
+7. Done: volumes back, speakers unmuted, the clicks stopped; optional quick listen
+   with clicks on the whole group for 10 s.
+   (The steps are grouped into four stages: Prepare · Measure · Tune · Done.)
 
 **Failure handling in the UI**
 - A member leaves the group or disconnects mid-session: its step is marked; the plan
