@@ -19,7 +19,7 @@ from itertools import pairwise
 import pytest
 
 from sendspin_bridge.services.audio.player.player import InPlaceShift, PcmFormat, StreamPlayer
-from sendspin_bridge.services.audio.player.splice import fade_frames, splice_region
+from sendspin_bridge.services.audio.player.splice import fade_frames, frames_needed, splice_region
 
 PCM = PcmFormat(sample_rate=48000, channels=2, bit_depth=16)
 RATE = PCM.sample_rate
@@ -51,6 +51,15 @@ def _sine(frames: int, *, start: int = 0, amp: int = 10_000, hz: float = 1000.0)
     return out
 
 
+def _splice(x: bytes, *, shift_frames: int, fmt: PcmFormat = PCM, fade: int = 240) -> tuple[bytes, int]:
+    """The region for audio ``x`` after the junction, and where ``x`` resumes after it."""
+    fb = fmt.frame_bytes()
+    skip = max(0, -shift_frames)
+    head, ahead = x[: fade * fb], x[skip * fb : (skip + fade) * fb]
+    region = splice_region(head, ahead, shift_frames=shift_frames, fade=fade, fmt=fmt)
+    return region, frames_needed(shift_frames, fade)
+
+
 def test_the_fade_is_five_milliseconds():
     assert fade_frames(48000) == 240
     assert fade_frames(44100) == 220
@@ -58,7 +67,7 @@ def test_the_fade_is_five_milliseconds():
 
 def test_no_shift_splices_to_the_untouched_audio():
     x = _sine(1000)
-    region, consumed = splice_region(_pcm(x), shift_frames=0, fade=240, fmt=PCM)
+    region, consumed = _splice(_pcm(x), shift_frames=0)
     assert consumed == 240
     assert _samples(region) == x[: 240 * 2]
 
@@ -67,7 +76,7 @@ def test_no_shift_splices_to_the_untouched_audio():
 def test_skipping_ahead_crossfades_into_the_audio_due_now(shift_frames):
     dropped = -shift_frames
     x = [7_000, -7_000] * (dropped + 2000)  # constant per channel: a crossfade of it is flat
-    region, consumed = splice_region(_pcm(x), shift_frames=shift_frames, fade=240, fmt=PCM)
+    region, consumed = _splice(_pcm(x), shift_frames=shift_frames)
     assert consumed == 240 + dropped  # the region ends where audio x[consumed:] continues
     assert len(region) == 240 * PCM.frame_bytes()
     assert set(_samples(region)) == {7_000, -7_000}
@@ -76,7 +85,7 @@ def test_skipping_ahead_crossfades_into_the_audio_due_now(shift_frames):
 @pytest.mark.parametrize("shift_frames", [336, 4800, 48000])
 def test_inserting_silence_fades_out_then_back_in(shift_frames):
     x = [8_000, 8_000] * 1000
-    region, consumed = splice_region(_pcm(x), shift_frames=shift_frames, fade=240, fmt=PCM)
+    region, consumed = _splice(_pcm(x), shift_frames=shift_frames)
     out = _samples(region)[::2]
     assert consumed == 240
     assert len(out) == shift_frames + 240
@@ -90,7 +99,7 @@ def test_a_shift_never_clicks(shift_frames):
     """The largest step between samples stays within the sine's own (plus the fade's slope)."""
     x = _sine(6000, start=37)
     natural = max(abs(a - b) for a, b in zip(x[2::2], x[:-2:2], strict=True))
-    region, _ = splice_region(_pcm(x), shift_frames=shift_frames, fade=240, fmt=PCM)
+    region, _ = _splice(_pcm(x), shift_frames=shift_frames)
     out = _sine(1, start=36) + _samples(region)  # from the sample handed on just before
     left = out[::2]
     worst = max(abs(a - b) for a, b in zip(left[1:], left[:-1], strict=True))
@@ -103,7 +112,7 @@ def test_wider_samples_splice_too(bit_depth):
     width = bit_depth // 8
     value = 3_000_000
     x = b"".join(value.to_bytes(width, "little", signed=True) for _ in range(2000))
-    region, consumed = splice_region(x, shift_frames=-500, fade=240, fmt=fmt)
+    region, consumed = _splice(x, shift_frames=-500, fmt=fmt)
     assert consumed == 740
     assert {int.from_bytes(region[i : i + width], "little", signed=True) for i in range(0, len(region), width)} == {
         value
@@ -451,4 +460,134 @@ def test_two_shifts_before_the_audio_that_follows_still_land_on_schedule():
         expected = _content_time_ns(content) + (60_000_000 if content >= junction else 0)
         assert abs(at_ns - expected) < 1e9 / RATE
     assert len(heard) == TOTAL_CHUNKS * CHUNK_FRAMES // CLICK_EVERY
+    player.stop()
+
+
+# ── Bounds and give-ups ──────────────────────────────────────────────────────
+
+
+@requires_gst
+@pytest.mark.parametrize("jump_s", [-60, 20])
+def test_audio_after_a_timeline_jump_is_not_taken_for_the_shift(jump_s):
+    """The next chunk lands far from where the shift asked for (a seek, a
+    foreign server): it is not the audio that follows the junction, so nothing
+    is held for it and no silence is built for it; it plays at its own time."""
+    handed: list[tuple[int, bytes]] = []
+    player = _player(handed)
+    player.start(PCM)
+    for i in range(JUNCTION_CHUNKS):
+        player.submit(BASE_US + i * 10_000, _click_chunk(i))
+    _wait_until(lambda: len(handed) == JUNCTION_CHUNKS)
+
+    player.resync(-10_000)
+    jumped = BASE_US + JUNCTION_CHUNKS * 10_000 - 10_000 + jump_s * 1_000_000
+    for i in range(4):
+        player.submit(jumped + i * 10_000, _click_chunk(JUNCTION_CHUNKS + i))
+
+    assert player._splice is None
+    if jump_s > 0:
+        _wait_until(lambda: len(handed) == JUNCTION_CHUNKS + 4)
+        assert [pts for pts, _ in handed[JUNCTION_CHUNKS:]] == [
+            (jumped + i * 10_000) * 1000 - LATENCY_NS for i in range(4)
+        ]
+        assert sum(len(d) for _, d in handed) == (JUNCTION_CHUNKS + 4) * CHUNK_FRAMES * PCM.frame_bytes()
+    else:
+        import time
+
+        time.sleep(0.05)
+        assert len(handed) == JUNCTION_CHUNKS  # long overdue: dropped, nothing held
+    player.stop()
+
+
+@requires_gst
+def test_a_held_shift_gives_up_as_the_output_runs_dry_and_holds_two_fades_at_most():
+    """500 ms earlier, with the server sending at the real-time rate instead of
+    bursting the extra lead: the audio due at the junction cannot arrive in
+    time. The player holds only the two fade windows meanwhile, and gives up
+    the splice as soon as the junction is near, so every later chunk plays (or
+    is dropped as overdue) at once, as after a rebuild."""
+    handed: list[tuple[int, bytes]] = []
+    now = {"us": 0}
+    clock = _test_clock()
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: now["us"],
+        clock=clock,
+        output_latency_ns=LATENCY_NS,
+        max_in_place_shift_us=2_000_000,
+    )
+    lead_us = 285_000
+
+    def arrive(i: int) -> None:
+        now["us"] = BASE_US + i * 10_000 - lead_us
+        clock.set_time(now["us"] * 1000)
+
+    player.start(PCM)
+    for i in range(JUNCTION_CHUNKS):
+        arrive(i)
+        player.submit(BASE_US + i * 10_000, _click_chunk(i))
+    player.resync(-500_000)
+    junction_us = BASE_US + JUNCTION_CHUNKS * 10_000
+    fade_bytes = 240 * PCM.frame_bytes()
+    for i in range(JUNCTION_CHUNKS, 60):
+        arrive(i)
+        player.submit(BASE_US + i * 10_000 - 500_000, _click_chunk(i))
+        if now["us"] >= junction_us - 50_000:
+            assert player._splice is None, f"still holding at chunk {i}"
+        else:
+            assert player._splice is not None
+            assert len(player._splice.head) + len(player._splice.ahead) <= 2 * fade_bytes
+    player.stop()
+
+
+@requires_gst
+def test_a_later_shift_while_the_stream_drains_hands_nothing_on():
+    handed: list[tuple[int, bytes]] = []
+    player = _player(handed)
+    player.start(PCM)
+    player.submit(BASE_US, _click_chunk(0))
+    player.close_stream()
+
+    assert player.resync(100_000) == InPlaceShift(shift_us=100_000)
+    player.stop()
+
+
+@requires_gst
+def test_a_format_change_while_a_shift_waits_still_plays_the_held_audio():
+    handed: list[tuple[int, bytes]] = []
+    player = _player(handed)
+    player.start(PCM)
+    player.submit(BASE_US, _click_chunk(0))
+    _wait_until(lambda: len(handed) == 1)
+    player.resync(3_000)  # later by less than a fade: waits for 5 ms of audio
+    half = _click_chunk(1)[: 120 * PCM.frame_bytes()]
+    player.submit(BASE_US + 10_000 + 3_000, half)
+    assert len(handed) == 1
+
+    player.start(PcmFormat(sample_rate=44100, channels=2, bit_depth=16))
+
+    _wait_until(lambda: len(handed) == 2)
+    assert handed[1] == ((BASE_US + 13_000) * 1000 - LATENCY_NS, half)
+    player.stop()
+
+
+@requires_gst
+@pytest.mark.parametrize("shift_us", [-100_000, 3_000, 100_000])
+def test_other_formats_shift_in_place_contiguously(shift_us):
+    fmt = PcmFormat(sample_rate=44100, channels=1, bit_depth=24)
+    frames = 441
+    handed: list[tuple[int, bytes]] = []
+    player = _player(handed)
+    player.start(fmt)
+    chunk = bytes(frames * fmt.frame_bytes())
+    for i in range(10):
+        player.submit(BASE_US + i * 10_000, chunk)
+    player.resync(shift_us)
+    for i in range(10, 40):
+        player.submit(BASE_US + i * 10_000 + shift_us, chunk)
+    expected = 40 * frames + round(shift_us * 44100 / 1_000_000)
+    _wait_until(lambda: sum(len(d) for _, d in handed) // fmt.frame_bytes() == expected)
+    for (pts, data), (next_pts, _) in pairwise(handed):
+        assert abs(pts + len(data) // fmt.frame_bytes() * 1e9 / 44100 - next_pts) < 1e9 / 44100
+    assert player.metrics()["discontinuity_count"] == 0
     player.stop()

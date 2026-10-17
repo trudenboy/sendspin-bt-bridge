@@ -38,37 +38,64 @@ def frames_needed(shift_frames: int, fade: int) -> int:
 
 
 def splice_region(
-    x: bytes, *, shift_frames: int, fade: int, fmt: PcmFormat, fade_out: bool = True
-) -> tuple[bytes, int]:
-    """The audio that follows the junction, and how many frames of ``x`` it used.
+    head: bytes, ahead: bytes, *, shift_frames: int, fade: int, fmt: PcmFormat, fade_out: bool = True
+) -> bytes:
+    """The audio that follows the junction.
 
-    The region is ``max(k, 0) + fade`` frames long; ``x`` from the returned
-    frame count on follows it directly. ``x`` must hold at least
-    ``frames_needed(k, fade)`` frames. Without ``fade_out`` (the output is
-    already silent at the junction) only the shifted audio fades in.
+    ``head`` is ``x[:fade]`` (the continuation); ``ahead`` is
+    ``x[-k : -k + fade]``, the audio due at the junction when skipping ahead
+    (``k`` < 0; ignored otherwise). Only those two windows are read. The
+    region is ``max(k, 0) + fade`` frames long, and ``x`` from frame
+    ``frames_needed(k, fade)`` on follows it directly. Without ``fade_out``
+    (the output is already silent at the junction) only the shifted audio
+    fades in.
     """
     channels = fmt.channels
-    needed = frames_needed(shift_frames, fade)
     frame_bytes = fmt.frame_bytes()
-    if len(x) < needed * frame_bytes:
+    window = fade * frame_bytes
+    if len(head) < window or (shift_frames < 0 and len(ahead) < window):
         raise ValueError("not enough audio after the junction for the splice")
-    samples = _decode(x[: needed * frame_bytes], fmt.bit_depth)
-    fade_in_from = max(shift_frames, 0)
-    length = fade_in_from + fade
+    h = _decode(head[:window], fmt.bit_depth)
     limit = (1 << (fmt.bit_depth - 1)) - 1
+
+    def clamp(value: float) -> int:
+        return max(-limit - 1, min(limit, round(value)))
+
+    def ramp(samples: list[int], *, rising: bool) -> bytes:
+        out = [0] * len(samples)
+        for t in range(fade):
+            gain = t / fade if rising else 1.0 - t / fade
+            for c in range(channels):
+                i = t * channels + c
+                out[i] = clamp(gain * samples[i])
+        return _encode(out, fmt.bit_depth)
+
+    if shift_frames < 0:
+        a = _decode(ahead[:window], fmt.bit_depth)
+        out = [0] * (fade * channels)
+        for t in range(fade):
+            g_in = t / fade
+            g_out = 1.0 - g_in if fade_out else 0.0
+            for c in range(channels):
+                i = t * channels + c
+                out[i] = clamp(g_out * h[i] + g_in * a[i])
+        return _encode(out, fmt.bit_depth)
+    if shift_frames >= fade:
+        faded_out = ramp(h, rising=False) if fade_out else bytes(window)
+        return faded_out + bytes((shift_frames - fade) * frame_bytes) + ramp(h, rising=True)
+    # A later shift shorter than the fade: the two overlap.
+    length = shift_frames + fade
     out = [0] * (length * channels)
     for t in range(length):
         g_out = 1.0 - t / fade if fade_out and t < fade else 0.0
         src = t - shift_frames
-        g_in = min(1.0, (t - fade_in_from) / fade) if src >= 0 else 0.0
+        g_in = src / fade if src >= 0 else 0.0
         for c in range(channels):
-            value = 0.0
-            if g_out:
-                value += g_out * samples[t * channels + c]
+            value = g_out * h[t * channels + c] if g_out else 0.0
             if g_in > 0.0:
-                value += g_in * samples[src * channels + c]
-            out[t * channels + c] = max(-limit - 1, min(limit, round(value)))
-    return _encode(out, fmt.bit_depth), needed
+                value += g_in * h[src * channels + c]
+            out[t * channels + c] = clamp(value)
+    return _encode(out, fmt.bit_depth)
 
 
 def silence_after(tail: bytes, *, frames: int, fade: int, fmt: PcmFormat) -> bytes:
@@ -83,13 +110,13 @@ def silence_after(tail: bytes, *, frames: int, fade: int, fmt: PcmFormat) -> byt
     frame_bytes = fmt.frame_bytes()
     have = min(len(tail) // frame_bytes, fade, frames)
     tail_samples = _decode(tail[len(tail) - have * frame_bytes :], fmt.bit_depth) if have else []
-    out = [0] * (frames * channels)
+    out = [0] * (have * channels)
     for t in range(have):
         gain = 1.0 - t / fade
         src = (have - 1 - t) * channels
         for c in range(channels):
             out[t * channels + c] = round(gain * tail_samples[src + c])
-    return _encode(out, fmt.bit_depth)
+    return _encode(out, fmt.bit_depth) + bytes((frames - have) * frame_bytes)
 
 
 def fade_in(payload: bytes, *, done: int, fade: int, fmt: PcmFormat) -> bytes:
