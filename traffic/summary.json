@@ -915,6 +915,10 @@
     "2026-10-15T00:00:00Z": {
       "count": 384,
       "uniques": 107
+    },
+    "2026-10-16T00:00:00Z": {
+      "count": 212,
+      "uniques": 102
     }
   },
   "views": {
@@ -1833,28 +1837,27 @@
     "2026-10-15T00:00:00Z": {
       "count": 37,
       "uniques": 18
+    },
+    "2026-10-16T00:00:00Z": {
+      "count": 39,
+      "uniques": 31
     }
   },
   "referrers": [
     {
       "referrer": "Google",
-      "count": 122,
+      "count": 119,
       "uniques": 81
     },
     {
       "referrer": "community.home-assistant.io",
-      "count": 85,
+      "count": 84,
       "uniques": 64
     },
     {
       "referrer": "github.com",
-      "count": 71,
-      "uniques": 53
-    },
-    {
-      "referrer": "Bing",
-      "count": 25,
-      "uniques": 18
+      "count": 64,
+      "uniques": 51
     },
     {
       "referrer": "DuckDuckGo",
@@ -1862,19 +1865,14 @@
       "uniques": 21
     },
     {
-      "referrer": "lm.facebook.com",
-      "count": 11,
-      "uniques": 8
+      "referrer": "Bing",
+      "count": 23,
+      "uniques": 17
     },
     {
       "referrer": "search.brave.com",
-      "count": 11,
-      "uniques": 6
-    },
-    {
-      "referrer": "facebook.com",
-      "count": 10,
-      "uniques": 9
+      "count": 12,
+      "uniques": 7
     },
     {
       "referrer": "reddit.com",
@@ -1885,53 +1883,57 @@
       "referrer": "4pda.to",
       "count": 7,
       "uniques": 1
+    },
+    {
+      "referrer": "lm.facebook.com",
+      "count": 6,
+      "uniques": 4
+    },
+    {
+      "referrer": "facebook.com",
+      "count": 5,
+      "uniques": 4
     }
   ],
-  "last_updated": "2026-10-16T07:59:05.852Z",
+  "last_updated": "2026-10-17T07:36:47.920Z",
   "clones_window": {
-    "count": 3916,
-    "uniques": 1189
+    "count": 4047,
+    "uniques": 1223
   },
   "views_window": {
-    "count": 1129,
-    "uniques": 520
+    "count": 1062,
+    "uniques": 502
   },
   "paths": [
     {
       "path": "/trudenboy/sendspin-bt-bridge",
       "title": "Overview",
-      "count": 635,
-      "uniques": 414
+      "count": 600,
+      "uniques": 401
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/issues",
       "title": "/issues",
-      "count": 77,
-      "uniques": 33
+      "count": 68,
+      "uniques": 31
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/releases",
       "title": "/releases",
       "count": 34,
-      "uniques": 20
+      "uniques": 21
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
       "title": "/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
-      "count": 14,
-      "uniques": 12
+      "count": 13,
+      "uniques": 11
     },
     {
-      "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
-      "title": "/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+      "path": "/trudenboy/sendspin-bt-bridge/compare/v2.76.2...v2.76.3",
+      "title": "/compare/v2.76.2...v2.76.3",
       "count": 11,
       "uniques": 10
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
-      "title": "/blob/main/README.ru.md",
-      "count": 11,
-      "uniques": 9
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/compare/v2.76.3...v2.76.4",
@@ -1940,16 +1942,22 @@
       "uniques": 9
     },
     {
-      "path": "/trudenboy/sendspin-bt-bridge/discussions",
-      "title": "/discussions",
-      "count": 11,
-      "uniques": 7
+      "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
+      "title": "/blob/main/README.ru.md",
+      "count": 10,
+      "uniques": 8
     },
     {
-      "path": "/trudenboy/sendspin-bt-bridge/compare/v2.76.2...v2.76.3",
-      "title": "/compare/v2.76.2...v2.76.3",
+      "path": "/trudenboy/sendspin-bt-bridge/discussions",
+      "title": "/discussions",
       "count": 10,
-      "uniques": 9
+      "uniques": 6
+    },
+    {
+      "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+      "title": "/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+      "count": 9,
+      "uniques": 8
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/compare/v2.76.4...HEAD",
@@ -1961,15 +1969,15 @@
   "repo": {
     "full_name": "trudenboy/sendspin-bt-bridge",
     "default_branch": "main",
-    "open_issues_count": 23,
-    "stargazers_count": 288,
+    "open_issues_count": 21,
+    "stargazers_count": 290,
     "subscribers_count": 1,
-    "watchers_count": 288,
-    "forks_count": 7,
-    "network_count": 7,
-    "size_kb": 68934,
-    "pushed_at": "2026-10-16T07:52:46Z",
-    "updated_at": "2026-10-15T15:45:27Z"
+    "watchers_count": 290,
+    "forks_count": 8,
+    "network_count": 8,
+    "size_kb": 68675,
+    "pushed_at": "2026-10-16T17:16:48Z",
+    "updated_at": "2026-10-16T22:41:15Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -4675,24 +4683,88 @@
       "size_kb": 68934,
       "pushed_at": "2026-10-16T07:52:46Z",
       "updated_at": "2026-10-15T15:45:27Z"
+    },
+    "2026-10-17": {
+      "full_name": "trudenboy/sendspin-bt-bridge",
+      "default_branch": "main",
+      "open_issues_count": 21,
+      "stargazers_count": 290,
+      "subscribers_count": 1,
+      "watchers_count": 290,
+      "forks_count": 8,
+      "network_count": 8,
+      "size_kb": 68675,
+      "pushed_at": "2026-10-16T17:16:48Z",
+      "updated_at": "2026-10-16T22:41:15Z"
     }
   },
   "releases": {
-    "total_downloads": 603,
-    "release_count": 265,
-    "latest_release_tag": "v3.1.0-beta.4",
-    "latest_release_published_at": "2026-10-15T06:53:18Z",
+    "total_downloads": 604,
+    "release_count": 268,
+    "latest_release_tag": "v3.1.0-beta.7",
+    "latest_release_published_at": "2026-10-16T17:16:24Z",
     "by_tag": {
+      "v3.1.0-beta.7": {
+        "name": "v3.1.0-beta.7",
+        "prerelease": true,
+        "published_at": "2026-10-16T17:16:24Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v3.1.0-beta.7",
+        "asset_downloads": 0,
+        "assets": [
+          {
+            "name": "sendspin-bt-bridge-3.1.0-beta.7.tar.gz",
+            "download_count": 0,
+            "size": 2583630,
+            "content_type": "application/x-gtar",
+            "created_at": "2026-10-16T17:16:25Z",
+            "updated_at": "2026-10-16T17:16:25Z"
+          }
+        ]
+      },
+      "v3.1.0-beta.6": {
+        "name": "v3.1.0-beta.6",
+        "prerelease": true,
+        "published_at": "2026-10-16T15:07:32Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v3.1.0-beta.6",
+        "asset_downloads": 0,
+        "assets": [
+          {
+            "name": "sendspin-bt-bridge-3.1.0-beta.6.tar.gz",
+            "download_count": 0,
+            "size": 2576954,
+            "content_type": "application/x-gtar",
+            "created_at": "2026-10-16T15:07:33Z",
+            "updated_at": "2026-10-16T15:07:34Z"
+          }
+        ]
+      },
+      "v3.1.0-beta.5": {
+        "name": "v3.1.0-beta.5",
+        "prerelease": true,
+        "published_at": "2026-10-16T13:35:21Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v3.1.0-beta.5",
+        "asset_downloads": 0,
+        "assets": [
+          {
+            "name": "sendspin-bt-bridge-3.1.0-beta.5.tar.gz",
+            "download_count": 0,
+            "size": 2554001,
+            "content_type": "application/x-gtar",
+            "created_at": "2026-10-16T13:35:22Z",
+            "updated_at": "2026-10-16T13:35:23Z"
+          }
+        ]
+      },
       "v3.1.0-beta.4": {
         "name": "v3.1.0-beta.4",
         "prerelease": true,
         "published_at": "2026-10-15T06:53:18Z",
         "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v3.1.0-beta.4",
-        "asset_downloads": 0,
+        "asset_downloads": 1,
         "assets": [
           {
             "name": "sendspin-bt-bridge-3.1.0-beta.4.tar.gz",
-            "download_count": 0,
+            "download_count": 1,
             "size": 2255326,
             "content_type": "application/x-gtar",
             "created_at": "2026-10-15T06:53:19Z",
@@ -8700,21 +8772,26 @@
       "total_downloads": 603,
       "release_count": 265,
       "latest_release_tag": "v3.1.0-beta.4"
+    },
+    "2026-10-17": {
+      "total_downloads": 604,
+      "release_count": 268,
+      "latest_release_tag": "v3.1.0-beta.7"
     }
   },
   "container": {
-    "total_versions": 4960,
-    "tagged_versions": 639,
+    "total_versions": 4981,
+    "tagged_versions": 642,
     "latest_tags": [],
     "by_tag": {
-      "v2.76.4": 5650,
+      "v2.76.4": 6209,
       "v2.76.3": 4481,
       "v2.76.2": 3734,
       "v2.76.1": 272,
       "v2.76.0": 355,
-      "v2.75.2": 2675,
+      "v2.75.2": 2678,
       "v2.75.1": 767,
-      "v2.75.0": 20035,
+      "v2.75.0": 20062,
       "v2.74.0": 5548,
       "v2.73.4": 4220,
       "v2.73.3": 602,
@@ -9524,13 +9601,17 @@
     "2026-10-16": {
       "total_versions": 4960,
       "tagged_versions": 639
+    },
+    "2026-10-17": {
+      "total_versions": 4981,
+      "tagged_versions": 642
     }
   },
   "issues": {
     "open_issues": 14,
-    "closed_issues": 105,
-    "open_prs": 9,
-    "closed_prs": 398
+    "closed_issues": 107,
+    "open_prs": 7,
+    "closed_prs": 400
   },
   "issues_history": {
     "2026-03-31": {
@@ -10696,6 +10777,12 @@
       "closed_issues": 105,
       "open_prs": 9,
       "closed_prs": 398
+    },
+    "2026-10-17": {
+      "open_issues": 14,
+      "closed_issues": 107,
+      "open_prs": 7,
+      "closed_prs": 400
     }
   },
   "ci": [
@@ -10717,11 +10804,11 @@
     },
     {
       "name": "Archive Traffic Stats",
-      "total_runs": 244,
-      "success_runs": 229,
+      "total_runs": 245,
+      "success_runs": 230,
       "failure_runs": 13,
       "last_status": "in_progress",
-      "last_run_at": "2026-10-16T07:58:00Z"
+      "last_run_at": "2026-10-17T07:35:47Z"
     },
     {
       "name": "Copilot coding agent",
@@ -10741,19 +10828,19 @@
     },
     {
       "name": "CI",
-      "total_runs": 1131,
-      "success_runs": 901,
+      "total_runs": 1134,
+      "success_runs": 904,
       "failure_runs": 152,
       "last_status": "success",
-      "last_run_at": "2026-10-16T07:52:52Z"
+      "last_run_at": "2026-10-16T17:08:30Z"
     },
     {
       "name": "Release",
-      "total_runs": 306,
-      "success_runs": 251,
+      "total_runs": 309,
+      "success_runs": 254,
       "failure_runs": 31,
       "last_status": "success",
-      "last_run_at": "2026-10-15T06:48:26Z"
+      "last_run_at": "2026-10-16T17:08:30Z"
     },
     {
       "name": "Docker smoke",
@@ -20238,6 +20325,62 @@
         "success_runs": 25,
         "failure_runs": 1
       }
+    ],
+    "2026-10-17": [
+      {
+        "name": "Deploy Docs to GitHub Pages",
+        "total_runs": 190,
+        "success_runs": 185,
+        "failure_runs": 5
+      },
+      {
+        "name": "Copilot code review",
+        "total_runs": 129,
+        "success_runs": 129,
+        "failure_runs": 0
+      },
+      {
+        "name": "Archive Traffic Stats",
+        "total_runs": 245,
+        "success_runs": 230,
+        "failure_runs": 13
+      },
+      {
+        "name": "Copilot coding agent",
+        "total_runs": 9,
+        "success_runs": 9,
+        "failure_runs": 0
+      },
+      {
+        "name": "Dependabot Updates",
+        "total_runs": 150,
+        "success_runs": 149,
+        "failure_runs": 1
+      },
+      {
+        "name": "CI",
+        "total_runs": 1134,
+        "success_runs": 904,
+        "failure_runs": 152
+      },
+      {
+        "name": "Release",
+        "total_runs": 309,
+        "success_runs": 254,
+        "failure_runs": 31
+      },
+      {
+        "name": "Docker smoke",
+        "total_runs": 79,
+        "success_runs": 72,
+        "failure_runs": 7
+      },
+      {
+        "name": "Copilot",
+        "total_runs": 26,
+        "success_runs": 25,
+        "failure_runs": 1
+      }
     ]
   },
   "dev": {
@@ -20248,119 +20391,114 @@
         "owner": 0
       },
       {
+        "week_offset": -33,
+        "total": 6,
+        "owner": 6
+      },
+      {
         "week_offset": -32,
-        "total": 430,
-        "owner": 393
+        "total": 491,
+        "owner": 445
       },
       {
         "week_offset": -31,
-        "total": 458,
-        "owner": 373
+        "total": 430,
+        "owner": 348
       },
       {
         "week_offset": -30,
-        "total": 183,
-        "owner": 161
+        "total": 255,
+        "owner": 213
       },
       {
         "week_offset": -29,
-        "total": 416,
-        "owner": 288
+        "total": 318,
+        "owner": 208
       },
       {
         "week_offset": -28,
-        "total": 198,
-        "owner": 20
+        "total": 206,
+        "owner": 15
       },
       {
         "week_offset": -27,
-        "total": 154,
+        "total": 133,
         "owner": 7
       },
       {
         "week_offset": -26,
-        "total": 38,
-        "owner": 2
+        "total": 63,
+        "owner": 8
       },
       {
         "week_offset": -25,
-        "total": 94,
-        "owner": 21
+        "total": 72,
+        "owner": 16
       },
       {
         "week_offset": -24,
-        "total": 302,
-        "owner": 45
+        "total": 320,
+        "owner": 50
       },
       {
         "week_offset": -23,
-        "total": 40,
-        "owner": 17
+        "total": 42,
+        "owner": 21
       },
       {
         "week_offset": -22,
-        "total": 77,
-        "owner": 34
+        "total": 79,
+        "owner": 26
       },
       {
-        "week_offset": -21,
-        "total": 25,
-        "owner": 2
-      },
-      {
-        "week_offset": -19,
+        "week_offset": -20,
         "total": 11,
         "owner": 4
       },
       {
         "week_offset": -15,
-        "total": 1,
-        "owner": 1
-      },
-      {
-        "week_offset": -14,
-        "total": 15,
+        "total": 11,
         "owner": 9
       },
       {
+        "week_offset": -14,
+        "total": 5,
+        "owner": 1
+      },
+      {
         "week_offset": -13,
-        "total": 24,
+        "total": 27,
         "owner": 7
       },
       {
         "week_offset": -12,
-        "total": 27,
+        "total": 24,
         "owner": 3
       },
       {
         "week_offset": -10,
-        "total": 14,
+        "total": 17,
         "owner": 2
       },
       {
-        "week_offset": -9,
-        "total": 3,
-        "owner": 0
-      },
-      {
         "week_offset": -8,
-        "total": 21,
+        "total": 29,
         "owner": 1
       },
       {
         "week_offset": -7,
-        "total": 96,
+        "total": 88,
         "owner": 31
       },
       {
         "week_offset": -1,
-        "total": 37,
-        "owner": 27
+        "total": 61,
+        "owner": 42
       },
       {
         "week_offset": 0,
-        "total": 44,
-        "owner": 19
+        "total": 23,
+        "owner": 4
       }
     ],
     "code_frequency": [
@@ -20476,14 +20614,14 @@
       },
       {
         "week": "2026-10-11",
-        "additions": 176,
-        "deletions": 40
+        "additions": 185,
+        "deletions": 49
       }
     ],
     "ai": {
       "commits_scanned": 200,
-      "ai_commits": 51,
-      "ai_ratio": 0.255,
+      "ai_commits": 50,
+      "ai_ratio": 0.25,
       "agents": [
         {
           "name": "Claude Opus 5.5 (1M context)",
@@ -20491,11 +20629,11 @@
         },
         {
           "name": "Administrator",
-          "commits": 10
+          "commits": 9
         },
         {
           "name": "Claude Opus 5",
-          "commits": 10
+          "commits": 9
         },
         {
           "name": "dependabot[bot]",
@@ -20503,10 +20641,6 @@
         },
         {
           "name": "Baptiste",
-          "commits": 1
-        },
-        {
-          "name": "factory-droid[bot]",
           "commits": 1
         }
       ]
@@ -21482,6 +21616,11 @@
       "total_weekly_commits": 2722,
       "ai_commits": 51,
       "ai_ratio": 0.255
+    },
+    "2026-10-17": {
+      "total_weekly_commits": 2725,
+      "ai_commits": 50,
+      "ai_ratio": 0.25
     }
   }
 }
