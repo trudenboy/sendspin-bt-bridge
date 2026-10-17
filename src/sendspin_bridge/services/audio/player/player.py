@@ -106,6 +106,11 @@ class StreamPlayer:
         """The format a deferred rebuild waits to be reopened in (None: none waits)."""
         return self._reopen_format
 
+    def forget_reopen(self) -> None:
+        """Drop the audio a deferred rebuild kept (its new output did not open)."""
+        self._reopen_audio = []
+        self._reopen_format = None
+
     def needs_output(self) -> bool:
         """Whether the next ``start`` has to open a new output (the slow part)."""
         return self._pipeline is None or self._stream_closed
@@ -292,6 +297,9 @@ class StreamPlayer:
         ``start`` builds a fresh output.
         """
         if self._pipeline is None or self._format is None:
+            if self._reopen_audio:
+                # Waiting for a rebuilt output: the audio kept for it moves too.
+                self._reopen_audio = [(t + shift_us, p) for t, p in self._reopen_audio]
             return False
         if shift_us and abs(shift_us) <= self._max_in_place_shift_us:
             outcome = self._shift_in_place(shift_us)

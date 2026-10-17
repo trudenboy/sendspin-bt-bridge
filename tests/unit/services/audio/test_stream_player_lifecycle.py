@@ -284,3 +284,94 @@ def test_audio_after_inserted_silence_starts_the_count_over():
     assert player.resync(1_000_000) == InPlaceShift(shift_us=1_000_000)
     assert player.metrics()["resync_count"] == 0
     player.stop()
+
+
+@requires_gst
+def test_a_shift_while_the_rebuilt_output_is_awaited_moves_the_kept_audio_too():
+    handed: list[tuple[int, int]] = []
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: 0,
+        clock=_test_clock(),
+        output_latency_ns=LATENCY_NS,
+        max_in_place_shift_us=2_000_000,
+        defer_rebuild_open=True,
+    )
+    player.start(PCM)
+    for i in range(3):
+        player.submit(1_000_000 + i * 10_000, _chunk())
+    _wait_until(lambda: len(handed) == 3)
+    handed.clear()
+    assert player.resync(2_500_000) is True
+
+    assert player.resync(-40_000) is False  # no output to shift: only what waits for it
+
+    player.adopt_output(player.prepare_output(PCM), PCM)
+    _wait_until(lambda: len(handed) == 3)
+    assert [pts for pts, _ in handed] == [(1_000_000 + i * 10_000 + 2_460_000) * 1000 - LATENCY_NS for i in range(3)]
+    player.stop()
+
+
+@requires_gst
+def test_forgetting_the_reopen_drops_the_kept_audio():
+    handed: list[tuple[int, int]] = []
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: 0,
+        clock=_test_clock(),
+        defer_rebuild_open=True,
+    )
+    player.start(PCM)
+    player.submit(1_000_000, _chunk())
+    _wait_until(lambda: len(handed) == 1)
+    handed.clear()
+    player.resync(-3_000_000)
+
+    player.forget_reopen()
+
+    assert player.awaiting_reopen is None
+    player.adopt_output(player.prepare_output(PCM), PCM)
+    time.sleep(0.05)
+    assert handed == []
+    player.stop()
+
+
+@requires_gst
+@pytest.mark.asyncio
+async def test_a_failed_reopen_drops_the_kept_audio(tmp_path):
+    from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon, DaemonArgs
+
+    handed: list[tuple[int, int]] = []
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: 0,
+        clock=_test_clock(),
+        max_in_place_shift_us=2_000_000,
+        defer_rebuild_open=True,
+    )
+    prepare = player.prepare_output
+
+    def failing_prepare(_fmt):
+        raise RuntimeError("no sink")
+
+    daemon = BridgeDaemon(
+        DaemonArgs(client_id="id", client_name="Speaker", identity_path=str(tmp_path / "identity.key")), {}, None
+    )
+    daemon._schedule_start_timing_line = lambda: None  # type: ignore[method-assign]
+    daemon._player = player
+    player.adopt_output(prepare(PCM), PCM)
+    player.submit(5_000_000, _chunk())
+    _wait_until(lambda: len(handed) == 1)
+    player.prepare_output = failing_prepare  # type: ignore[method-assign]
+    daemon._player_delay_ms = 3000.0
+    daemon._target_delay_ms = 0.0
+
+    daemon._apply_output_delay()
+    for _ in range(100):
+        if daemon._opening is None:
+            break
+        await asyncio.sleep(0.02)
+
+    assert daemon._opening is None
+    assert player.awaiting_reopen is None
+    player.stop()
