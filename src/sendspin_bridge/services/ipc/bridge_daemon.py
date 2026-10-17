@@ -1274,6 +1274,8 @@ class BridgeDaemon:
                 "The audio output did not open within %.0f s; giving up on it, the next audio opens it anew",
                 _OPEN_TIMEOUT_S,
             )
+        if self._player is not None and hasattr(self._player, "forget_reopen"):
+            self._player.forget_reopen()
         self._forget_open()
 
     def _on_output_opened(self, done: asyncio.Future[Any], player: StreamPlayer, fmt: PcmFormat) -> None:
@@ -1292,6 +1294,9 @@ class BridgeDaemon:
                 backoff = min(_OPEN_RETRY_MIN_S * 2 ** (self._open_failures - 1), _OPEN_RETRY_MAX_S)
                 self._open_retry_at = _monotonic() + backoff
                 logger.warning("Opening the audio output failed: %s; retrying in %.1f s", exc, backoff)
+                # Audio a rebuild kept for this output would be stale by the next one.
+                if hasattr(player, "forget_reopen"):
+                    player.forget_reopen()
             return
         output = done.result()
         if not current or player is not self._player or self._opening_discard:
