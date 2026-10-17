@@ -272,7 +272,11 @@ class StreamPlayer:
         if self._pipeline is None or self._format is None:
             return False
         if shift_us and abs(shift_us) <= self._max_in_place_shift_us:
-            return self._shift_in_place(shift_us)
+            outcome = self._shift_in_place(shift_us)
+            if outcome is not None:
+                return outcome
+            # Beyond what can be applied in place (shifts adding up past the
+            # limit, or silence piling up ahead of the audio): rebuild.
         self._forget_shift()
         audio_format = self._format
         now_us = self._raw_now_us()
@@ -288,48 +292,68 @@ class StreamPlayer:
         self._resyncs += 1
         return True
 
-    def _shift_in_place(self, shift_us: int) -> InPlaceShift:
+    def _shift_in_place(self, shift_us: int) -> InPlaceShift | None:
+        """Apply a shift on the running output; None when it must be rebuilt instead."""
         assert self._format is not None
+        rate = self._format.sample_rate
+        frames = round(shift_us * rate / 1_000_000)
+        max_frames = self._max_shift_frames()
+        fade = fade_frames(rate)
+        raw_now_us, gst_now_ns = self._now()
+        splice = self._splice
+        insert_at: int | None = None  # the junction to hand silence on from
+        if self._stream_closed:
+            pass  # draining after the stream's end: nothing more is handed on
+        elif splice is not None:
+            # Still waiting for the audio after an earlier shift: the shifts
+            # compose into one, measured from the same junction.
+            total = (splice.expected_frames if splice.shift_frames is None else splice.shift_frames) + frames
+            if abs(total) > max_frames:
+                return None
+            if splice.shift_frames is None and total >= fade:
+                insert_at = splice.junction_ns  # nothing arrived yet: hand the silence on now
+                frames = total
+        elif self._last_pts_ns is not None and self._last_duration_ns is not None:
+            junction_ns = self._last_pts_ns + self._last_duration_ns
+            if frames and not self._junction_passed(junction_ns, gst_now_ns):
+                if frames >= fade:
+                    insert_at = junction_ns
+                else:
+                    # Earlier (or later by less than a fade): it needs the audio that follows.
+                    self._splice = splice = _PendingSplice(
+                        junction_ns=junction_ns, expected_frames=0, after_silence=self._fade_in_done is not None
+                    )
+        if insert_at is not None:
+            # The silence must not run ahead of the audio it stands for: the
+            # output would hold more than the limit that no audio can replace.
+            junction_play_us = raw_now_us + (insert_at + self._output_latency_ns - gst_now_ns) // 1000
+            content_end_us = (self._queued[-1][1] if self._queued else junction_play_us) + shift_us
+            if junction_play_us + frames * 1_000_000 // rate - content_end_us > self._max_in_place_shift_us:
+                return None
+        # Applied in place from here on.
         # The kept record follows the shift, so a later rebuild re-times it
         # from where it now belongs.
         self._queued = deque(((s + shift_us, e + shift_us, p) for s, e, p in self._queued), maxlen=_MAX_QUEUED_CHUNKS)
         self._in_place_shifts += 1
         outcome = InPlaceShift(shift_us=shift_us)
-        if self._stream_closed:
-            return outcome  # draining after the stream's end: nothing more is handed on
-        rate = self._format.sample_rate
-        frames = round(shift_us * rate / 1_000_000)
-        raw_now_us, gst_now_ns = self._now()
-        splice = self._splice
-        if splice is not None:
-            if splice.shift_frames is None:
-                # Nothing after the junction yet: the shifts add up.
-                self._splice = None
-                frames += splice.expected_frames
-            else:
-                # Audio held for an earlier shift: hand it on at its own (now
-                # shifted) time and shift from where it ends.
-                if splice.first_play_us is not None:
-                    splice.first_play_us += shift_us
-                self._abandon_splice(raw_now_us, gst_now_ns)
-        if self._last_pts_ns is None or self._last_duration_ns is None:
-            return outcome  # nothing handed on: nothing to continue
-        junction_ns = self._last_pts_ns + self._last_duration_ns
-        if frames == 0 or self._junction_passed(junction_ns, gst_now_ns):
-            return outcome  # ran dry: the next chunk plays at its own time
-        fade = fade_frames(rate)
-        if frames >= fade:
+        if insert_at is not None:
             # Later: the server sends the next audio that much later too, so
             # the silence is handed on now and the output never runs dry.
-            tail = b"" if self._fade_in_done is not None else self._tail
-            frames = min(frames, self._max_shift_frames())
-            self._push_pieces(junction_ns, silence_after(tail, frames=frames, fade=fade, fmt=self._format))
+            silent = self._fade_in_done is not None or (splice is not None and splice.after_silence)
+            self._splice = None
+            tail = b"" if silent else self._tail
+            self._push_pieces(insert_at, silence_after(tail, frames=frames, fade=fade, fmt=self._format))
             self._fade_in_done = 0
-        else:
-            # Earlier (or later by less than a fade): it needs the audio that follows.
-            self._splice = _PendingSplice(
-                junction_ns=junction_ns, expected_frames=frames, after_silence=self._fade_in_done is not None
-            )
+        elif splice is not None and self._splice is splice:
+            if splice.shift_frames is None:
+                splice.expected_frames += frames
+            else:
+                splice.expected_frames += frames
+                splice.shift_frames += frames
+                if splice.first_play_us is not None:
+                    splice.first_play_us += shift_us
+                splice.next_play_us += shift_us
+                self._splice_try_emit()
         return outcome
 
     def _now(self) -> tuple[int, int]:
@@ -401,29 +425,30 @@ class StreamPlayer:
             # Not the audio that follows: give up the splice, play everything as is.
             self._abandon_splice(raw_now_us, gst_now_ns)
             return False
-        n_frames = len(payload) // frame
-        splice.next_play_us = play_time_us + n_frames * 1_000_000 // rate
+        splice.next_play_us = play_time_us + (len(payload) // frame) * 1_000_000 // rate
+        # Held whole (bounded by the in-place limit: |shift| plus one fade), so
+        # a further shift can still compose with this one.
+        splice.audio += payload
+        self._splice_try_emit()
+        return True
+
+    def _splice_try_emit(self) -> None:
+        """Hand on the splice once the audio it needs has arrived."""
+        splice = self._splice
+        assert splice is not None and splice.shift_frames is not None and self._format is not None
+        rate = self._format.sample_rate
+        frame = self._format.frame_bytes()
         fade = fade_frames(rate)
         k = splice.shift_frames
-        skip = max(0, -k)
         needed = frames_needed(k, fade)
-        start = splice.received
-        # Only the two windows the fades read are kept: the continuation
-        # x[:fade] and, skipping ahead, x[skip : skip + fade]. What lies
-        # between is due before the junction and never plays.
-        if start < fade:
-            splice.head += payload[: (min(fade, start + n_frames) - start) * frame]
-        if k < 0:
-            lo, hi = max(start, skip), min(start + n_frames, skip + fade)
-            if lo < hi:
-                splice.ahead += payload[(lo - start) * frame : (hi - start) * frame]
-        splice.received += n_frames
-        if splice.received < needed:
-            return True
+        if len(splice.audio) // frame < needed:
+            return
         self._splice = None
+        skip = max(0, -k)
+        audio = bytes(splice.audio)
         region = splice_region(
-            bytes(splice.head),
-            bytes(splice.ahead),
+            audio[: fade * frame],
+            audio[skip * frame : (skip + fade) * frame],
             shift_frames=k,
             fade=fade,
             fmt=self._format,
@@ -431,10 +456,9 @@ class StreamPlayer:
         )
         self._fade_in_done = None  # the region fades the shifted audio in
         region_frames = self._push_pieces(splice.junction_ns, region)
-        rest = payload[(needed - start) * frame :]
+        rest = audio[needed * frame :]
         if rest:
             self._push(splice.junction_ns + region_frames * 1_000_000_000 // rate, rest)
-        return True
 
     def _abandon_splice(self, raw_now_us: int, gst_now_ns: int) -> None:
         """Hand on the held audio that is due from the junction on, at its own time.
@@ -446,10 +470,8 @@ class StreamPlayer:
         if splice is None or splice.shift_frames is None or self._format is None:
             return
         rate = self._format.sample_rate
-        if splice.shift_frames < 0:
-            held, first = bytes(splice.ahead), -splice.shift_frames
-        else:
-            held, first = bytes(splice.head), 0
+        first = max(0, -splice.shift_frames)
+        held = bytes(splice.audio[first * self._format.frame_bytes() :])
         if held and splice.first_play_us is not None:
             play_time_us = splice.first_play_us + first * 1_000_000 // rate
             self._submit_now(play_time_us, held, raw_now_us, gst_now_ns)
@@ -735,11 +757,8 @@ class _PendingSplice:
     shift_frames: int | None = None
     first_play_us: int | None = None
     next_play_us: int = 0
-    # Frames of the audio after the junction seen so far, and the two fade
-    # windows kept of it (at most one fade each).
-    received: int = 0
-    head: bytearray = field(default_factory=bytearray)
-    ahead: bytearray = field(default_factory=bytearray)
+    # The audio after the junction so far (at most |shift| plus one fade).
+    audio: bytearray = field(default_factory=bytearray)
 
 
 @dataclass(frozen=True, slots=True)

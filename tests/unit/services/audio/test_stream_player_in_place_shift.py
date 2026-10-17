@@ -500,10 +500,10 @@ def test_audio_after_a_timeline_jump_is_not_taken_for_the_shift(jump_s):
 
 
 @requires_gst
-def test_a_held_shift_gives_up_as_the_output_runs_dry_and_holds_two_fades_at_most():
+def test_a_held_shift_gives_up_as_the_output_runs_dry_and_holds_a_bounded_amount():
     """500 ms earlier, with the server sending at the real-time rate instead of
     bursting the extra lead: the audio due at the junction cannot arrive in
-    time. The player holds only the two fade windows meanwhile, and gives up
+    time. The player holds no more than the shift and a fade meanwhile, and gives up
     the splice as soon as the junction is near, so every later chunk plays (or
     is dropped as overdue) at once, as after a rebuild."""
     handed: list[tuple[int, bytes]] = []
@@ -536,7 +536,7 @@ def test_a_held_shift_gives_up_as_the_output_runs_dry_and_holds_two_fades_at_mos
             assert player._splice is None, f"still holding at chunk {i}"
         else:
             assert player._splice is not None
-            assert len(player._splice.head) + len(player._splice.ahead) <= 2 * fade_bytes
+            assert len(player._splice.audio) <= 500 * 48 * PCM.frame_bytes() + fade_bytes
     player.stop()
 
 
@@ -590,4 +590,134 @@ def test_other_formats_shift_in_place_contiguously(shift_us):
     for (pts, data), (next_pts, _) in pairwise(handed):
         assert abs(pts + len(data) // fmt.frame_bytes() * 1e9 / 44100 - next_pts) < 1e9 / 44100
     assert player.metrics()["discontinuity_count"] == 0
+    player.stop()
+
+
+# ── Shifts that compose ──────────────────────────────────────────────────────
+
+
+def _expected_clicks(net_us: int, skipped: tuple[int, int] | None = None) -> dict[int, int]:
+    junction = JUNCTION_CHUNKS * CHUNK_FRAMES
+    expected: dict[int, int] = {}
+    for n in range(TOTAL_CHUNKS * CHUNK_FRAMES // CLICK_EVERY):
+        content = n * CLICK_EVERY + CLICK_AT
+        if skipped and skipped[0] <= content < skipped[1]:
+            continue
+        expected[n] = _content_time_ns(content) + (net_us * 1000 if content >= junction else 0)
+    return expected
+
+
+@requires_gst
+@pytest.mark.parametrize(
+    ("first_us", "second_us"),
+    [(-100_000, 100_000), (-100_000, -100_000), (-100_000, 150_000), (-1_900_000, 1_900_000)],
+)
+def test_a_second_shift_while_audio_is_held_composes_with_the_first(first_us, second_us):
+    """Audio is held for an earlier shift when the next change comes: the two
+    apply as one net shift from the same junction, exactly."""
+    handed: list[tuple[int, bytes]] = []
+    player = _player(handed)
+    player.start(PCM)
+    for i in range(JUNCTION_CHUNKS):
+        player.submit(BASE_US + i * 10_000, _click_chunk(i))
+    player.resync(first_us)
+    player.submit(BASE_US + JUNCTION_CHUNKS * 10_000 + first_us, _click_chunk(JUNCTION_CHUNKS))
+    assert player._splice is not None  # held: the earlier shift needs more audio
+
+    assert player.resync(second_us) == InPlaceShift(shift_us=second_us)
+
+    net = first_us + second_us
+    for i in range(JUNCTION_CHUNKS + 1, TOTAL_CHUNKS):
+        player.submit(BASE_US + i * 10_000 + net, _click_chunk(i))
+    net_frames = net * RATE // 1_000_000
+    _wait_until(lambda: sum(len(d) for _, d in handed) // PCM.frame_bytes() == TOTAL_CHUNKS * CHUNK_FRAMES + net_frames)
+    junction = JUNCTION_CHUNKS * CHUNK_FRAMES
+    skipped = (junction, junction - net_frames) if net < 0 else None
+    heard = _clicks_heard(handed)
+    expected = _expected_clicks(net, skipped)
+    assert sorted(heard) == sorted(expected)
+    for n, at_ns in expected.items():
+        assert abs(heard[n] - at_ns) < 1e9 / RATE
+    for (pts, data), (next_pts, _) in pairwise(handed):
+        assert abs(pts + len(data) // PCM.frame_bytes() * 1e9 / RATE - next_pts) < 1e9 / RATE
+    assert player.metrics()["resync_count"] == 0
+    player.stop()
+
+
+@requires_gst
+def test_shifts_adding_up_past_the_limit_before_any_audio_rebuild_the_output():
+    handed: list[tuple[int, bytes]] = []
+    player = _player(handed)
+    player.start(PCM)
+    for i in range(JUNCTION_CHUNKS):
+        player.submit(BASE_US + i * 10_000, _click_chunk(i))
+    _wait_until(lambda: len(handed) == JUNCTION_CHUNKS)
+    sink = player._sink
+
+    assert player.resync(-1_500_000) == InPlaceShift(shift_us=-1_500_000)
+    assert player.resync(-1_000_000) is True  # -2.5 s in all: beyond what applies in place
+
+    assert player._sink is not sink
+    assert player.metrics()["resync_count"] == 1
+    player.stop()
+
+
+@requires_gst
+def test_alternating_large_shifts_keep_the_queue_bounded_and_land_on_schedule():
+    """±1.9 s flips every 300 ms, the server sending up to its lead: silence
+    never piles up ahead of the audio, and once the flips stop every click
+    plays on the schedule of the final delay."""
+    handed: list[tuple[int, bytes]] = []
+    now = {"us": 0}
+    clock = _test_clock()
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: now["us"],
+        clock=clock,
+        output_latency_ns=LATENCY_NS,
+        max_in_place_shift_us=2_000_000,
+    )
+    lead_us = 285_000
+    player.start(PCM)
+    net = 0
+    sent = 0
+    total_chunks = 1300  # 13 s
+    flips = 0
+    last_flip_us = 0
+    worst_ahead_us = 0
+    t = BASE_US - lead_us
+    while sent < total_chunks:
+        now["us"] = t
+        clock.set_time(t * 1000)
+        if flips < 20 and t >= BASE_US + 300_000 * (flips + 1):
+            shift = 1_900_000 if net == 0 else -1_900_000
+            player.resync(shift)
+            net += shift
+            flips += 1
+            last_flip_us = t
+        while sent < total_chunks and BASE_US + sent * 10_000 + net <= t + lead_us:
+            player.submit(BASE_US + sent * 10_000 + net, _click_chunk(sent))
+            sent += 1
+        if player._last_pts_ns is not None:
+            ahead_us = (player._last_pts_ns + player._last_duration_ns + LATENCY_NS) // 1000 - t
+            worst_ahead_us = max(worst_ahead_us, ahead_us)
+        t += 5_000
+    assert flips == 20 and net == 0
+    _wait_until(lambda: sum(len(d) for _, d in handed) > 0)
+    import time
+
+    time.sleep(0.2)
+    assert worst_ahead_us <= 2_000_000 + lead_us + 20_000
+    heard = _clicks_heard(handed)
+    # The last flip skips up to 1.9 s of audio; everything after plays on schedule.
+    settled_from_ns = (last_flip_us + 1_900_000 + 1_000_000) * 1000
+    settled = [
+        n
+        for n in range(total_chunks * CHUNK_FRAMES // CLICK_EVERY)
+        if _content_time_ns(n * CLICK_EVERY + CLICK_AT) >= settled_from_ns
+    ]
+    assert len(settled) >= 20
+    for n in settled:
+        assert n in heard
+        assert abs(heard[n] - _content_time_ns(n * CLICK_EVERY + CLICK_AT)) < 1e9 / RATE
     player.stop()
