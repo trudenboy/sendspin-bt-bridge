@@ -59,6 +59,7 @@ class StreamPlayer:
         self._generation = 0
         self._first_lead_us: int | None = None
         self._first_margin_raw_ns: int | None = None
+        self._overdue_dropped_us = 0.0
 
     @property
     def stream_generation(self) -> int:
@@ -92,6 +93,7 @@ class StreamPlayer:
         self._generation += 1
         self._first_lead_us = None
         self._first_margin_raw_ns = None
+        self._overdue_dropped_us = 0.0
         self._attach_sink_probe()
         self._apply_volume()
         self._set_caps(audio_format)
@@ -113,12 +115,29 @@ class StreamPlayer:
         clock = self._pipeline.get_clock()
         gst_now_ns = int(clock.get_time()) if clock is not None else 0
         raw_now_us = self._raw_now_us()
-        pts_ns = max(0, gst_pts_ns(play_time_us, raw_now_us, gst_now_ns) - self._output_latency_ns)
         if self._first_lead_us is None:
             self._first_lead_us = play_time_us - raw_now_us
         frame = self._format.frame_bytes()
+        rate = self._format.sample_rate
         n_frames = len(payload) // frame if frame else 0
-        duration_ns = int(n_frames * 1_000_000_000 / self._format.sample_rate) if n_frames else 0
+        # Audio whose play time has passed can only sound late, so it never
+        # reaches the output: whole chunks are dropped and a chunk that straddles
+        # "now" loses its head up to the next frame, so the first sample handed
+        # on is exactly the one due next (a late start or an underrun).
+        skip = 0
+        if n_frames and play_time_us < raw_now_us:
+            skip = min(n_frames, -(-(raw_now_us - play_time_us) * rate // 1_000_000))
+            self._overdue_dropped_us += skip * 1_000_000 / rate
+            if skip == n_frames:
+                self._forget_played(raw_now_us)
+                self._poll_bus()
+                return
+            payload = payload[skip * frame :]
+            n_frames -= skip
+        skip_ns = skip * 1_000_000_000 // rate
+        pts_ns = max(0, gst_pts_ns(play_time_us, raw_now_us, gst_now_ns) + skip_ns - self._output_latency_ns)
+        play_time_us += skip_ns // 1000
+        duration_ns = int(n_frames * 1_000_000_000 / rate) if n_frames else 0
         buf = Gst.Buffer.new_wrapped(payload)
         buf.pts = pts_ns
         buf.duration = duration_ns
@@ -326,20 +345,27 @@ class StreamPlayer:
         first buffer reached the sink (negative: it was late).
         ``configured_latency_ms``: the latency the pipeline runs with;
         ``min_latency_ms``: the least the sink said it needs.
+        ``overdue_dropped_ms``: audio dropped because its play time had passed.
+        ``first_on_schedule_error_ms``: how late the first sample handed on
+        (the first not dropped) still reached the sink; 0 when it was in time.
         """
         if self._pipeline is None:
             return None
         configured_ns = self._configured_latency_ns()
         min_ns = self._latency_query()
         margin_ms = None
+        error_ms = None
         if self._first_margin_raw_ns is not None:
             margin_ms = _ns_to_ms(self._first_margin_raw_ns + (configured_ns or 0))
+            error_ms = max(0.0, -(margin_ms or 0.0))
         return {
             "compensated_latency_ms": _ns_to_ms(self._output_latency_ns),
             "configured_latency_ms": _ns_to_ms(configured_ns),
             "min_latency_ms": _ns_to_ms(min_ns),
             "first_lead_ms": None if self._first_lead_us is None else round(self._first_lead_us / 1000.0, 3),
             "first_buffer_margin_ms": margin_ms,
+            "overdue_dropped_ms": round(self._overdue_dropped_us / 1000.0, 3),
+            "first_on_schedule_error_ms": error_ms,
         }
 
     def audio_clock_ns(self) -> int | None:

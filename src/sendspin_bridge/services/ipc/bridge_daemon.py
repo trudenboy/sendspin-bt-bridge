@@ -7,6 +7,7 @@ import contextlib
 import logging
 import signal
 import socket
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
@@ -43,6 +44,30 @@ _DELAY_RESYNC_QUIET_S = 0.15
 # the sink's lookahead (PA "sink latency") ahead of its play time; the declared
 # lead covers a measured lookahead plus this much.
 _LEAD_MARGIN_MS = 50.0
+# Handling stream/start (above all opening the PulseAudio output, which on a
+# Bluetooth sink waits for the A2DP transport) holds the loop while the server's
+# first chunks wait unread, so they arrive past their play time. The declared
+# lead covers the last start's output open time plus this margin, in steps of
+# _LEAD_STEP_MS (no re-declare for a few ms of jitter), up to _MAX_START_LEAD_MS.
+_START_LEAD_MARGIN_MS = 100.0
+_LEAD_STEP_MS = 50.0
+_MAX_START_LEAD_MS = 2000.0
+_monotonic = time.monotonic
+
+
+def _load_decoder_library() -> None:
+    import importlib
+
+    importlib.import_module("av")
+
+
+def _warm_decoder_library() -> None:
+    try:
+        _load_decoder_library()
+    except Exception as exc:  # the first FLAC stream then loads it (or reports it)
+        logger.debug("decoder library warm-up failed: %s", exc)
+
+
 # The stream start timing line waits until the output has settled.
 _START_TIMING_DELAY_S = 2.0
 _CLOCK_DIAG_INTERVAL_S = 1.0
@@ -146,6 +171,10 @@ class BridgeDaemon:
         self._start_timing_task: asyncio.Task[None] | None = None
         # Largest PulseAudio sink lookahead measured at a stream start (ms).
         self._sink_lookahead_ms: float | None = None
+        # What the last stream start that opened a new output cost, in ms:
+        # {"decoder_ms", "output_open_ms"}.
+        self._start_cost: dict[str, float] | None = None
+        self._decoder_warmup: asyncio.Future[None] | None = None
         self._warned_min_latency = False
 
     def _notify(self) -> None:
@@ -182,6 +211,10 @@ class BridgeDaemon:
         self._player = self._new_player(sink_name)
         self._audio_handler = self._player
         self._clock_diag_task = asyncio.create_task(self._clock_diag_loop())
+        # Loaded on the first FLAC stream/start, PyAV's import would hold the
+        # loop (0.05 s warm, seconds from a cold disk) while that stream's first
+        # chunks wait unread; load it off the loop now instead.
+        self._decoder_warmup = asyncio.ensure_future(asyncio.to_thread(_warm_decoder_library))
         if self._scales_stream:
             self._apply_stream_volume()
         elif self._bluetooth_sink_name:
@@ -393,11 +426,22 @@ class BridgeDaemon:
         a steady 60 ms lead played every chunk on time, so the configured lead
         stands until a stream start measures a sink lookahead that, with a
         margin, needs more. The minimum buffer is never changed.
+
+        It also covers what the last stream start spent opening the output
+        (the server's first chunks wait unread meanwhile), so they arrive in
+        time to be played. The output delay is not part of it: the server adds
+        that on top (required_lead_time_ms "excludes output_delay_ms").
         """
+        lead = float(value_ms)
         lookahead = getattr(self, "_sink_lookahead_ms", None)
-        if lookahead is None or not self._args.compensate_output_latency:
-            return float(value_ms)
-        return max(float(value_ms), lookahead + _LEAD_MARGIN_MS)
+        if lookahead is not None and self._args.compensate_output_latency:
+            lead = max(lead, lookahead + _LEAD_MARGIN_MS)
+        cost = getattr(self, "_start_cost", None)
+        if cost is not None:
+            needed = cost["output_open_ms"] + _START_LEAD_MARGIN_MS
+            stepped = -(-needed // _LEAD_STEP_MS) * _LEAD_STEP_MS
+            lead = max(lead, min(stepped, _MAX_START_LEAD_MS))
+        return lead
 
     def _note_sink_lookahead(self, sink_ms: float) -> None:
         """Keep the largest sink lookahead seen this session (the lead only grows)."""
@@ -1115,13 +1159,18 @@ class BridgeDaemon:
         bit_depth = int(getattr(player_cfg, "bit_depth", 16))
         channels = int(getattr(player_cfg, "channels", 2))
         header = getattr(player_cfg, "codec_header", None)
+        began = _monotonic()
         self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
+        decoder_ms = (_monotonic() - began) * 1000.0
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
             generation = self._player.stream_generation
+            began = _monotonic()
             self._player.start(PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth))
             # A start that keeps the running output has no new start to describe.
             if self._player.stream_generation != generation:
+                # The loop was held this long: chunks sent meanwhile wait unread.
+                self._start_cost = {"decoder_ms": decoder_ms, "output_open_ms": (_monotonic() - began) * 1000.0}
                 self._schedule_start_timing_line()
         self._on_stream_event("start")
 
@@ -1277,11 +1326,13 @@ class BridgeDaemon:
                 pa_latency=pa_latency,
                 time_sync=time_sync_summary(self._client),
                 output_delay_ms=self._player_delay_ms,
+                start_cost=self._start_cost,
             ),
         )
         self._check_min_latency(report)
         if pa_latency is not None and self._args.compensate_output_latency:
-            self._raise_lead_for_lookahead(float(pa_latency["sink_ms"]))
+            self._note_sink_lookahead(float(pa_latency["sink_ms"]))
+        self._redeclare_lead()
 
     def _check_min_latency(self, report: dict[str, Any]) -> None:
         compensated = report.get("compensated_latency_ms")
@@ -1297,8 +1348,8 @@ class BridgeDaemon:
             min_latency - compensated,
         )
 
-    def _raise_lead_for_lookahead(self, sink_ms: float) -> None:
-        self._note_sink_lookahead(sink_ms)
+    def _redeclare_lead(self) -> None:
+        """Send Music Assistant a new lead when what it must cover has changed."""
         client = self._client
         if client is None or not hasattr(client, "set_required_lead_time_ms"):
             return
@@ -1309,7 +1360,14 @@ class BridgeDaemon:
         self._bridge_status["declared_lead_time_ms"] = round(lead)
         self._notify()
         self._report_player_state()
-        logger.info("Declared lead time raised to %.0f ms to cover the sink's %.1f ms lookahead", lead, sink_ms)
+        lookahead = "n/a" if self._sink_lookahead_ms is None else f"{self._sink_lookahead_ms:.1f} ms"
+        opened = "n/a" if self._start_cost is None else f"{self._start_cost['output_open_ms']:.0f} ms"
+        logger.info(
+            "Declared lead time set to %.0f ms to cover the sink's %s lookahead and the %s the output took to open",
+            lead,
+            lookahead,
+            opened,
+        )
 
     async def _clock_diag_loop(self) -> None:
         """While playing: clock rates, DEBUG every 10 s and INFO once a minute."""
