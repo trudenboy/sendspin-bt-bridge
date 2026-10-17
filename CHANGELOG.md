@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.9] - 2026-10-17
+
 ### Fixed
 
 - Changing a speaker's delay while it plays no longer restarts its audio
@@ -6495,7 +6497,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.7...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.8...HEAD
+[3.1.0-beta.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.7...v3.1.0-beta.8
 [3.1.0-beta.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.6...v3.1.0-beta.7
 [3.1.0-beta.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.5...v3.1.0-beta.6
 [3.1.0-beta.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.4...v3.1.0-beta.5
