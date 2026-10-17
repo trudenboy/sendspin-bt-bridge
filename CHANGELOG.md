@@ -10,19 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - On a Bluetooth speaker the first audio of every stream reached the player
-  0.7–1.6 s after its play time: opening the audio output (and, on the first
-  stream, loading the FLAC decoder) held the speaker's process while Music
-  Assistant's first chunks waited unread. Audio that arrives past its play
-  time is now dropped to the exact sample, at a start or after a dropout, so
-  the first sample played is the one due next. The decoder is loaded when the
-  speaker starts, not on its first stream. The lead time declared to Music
-  Assistant now also covers how long the last start took to open the output
-  (plus 100 ms, at most 2 s), so later starts get their first audio in time;
-  a group can start that much later, about 1 s for a speaker whose output
-  takes 0.9 s to open. Music Assistant ignores the lead for live sources
-  such as radio. The `Stream start timing:` line now also gives the overdue
-  audio dropped, how late the first sample kept reached the output, and how
-  long the output took to open.
+  0.7–1.6 s after its play time: opening the audio output, which waits for
+  the speaker's Bluetooth link, held the speaker's process (time sync,
+  volume and stop commands included) while Music Assistant's first audio
+  waited unread. The output is now opened in the background and the audio
+  that arrives meanwhile waits for it. With the default
+  **Compensate the audio buffer latency**, audio whose play time has passed
+  by the time the output is ready is dropped to the exact sample instead of
+  being handed to the audio server, at a start or after a dropout. The audio
+  server still clips the few tens of ms just ahead of what the speaker is
+  playing (about 60 ms on Bluetooth). A speaker whose output is slow to open
+  therefore joins a group stream in time, a moment after the others; the lead
+  time declared to Music Assistant is unchanged. The FLAC decoder is loaded
+  in the background a few seconds after the speaker starts, not on its first
+  stream. The `Stream start timing:` line now also gives the overdue audio
+  dropped, how late the first kept sample reached the output, how long the
+  output took to open, and how long the start held the speaker's process.
 
 ## [3.1.0-beta.7] - 2026-10-16
 

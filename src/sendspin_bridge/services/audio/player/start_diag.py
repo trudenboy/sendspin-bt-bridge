@@ -56,7 +56,9 @@ def format_stream_start_line(
             f"; first on-schedule sample error {_ms(report.get('first_on_schedule_error_ms'))}"
         )
     if start_cost is not None:
-        line += f"; output open {_ms(start_cost.get('output_open_ms'))} (decoder {_ms(start_cost.get('decoder_ms'))})"
+        held = start_cost.get("loop_block_ms")
+        where = "on the loop" if held is None else f"off the loop, loop held {_ms(held)}"
+        line += f"; output open {_ms(start_cost.get('output_open_ms'))} ({where})"
     return line
 
 

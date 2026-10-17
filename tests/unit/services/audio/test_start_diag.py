@@ -64,14 +64,22 @@ def test_start_line_tells_the_overdue_audio_and_the_start_cost():
         pa_latency=None,
         time_sync=None,
         output_delay_ms=247.0,
-        start_cost={"output_open_ms": 962.4, "decoder_ms": 1.2},
+        start_cost={"output_open_ms": 962.4, "loop_block_ms": 1.2},
     )
 
     assert line.endswith(
         "first chunk lead -747.0 ms; first buffer margin 1249.6 ms; output delay 247 ms; "
         "overdue audio dropped 747.2 ms; first on-schedule sample error 0.0 ms; "
-        "output open 962.4 ms (decoder 1.2 ms)"
+        "output open 962.4 ms (off the loop, loop held 1.2 ms)"
     )
+
+
+def test_start_line_says_when_the_output_was_opened_on_the_loop():
+    line = format_stream_start_line(
+        REPORT, pa_latency=None, time_sync=None, output_delay_ms=None, start_cost={"output_open_ms": 30.0}
+    )
+
+    assert line.endswith("output open 30.0 ms (on the loop)")
 
 
 def test_start_line_marks_an_unknown_first_sample_error():

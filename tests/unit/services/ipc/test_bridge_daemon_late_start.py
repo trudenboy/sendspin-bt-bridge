@@ -1,19 +1,21 @@
 """A stream start whose output is slow to open.
 
 On HAOS (PulseAudio 17, an A2DP speaker) the first chunks of every stream
-reached the player 0.7-1.6 s after their play time: handling stream/start
-(the decoder and, above all, opening the PulseAudio output on a Bluetooth sink)
-held the daemon's loop that long while the server's chunks, sent with the
-declared 250 ms lead plus the output delay, waited unread. The daemon now
-measures that cost, logs it on the start line, and declares a lead that covers it.
-The output delay is not part of the lead: the server adds it on top (Sendspin
-spec: required_lead_time_ms "excludes output_delay_ms").
+reached the player 0.7-1.6 s after their play time: stream/start opened the
+PulseAudio output on the daemon's loop (a Bluetooth sink waits for its A2DP
+transport), and the server's chunks waited unread meanwhile. The output is now
+opened in a worker thread; chunks that arrive meanwhile wait and are handed to
+the output once it is open (the player drops what became overdue). The lead
+declared to Music Assistant is not raised for it, and never includes the output
+delay: the server adds that on top (required_lead_time_ms "excludes output_delay_ms").
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -39,9 +41,9 @@ def _daemon(tmp_path: Path, **overrides) -> BridgeDaemon:
     return BridgeDaemon(replace(args, **overrides), {}, SINK)
 
 
-def _start_message(codec: str = "flac") -> MagicMock:
+def _start_message() -> MagicMock:
     message = MagicMock()
-    message.payload.player.codec = codec
+    message.payload.player.codec = "pcm"
     message.payload.player.sample_rate = 48000
     message.payload.player.bit_depth = 16
     message.payload.player.channels = 2
@@ -49,117 +51,179 @@ def _start_message(codec: str = "flac") -> MagicMock:
     return message
 
 
-def _fake_clock(monkeypatch) -> dict[str, float]:
-    import sendspin_bridge.services.ipc.bridge_daemon as daemon_module
+def _pcm_format() -> MagicMock:
+    fmt = MagicMock()
+    fmt.pcm_format.sample_rate = 48000
+    fmt.pcm_format.channels = 2
+    fmt.pcm_format.bit_depth = 16
+    fmt.codec = "pcm"
+    fmt.codec_header = None
+    return fmt
 
-    now = {"s": 100.0}
-    monkeypatch.setattr(daemon_module, "_monotonic", lambda: now["s"])
-    return now
+
+class _SlowOutputPlayer:
+    """A player whose output takes ``open_s`` to open, like an A2DP sink."""
+
+    def __init__(self, open_s: float) -> None:
+        self.open_s = open_s
+        self.stream_generation = 0
+        self.output: object | None = None
+        self.discarded: list[object] = []
+        self.submitted: list[int] = []
+        self.opened_in: list[str] = []
+
+    def needs_output(self) -> bool:
+        return self.output is None
+
+    def now_us(self) -> int:
+        return 10_000_000
+
+    def prepare_output(self, fmt):
+        self.opened_in.append(threading.current_thread().name)
+        time.sleep(self.open_s)
+        return object()
+
+    def adopt_output(self, output, fmt) -> None:
+        self.output = output
+        self.stream_generation += 1
+
+    def discard_output(self, output) -> None:
+        self.discarded.append(output)
+
+    def start(self, fmt) -> None:
+        assert self.output is not None, "the output must be adopted before audio is handed on"
+
+    def submit(self, play_time_us: int, payload: bytes) -> None:
+        self.submitted.append(play_time_us)
+
+    def stop(self) -> None:
+        self.output = None
+
+    def clear(self) -> None:
+        pass
+
+    def resync(self, shift_us: int) -> bool:
+        return False
 
 
-def test_a_stream_start_measures_how_long_the_output_took_to_open(tmp_path, monkeypatch):
-    now = _fake_clock(monkeypatch)
+async def _wait_for(predicate, timeout_s: float = 3.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise AssertionError("condition not met before timeout")
+        await asyncio.sleep(0.01)
+
+
+def _with_player(tmp_path, open_s: float) -> tuple[BridgeDaemon, _SlowOutputPlayer]:
     daemon = _daemon(tmp_path)
     daemon._schedule_start_timing_line = MagicMock()  # type: ignore[method-assign]
+    player = _SlowOutputPlayer(open_s=open_s)
+    daemon._player = player  # type: ignore[assignment]
+    return daemon, player
 
-    def _decoder(*_args):
-        now["s"] += 0.004
 
-    def _open(_fmt):
-        now["s"] += 0.962
-        player.stream_generation += 1
+@pytest.mark.asyncio
+async def test_the_output_is_opened_off_the_loop_and_waiting_chunks_follow_in_order(tmp_path):
+    daemon, player = _with_player(tmp_path, open_s=0.4)
 
-    daemon._reset_decoder = _decoder  # type: ignore[method-assign]
-    player = MagicMock()
-    player.stream_generation = 1
-    player.start.side_effect = _open
-    daemon._player = player
+    began = time.monotonic()
+    daemon._on_stream_start(_start_message())
+    for ts in (10_250_000, 10_260_000, 10_270_000):
+        daemon._on_audio_chunk(ts, bytes(1920), _pcm_format())
+    held_s = time.monotonic() - began
+
+    assert held_s < 0.1
+    assert player.submitted == []
+    assert player.opened_in
+    assert player.opened_in[0] != threading.current_thread().name
+    await _wait_for(lambda: len(player.submitted) == 3)
+    assert player.submitted == [10_250_000, 10_260_000, 10_270_000]
+    assert daemon._start_cost is not None
+    assert daemon._start_cost["output_open_ms"] >= 350
+    assert daemon._start_cost["loop_block_ms"] < 100
+    assert daemon._first_arrival_lead_us == 250_000
+    daemon._schedule_start_timing_line.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_a_stream_end_while_opening_discards_the_output(tmp_path):
+    daemon, player = _with_player(tmp_path, open_s=0.2)
 
     daemon._on_stream_start(_start_message())
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    daemon._on_stream_end()
+    await _wait_for(lambda: daemon._opening is None)
 
-    assert daemon._start_cost == {"decoder_ms": pytest.approx(4.0), "output_open_ms": pytest.approx(962.0)}
+    assert len(player.discarded) == 1
+    assert player.output is None
+    assert player.submitted == []
 
 
-def test_a_start_that_keeps_the_running_output_measures_nothing_new(tmp_path, monkeypatch):
-    now = _fake_clock(monkeypatch)
-    daemon = _daemon(tmp_path)
-    daemon._schedule_start_timing_line = MagicMock()  # type: ignore[method-assign]
-    daemon._reset_decoder = MagicMock()  # type: ignore[method-assign]
-    daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": 900.0}
-    player = MagicMock()
-    player.stream_generation = 1
-    player.start.side_effect = lambda _fmt: now.__setitem__("s", now["s"] + 0.001)
-    daemon._player = player
+@pytest.mark.asyncio
+async def test_a_new_stream_start_while_opening_keeps_the_output(tmp_path):
+    daemon, player = _with_player(tmp_path, open_s=0.2)
 
     daemon._on_stream_start(_start_message())
+    daemon._on_stream_end()
+    daemon._on_stream_start(_start_message())
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    await _wait_for(lambda: player.submitted)
 
-    assert daemon._start_cost == {"decoder_ms": 1.0, "output_open_ms": 900.0}
-
-
-@pytest.mark.parametrize(
-    ("open_ms", "expected"),
-    [(None, 250.0), (60.0, 250.0), (962.0, 1100.0), (1500.0, 1600.0), (4000.0, 2000.0)],
-)
-def test_the_declared_lead_covers_the_time_the_output_took_to_open(tmp_path, open_ms, expected):
-    daemon = _daemon(tmp_path)
-    if open_ms is not None:
-        daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": open_ms}
-
-    assert daemon.declared_lead_time_ms(250.0) == expected
+    assert player.discarded == []
+    assert len(player.opened_in) == 1
+    assert player.submitted == [10_250_000]
 
 
-def test_the_lead_follows_the_latest_start_and_keeps_covering_the_sink_lookahead(tmp_path):
-    daemon = _daemon(tmp_path)
-    daemon._note_sink_lookahead(230.0)
-    daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": 962.0}
-    slow = daemon.declared_lead_time_ms(250.0)
-    daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": 20.0}
+@pytest.mark.asyncio
+async def test_a_delay_change_while_opening_moves_the_waiting_chunks(tmp_path):
+    daemon, player = _with_player(tmp_path, open_s=0.3)
+    daemon._player_delay_ms = 247.0
 
-    assert slow == 1100.0
-    assert daemon.declared_lead_time_ms(250.0) == 280.0
+    daemon._on_stream_start(_start_message())
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    daemon._target_delay_ms = 267.0
+    daemon._apply_output_delay()  # 20 ms more delay plays 20 ms earlier
+    await _wait_for(lambda: player.submitted)
+
+    assert player.submitted == [10_230_000]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_open_is_logged_and_the_next_chunk_tries_again(tmp_path, caplog):
+    daemon, player = _with_player(tmp_path, open_s=0.0)
+    calls = {"n": 0}
+    original = player.prepare_output
+
+    def _flaky(fmt):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("failed to set GStreamer pipeline to PLAYING")
+        return original(fmt)
+
+    player.prepare_output = _flaky  # type: ignore[method-assign]
+    caplog.set_level(logging.WARNING, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._on_stream_start(_start_message())
+    await _wait_for(lambda: daemon._opening is None)
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    await _wait_for(lambda: bool(player.submitted))
+
+    assert any("Opening the audio output failed" in r.getMessage() for r in caplog.records)
+    assert player.submitted == [10_250_000]
 
 
 @pytest.mark.parametrize("delay_ms", [0.0, 247.0, 267.0])
-def test_the_output_delay_is_not_added_to_the_lead(tmp_path, delay_ms):
+def test_the_lead_covers_neither_the_output_open_nor_the_output_delay(tmp_path, delay_ms):
     daemon = _daemon(tmp_path)
     daemon._player_delay_ms = delay_ms
     daemon._static_delay_ms = delay_ms
-    daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": 962.0}
+    daemon._start_cost = {"output_open_ms": 962.0, "loop_block_ms": 1.0}
 
-    assert daemon.declared_lead_time_ms(250.0) == 1100.0
-
-
-@pytest.mark.asyncio
-async def test_a_slow_output_open_re_declares_the_lead_to_the_server(tmp_path, monkeypatch, caplog):
-    import sendspin_bridge.services.audio.pulse as pulse
-
-    async def _latency(_pid):
-        return {"buffer_ms": 134.4, "sink_ms": 60.7}
-
-    monkeypatch.setattr(pulse, "apid_sink_input_latency", _latency)
-    daemon = _daemon(tmp_path)
-    await daemon._load_identity_and_pairing_store()
-    daemon._client = daemon._create_client(247.0)
-    daemon._report_player_state = MagicMock()  # type: ignore[method-assign]
-    daemon._player = MagicMock()
-    daemon._player.start_report.return_value = {"compensated_latency_ms": 200.0, "min_latency_ms": 150.0}
-    daemon._player.stream_generation = 1
-    daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": 962.0}
-    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
-
-    await daemon._log_stream_start_timing(1)
-
-    assert daemon._client.required_lead_time_ms == 1100.0
-    assert daemon._client.min_buffer_ms == 250.0
-    assert daemon._bridge_status["declared_lead_time_ms"] == 1100
-    daemon._report_player_state.assert_called_once()
-    assert any(
-        "Declared lead time set to 1100 ms" in r.getMessage() and "962" in r.getMessage() for r in caplog.records
-    )
+    assert daemon.declared_lead_time_ms(250.0) == 250.0
 
 
 @pytest.mark.asyncio
-async def test_the_start_line_tells_the_output_open_time(tmp_path, monkeypatch, caplog):
+async def test_the_start_line_tells_the_arrival_lead_and_the_output_open(tmp_path, monkeypatch, caplog):
     import sendspin_bridge.services.audio.pulse as pulse
 
     async def _none(_pid):
@@ -170,29 +234,35 @@ async def test_the_start_line_tells_the_output_open_time(tmp_path, monkeypatch, 
     daemon._player = MagicMock()
     daemon._player.start_report.return_value = {
         "compensated_latency_ms": 200.0,
-        "first_lead_ms": -747.0,
-        "overdue_dropped_ms": 747.0,
-        "first_on_schedule_error_ms": 0.0,
+        "first_lead_ms": -712.0,  # when the opened output took it
+        "overdue_dropped_ms": 712.0,
+        "first_on_schedule_error_ms": 0.2,
     }
     daemon._player.stream_generation = 2
-    daemon._start_cost = {"decoder_ms": 1.0, "output_open_ms": 962.0}
+    daemon._first_arrival_lead_us = 250_000
+    daemon._start_cost = {"output_open_ms": 962.0, "loop_block_ms": 1.0}
     caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
 
     await daemon._log_stream_start_timing(2)
 
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Stream start timing:")]
-    assert "overdue audio dropped 747.0 ms" in lines[0]
-    assert "output open 962.0 ms (decoder 1.0 ms)" in lines[0]
+    assert "first chunk lead 250.0 ms" in lines[0]
+    assert "overdue audio dropped 712.0 ms" in lines[0]
+    assert "output open 962.0 ms (off the loop, loop held 1.0 ms)" in lines[0]
 
 
 @pytest.mark.asyncio
-async def test_the_decoder_library_is_loaded_before_the_first_stream(tmp_path, monkeypatch):
+async def test_the_decoder_library_is_loaded_in_a_worker_thread_after_startup(tmp_path, monkeypatch):
     """Loading PyAV on the first FLAC stream/start held the loop for its import
-    (0.05 s warm, 4 s cold here): it is loaded off the loop when the daemon starts."""
+    (0.07 s warm, 4 s cold here): it is loaded in a worker thread a little
+    after the daemon starts instead."""
     import sendspin_bridge.services.ipc.bridge_daemon as daemon_module
 
-    warmed: list[str] = []
-    monkeypatch.setattr(daemon_module, "_load_decoder_library", lambda: warmed.append("av"))
+    loaded_in: list[str] = []
+    monkeypatch.setattr(daemon_module, "_DECODER_WARMUP_DELAY_S", 0.0)
+    monkeypatch.setattr(
+        daemon_module, "_load_decoder_library", lambda: loaded_in.append(threading.current_thread().name)
+    )
     monkeypatch.setattr(daemon_module, "StreamPlayer", lambda **_kw: MagicMock())
     monkeypatch.setattr(daemon_module, "default_pulsesink_factory", lambda **_kw: MagicMock())
     daemon = _daemon(tmp_path)
@@ -201,7 +271,8 @@ async def test_the_decoder_library_is_loaded_before_the_first_stream(tmp_path, m
         daemon._identity = None
 
     async def _connect():
-        await asyncio.sleep(0.05)
+        assert daemon._decoder_warmup_task is not None
+        await daemon._decoder_warmup_task
         raise asyncio.CancelledError
 
     daemon._load_identity_and_pairing_store = _load  # type: ignore[method-assign]
@@ -209,4 +280,5 @@ async def test_the_decoder_library_is_loaded_before_the_first_stream(tmp_path, m
     daemon._run_server_initiated = _connect  # type: ignore[method-assign]
     await daemon.run()
 
-    assert warmed == ["av"]
+    assert len(loaded_in) == 1
+    assert loaded_in[0] != threading.current_thread().name

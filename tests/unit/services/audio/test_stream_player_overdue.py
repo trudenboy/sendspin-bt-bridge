@@ -204,3 +204,85 @@ def test_a_new_output_starts_its_overdue_count_over():
 
     assert report["overdue_dropped_ms"] == 0.0
     assert report["first_on_schedule_error_ms"] is None
+
+
+@requires_gst
+def test_an_uncompensated_output_keeps_audio_that_its_own_schedule_still_plays():
+    """Without compensation a buffer sounds a pipeline latency after its play
+    time, so audio just past its play time is still on that schedule."""
+    handed: list[tuple[int, int]] = []
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: NOW_US,
+        clock=_test_clock(CLOCK_NS),
+    )
+    player.start(PCM)
+
+    player.submit(NOW_US - 100_000, _audio(480))
+    _wait_until(lambda: len(handed) >= 1)
+    report = player.start_report()
+    player.stop()
+
+    assert handed == [(CLOCK_NS - 100_000_000, 480)]
+    assert report["overdue_dropped_ms"] == 0.0
+
+
+@requires_gst
+def test_a_first_sample_that_reaches_the_sink_late_reports_how_late():
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+
+    handed: list[tuple[int, int]] = []
+    clock = _test_clock(CLOCK_NS)
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: NOW_US,
+        clock=clock,
+        output_latency_ns=LATENCY_NS,
+    )
+    player.start(PCM)
+    # The buffer takes 5 ms to get from appsrc to the sink.
+    src_pad = player._pipeline.get_by_name("src").get_static_pad("src")
+    src_pad.add_probe(
+        Gst.PadProbeType.BUFFER,
+        lambda _pad, _info: clock.set_time(CLOCK_NS + 5_000_000) or Gst.PadProbeReturn.OK,
+    )
+
+    player.submit(NOW_US, _audio(480))
+    _wait_until(lambda: (player.start_report() or {}).get("first_on_schedule_error_ms") is not None)
+    report = player.start_report()
+    player.stop()
+
+    assert report["first_buffer_margin_ms"] == pytest.approx(-5.0)
+    assert report["first_on_schedule_error_ms"] == pytest.approx(5.0)
+
+
+@requires_gst
+def test_an_output_prepared_in_a_worker_thread_plays_once_adopted():
+    import threading
+
+    handed: list[tuple[int, int]] = []
+    player = _player(handed)
+    prepared: list[object] = []
+    worker = threading.Thread(target=lambda: prepared.append(player.prepare_output(PCM)))
+    worker.start()
+    worker.join(5)
+
+    assert player.stream_generation == 0
+    assert player.needs_output()
+    player.adopt_output(prepared[0], PCM)
+    player.submit(NOW_US + 100_000, _audio(480))
+    _wait_until(lambda: len(handed) >= 1)
+    player.stop()
+
+    assert player.stream_generation == 1
+    assert handed == [(_pts_for((NOW_US + 100_000) * 1000), 480)]
+
+
+@requires_gst
+def test_metrics_keep_the_running_overdue_total():
+    player = _player([])
+    player.start(PCM)
+    player.submit(NOW_US - 50_000, _audio(480))
+
+    assert player.metrics()["overdue_dropped_ms"] == pytest.approx(10.0)
+    player.stop()
