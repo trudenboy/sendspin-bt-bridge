@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Changing a speaker's delay while it plays no longer restarts its audio
+  stream. Each change used to open a new stream, and a Bluetooth speaker
+  buffers every new stream by a different amount, so each change landed at
+  a random offset of up to hundreds of ms and a speaker could not be tuned by
+  ear. A change of up to 2 s now applies to the stream that is playing: the
+  audio already sent to the speaker plays out, then the bridge inserts
+  silence (later) or skips audio (earlier) to the exact sample, with a 5 ms
+  fade so nothing clicks. The new delay is heard after the audio already
+  buffered, typically a few hundred ms. Larger changes still restart the
+  stream. The log says which was done, for example `Output delay changed
+  283→112 ms; shifted in place (inserted 171 ms)`.
+
 ## [3.1.0-beta.8] - 2026-10-17
 
 ### Fixed
