@@ -56,3 +56,38 @@ def test_time_sync_summary_without_a_connection_is_none():
 
     assert time_sync_summary(None) is None
     assert time_sync_summary(SimpleNamespace(_admitted_connection=None)) is None
+
+
+def test_start_line_tells_the_overdue_audio_and_the_start_cost():
+    line = format_stream_start_line(
+        {**REPORT, "first_lead_ms": -747.0, "overdue_dropped_ms": 747.25, "first_on_schedule_error_ms": 0.0},
+        pa_latency=None,
+        time_sync=None,
+        output_delay_ms=247.0,
+        start_cost={"output_open_ms": 962.4, "loop_block_ms": 1.2},
+    )
+
+    assert line.endswith(
+        "first chunk lead -747.0 ms; first buffer margin 1249.6 ms; output delay 247 ms; "
+        "overdue audio dropped 747.2 ms; first on-schedule sample error 0.0 ms; "
+        "output open 962.4 ms (off the loop, loop held 1.2 ms)"
+    )
+
+
+def test_start_line_says_when_the_output_was_opened_on_the_loop():
+    line = format_stream_start_line(
+        REPORT, pa_latency=None, time_sync=None, output_delay_ms=None, start_cost={"output_open_ms": 30.0}
+    )
+
+    assert line.endswith("output open 30.0 ms (on the loop)")
+
+
+def test_start_line_marks_an_unknown_first_sample_error():
+    line = format_stream_start_line(
+        {**REPORT, "overdue_dropped_ms": 0.0, "first_on_schedule_error_ms": None},
+        pa_latency=None,
+        time_sync=None,
+        output_delay_ms=None,
+    )
+
+    assert line.endswith("overdue audio dropped 0.0 ms; first on-schedule sample error n/a")

@@ -7,6 +7,8 @@ import contextlib
 import logging
 import signal
 import socket
+import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
@@ -43,6 +45,35 @@ _DELAY_RESYNC_QUIET_S = 0.15
 # the sink's lookahead (PA "sink latency") ahead of its play time; the declared
 # lead covers a measured lookahead plus this much.
 _LEAD_MARGIN_MS = 50.0
+_monotonic = time.monotonic
+# Opening a PulseAudio output can take a second or more (a Bluetooth sink waits
+# for its A2DP transport). It runs in a worker thread; the chunks that arrive
+# meanwhile wait here (oldest dropped beyond this many, ~50 s of 25 ms chunks).
+_MAX_OPENING_CHUNKS = 2048
+# An open still running after this long is abandoned (its output is closed if it
+# ever finishes); the next stream start or chunk opens anew.
+_OPEN_TIMEOUT_S = 5.0
+# A failed open is retried no sooner than this, doubling per failure up to the max.
+_OPEN_RETRY_MIN_S = 0.5
+_OPEN_RETRY_MAX_S = 10.0
+# PyAV (the FLAC decoder) is imported in a worker thread this long after the
+# daemon starts, so neither the handshake nor the first stream/start waits for it.
+_DECODER_WARMUP_DELAY_S = 5.0
+
+
+def _load_decoder_library() -> None:
+    import importlib
+
+    importlib.import_module("av")
+
+
+def _warm_decoder_library() -> None:
+    try:
+        _load_decoder_library()
+    except Exception as exc:  # the first FLAC stream then loads it (or reports it)
+        logger.debug("decoder library warm-up failed: %s", exc)
+
+
 # The stream start timing line waits until the output has settled.
 _START_TIMING_DELAY_S = 2.0
 _CLOCK_DIAG_INTERVAL_S = 1.0
@@ -146,6 +177,22 @@ class BridgeDaemon:
         self._start_timing_task: asyncio.Task[None] | None = None
         # Largest PulseAudio sink lookahead measured at a stream start (ms).
         self._sink_lookahead_ms: float | None = None
+        # What the last stream start that opened a new output cost, in ms:
+        # {"output_open_ms", "loop_block_ms"} (the latter only when opened off the loop).
+        self._start_cost: dict[str, float] | None = None
+        self._decoder_warmup_task: asyncio.Task[None] | None = None
+        # An output being opened off the loop, and the chunks waiting for it.
+        self._opening: asyncio.Future[Any] | None = None
+        self._opening_chunks: deque[tuple[int, bytes, PcmFormat]] = deque(maxlen=_MAX_OPENING_CHUNKS)
+        self._opening_discard = False
+        self._opening_began = 0.0
+        self._loop_block_ms = 0.0
+        self._opening_from_start = False
+        self._opening_watchdog: asyncio.TimerHandle | None = None
+        self._open_failures = 0
+        self._open_retry_at = 0.0
+        self._warned_hung_open = False
+        self._first_arrival_lead_us: int | None = None
         self._warned_min_latency = False
 
     def _notify(self) -> None:
@@ -182,6 +229,10 @@ class BridgeDaemon:
         self._player = self._new_player(sink_name)
         self._audio_handler = self._player
         self._clock_diag_task = asyncio.create_task(self._clock_diag_loop())
+        # Loaded on the first FLAC stream/start, PyAV's import would hold the
+        # loop (0.07 s warm, seconds from a cold disk); load it in a worker
+        # thread once the daemon has settled instead.
+        self._decoder_warmup_task = asyncio.create_task(self._warm_decoder_later())
         if self._scales_stream:
             self._apply_stream_volume()
         elif self._bluetooth_sink_name:
@@ -204,13 +255,22 @@ class BridgeDaemon:
             if self._delay_resync_handle is not None:
                 self._delay_resync_handle.cancel()
                 self._delay_resync_handle = None
-            for task in (self._clock_diag_task, self._start_timing_task):
+            if self._opening is not None:
+                # The worker thread cannot be cancelled: let it finish and close its output.
+                self._opening_discard = True
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(asyncio.shield(self._opening), timeout=5.0)
+            if self._opening_watchdog is not None:
+                self._opening_watchdog.cancel()
+                self._opening_watchdog = None
+            for task in (self._clock_diag_task, self._start_timing_task, self._decoder_warmup_task):
                 if task is not None:
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await task
             self._clock_diag_task = None
             self._start_timing_task = None
+            self._decoder_warmup_task = None
             if self._pairing_window_task is not None:
                 self._pairing_window_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -393,6 +453,11 @@ class BridgeDaemon:
         a steady 60 ms lead played every chunk on time, so the configured lead
         stands until a stream start measures a sink lookahead that, with a
         margin, needs more. The minimum buffer is never changed.
+
+        The output delay is not part of it: the server adds that on top
+        (required_lead_time_ms "excludes output_delay_ms"). Nor is the time an
+        output takes to open: that no longer holds the loop, and covering it
+        would delay every start of the whole group.
         """
         lookahead = getattr(self, "_sink_lookahead_ms", None)
         if lookahead is None or not self._args.compensate_output_latency:
@@ -407,6 +472,8 @@ class BridgeDaemon:
     def retarget_sink(self, sink_name: str | None) -> None:
         if self._player is None:
             return
+        # An open in flight belongs to the old sink: its output is closed when it finishes.
+        self._forget_open()
         self._player.stop()
         self._player = self._new_player(sink_name)
         self._audio_handler = self._player
@@ -931,6 +998,11 @@ class BridgeDaemon:
             self._pending_play_time_us += shift_us
         if self._next_play_time_us is not None:
             self._next_play_time_us += shift_us
+        if self._opening_chunks:
+            # Waiting for an output being opened: move them like queued audio.
+            self._opening_chunks = deque(
+                ((t + shift_us, p, f) for t, p, f in self._opening_chunks), maxlen=_MAX_OPENING_CHUNKS
+            )
         resynced = False
         if self._player is not None:
             try:
@@ -938,7 +1010,10 @@ class BridgeDaemon:
             except Exception:
                 logger.exception("Player resync after an output delay change failed")
                 return
-        outcome = "player resynchronised" if resynced else "applies to the next stream"
+        if self._opening is not None:
+            outcome = "waiting audio shifted (output still opening)"
+        else:
+            outcome = "player resynchronised" if resynced else "applies to the next stream"
         logger.info("Output delay changed %g→%g ms; %s", old_ms, new_ms, outcome)
 
     # ── MA group updates ─────────────────────────────────────────────────────
@@ -1115,15 +1190,124 @@ class BridgeDaemon:
         bit_depth = int(getattr(player_cfg, "bit_depth", 16))
         channels = int(getattr(player_cfg, "channels", 2))
         header = getattr(player_cfg, "codec_header", None)
+        began = _monotonic()
         self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
-            generation = self._player.stream_generation
-            self._player.start(PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth))
-            # A start that keeps the running output has no new start to describe.
-            if self._player.stream_generation != generation:
-                self._schedule_start_timing_line()
+            fmt = PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth)
+            state = self._output_state(fmt, from_start=True)
+            if state == "opening":
+                # An output already being opened serves this stream too.
+                self._opening_discard = False
+            elif state == "ready":
+                self._first_arrival_lead_us = None
+                generation = self._player.stream_generation
+                self._player.start(fmt)
+                # A start that keeps the running output has no new start to describe.
+                if self._player.stream_generation != generation:
+                    self._start_cost = {"output_open_ms": (_monotonic() - began) * 1000.0}
+                    self._schedule_start_timing_line()
+        # What this start held the loop for (chunks sent meanwhile wait unread).
+        self._loop_block_ms = (_monotonic() - began) * 1000.0
         self._on_stream_event("start")
+
+    def _output_state(self, fmt: PcmFormat, *, from_start: bool = False) -> str:
+        """Where audio for ``fmt`` goes now: ``ready`` (the player, opening its
+        output on the loop if it must: no loop to come back to), ``opening``
+        (wait for the output being opened in a worker thread, starting that
+        open if needed) or ``unavailable`` (a failed open is backing off)."""
+        player = self._player
+        if self._opening is not None:
+            return "opening"
+        if player is None or player.needs_output() is not True:
+            return "ready"
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return "ready"
+        if _monotonic() < self._open_retry_at:
+            return "unavailable"
+        self._opening_chunks.clear()
+        self._opening_discard = False
+        self._opening_from_start = from_start
+        self._opening_began = _monotonic()
+        self._first_arrival_lead_us = None
+        opening = asyncio.ensure_future(loop.run_in_executor(None, player.prepare_output, fmt))
+        self._opening = opening
+        self._opening_watchdog = loop.call_later(_OPEN_TIMEOUT_S, self._abandon_open, opening)
+        opening.add_done_callback(lambda done: self._on_output_opened(done, player, fmt))
+        return "opening"
+
+    def _forget_open(self) -> None:
+        """Stop waiting for the open in flight; its output is closed when it finishes."""
+        if self._opening_watchdog is not None:
+            self._opening_watchdog.cancel()
+            self._opening_watchdog = None
+        self._opening = None
+        self._opening_chunks.clear()
+
+    def _abandon_open(self, opening: asyncio.Future[Any]) -> None:
+        if self._opening is not opening:
+            return
+        self._opening_watchdog = None
+        if not self._warned_hung_open:
+            self._warned_hung_open = True
+            logger.warning(
+                "The audio output did not open within %.0f s; giving up on it, the next audio opens it anew",
+                _OPEN_TIMEOUT_S,
+            )
+        self._forget_open()
+
+    def _on_output_opened(self, done: asyncio.Future[Any], player: StreamPlayer, fmt: PcmFormat) -> None:
+        """Adopt the output opened off the loop and hand it the chunks that waited."""
+        current = self._opening is done
+        chunks: list[tuple[int, bytes, PcmFormat]] = []
+        if current:
+            chunks = list(self._opening_chunks)
+            self._forget_open()
+        if done.cancelled():
+            return
+        exc = done.exception()
+        if exc is not None:
+            if current:
+                self._open_failures += 1
+                backoff = min(_OPEN_RETRY_MIN_S * 2 ** (self._open_failures - 1), _OPEN_RETRY_MAX_S)
+                self._open_retry_at = _monotonic() + backoff
+                logger.warning("Opening the audio output failed: %s; retrying in %.1f s", exc, backoff)
+            return
+        output = done.result()
+        if not current or player is not self._player or self._opening_discard:
+            player.discard_output(output)
+            return
+        self._open_failures = 0
+        self._open_retry_at = 0.0
+        opened_ms = (_monotonic() - self._opening_began) * 1000.0
+        player.adopt_output(output, fmt)
+        self._start_cost = {"output_open_ms": opened_ms}
+        if self._opening_from_start:
+            self._start_cost["loop_block_ms"] = self._loop_block_ms
+        self._schedule_start_timing_line()
+        try:
+            for play_time_us, payload, chunk_fmt in chunks:
+                player.start(chunk_fmt)
+                player.submit(play_time_us, payload)
+        except Exception:
+            logger.exception("Handing the waiting audio to the new output failed")
+
+    def _prune_waiting(self, now_us: int) -> None:
+        """Drop waiting chunks that end before now: the player would drop them anyway."""
+        chunks = self._opening_chunks
+        while chunks:
+            play_time_us, payload, fmt = chunks[0]
+            frame_bytes = fmt.frame_bytes()
+            frames = len(payload) // frame_bytes if frame_bytes else 0
+            if play_time_us + frames * 1_000_000 // fmt.sample_rate > now_us:
+                break
+            chunks.popleft()
+
+    async def _warm_decoder_later(self) -> None:
+        await asyncio.sleep(_DECODER_WARMUP_DELAY_S)
+        await asyncio.to_thread(_warm_decoder_library)
 
     def _reset_decoder(
         self,
@@ -1202,8 +1386,19 @@ class BridgeDaemon:
             self._pending_play_time_us = None
         else:
             self._pending_play_time_us = None
-        self._player.start(fmt)
-        self._player.submit(play_time_us, payload)
+        state = self._output_state(fmt)
+        if state == "opening":
+            now_us = self._player.now_us()
+            if self._first_arrival_lead_us is None:
+                self._first_arrival_lead_us = play_time_us - now_us
+            if self._args.compensate_output_latency:
+                self._prune_waiting(now_us)
+            self._opening_chunks.append((play_time_us, payload, fmt))
+        elif state == "unavailable":
+            pass  # a failed open is backing off: nothing can play this
+        else:
+            self._player.start(fmt)
+            self._player.submit(play_time_us, payload)
         frame_bytes = fmt.frame_bytes()
         duration_us = (len(payload) // frame_bytes) * 1_000_000 // fmt.sample_rate if frame_bytes else 0
         self._next_play_time_us = play_time_us + duration_us
@@ -1213,6 +1408,7 @@ class BridgeDaemon:
         self._decoder_format = None
         self._next_play_time_us = None
         self._pending_play_time_us = None
+        self._opening_chunks.clear()
         if self._player is not None:
             self._player.clear()
 
@@ -1226,6 +1422,9 @@ class BridgeDaemon:
         self._decoder_format = None
         self._next_play_time_us = None
         self._pending_play_time_us = None
+        if self._opening is not None:
+            self._opening_discard = True
+            self._opening_chunks.clear()
         if self._player is not None:
             self._player.stop()
         self._on_stream_event("stop")
@@ -1265,6 +1464,9 @@ class BridgeDaemon:
         report = player.start_report()
         if report is None:
             return
+        if self._first_arrival_lead_us is not None:
+            # The first chunk's lead when it arrived, not when the opened output took it.
+            report = {**report, "first_lead_ms": round(self._first_arrival_lead_us / 1000.0, 3)}
         try:
             pa_latency = await pulse.apid_sink_input_latency(os.getpid())
         except Exception as exc:
@@ -1277,11 +1479,13 @@ class BridgeDaemon:
                 pa_latency=pa_latency,
                 time_sync=time_sync_summary(self._client),
                 output_delay_ms=self._player_delay_ms,
+                start_cost=self._start_cost,
             ),
         )
         self._check_min_latency(report)
         if pa_latency is not None and self._args.compensate_output_latency:
-            self._raise_lead_for_lookahead(float(pa_latency["sink_ms"]))
+            self._note_sink_lookahead(float(pa_latency["sink_ms"]))
+        self._redeclare_lead()
 
     def _check_min_latency(self, report: dict[str, Any]) -> None:
         compensated = report.get("compensated_latency_ms")
@@ -1297,8 +1501,8 @@ class BridgeDaemon:
             min_latency - compensated,
         )
 
-    def _raise_lead_for_lookahead(self, sink_ms: float) -> None:
-        self._note_sink_lookahead(sink_ms)
+    def _redeclare_lead(self) -> None:
+        """Send Music Assistant a new lead when what it must cover has changed."""
         client = self._client
         if client is None or not hasattr(client, "set_required_lead_time_ms"):
             return
@@ -1309,7 +1513,11 @@ class BridgeDaemon:
         self._bridge_status["declared_lead_time_ms"] = round(lead)
         self._notify()
         self._report_player_state()
-        logger.info("Declared lead time raised to %.0f ms to cover the sink's %.1f ms lookahead", lead, sink_ms)
+        logger.info(
+            "Declared lead time raised to %.0f ms to cover the sink's %.1f ms lookahead",
+            lead,
+            self._sink_lookahead_ms or 0.0,
+        )
 
     async def _clock_diag_loop(self) -> None:
         """While playing: clock rates, DEBUG every 10 s and INFO once a minute."""

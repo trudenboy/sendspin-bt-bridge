@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- On a Bluetooth speaker the first audio of every stream reached the player
+  0.7–1.6 s after its play time: opening the audio output, which waits for
+  the speaker's Bluetooth link, held the speaker's process (time sync,
+  volume and stop commands included) while Music Assistant's first audio
+  waited unread. The output is now opened in the background and the audio
+  that arrives meanwhile waits for it. With the default
+  **Compensate the audio buffer latency**, audio whose play time has passed
+  by the time the output is ready is dropped to the exact sample instead of
+  being handed to the audio server, at a start or after a dropout. The audio
+  server still clips the few tens of ms just ahead of what the speaker is
+  playing (about 60 ms on Bluetooth). A speaker whose output is slow to open
+  therefore joins a group stream in time, a moment after the others; the lead
+  time declared to Music Assistant is unchanged. The FLAC decoder is loaded
+  in the background a few seconds after the speaker starts, not on its first
+  stream. The `Stream start timing:` line now also gives the overdue audio
+  dropped, how late the first kept sample reached the output, how long the
+  output took to open, and how long the start held the speaker's process.
+
 ## [3.1.0-beta.7] - 2026-10-16
 
 ### Added
