@@ -50,6 +50,12 @@ _monotonic = time.monotonic
 # for its A2DP transport). It runs in a worker thread; the chunks that arrive
 # meanwhile wait here (oldest dropped beyond this many, ~50 s of 25 ms chunks).
 _MAX_OPENING_CHUNKS = 2048
+# An open still running after this long is abandoned (its output is closed if it
+# ever finishes); the next stream start or chunk opens anew.
+_OPEN_TIMEOUT_S = 5.0
+# A failed open is retried no sooner than this, doubling per failure up to the max.
+_OPEN_RETRY_MIN_S = 0.5
+_OPEN_RETRY_MAX_S = 10.0
 # PyAV (the FLAC decoder) is imported in a worker thread this long after the
 # daemon starts, so neither the handshake nor the first stream/start waits for it.
 _DECODER_WARMUP_DELAY_S = 5.0
@@ -181,6 +187,11 @@ class BridgeDaemon:
         self._opening_discard = False
         self._opening_began = 0.0
         self._loop_block_ms = 0.0
+        self._opening_from_start = False
+        self._opening_watchdog: asyncio.TimerHandle | None = None
+        self._open_failures = 0
+        self._open_retry_at = 0.0
+        self._warned_hung_open = False
         self._first_arrival_lead_us: int | None = None
         self._warned_min_latency = False
 
@@ -249,6 +260,9 @@ class BridgeDaemon:
                 self._opening_discard = True
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(asyncio.shield(self._opening), timeout=5.0)
+            if self._opening_watchdog is not None:
+                self._opening_watchdog.cancel()
+                self._opening_watchdog = None
             for task in (self._clock_diag_task, self._start_timing_task, self._decoder_warmup_task):
                 if task is not None:
                     task.cancel()
@@ -458,6 +472,8 @@ class BridgeDaemon:
     def retarget_sink(self, sink_name: str | None) -> None:
         if self._player is None:
             return
+        # An open in flight belongs to the old sink: its output is closed when it finishes.
+        self._forget_open()
         self._player.stop()
         self._player = self._new_player(sink_name)
         self._audio_handler = self._player
@@ -994,7 +1010,10 @@ class BridgeDaemon:
             except Exception:
                 logger.exception("Player resync after an output delay change failed")
                 return
-        outcome = "player resynchronised" if resynced else "applies to the next stream"
+        if self._opening is not None:
+            outcome = "waiting audio shifted (output still opening)"
+        else:
+            outcome = "player resynchronised" if resynced else "applies to the next stream"
         logger.info("Output delay changed %g→%g ms; %s", old_ms, new_ms, outcome)
 
     # ── MA group updates ─────────────────────────────────────────────────────
@@ -1176,10 +1195,11 @@ class BridgeDaemon:
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
             fmt = PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth)
-            if self._opening is not None:
+            state = self._output_state(fmt, from_start=True)
+            if state == "opening":
                 # An output already being opened serves this stream too.
                 self._opening_discard = False
-            elif not self._open_output_off_loop(fmt):
+            elif state == "ready":
                 self._first_arrival_lead_us = None
                 generation = self._player.stream_generation
                 self._player.start(fmt)
@@ -1191,44 +1211,81 @@ class BridgeDaemon:
         self._loop_block_ms = (_monotonic() - began) * 1000.0
         self._on_stream_event("start")
 
-    def _open_output_off_loop(self, fmt: PcmFormat) -> bool:
-        """Open a new output in a worker thread; False when one is not needed
-        (the running output is kept) or there is no loop to come back to."""
+    def _output_state(self, fmt: PcmFormat, *, from_start: bool = False) -> str:
+        """Where audio for ``fmt`` goes now: ``ready`` (the player, opening its
+        output on the loop if it must: no loop to come back to), ``opening``
+        (wait for the output being opened in a worker thread, starting that
+        open if needed) or ``unavailable`` (a failed open is backing off)."""
         player = self._player
+        if self._opening is not None:
+            return "opening"
         if player is None or player.needs_output() is not True:
-            return False
+            return "ready"
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            return False
+            return "ready"
+        if _monotonic() < self._open_retry_at:
+            return "unavailable"
         self._opening_chunks.clear()
         self._opening_discard = False
+        self._opening_from_start = from_start
         self._opening_began = _monotonic()
         self._first_arrival_lead_us = None
         opening = asyncio.ensure_future(loop.run_in_executor(None, player.prepare_output, fmt))
         self._opening = opening
+        self._opening_watchdog = loop.call_later(_OPEN_TIMEOUT_S, self._abandon_open, opening)
         opening.add_done_callback(lambda done: self._on_output_opened(done, player, fmt))
-        return True
+        return "opening"
+
+    def _forget_open(self) -> None:
+        """Stop waiting for the open in flight; its output is closed when it finishes."""
+        if self._opening_watchdog is not None:
+            self._opening_watchdog.cancel()
+            self._opening_watchdog = None
+        self._opening = None
+        self._opening_chunks.clear()
+
+    def _abandon_open(self, opening: asyncio.Future[Any]) -> None:
+        if self._opening is not opening:
+            return
+        self._opening_watchdog = None
+        if not self._warned_hung_open:
+            self._warned_hung_open = True
+            logger.warning(
+                "The audio output did not open within %.0f s; giving up on it, the next audio opens it anew",
+                _OPEN_TIMEOUT_S,
+            )
+        self._forget_open()
 
     def _on_output_opened(self, done: asyncio.Future[Any], player: StreamPlayer, fmt: PcmFormat) -> None:
         """Adopt the output opened off the loop and hand it the chunks that waited."""
-        if self._opening is done:
-            self._opening = None
-        chunks = list(self._opening_chunks)
-        self._opening_chunks.clear()
+        current = self._opening is done
+        chunks: list[tuple[int, bytes, PcmFormat]] = []
+        if current:
+            chunks = list(self._opening_chunks)
+            self._forget_open()
         if done.cancelled():
             return
         exc = done.exception()
         if exc is not None:
-            logger.warning("Opening the audio output failed: %s", exc)
+            if current:
+                self._open_failures += 1
+                backoff = min(_OPEN_RETRY_MIN_S * 2 ** (self._open_failures - 1), _OPEN_RETRY_MAX_S)
+                self._open_retry_at = _monotonic() + backoff
+                logger.warning("Opening the audio output failed: %s; retrying in %.1f s", exc, backoff)
             return
         output = done.result()
-        if player is not self._player or self._opening_discard:
+        if not current or player is not self._player or self._opening_discard:
             player.discard_output(output)
             return
+        self._open_failures = 0
+        self._open_retry_at = 0.0
         opened_ms = (_monotonic() - self._opening_began) * 1000.0
         player.adopt_output(output, fmt)
-        self._start_cost = {"output_open_ms": opened_ms, "loop_block_ms": self._loop_block_ms}
+        self._start_cost = {"output_open_ms": opened_ms}
+        if self._opening_from_start:
+            self._start_cost["loop_block_ms"] = self._loop_block_ms
         self._schedule_start_timing_line()
         try:
             for play_time_us, payload, chunk_fmt in chunks:
@@ -1236,6 +1293,17 @@ class BridgeDaemon:
                 player.submit(play_time_us, payload)
         except Exception:
             logger.exception("Handing the waiting audio to the new output failed")
+
+    def _prune_waiting(self, now_us: int) -> None:
+        """Drop waiting chunks that end before now: the player would drop them anyway."""
+        chunks = self._opening_chunks
+        while chunks:
+            play_time_us, payload, fmt = chunks[0]
+            frame_bytes = fmt.frame_bytes()
+            frames = len(payload) // frame_bytes if frame_bytes else 0
+            if play_time_us + frames * 1_000_000 // fmt.sample_rate > now_us:
+                break
+            chunks.popleft()
 
     async def _warm_decoder_later(self) -> None:
         await asyncio.sleep(_DECODER_WARMUP_DELAY_S)
@@ -1318,10 +1386,16 @@ class BridgeDaemon:
             self._pending_play_time_us = None
         else:
             self._pending_play_time_us = None
-        if self._opening is not None or self._open_output_off_loop(fmt):
+        state = self._output_state(fmt)
+        if state == "opening":
+            now_us = self._player.now_us()
             if self._first_arrival_lead_us is None:
-                self._first_arrival_lead_us = play_time_us - self._player.now_us()
+                self._first_arrival_lead_us = play_time_us - now_us
+            if self._args.compensate_output_latency:
+                self._prune_waiting(now_us)
             self._opening_chunks.append((play_time_us, payload, fmt))
+        elif state == "unavailable":
+            pass  # a failed open is backing off: nothing can play this
         else:
             self._player.start(fmt)
             self._player.submit(play_time_us, payload)

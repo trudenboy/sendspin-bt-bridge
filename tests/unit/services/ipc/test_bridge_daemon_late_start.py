@@ -189,7 +189,10 @@ async def test_a_delay_change_while_opening_moves_the_waiting_chunks(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_failed_open_is_logged_and_the_next_chunk_tries_again(tmp_path, caplog):
+async def test_a_failed_open_is_logged_and_the_next_chunk_tries_again(tmp_path, monkeypatch, caplog):
+    import sendspin_bridge.services.ipc.bridge_daemon as daemon_module
+
+    monkeypatch.setattr(daemon_module, "_OPEN_RETRY_MIN_S", 0.0)  # no backoff here (tested below)
     daemon, player = _with_player(tmp_path, open_s=0.0)
     calls = {"n": 0}
     original = player.prepare_output
@@ -282,3 +285,127 @@ async def test_the_decoder_library_is_loaded_in_a_worker_thread_after_startup(tm
 
     assert len(loaded_in) == 1
     assert loaded_in[0] != threading.current_thread().name
+
+
+# ── Opening edge cases ───────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_a_retarget_while_opening_forgets_the_open_and_its_waiting_audio(tmp_path, monkeypatch):
+    import sendspin_bridge.services.ipc.bridge_daemon as daemon_module
+
+    daemon, player = _with_player(tmp_path, open_s=0.2)
+    daemon._on_stream_start(_start_message())
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    monkeypatch.setattr(daemon_module, "StreamPlayer", lambda **_kw: _SlowOutputPlayer(open_s=0.0))
+    monkeypatch.setattr(daemon_module, "default_pulsesink_factory", lambda **_kw: MagicMock())
+
+    daemon.retarget_sink("sendspin_fallback")
+
+    assert daemon._opening is None
+    assert not daemon._opening_chunks
+    await _wait_for(lambda: len(player.discarded) == 1)
+    assert player.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_a_hung_open_is_abandoned_with_one_warning_and_the_next_chunk_opens_anew(tmp_path, monkeypatch, caplog):
+    import sendspin_bridge.services.ipc.bridge_daemon as daemon_module
+
+    monkeypatch.setattr(daemon_module, "_OPEN_TIMEOUT_S", 0.1)
+    daemon, player = _with_player(tmp_path, open_s=0.5)
+    caplog.set_level(logging.WARNING, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._on_stream_start(_start_message())
+    await _wait_for(lambda: daemon._opening is None)
+    player.open_s = 0.0
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    await _wait_for(lambda: bool(player.submitted))
+    await _wait_for(lambda: len(player.discarded) == 1)  # the hung open finished late
+
+    hung = [r for r in caplog.records if "did not open" in r.getMessage()]
+    assert len(hung) == 1
+    assert len(player.opened_in) == 2
+    assert player.submitted == [10_250_000]
+
+
+@pytest.mark.asyncio
+async def test_audio_that_falls_overdue_while_waiting_is_pruned(tmp_path):
+    daemon, _player = _with_player(tmp_path, open_s=0.3)
+
+    daemon._on_stream_start(_start_message())
+    for ts in (9_000_000, 9_990_000, 9_995_000, 10_250_000):  # "now" is 10 s; chunks last 10 ms
+        daemon._on_audio_chunk(ts, bytes(1920), _pcm_format())
+
+    assert [t for t, _p, _f in daemon._opening_chunks] == [9_995_000, 10_250_000]
+
+
+@pytest.mark.asyncio
+async def test_without_compensation_waiting_audio_is_kept(tmp_path):
+    daemon = _daemon(tmp_path, compensate_output_latency=False)
+    daemon._schedule_start_timing_line = MagicMock()  # type: ignore[method-assign]
+    daemon._player = _SlowOutputPlayer(open_s=0.3)  # type: ignore[assignment]
+
+    daemon._on_stream_start(_start_message())
+    daemon._on_audio_chunk(9_000_000, bytes(1920), _pcm_format())
+
+    assert [t for t, _p, _f in daemon._opening_chunks] == [9_000_000]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_open_is_retried_with_backoff_and_logged_once_per_window(tmp_path, monkeypatch, caplog):
+    import sendspin_bridge.services.ipc.bridge_daemon as daemon_module
+
+    monkeypatch.setattr(daemon_module, "_OPEN_RETRY_MIN_S", 0.2)
+    daemon, player = _with_player(tmp_path, open_s=0.0)
+    calls = {"n": 0}
+
+    def _failing(fmt):
+        calls["n"] += 1
+        raise RuntimeError("Connection refused")
+
+    player.prepare_output = _failing  # type: ignore[method-assign]
+    caplog.set_level(logging.WARNING, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._on_stream_start(_start_message())
+    await _wait_for(lambda: daemon._opening is None and calls["n"] == 1)
+    for _ in range(5):  # within the backoff window: no new attempt
+        daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+        await asyncio.sleep(0.01)
+    assert calls["n"] == 1
+    assert not daemon._opening_chunks
+
+    await asyncio.sleep(0.25)
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    await _wait_for(lambda: daemon._opening is None and calls["n"] == 2)
+
+    failures = [r.getMessage() for r in caplog.records if "Opening the audio output failed" in r.getMessage()]
+    assert len(failures) == 2
+    assert "retrying in 0.2 s" in failures[0]
+    assert "retrying in 0.4 s" in failures[1]
+
+
+@pytest.mark.asyncio
+async def test_a_delay_change_while_opening_says_the_waiting_audio_was_shifted(tmp_path, caplog):
+    daemon, _player = _with_player(tmp_path, open_s=0.3)
+    daemon._player_delay_ms = 247.0
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._on_stream_start(_start_message())
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    daemon._target_delay_ms = 267.0
+    daemon._apply_output_delay()
+
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Output delay changed")]
+    assert "waiting audio shifted" in lines[0]
+
+
+@pytest.mark.asyncio
+async def test_an_open_started_by_a_chunk_reports_no_loop_block(tmp_path):
+    daemon, player = _with_player(tmp_path, open_s=0.0)
+
+    daemon._on_audio_chunk(10_250_000, bytes(1920), _pcm_format())
+    await _wait_for(lambda: bool(player.submitted))
+
+    assert daemon._start_cost is not None
+    assert "loop_block_ms" not in daemon._start_cost
