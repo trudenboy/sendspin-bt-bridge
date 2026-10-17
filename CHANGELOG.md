@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stream. The log says which was done, for example `Output delay changed
   283→112 ms; shifted in place (inserted 171 ms)`.
 
+- A speaker's process no longer grows by a whole audio pipeline with every
+  stream start or output rebuild: the pipelines it closed were never freed.
+  When a delay change does restart the stream, the new stream is now opened
+  in the background, like at a stream start, so the speaker's process
+  (time sync, volume and stop commands included) is not held meanwhile.
+
 ## [3.1.0-beta.8] - 2026-10-17
 
 ### Fixed

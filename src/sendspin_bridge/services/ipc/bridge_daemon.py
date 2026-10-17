@@ -447,6 +447,9 @@ class BridgeDaemon:
             ),
             output_latency_ns=buffer_time_us * 1000 if self._args.compensate_output_latency else 0,
             max_in_place_shift_us=_MAX_IN_PLACE_SHIFT_US,
+            # A rebuild's new output is opened like a stream start's: in a
+            # worker, never on the loop.
+            defer_rebuild_open=True,
         )
 
     def declared_lead_time_ms(self, value_ms: float) -> float:
@@ -1010,13 +1013,19 @@ class BridgeDaemon:
                 ((t + shift_us, p, f) for t, p, f in self._opening_chunks), maxlen=_MAX_OPENING_CHUNKS
             )
         result: InPlaceShift | bool = False
+        was_opening = self._opening is not None
         if self._player is not None:
             try:
                 result = self._player.resync(shift_us)
             except Exception:
                 logger.exception("Player resync after an output delay change failed")
                 return
-        if self._opening is not None:
+            reopen = getattr(self._player, "awaiting_reopen", None)
+            if result is True and isinstance(reopen, PcmFormat):
+                # The rebuild closed the output: open the new one off the loop
+                # (its kept audio, and what arrives meanwhile, wait for it).
+                self._output_state(reopen)
+        if was_opening:
             outcome = "waiting audio shifted (output still opening)"
         elif isinstance(result, InPlaceShift):
             verb = "inserted" if result.shift_us > 0 else "dropped"

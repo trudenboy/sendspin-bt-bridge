@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+import weakref
 from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -44,6 +45,7 @@ class StreamPlayer:
         clock: object | None = None,
         output_latency_ns: int = 0,
         max_in_place_shift_us: int = 0,
+        defer_rebuild_open: bool = False,
     ) -> None:
         self._sink_factory = sink_factory
         # The pipeline latency, fixed on every new pipeline and taken out of
@@ -57,6 +59,15 @@ class StreamPlayer:
         # An in-place shift waiting for the audio that follows it.
         self._splice: _PendingSplice | None = None
         self._in_place_shifts = 0
+        # A rebuild only closes the output and keeps its audio here; the caller
+        # opens the new one (off its event loop) and adopts it.
+        self._defer_rebuild_open = bool(defer_rebuild_open)
+        self._reopen_audio: list[tuple[int, bytes]] = []
+        self._reopen_format: PcmFormat | None = None
+        self._probe_id = 0
+        # Silence handed on for later shifts since the last audio, in frames:
+        # it counts toward the in-place limit.
+        self._inserted_frames = 0
         # The last audio handed on (up to one fade): what a fade-out mirrors.
         self._tail = b""
         # Frames of a fade-in already applied, while the audio after inserted
@@ -89,6 +100,11 @@ class StreamPlayer:
     def stream_generation(self) -> int:
         """How many outputs (pipelines) this player has built so far."""
         return self._generation
+
+    @property
+    def awaiting_reopen(self) -> PcmFormat | None:
+        """The format a deferred rebuild waits to be reopened in (None: none waits)."""
+        return self._reopen_format
 
     def needs_output(self) -> bool:
         """Whether the next ``start`` has to open a new output (the slow part)."""
@@ -128,8 +144,7 @@ class StreamPlayer:
         pipeline.set_base_time(0)
         if self._output_latency_ns:
             pipeline.set_latency(self._output_latency_ns)
-        output = PreparedOutput(pipeline=pipeline, appsrc=appsrc, sink=sink)
-        self._attach_sink_probe(output)
+        output = PreparedOutput(pipeline=pipeline, appsrc=appsrc, sink=sink, probe_id=self._attach_sink_probe(sink))
         _apply_volume_to(sink, self._volume)
         appsrc.set_property(
             "caps",
@@ -151,10 +166,12 @@ class StreamPlayer:
 
     def adopt_output(self, output: PreparedOutput, audio_format: PcmFormat) -> None:
         """Make a prepared output the current one (a new stream start)."""
+        reopen = self._reopen_audio if self._reopen_format == audio_format else []
         self.stop()
         self._pipeline = output.pipeline
         self._appsrc = output.appsrc
         self._sink = output.sink
+        self._probe_id = output.probe_id
         self._format = audio_format
         self._generation += 1
         self._first_lead_us = None
@@ -163,12 +180,16 @@ class StreamPlayer:
         self._stream_closed = False
         # A volume set while the output was being opened.
         self._apply_volume()
+        # The audio a deferred rebuild kept for the new output.
+        for play_time_us, payload in reopen:
+            self.submit(play_time_us, payload)
 
     @staticmethod
     def discard_output(output: PreparedOutput) -> None:
         """Close a prepared output that will not be used."""
         from sendspin_bridge.services.audio.player.gst_support import Gst
 
+        _remove_probe(output.sink, output.probe_id)
         output.pipeline.set_state(Gst.State.NULL)
 
     def submit(self, play_time_us: int, payload: bytes) -> None:
@@ -221,6 +242,7 @@ class StreamPlayer:
             if self._fade_in_done >= fade:
                 self._fade_in_done = None
         self._push(pts_ns, payload)
+        self._inserted_frames = 0
         return True
 
     def _push(self, pts_ns: int, payload: bytes) -> None:
@@ -286,10 +308,14 @@ class StreamPlayer:
         guard_us = _RESYNC_GUARD_US if self._output_latency_ns else 0
         keep = [(start_us, payload) for start_us, payload in keep if start_us >= now_us + guard_us]
         self.stop()
+        self._resyncs += 1
+        if self._defer_rebuild_open:
+            self._reopen_audio = keep
+            self._reopen_format = audio_format
+            return True
         self.start(audio_format)
         for play_time_us, payload in keep:
             self.submit(play_time_us, payload)
-        self._resyncs += 1
         return True
 
     def _shift_in_place(self, shift_us: int) -> InPlaceShift | None:
@@ -308,7 +334,7 @@ class StreamPlayer:
             # Still waiting for the audio after an earlier shift: the shifts
             # compose into one, measured from the same junction.
             total = (splice.expected_frames if splice.shift_frames is None else splice.shift_frames) + frames
-            if abs(total) > max_frames:
+            if abs(total) > max_frames or abs(total + splice.inserted_before) > max_frames:
                 return None
             if splice.shift_frames is None and total >= fade:
                 insert_at = splice.junction_ns  # nothing arrived yet: hand the silence on now
@@ -316,12 +342,17 @@ class StreamPlayer:
         elif self._last_pts_ns is not None and self._last_duration_ns is not None:
             junction_ns = self._last_pts_ns + self._last_duration_ns
             if frames and not self._junction_passed(junction_ns, gst_now_ns):
+                if abs(self._inserted_frames + frames) > max_frames:
+                    return None  # with the silence already handed on, beyond the limit
                 if frames >= fade:
                     insert_at = junction_ns
                 else:
                     # Earlier (or later by less than a fade): it needs the audio that follows.
                     self._splice = splice = _PendingSplice(
-                        junction_ns=junction_ns, expected_frames=0, after_silence=self._fade_in_done is not None
+                        junction_ns=junction_ns,
+                        expected_frames=0,
+                        after_silence=self._fade_in_done is not None,
+                        inserted_before=self._inserted_frames,
                     )
         if insert_at is not None:
             # The silence must not run ahead of the audio it stands for: the
@@ -340,9 +371,12 @@ class StreamPlayer:
             # Later: the server sends the next audio that much later too, so
             # the silence is handed on now and the output never runs dry.
             silent = self._fade_in_done is not None or (splice is not None and splice.after_silence)
+            if splice is not None:
+                self._inserted_frames = splice.inserted_before
             self._splice = None
             tail = b"" if silent else self._tail
             self._push_pieces(insert_at, silence_after(tail, frames=frames, fade=fade, fmt=self._format))
+            self._inserted_frames += frames
             self._fade_in_done = 0
         elif splice is not None and self._splice is splice:
             if splice.shift_frames is None:
@@ -455,6 +489,7 @@ class StreamPlayer:
             fade_out=not splice.after_silence,
         )
         self._fade_in_done = None  # the region fades the shifted audio in
+        self._inserted_frames = 0
         region_frames = self._push_pieces(splice.junction_ns, region)
         rest = audio[needed * frame :]
         if rest:
@@ -478,6 +513,7 @@ class StreamPlayer:
 
     def _forget_shift(self) -> None:
         self._splice = None
+        self._inserted_frames = 0
         self._fade_in_done = None
         self._tail = b""
 
@@ -491,6 +527,8 @@ class StreamPlayer:
     def clear(self) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
 
+        self._reopen_audio = []
+        self._reopen_format = None
         if self._pipeline is None:
             return
         self._pipeline.send_event(Gst.Event.new_flush_start())
@@ -522,8 +560,14 @@ class StreamPlayer:
     def stop(self) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
 
+        self._reopen_audio = []
+        self._reopen_format = None
         if self._pipeline is None:
             return
+        # The probe holds a reference into the player: removed, the pipeline
+        # and everything in it can be freed.
+        _remove_probe(self._sink, self._probe_id)
+        self._probe_id = 0
         self._pipeline.set_state(Gst.State.NULL)
         self._pipeline = None
         self._appsrc = None
@@ -587,27 +631,35 @@ class StreamPlayer:
         )
         self._format = audio_format
 
-    def _attach_sink_probe(self, output: PreparedOutput) -> None:
+    def _attach_sink_probe(self, sink: Any) -> int:
+        """Count rendered buffers and their sync error; returns the probe id (0: none).
+
+        The probe lives on the sink's pad, so it holds neither the pipeline
+        nor the player: a reference from a GStreamer callback is invisible to
+        Python's collector, and would keep every output ever built alive.
+        """
         from sendspin_bridge.services.audio.player.gst_support import Gst
 
-        pad = output.sink.get_static_pad("sink")
+        pad = sink.get_static_pad("sink")
         if pad is None:
-            return
-        pipeline = output.pipeline
+            return 0
+        player_ref = weakref.ref(self)
 
-        def _probe(_pad, info):
+        def _probe(probe_pad, info):
+            player = player_ref()
             buf = info.get_buffer()
-            if buf is None:
+            if player is None or buf is None:
                 return Gst.PadProbeReturn.OK
-            self._rendered += 1
-            clock = pipeline.get_clock()
+            player._rendered += 1
+            element = probe_pad.get_parent_element()
+            clock = element.get_clock() if element is not None else None
             if clock is not None and buf.pts != Gst.CLOCK_TIME_NONE:
-                self._sync_error_ns = int(clock.get_time()) - int(buf.pts)
-                if self._first_margin_raw_ns is None:
-                    self._first_margin_raw_ns = -self._sync_error_ns
+                player._sync_error_ns = int(clock.get_time()) - int(buf.pts)
+                if player._first_margin_raw_ns is None:
+                    player._first_margin_raw_ns = -player._sync_error_ns
             return Gst.PadProbeReturn.OK
 
-        pad.add_probe(Gst.PadProbeType.BUFFER, _probe)
+        return int(pad.add_probe(Gst.PadProbeType.BUFFER, _probe) or 0)
 
     def _is_discontinuity(self, pts_ns: int) -> bool:
         if self._last_pts_ns is None or self._last_duration_ns is None:
@@ -757,6 +809,8 @@ class _PendingSplice:
     shift_frames: int | None = None
     first_play_us: int | None = None
     next_play_us: int = 0
+    # Silence handed on for later shifts just before the junction, in frames.
+    inserted_before: int = 0
     # The audio after the junction so far (at most |shift| plus one fade).
     audio: bytearray = field(default_factory=bytearray)
 
@@ -768,6 +822,15 @@ class PreparedOutput:
     pipeline: Any
     appsrc: Any
     sink: Any
+    probe_id: int = 0
+
+
+def _remove_probe(sink: Any, probe_id: int) -> None:
+    if sink is None or not probe_id:
+        return
+    pad = sink.get_static_pad("sink")
+    if pad is not None:
+        pad.remove_probe(probe_id)
 
 
 def _apply_volume_to(sink: Any, volume: tuple[float, bool] | None) -> None:
