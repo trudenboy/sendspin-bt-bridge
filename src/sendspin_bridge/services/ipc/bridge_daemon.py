@@ -29,7 +29,7 @@ from aiosendspin.models.types import PlayerCommand, UndefinedField
 
 from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
 from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory
-from sendspin_bridge.services.audio.player.player import PcmFormat, StreamPlayer
+from sendspin_bridge.services.audio.player.player import InPlaceShift, PcmFormat, StreamPlayer
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
 from sendspin_bridge.services.ipc.status_store import StatusStore
 
@@ -41,6 +41,10 @@ logger = logging.getLogger(__name__)
 # client/state (never the hello) and names the delay command set_output_delay.
 # Delay changes closer together than this are applied as one resync.
 _DELAY_RESYNC_QUIET_S = 0.15
+# A delay change up to this size is applied on the running output (the
+# PulseAudio stream is kept, so a Bluetooth speaker does not re-buffer with a
+# new offset); a larger one rebuilds the output.
+_MAX_IN_PLACE_SHIFT_US = 2_000_000
 # A compensated chunk must reach PulseAudio before the sink renders it, i.e.
 # the sink's lookahead (PA "sink latency") ahead of its play time; the declared
 # lead covers a measured lookahead plus this much.
@@ -442,6 +446,10 @@ class BridgeDaemon:
                 provide_clock=self._args.playout_diag,
             ),
             output_latency_ns=buffer_time_us * 1000 if self._args.compensate_output_latency else 0,
+            max_in_place_shift_us=_MAX_IN_PLACE_SHIFT_US,
+            # A rebuild's new output is opened like a stream start's: in a
+            # worker, never on the loop.
+            defer_rebuild_open=True,
         )
 
     def declared_lead_time_ms(self, value_ms: float) -> float:
@@ -960,8 +968,9 @@ class BridgeDaemon:
         set_output_delay or the bridge set it (set_static_delay_ms). Only later
         chunks get the new play time from ``compute_play_time``; the queued ones
         keep the old one, and GStreamer would absorb a step under 40 ms as
-        jitter. Each resync rebuilds the output, so a burst of changes (a
-        slider being dragged) is applied once, after a short quiet period.
+        jitter. The player applies the shift on its running output (or, for a
+        very large one, rebuilds it); either way a burst of changes (a slider
+        being dragged) is applied once, after a short quiet period.
         """
         self._target_delay_ms = delay_ms
         if self._delay_resync_handle is not None:
@@ -1003,17 +1012,26 @@ class BridgeDaemon:
             self._opening_chunks = deque(
                 ((t + shift_us, p, f) for t, p, f in self._opening_chunks), maxlen=_MAX_OPENING_CHUNKS
             )
-        resynced = False
+        result: InPlaceShift | bool = False
+        was_opening = self._opening is not None
         if self._player is not None:
             try:
-                resynced = bool(self._player.resync(shift_us))
+                result = self._player.resync(shift_us)
             except Exception:
                 logger.exception("Player resync after an output delay change failed")
                 return
-        if self._opening is not None:
+            reopen = getattr(self._player, "awaiting_reopen", None)
+            if result is True and isinstance(reopen, PcmFormat):
+                # The rebuild closed the output: open the new one off the loop
+                # (its kept audio, and what arrives meanwhile, wait for it).
+                self._output_state(reopen)
+        if was_opening:
             outcome = "waiting audio shifted (output still opening)"
+        elif isinstance(result, InPlaceShift):
+            verb = "inserted" if result.shift_us > 0 else "dropped"
+            outcome = f"shifted in place ({verb} {abs(result.shift_us) / 1000:g} ms)"
         else:
-            outcome = "player resynchronised" if resynced else "applies to the next stream"
+            outcome = "player resynchronised (output rebuilt)" if result else "applies to the next stream"
         logger.info("Output delay changed %g→%g ms; %s", old_ms, new_ms, outcome)
 
     # ── MA group updates ─────────────────────────────────────────────────────

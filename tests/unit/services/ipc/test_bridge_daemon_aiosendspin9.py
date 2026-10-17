@@ -609,6 +609,51 @@ async def test_delay_change_shifts_audio_held_by_the_decoder(tmp_path: Path, qui
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("new_delay", "path"),
+    [(310.0, "shifted in place (dropped 10 ms)"), (200.0, "shifted in place (inserted 100 ms)")],
+)
+async def test_a_delay_change_applied_in_place_says_so(tmp_path: Path, caplog, quick_delay_quiet, new_delay, path):
+    """A shift the player applies on its running output keeps the PulseAudio
+    stream; the log tells that path (and how much audio it dropped or inserted)
+    apart from a rebuild."""
+    from sendspin_bridge.services.audio.player.player import InPlaceShift
+
+    daemon = await _daemon_with_real_client(tmp_path)
+    daemon._player.resync.side_effect = lambda shift_us: InPlaceShift(shift_us=shift_us)
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._client.set_output_delay_ms(new_delay)
+    await _settle()
+
+    assert f"Output delay changed 300→{new_delay:g} ms; {path}" in caplog.text
+    assert "rebuilt" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_delay_change_that_rebuilds_the_output_says_so(tmp_path: Path, caplog, quick_delay_quiet):
+    daemon = await _daemon_with_real_client(tmp_path)
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    daemon._client.set_output_delay_ms(310.0)
+    await _settle()
+
+    assert "Output delay changed 300→310 ms; player resynchronised (output rebuilt)" in caplog.text
+
+
+def test_the_daemon_player_applies_delay_changes_up_to_two_seconds_in_place(tmp_path: Path, monkeypatch):
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_module
+
+    made: list[dict] = []
+    monkeypatch.setattr(bridge_daemon_module, "default_pulsesink_factory", lambda **_kw: MagicMock())
+    monkeypatch.setattr(bridge_daemon_module, "StreamPlayer", lambda **kw: made.append(kw) or MagicMock())
+
+    _daemon(tmp_path)._new_player("bluez_sink.AA_BB.a2dp_sink")
+
+    assert made[0]["max_in_place_shift_us"] == 2_000_000
+
+
+@pytest.mark.asyncio
 async def test_delay_change_with_nothing_playing_says_it_applies_later(tmp_path: Path, caplog, quick_delay_quiet):
     daemon = await _daemon_with_real_client(tmp_path)
     daemon._player.resync.return_value = False
