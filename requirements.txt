@@ -2,7 +2,7 @@
 #    uv export --no-hashes --no-dev --no-emit-project --output-file requirements.txt
 aiohappyeyeballs==2.7.1
     # via aiohttp
-aiohttp==3.14.3
+aiohttp==3.14.5
     # via
     #   aiosendspin
     #   music-assistant-client
@@ -31,7 +31,7 @@ btsocket==0.3.0
     # via
     #   bluetooth-auto-recovery
     #   sendspin-bt-bridge
-certifi==2026.7.22
+certifi==2026.10.23
     # via requests
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
@@ -41,7 +41,7 @@ click==8.5.0
     # via flask
 cpace==0.1.0
     # via aiosendspin
-cryptography==50.0.0
+cryptography==50.0.2
     # via
     #   aiosendspin
     #   cpace
@@ -94,7 +94,7 @@ orjson==3.13.0
     #   music-assistant-models
 paho-mqtt==2.1.0
     # via aiomqtt
-pillow==12.3.0
+pillow==13.0.0
     # via sendspin-bt-bridge
 propcache==0.5.4
     # via
@@ -106,9 +106,9 @@ pulsectl-asyncio==1.3.2
     # via sendspin-bt-bridge
 pycairo==1.29.1
     # via pygobject
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
-pygments==2.20.0
+pygments==2.21.0
     # via sendspin-bt-bridge
 pygobject==3.56.3
     # via sendspin-bt-bridge
@@ -179,9 +179,9 @@ winrt-windows-foundation-collections==3.2.1 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
     # via bleak
-yarl==1.24.2
+yarl==1.25.1
     # via aiohttp
-zeroconf==0.150.0
+zeroconf==0.151.5
     # via
     #   aiosendspin
     #   sendspin-bt-bridge
