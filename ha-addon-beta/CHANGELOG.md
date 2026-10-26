@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.10] - 2026-10-26
+
+### Added
+
+- Speakers now offer Music Assistant 24-bit audio at 44.1, 48 and 96 kHz
+  besides 16-bit. A player set to a hi-res output format in Music Assistant
+  gets it instead of falling back to 16-bit; players left at their default
+  stay on 16-bit 48 kHz.
+
+### Fixed
+
+- Saving the settings no longer revokes the tokens issued for the Home
+  Assistant integration. Each save dropped them from the configuration, so
+  Home Assistant lost access to the bridge until it was paired again.
+- Home Assistant no longer waits 60 seconds at startup for the Sendspin
+  Bridge integration ("Setup timed out for bootstrap"). Its event listener
+  now runs in the background.
+
+### Security
+
+- Updated aiohttp to 3.14.5, Pillow to 13.0.0, certifi to 2026.10.23 and
+  cryptography to 50.0.2, which fix published vulnerabilities in those
+  libraries.
+
 ## [3.1.0-beta.9] - 2026-10-17
 
 ### Fixed

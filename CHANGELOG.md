@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.10] - 2026-10-26
+
 ### Added
 
 - Speakers now offer Music Assistant 24-bit audio at 44.1, 48 and 96 kHz
