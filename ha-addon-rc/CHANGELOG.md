@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.77.0-rc.5] - 2026-10-26
+
+### Fixed
+
+- Saving the settings no longer revokes the tokens issued for the Home
+  Assistant integration. Each save dropped them from the configuration, so
+  Home Assistant lost access to the bridge until it was paired again.
+- Home Assistant no longer waits 60 seconds at startup for the Sendspin
+  Bridge integration ("Setup timed out for bootstrap"). Its event listener
+  now runs in the background.
+
+### Security
+
+- Updated aiohttp to 3.14.5, Pillow to 13.0.0, certifi to 2026.10.23 and
+  cryptography to 50.0.2, which fix published vulnerabilities in those
+  libraries.
+
 ## [2.77.0-rc.4] - 2026-10-14
 
 ### Changed
