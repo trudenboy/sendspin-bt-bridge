@@ -183,7 +183,7 @@ wheels = [
 
 [[package]]
 name = "aiosendspin"
-version = "10.0.2"
+version = "10.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -194,9 +194,9 @@ dependencies = [
     { name = "orjson" },
     { name = "zeroconf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/a9/0021aca30f256a62f453bf3d96b381695260e629d33301131632fbbb2db8/aiosendspin-10.0.2.tar.gz", hash = "sha256:9844dae192482628127c6e2240315c85cfbf41c176fd8b5a0f72e52fb8c5d556", size = 344925, upload-time = "2026-10-13T14:23:31.222Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/74/20836f6e32e902c72796b6731a7da86f062c64a760b93b6f62f9cc3ff873/aiosendspin-10.2.1.tar.gz", hash = "sha256:94ef9214e7b14c52c9d792b87975ec7638be3c62fcfb61aca9dc9c9559563c55", size = 348450, upload-time = "2026-10-19T15:21:47.207Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/93/f89c9cd91c1d093d51bfbd777ca6710095f1f5fbe010d6769dbae44cede2/aiosendspin-10.0.2-py3-none-any.whl", hash = "sha256:373b8bda8986e0ceafd699b505b7947eceade4dd03e239131a29071436c29b69", size = 353358, upload-time = "2026-10-13T14:23:29.625Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/97/0b7344c0b7d446a2228fb90ba380fd08af7f9b96941988608723f849ced1/aiosendspin-10.2.1-py3-none-any.whl", hash = "sha256:22aeeaa53bd383a9cd026a5b505fc3913a021bbc9d10011684e256e0691a44e1", size = 356651, upload-time = "2026-10-19T15:21:45.718Z" },
 ]
 
 [[package]]
@@ -1908,7 +1908,7 @@ gstreamer = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.14.3" },
     { name = "aiomqtt", specifier = ">=2.0" },
-    { name = "aiosendspin", specifier = "==10.0.2" },
+    { name = "aiosendspin", specifier = "==10.2.1" },
     { name = "av", specifier = ">=16.1.0" },
     { name = "bluetooth-auto-recovery", specifier = "==1.6.4" },
     { name = "btsocket", specifier = "==0.3.0" },
