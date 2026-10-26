@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Bridge integration ("Setup timed out for bootstrap"). Its event listener
   now runs in the background.
 
+### Security
+
+- Updated aiohttp to 3.14.5, Pillow to 13.0.0 and certifi to 2026.10.23,
+  which fix published vulnerabilities in those libraries.
+
 ## [2.76.4] - 2026-10-12
 
 ### Fixed

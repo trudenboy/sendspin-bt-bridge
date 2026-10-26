@@ -41,10 +41,11 @@ dependencies = [
 required-version = "==0.12.5"
 
 constraint-dependencies = [
-    # piwheels publishes a CPython 3.13 armv7 binary wheel through yarl
-    # 1.24.2. Keep the cap below 1.24.3 so armv7 installs remain
-    # compatible with Docker's `--only-binary :all:` requirement.
-    "yarl<1.24.3",
+    # piwheels publishes CPython 3.13 armv7 binary wheels for yarl 1.24.2,
+    # 1.24.5 and 1.25.1 but not for every release in between. Keep the cap
+    # at the newest built one so armv7 installs remain compatible with
+    # Docker's `--only-binary :all:` requirement.
+    "yarl<=1.25.1",
 ]
 
 [tool.hatch.version]

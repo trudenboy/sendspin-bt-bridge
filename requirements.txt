@@ -2,7 +2,7 @@
 #    uv export --no-hashes --no-dev --no-emit-project --output-file requirements.txt
 aiohappyeyeballs==2.7.1
     # via aiohttp
-aiohttp==3.14.3
+aiohttp==3.14.5
     # via
     #   aiosendspin
     #   music-assistant-client
@@ -31,7 +31,7 @@ btsocket==0.3.0
     # via
     #   bluetooth-auto-recovery
     #   sendspin-bt-bridge
-certifi==2026.7.22
+certifi==2026.10.23
     # via requests
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
@@ -94,7 +94,7 @@ orjson==3.13.0
     #   music-assistant-models
 paho-mqtt==2.1.0
     # via aiomqtt
-pillow==12.3.0
+pillow==13.0.0
     # via sendspin-bt-bridge
 propcache==0.5.4
     # via
@@ -179,7 +179,7 @@ winrt-windows-foundation-collections==3.2.1 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
     # via bleak
-yarl==1.24.2
+yarl==1.25.1
     # via aiohttp
 zeroconf==0.150.0
     # via
