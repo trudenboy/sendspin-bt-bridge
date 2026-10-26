@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.11] - 2026-10-26
+
+### Changed
+
+- The Sendspin library is updated to aiosendspin 10.2.1. Its fixes include
+  reconnecting to a client at its new address after an IP change and no
+  playback gaps when a client's network addresses change.
+
 ## [3.1.0-beta.10] - 2026-10-26
 
 ### Added
