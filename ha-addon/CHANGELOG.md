@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.5] - 2026-10-26
+
+### Fixed
+
+- Saving the settings no longer revokes the tokens issued for the Home
+  Assistant integration. Each save dropped them from the configuration, so
+  Home Assistant lost access to the bridge until it was paired again.
+- Home Assistant no longer waits 60 seconds at startup for the Sendspin
+  Bridge integration ("Setup timed out for bootstrap"). Its event listener
+  now runs in the background.
+
+### Security
+
+- Updated aiohttp to 3.14.5, Pillow to 13.0.0 and certifi to 2026.10.23,
+  which fix published vulnerabilities in those libraries.
+
+## [2.76.4] - 2026-10-12
+
+### Fixed
+
+- Changing the volume or mute with the speaker's own buttons now moves the
+  Music Assistant slider too. The bridge picked up the change and updated its
+  own interface, but never reported it back to Music Assistant.
+- In the Home Assistant add-on, the bridge kept asking to connect Music
+  Assistant ("Music Assistant API URL is not configured") although Music
+  Assistant was found automatically and connected. The check now follows
+  the live connection, and "Revalidate MA link" uses the address found
+  automatically.
+
 ## [2.76.3] - 2026-10-10
 
 ### Fixed
