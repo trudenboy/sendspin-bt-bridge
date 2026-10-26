@@ -163,3 +163,24 @@ async def test_sse_connect_refreshes_even_without_events():
 
     # A refresh coroutine was scheduled on connect, with zero events delivered.
     assert scheduled, "no refresh scheduled on SSE (re)connect"
+
+
+def test_event_listener_runs_as_a_background_task():
+    """The SSE loop never finishes, so it must not be a tracked task (#549).
+
+    Home Assistant's bootstrap waits for every tracked task and gave up only
+    after 60 s; a background task is exempt from that wait.
+    """
+    coord, _entry, hass, _scheduled = _make_coordinator()
+
+    def _create_background_task(coro, name, *a, **k):
+        if asyncio.iscoroutine(coro):
+            coro.close()
+        return MagicMock()
+
+    hass.async_create_background_task.side_effect = _create_background_task
+
+    coord.start_event_listener()
+
+    hass.async_create_background_task.assert_called_once()
+    hass.async_create_task.assert_not_called()
