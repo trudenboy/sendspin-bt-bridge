@@ -96,7 +96,9 @@ class SendspinDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def start_event_listener(self) -> None:
         if self._sse_task is None or self._sse_task.done():
             self._stopped.clear()
-            self._sse_task = self.hass.async_create_task(self._run_sse())
+            # A background task: the loop never ends, and Home Assistant's
+            # bootstrap waits for every tracked task (#549).
+            self._sse_task = self.hass.async_create_background_task(self._run_sse(), name="sendspin_bridge SSE")
 
     async def async_stop(self) -> None:
         self._stopped.set()

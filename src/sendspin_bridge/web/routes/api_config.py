@@ -913,6 +913,11 @@ def api_config():
             ):
                 if key in existing and key not in config:
                     config[key] = existing[key]
+            # Bearer tokens are minted and revoked by their own endpoints; the
+            # GET response hides them, so the form never sends them back (#551).
+            config.pop("AUTH_TOKENS", None)
+            if "AUTH_TOKENS" in existing:
+                config["AUTH_TOKENS"] = existing["AUTH_TOKENS"]
             # The form pre-fills MA_API_TOKEN with the stored value.
             # Empty string = user explicitly cleared it → do NOT restore.
             # (No implicit preserve needed — the field is always submitted.)

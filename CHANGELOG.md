@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.5] - 2026-10-26
+
+### Fixed
+
+- Saving the settings no longer revokes the tokens issued for the Home
+  Assistant integration. Each save dropped them from the configuration, so
+  Home Assistant lost access to the bridge until it was paired again.
+- Home Assistant no longer waits 60 seconds at startup for the Sendspin
+  Bridge integration ("Setup timed out for bootstrap"). Its event listener
+  now runs in the background.
+
 ## [2.76.4] - 2026-10-12
 
 ### Fixed
