@@ -1580,8 +1580,13 @@ def _declared_formats():
     from aiosendspin.models.player import SupportedAudioFormat
     from aiosendspin.models.types import AudioCodec
 
+    # The server prefers the first declared format, so speakers stay on 16-bit
+    # unless their Music Assistant player is set to a hi-res one (#543).
     formats = []
-    for sample_rate in (48000, 44100):
-        for codec in (AudioCodec.FLAC, AudioCodec.PCM):
-            formats.append(SupportedAudioFormat(codec=codec, channels=2, sample_rate=sample_rate, bit_depth=16))
+    for bit_depth, sample_rates in ((16, (48000, 44100)), (24, (48000, 44100, 96000))):
+        for sample_rate in sample_rates:
+            for codec in (AudioCodec.FLAC, AudioCodec.PCM):
+                formats.append(
+                    SupportedAudioFormat(codec=codec, channels=2, sample_rate=sample_rate, bit_depth=bit_depth)
+                )
     return formats

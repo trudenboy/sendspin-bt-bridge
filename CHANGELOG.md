@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Speakers now offer Music Assistant 24-bit audio at 44.1, 48 and 96 kHz
+  besides 16-bit. A player set to a hi-res output format in Music Assistant
+  gets it instead of falling back to 16-bit; players left at their default
+  stay on 16-bit 48 kHz.
+
 ### Fixed
 
 - Saving the settings no longer revokes the tokens issued for the Home
