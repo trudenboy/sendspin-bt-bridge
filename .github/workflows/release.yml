@@ -347,6 +347,23 @@ jobs:
           git fetch --force --tags
           git reset --hard origin/main
 
+      - name: Carry a stable hotfix's changelog section to main
+        # A stable release cut from a release/X.Y branch has its section only
+        # in that branch's CHANGELOG.md, but the add-on store and the GitHub
+        # Release notes below read main's. Copy it across (no-op when main
+        # already has it, e.g. for a stable release made from main).
+        if: needs.prepare.outputs.channel == 'stable' && github.ref_name != 'main'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${GITHUB_SHA}"
+          git show "${GITHUB_SHA}:CHANGELOG.md" > /tmp/release-branch-changelog.md
+          python scripts/carry_stable_changelog.py \
+            --version "${VERSION}" \
+            --source /tmp/release-branch-changelog.md \
+            --target CHANGELOG.md
+
       - name: Refresh CHANGELOG compare-links footer
         # The new tag is now visible to `git tag`. Regenerate the footer so
         # the just-released version's link appears alongside Unreleased and
