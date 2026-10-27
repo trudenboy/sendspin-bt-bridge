@@ -12,13 +12,14 @@ first completion events belong to packets sent before the window.
     uv run python tests/fixtures/a2dp_air/build_fixture.py /path/to/hci_dcold2.btsnoop
 
 On the full capture ``scripts/a2dp_air_phase.py`` reports the click phase
-recorded as ``FULL_CAPTURE_PHASE_MS`` in the fixture test.
+recorded as ``FULL_CAPTURE_PHASE_SEND_MS`` in the fixture test.
 """
 
 from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import struct
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from sendspin_bridge.services.bluetooth.a2dp_air import (
 )
 
 HERE = Path(__file__).resolve().parent
+SOURCE_SHA256 = "42b47e3f5cb463133584878e833add25c26fce81e60af80ff2a21b3c2ade9568"  # hci_dcold2.btsnoop
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -40,6 +42,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--duration", type=float, default=6.0)
     ap.add_argument("--out", type=Path, default=HERE / "eneby_clicks.btsnoop.gz")
     args = ap.parse_args(argv)
+    digest = hashlib.sha256(args.source.read_bytes()).hexdigest()
+    if digest != SOURCE_SHA256:
+        print(f"warning: {args.source} sha256 {digest} is not the recorded stand capture {SOURCE_SHA256}")
 
     out = bytearray(BTSNOOP_MAGIC + struct.pack(">II", 1, BTSNOOP_DATALINK_MONITOR))
     t0 = None

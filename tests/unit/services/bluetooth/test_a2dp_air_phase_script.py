@@ -21,8 +21,9 @@ ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / "scripts" / "a2dp_air_phase.py"
 FIXTURE = ROOT / "tests" / "fixtures" / "a2dp_air" / "eneby_clicks.btsnoop.gz"
 
-# What the script reports on the full 66 s capture (hci1 handle 70).
-FULL_CAPTURE_PHASE_SEND_MS = 9834.6
+# What the script reports on the full 66 s capture (hci1 handle 70). The capture has no Connection
+# Complete and no idle gap on that handle, so it has no trusted completion times either.
+FULL_CAPTURE_PHASE_SEND_MS = 9829.8
 TOLERANCE_MS = 3.0
 
 
@@ -94,25 +95,43 @@ def test_cli_without_matching_traffic_fails(tool, capsys):
     assert tool.main([str(FIXTURE), "--index", "0"]) == 1
 
 
-@pytest.mark.parametrize("phase_ms", [0.0, 1234.5, 5000.0, 9832.0])
-def test_fold_recovers_a_synthetic_click_phase(tool, phase_ms):
-    rate, spf = 44100, 128
+def test_sbc_encoder_delay(tool):
+    # analysis window of 10*M taps, symmetric about (10M-1)/2 behind the newest sample of a block;
+    # a block is placed at its oldest new sample, M-1 before the newest: (10M-1)/2 - (M-1) = 4M + 1/2
+    assert tool.sbc_encoder_delay_samples(8) == 32.5
+    assert tool.sbc_encoder_delay_samples(4) == 16.5
+
+
+@pytest.mark.parametrize("phase_ms", [0.0, 1234.56, 5000.3, 9829.71, 3333.0])
+def test_fold_returns_the_chirp_start(tool, phase_ms):
+    """Per-frame energy shaped like the real proxy: the peak chirp amplitude the SBC analysis window sees.
+
+    A frame placed at media sample m is computed from PCM delayed by the encoder (32.5 samples for
+    8 sub-bands) and smeared by the 80-tap window (±40 samples); the proxy follows the peak amplitude."""
+    rate, spf, delay, half_window = 44100, 128, 32.5, 40
     frame_s = spf / rate
     epoch = 1_700_000_000.0
-    # click k (in cycle order) at epoch + LEAD_IN + phase + k*PERIOD, its partner gap_ms(k) later
-    clicks = []
-    for k in range(12):
+    template = [abs(v) for v in ct.chirp(rate)]
+    starts = []  # chirp starts in samples after *base*
+    base = epoch - 1.0
+    for k in range(13):
         t = epoch + ct.LEAD_IN_S + phase_ms / 1000.0 + k * ct.PERIOD_S
-        clicks += [t, t + ct.gap_ms(k) / 1000.0]
-    start = epoch - 1.0
+        for c in (t, t + ct.gap_ms(k) / 1000.0):
+            starts.append((c - base) * rate)
     rows = []
-    for n in range(round(26.0 / frame_s)):
-        w = start + n * frame_s
-        hot = any(w <= c < w + frame_s for c in clicks)
-        rows.append((w, 4096.0 if hot else 4.0))
-    got = tool.click_phase_ms(rows, frame_s, epoch_s=epoch)
+    for n in range(round(28.0 / frame_s)):
+        m = n * spf
+        lo, hi = m - delay - half_window, m + spf - delay + half_window
+        peak = 0.0
+        for s0 in starts:
+            if s0 + len(template) < lo or s0 > hi:
+                continue
+            i_lo, i_hi = max(0, int(lo - s0)), min(len(template), int(hi - s0) + 1)
+            peak = max(peak, *template[i_lo:i_hi]) if i_hi > i_lo else peak
+        rows.append((base + m / rate, 4.0 + 4096.0 * peak))
+    got = tool.click_phase_ms(rows, frame_s, epoch_s=epoch, encoder_delay_s=delay / rate)
     assert got is not None
-    assert circular_diff_ms(got, phase_ms) <= frame_s * 1000.0
+    assert circular_diff_ms(got, phase_ms) < 1.0
 
 
 def test_fold_without_clicks_returns_none(tool):

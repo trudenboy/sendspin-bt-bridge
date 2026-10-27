@@ -15,7 +15,13 @@ find where the clicks left the host:
   first sample therefore sits at the packet's time and later frames follow at
   the media rate;
 * the folded profile is matched against the click pattern (click k at
-  ``k·PERIOD_S``, its partner ``gap_ms(k)`` later).
+  ``k·PERIOD_S``, its partner ``gap_ms(k)`` later); the peak's centre minus half
+  a chirp and the SBC encoder's analysis delay (4·M + ½ samples) is the chirp
+  start in PCM time, the same instant the estimator reports for a recording.
+
+Completion-anchored phases need trusted completion times, which the parser only
+gives after a Connection Complete or an idle gap of > 0.5 s on the link inside
+the capture (see ``a2dp_air``); otherwise "complete" reads n/a.
 
 The phase uses the convention of ``sendspin_sync.estimator``: click 0 at
 ``LEAD_IN_S``, ``phase = (t − epoch − LEAD_IN_S − k·PERIOD_S) mod CYCLE_S`` in ms,
@@ -50,7 +56,9 @@ from sendspin_bridge.services.bluetooth.hci_socket import MONITOR_ACL_TX_PKT  # 
 from sendspin_sync import click_track as ct  # noqa: E402
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
+
+    from sendspin_bridge.services.bluetooth.a2dp_air import MonitorRecord
 
 
 @dataclass(frozen=True)
@@ -69,7 +77,7 @@ class LinkReport:
     phase_complete_ms: float | None
 
 
-def busiest_tx_link(records, index: int | None = None) -> tuple[int, int] | None:
+def busiest_tx_link(records: Iterable[MonitorRecord], index: int | None = None) -> tuple[int, int] | None:
     """The ``(index, handle)`` with the most ACL TX fragments (optionally on one controller index)."""
     counts: Counter[tuple[int, int]] = Counter()
     for rec in records:
@@ -141,13 +149,30 @@ def air_profile(packets: Sequence[MediaPacket], use: str) -> list[tuple[float, f
     return rows
 
 
-def click_phase_ms(rows: Sequence[tuple[float, float]], frame_s: float, epoch_s: float = 0.0) -> float | None:
+def sbc_encoder_delay_samples(subbands: int) -> float:
+    """Samples between a PCM sample and the SBC block whose sub-band output it peaks in.
+
+    The SBC analysis filter (A2DP v1.3 §12.5) runs a 10·M-tap window, symmetric about its middle,
+    over the newest 10·M input samples for each block of M new samples. An input sample therefore
+    peaks in the block whose window is centred on it, i.e. whose newest sample is (10M−1)/2 later.
+    Blocks sit on the media timeline at their oldest new sample (the frame's RTP timestamp plus
+    j·M), M−1 before their newest, so the sub-band timeline lags the PCM by
+    (10M−1)/2 − (M−1) = 4M + ½ samples: 32.5 for 8 sub-bands (0.74 ms at 44.1 kHz), 16.5 for 4.
+    (Twice this plus the decoder's half gives the usual 73-sample SBC codec delay for M = 8.)
+    """
+    return 4 * subbands + 0.5
+
+
+def click_phase_ms(
+    rows: Sequence[tuple[float, float]], frame_s: float, epoch_s: float = 0.0, encoder_delay_s: float = 0.0
+) -> float | None:
     """Fold ``rows`` over the click cycle and return the click-0 phase in ms, ``None`` without clicks.
 
     The fold runs on a 1 ms grid: each frame spreads its energy above the median floor over the
-    milliseconds it covers, so the click pattern's offsets (whole ms) need no rounding. The
-    pattern score is maximal over the frames that hold the clicks; the phase is the centre of
-    the score's half-maximum peak around its maximum.
+    milliseconds it covers, so the click pattern's offsets (whole ms) need no rounding. The pattern
+    score peaks over the frames that hold the chirps; the centre of its half-maximum peak is the
+    chirps' centre on the sub-band timeline. Subtracting half a chirp (``CHIRP_MS / 2``) and the
+    encoder's analysis delay gives the chirp *start* in PCM time, the estimator's convention.
     """
     if not rows or frame_s <= 0:
         return None
@@ -181,7 +206,8 @@ def click_phase_ms(rows: Sequence[tuple[float, float]], frame_s: float, epoch_s:
     weights = [(i, score[i % bins] - half) for i in range(lo_i, hi_i + 1)]
     total = sum(wt for _, wt in weights)
     centre = sum(i * wt for i, wt in weights) / total if total > 0 else float(p0)
-    return (centre - ct.LEAD_IN_S * 1000.0) % (ct.CYCLE_S * 1000.0)
+    start_ms = centre - ct.CHIRP_MS / 2 - encoder_delay_s * 1000.0
+    return (start_ms - ct.LEAD_IN_S * 1000.0) % (ct.CYCLE_S * 1000.0)
 
 
 def report(packets: Sequence[MediaPacket], index: int, handle: int, epoch_s: float = 0.0) -> LinkReport:
@@ -198,8 +224,9 @@ def report(packets: Sequence[MediaPacket], index: int, handle: int, epoch_s: flo
         )
         nominal = f0.sampling_rate
         frame_s = f0.samples / f0.sampling_rate
-        phase_send = click_phase_ms(air_profile(pk, "send"), frame_s, epoch_s)
-        phase_complete = click_phase_ms(air_profile(pk, "complete"), frame_s, epoch_s)
+        delay_s = sbc_encoder_delay_samples(f0.subbands) / f0.sampling_rate
+        phase_send = click_phase_ms(air_profile(pk, "send"), frame_s, epoch_s, delay_s)
+        phase_complete = click_phase_ms(air_profile(pk, "complete"), frame_s, epoch_s, delay_s)
     lat = [p.t_complete - p.t_send for p in pk if p.t_complete is not None]
     codecs = Counter(p.codec for p in pk)
     return LinkReport(
