@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.12] - 2026-10-27
+
 ### Added
 
 - With "Recover a missing audio sink" turned on, a speaker that is also an
