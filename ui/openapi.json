@@ -3067,6 +3067,17 @@
             ],
             "title": "Clock Offset Ms"
           },
+          "clock_slew_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Slew Ppm"
+          },
           "clock_synchronized": {
             "default": false,
             "title": "Clock Synchronized",
@@ -3210,6 +3221,7 @@
           "clock_synchronized",
           "clock_offset_ms",
           "clock_uncertainty_ms",
+          "clock_slew_ppm",
           "required_lead_time_ms",
           "min_buffer_ms",
           "declared_lead_time_ms",

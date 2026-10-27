@@ -3529,6 +3529,8 @@ export interface components {
             calibration_metronome_active: boolean;
             /** Clock Offset Ms */
             clock_offset_ms: number | null;
+            /** Clock Slew Ppm */
+            clock_slew_ppm: number | null;
             /**
              * Clock Synchronized
              * @default false

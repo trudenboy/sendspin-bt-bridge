@@ -305,6 +305,13 @@ async def _reanchor_watcher(status: StatusStore | dict, on_status_change, stop_e
                         logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
+def _make_slew_estimator():
+    """Factory for the clock-slew estimator (module level so tests can inject a fake)."""
+    from sendspin_bridge.services.audio.playout.stats import ClockSlewEstimator
+
+    return ClockSlewEstimator()
+
+
 async def _timing_telemetry_watcher(
     daemon,
     status: StatusStore | dict,
@@ -318,8 +325,11 @@ async def _timing_telemetry_watcher(
 
     next_metrics_at = 0.0
     failure_reported = False
+    slew = _make_slew_estimator()
     while not stop_event.is_set():
         try:
+            slew.sample()
+            slew_ppm = slew.ppm()
             audio_handler = getattr(daemon, "_audio_handler", None)
             client = getattr(daemon, "_client", None)
             changed = False
@@ -328,9 +338,15 @@ async def _timing_telemetry_watcher(
             now = time.monotonic()
             if audio_handler is not None and client is not None and now >= next_metrics_at:
                 snapshot = collect_timing_snapshot(audio_handler, client)
+                if slew_ppm is not None:
+                    snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
                 _patch_status(status, snapshot)
                 changed = True
                 next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
+            elif slew_ppm is not None and status.get("clock_slew_ppm") is None:
+                # First estimate: publish at once instead of waiting for the next metrics tick.
+                _patch_status(status, {"clock_slew_ppm": round(slew_ppm, 1)})
+                changed = True
             if changed and callable(on_status_change):
                 on_status_change()
             failure_reported = False
