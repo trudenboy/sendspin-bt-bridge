@@ -115,6 +115,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for again on every status refresh, which filled the log with a warning
   every few seconds.
 
+## [2.76.6] - 2026-10-27
+
+### Fixed
+
+- Bug reports sent from the web interface without a GitHub account keep
+  their log lines. The report is shortened to fit GitHub's size limit and
+  the logs came last, so they were cut off entirely; they now come before
+  the raw diagnostics data.
+
 ## [2.76.5] - 2026-10-26
 
 ### Fixed
@@ -6073,13 +6082,16 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.11...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.6...HEAD
 [2.77.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.5...v2.77.0-rc.6
 [2.77.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.4...v2.77.0-rc.5
 [2.77.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.3...v2.77.0-rc.4
 [2.77.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.2...v2.77.0-rc.3
 [2.77.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.1...v2.77.0-rc.2
-[2.77.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.3...v2.77.0-rc.1
+[2.77.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.6...v2.77.0-rc.1
+[2.76.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.5...v2.76.6
+[2.76.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.4...v2.76.5
+[2.76.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.3...v2.76.4
 [2.76.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.2...v2.76.3
 [2.76.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.1...v2.76.2
 [2.76.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0...v2.76.1
