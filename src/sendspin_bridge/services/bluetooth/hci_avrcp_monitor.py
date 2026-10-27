@@ -30,6 +30,12 @@ import struct
 import sys
 from typing import TYPE_CHECKING
 
+from sendspin_bridge.services.bluetooth.hci_socket import (
+    MONITOR_ACL_RX_PKT,
+    MONITOR_EVENT_PKT,
+    parse_monitor_packet,
+)
+
 if TYPE_CHECKING:
     from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
@@ -39,8 +45,8 @@ _AF_BLUETOOTH: int = 31  # PF_BLUETOOTH — hardcoded so imports work on macOS
 _BTPROTO_HCI: int = 1
 _HCI_DEV_NONE: int = 0xFFFF
 _HCI_CHANNEL_MONITOR: int = 2  # read-only passthrough of all HCI traffic
-_OPCODE_EVENT_PKT: int = 0x0003
-_OPCODE_ACL_RX_PKT: int = 0x0005
+_OPCODE_EVENT_PKT: int = MONITOR_EVENT_PKT
+_OPCODE_ACL_RX_PKT: int = MONITOR_ACL_RX_PKT
 _HCI_EVT_CONNECTION_COMPLETE: int = 0x03
 _HCI_EVT_DISCONNECT_COMPLETE: int = 0x05
 _AVRCP_PID: int = 0x110E
@@ -180,10 +186,10 @@ def _process_packet(
     handle_to_mac: dict[int, str],
     tracker: AvrcpSourceTracker,
 ) -> None:
-    if len(data) < 6:
+    frame = parse_monitor_packet(data)
+    if frame is None:
         return
-    opcode, _adapter_idx, payload_len = struct.unpack_from("<HHH", data, 0)
-    payload = data[6 : 6 + payload_len]
+    opcode, _adapter_idx, payload = frame
 
     if opcode == _OPCODE_EVENT_PKT:
         if len(payload) < 2:

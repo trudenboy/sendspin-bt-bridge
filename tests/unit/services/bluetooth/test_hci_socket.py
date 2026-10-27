@@ -53,3 +53,25 @@ def test_socket_addr_struct_layout():
     import ctypes
 
     assert ctypes.sizeof(hci_socket._SocketAddr) == 6
+
+
+def test_monitor_opcodes_match_btmon_values():
+    from sendspin_bridge.services.bluetooth import hci_socket as m
+
+    # include/net/bluetooth/hci_mon.h: HCI_MON_COMMAND_PKT=2, EVENT=3, ACL_TX=4, ACL_RX=5
+    assert (m.MONITOR_COMMAND_PKT, m.MONITOR_EVENT_PKT, m.MONITOR_ACL_TX_PKT, m.MONITOR_ACL_RX_PKT) == (2, 3, 4, 5)
+
+
+def test_parse_monitor_packet_splits_header_and_payload():
+    from sendspin_bridge.services.bluetooth.hci_socket import parse_monitor_packet
+
+    frame = bytes([0x04, 0x00, 0x01, 0x00, 0x03, 0x00]) + b"abcEXTRA"
+    assert parse_monitor_packet(frame) == (4, 1, b"abc")
+
+
+def test_parse_monitor_packet_rejects_short_or_truncated_frames():
+    from sendspin_bridge.services.bluetooth.hci_socket import parse_monitor_packet
+
+    assert parse_monitor_packet(b"\x04\x00\x01") is None
+    # header claims 5 payload bytes, only 2 present
+    assert parse_monitor_packet(bytes([0x04, 0x00, 0x01, 0x00, 0x05, 0x00]) + b"ab") is None
