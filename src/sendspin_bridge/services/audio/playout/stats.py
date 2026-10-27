@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections import deque
 from typing import TYPE_CHECKING
@@ -75,3 +76,107 @@ class ClockSlewEstimator:
     def ppm(self) -> float | None:
         slope = self._trend.slope()
         return None if slope is None else slope * 1e6
+
+
+class PlayoutStats:
+    """Per-tick telemetry aggregates for the playout engine."""
+
+    def __init__(self, *, window_s: float = 60.0, rate_window_s: float = 10.0) -> None:
+        self._window_s = float(window_s)
+        self._rate_window_s = float(rate_window_s)
+        self._errors: deque[tuple[float, float]] = deque()  # (t_s, e_us)
+        self._error_trend = LinearTrend(window_s)
+        self._port_trend = LinearTrend(window_s)
+        self._corrections: deque[tuple[float, int]] = deque()  # (t_s, frames)
+        self._last_t: float | None = None
+        self.inserted = 0
+        self.dropped = 0
+        self.jumps = 0
+        self.underruns = 0
+        self.pa_steps = 0
+        self.rejected_samples = 0
+        self._last_jump_us: float | None = None
+        self._last_jump_reason: str | None = None
+        self._last_jump_at: str | None = None
+
+    def _seen(self, t_s: float) -> None:
+        if self._last_t is None or t_s > self._last_t:
+            self._last_t = t_s
+
+    def error(self, t_s: float, e_us: float) -> None:
+        self._seen(t_s)
+        self._errors.append((t_s, e_us))
+        cutoff = t_s - self._window_s
+        while self._errors and self._errors[0][0] < cutoff:
+            self._errors.popleft()
+        self._error_trend.add(t_s, e_us / 1000.0)
+
+    def port(self, t_s: float, a_minus_t_us: float) -> None:
+        self._seen(t_s)
+        self._port_trend.add(t_s, a_minus_t_us)
+
+    def correction(self, t_s: float, inserted: int, dropped: int) -> None:
+        self._seen(t_s)
+        self.inserted += inserted
+        self.dropped += dropped
+        if inserted or dropped:
+            self._corrections.append((t_s, inserted + dropped))
+
+    def jump(self, at_iso: str, size_us: float, reason: str) -> None:
+        self.jumps += 1
+        self._last_jump_us = size_us
+        self._last_jump_reason = reason
+        self._last_jump_at = at_iso
+
+    def underrun(self) -> None:
+        self.underruns += 1
+
+    def pa_step(self) -> None:
+        self.pa_steps += 1
+
+    def rejected(self) -> None:
+        self.rejected_samples += 1
+
+    def reset_window(self) -> None:
+        """Forget the error and sink-rate windows (counters are kept)."""
+        self._errors.clear()
+        self._error_trend.reset()
+        self._port_trend.reset()
+
+    def _p95_ms(self) -> float | None:
+        if not self._errors:
+            return None
+        mags = sorted(abs(e) for _, e in self._errors)
+        rank = max(1, math.ceil(0.95 * len(mags)))
+        return mags[rank - 1] / 1000.0
+
+    def _corrections_per_s(self) -> float:
+        if self._last_t is None:
+            return 0.0
+        cutoff = self._last_t - self._rate_window_s
+        while self._corrections and self._corrections[0][0] <= cutoff:
+            self._corrections.popleft()
+        return sum(n for _, n in self._corrections) / self._rate_window_s
+
+    def snapshot(self) -> dict[str, object]:
+        """error_ms, error_p95_ms, error_slope_ms_per_s, corrections_per_s, counters, jump info
+        and sink_rate_ppm; ms rounded to 3 decimals, ppm to 1. Unknown values are None."""
+        slope = self._error_trend.slope()
+        port_slope = self._port_trend.slope()  # µs per s == ppm
+        p95 = self._p95_ms()
+        return {
+            "error_ms": round(self._errors[-1][1] / 1000.0, 3) if self._errors else None,
+            "error_p95_ms": None if p95 is None else round(p95, 3),
+            "error_slope_ms_per_s": None if slope is None else round(slope, 3),
+            "corrections_per_s": round(self._corrections_per_s(), 3),
+            "inserted": self.inserted,
+            "dropped": self.dropped,
+            "jumps": self.jumps,
+            "last_jump_ms": None if self._last_jump_us is None else round(self._last_jump_us / 1000.0, 3),
+            "last_jump_reason": self._last_jump_reason,
+            "last_jump_at": self._last_jump_at,
+            "underruns": self.underruns,
+            "pa_steps": self.pa_steps,
+            "rejected_samples": self.rejected_samples,
+            "sink_rate_ppm": None if port_slope is None else round(port_slope, 1),
+        }
