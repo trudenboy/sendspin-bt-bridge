@@ -56,7 +56,8 @@ def test_the_schema_describes_it_with_default_true():
 
 def test_a_change_warm_restarts_that_player_only():
     old = v6_config(
-        [{"mac": "AA:BB:CC:DD:EE:01", "player_name": "A"}, {"mac": "AA:BB:CC:DD:EE:02", "player_name": "B"}]
+        [{"mac": "AA:BB:CC:DD:EE:01", "player_name": "A"}, {"mac": "AA:BB:CC:DD:EE:02", "player_name": "B"}],
+        PLAYOUT_SYNC="measure",
     )
     new = json.loads(json.dumps(old))
     new["players"][0]["playout_sync_enabled"] = False
@@ -65,3 +66,26 @@ def test_a_change_warm_restarts_that_player_only():
 
     assert [(a.kind, a.player_id) for a in actions] == [(ActionKind.WARM_RESTART, old["players"][0]["id"])]
     assert actions[0].fields == ["playout_sync_enabled"]
+
+
+@pytest.mark.parametrize("global_mode", [None, "off"])
+def test_a_change_that_keeps_the_effective_mode_restarts_nothing(global_mode):
+    extra = {} if global_mode is None else {"PLAYOUT_SYNC": global_mode}
+    old = v6_config([{"mac": "AA:BB:CC:DD:EE:01", "player_name": "A"}], **extra)
+    new = json.loads(json.dumps(old))
+    new["players"][0]["playout_sync_enabled"] = False
+
+    assert diff_configs(old, new) == []
+    assert diff_configs(new, old) == []
+
+
+def test_a_kept_effective_mode_does_not_hide_another_warm_change():
+    old = v6_config([{"mac": "AA:BB:CC:DD:EE:01", "player_name": "A"}], PLAYOUT_SYNC="off")
+    new = json.loads(json.dumps(old))
+    new["players"][0]["playout_sync_enabled"] = False
+    new["players"][0]["player_name"] = "B"
+
+    (action,) = diff_configs(old, new)
+
+    assert action.kind == ActionKind.WARM_RESTART
+    assert action.fields == ["player_name"]

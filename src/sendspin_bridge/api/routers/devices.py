@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field, StrictBool, model_serializer, model_validator
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, StrictBool, model_validator
 
 from sendspin_bridge.api.auth import require_principal
 from sendspin_bridge.api.errors import PROBLEM_RESPONSES
@@ -96,15 +97,14 @@ class DevicePatchIn(BaseModel):
 
 
 class DevicePatchOut(BaseModel):
-    enabled: bool | None = None
-    restart_required: bool | None = None
-    playout_sync_enabled: bool | None = None
-    device: Device | None = Field(default=None, description="The updated speaker, when it is running.")
+    """Only the parts that were changed are sent (a key is left out, never null)."""
 
-    @model_serializer(mode="wrap")
-    def _omit_unset_parts(self, handler: Any) -> dict[str, Any]:
-        """Leave out the parts that were not changed; ``device`` stays a complete Device."""
-        return {key: value for key, value in handler(self).items() if value is not None}
+    enabled: bool | None = Field(default=None, description="Sent when ``enabled`` was changed.")
+    restart_required: bool | None = Field(default=None, description="Sent with ``enabled``.")
+    playout_sync_enabled: bool | None = Field(default=None, description="Sent when the opt-out was changed.")
+    device: Device | None = Field(
+        default=None, description="The updated speaker, a complete Device, when it is running."
+    )
 
 
 @router.patch(
@@ -112,14 +112,23 @@ class DevicePatchOut(BaseModel):
     response_model=DevicePatchOut,
     summary="Change a speaker's settings",
 )
-def patch_device(device_id: str, body: DevicePatchIn) -> DevicePatchOut:
+def patch_device(device_id: str, body: DevicePatchIn) -> JSONResponse:
     """Enable or disable the speaker, and/or opt it out of (or back into) playout sync."""
     result: dict[str, Any] = {}
     if body.enabled is not None:
         result.update(dev.set_enabled(device_id, body.enabled))
     if body.playout_sync_enabled is not None:
         result.update(dev.set_playout_sync(device_id, body.playout_sync_enabled))
-    return DevicePatchOut(**result)
+    # Built part by part: unchanged parts are left out, while ``device`` keeps
+    # every key of a Device (its null values included).
+    content: dict[str, Any] = {}
+    for key in ("enabled", "restart_required", "playout_sync_enabled"):
+        if result.get(key) is not None:
+            content[key] = result[key]
+    device = result.get("device")
+    if device is not None:
+        content["device"] = Device.model_validate(device).model_dump(mode="json")
+    return JSONResponse(content)
 
 
 class RemovedOut(BaseModel):

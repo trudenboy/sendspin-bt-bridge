@@ -3418,8 +3418,28 @@ export interface components {
              */
             playout_sync_enabled?: boolean | null;
         };
+        /**
+         * DevicePatchOut
+         * @description Only the parts that were changed are sent (a key is left out, never null).
+         */
         DevicePatchOut: {
-            [key: string]: unknown;
+            /** @description The updated speaker, a complete Device, when it is running. */
+            device?: components["schemas"]["Device"] | null;
+            /**
+             * Enabled
+             * @description Sent when ``enabled`` was changed.
+             */
+            enabled?: boolean | null;
+            /**
+             * Playout Sync Enabled
+             * @description Sent when the opt-out was changed.
+             */
+            playout_sync_enabled?: boolean | null;
+            /**
+             * Restart Required
+             * @description Sent with ``enabled``.
+             */
+            restart_required?: boolean | null;
         };
         /** DevicePlayback */
         DevicePlayback: {

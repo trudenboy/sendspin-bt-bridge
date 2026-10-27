@@ -2684,7 +2684,57 @@
         "type": "object"
       },
       "DevicePatchOut": {
-        "additionalProperties": true,
+        "description": "Only the parts that were changed are sent (a key is left out, never null).",
+        "properties": {
+          "device": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Device"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The updated speaker, a complete Device, when it is running."
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sent when ``enabled`` was changed.",
+            "title": "Enabled"
+          },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sent when the opt-out was changed.",
+            "title": "Playout Sync Enabled"
+          },
+          "restart_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sent with ``enabled``.",
+            "title": "Restart Required"
+          }
+        },
+        "title": "DevicePatchOut",
         "type": "object"
       },
       "DevicePlayback": {

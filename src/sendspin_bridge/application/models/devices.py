@@ -185,7 +185,9 @@ class DeviceTiming(ResponseModel):
     declared_lead_time_ms: int | None = None
     """The startup lead actually declared to Music Assistant (at least the configured one)."""
     effective_required_lead_time_ms: int | None = None
-    """The lead the playout engine needs (its ring plus a safety margin); null while playout is off."""
+    """The start lead the player runs with: in ``measure``/``loop`` the configured lead raised to
+    cover the engine's buffer (PULSE_LATENCY_MSEC + 40 ms ring + 100 ms margin), in ``off`` the
+    configured lead itself; null while the player is not running."""
     playout: PlayoutTiming | None = None
     reanchoring: bool = False
     reanchor_count: int = 0

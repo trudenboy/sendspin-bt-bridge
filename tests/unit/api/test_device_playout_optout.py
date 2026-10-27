@@ -159,3 +159,22 @@ def test_the_legacy_enabled_reply_is_unchanged(two_players, tmp_config, applied)
     resp = make_client().patch(f"/api/v1/devices/{kitchen}", json={"enabled": False})
 
     assert resp.json() == {"enabled": False, "restart_required": True}
+
+
+def test_the_patch_reply_has_a_typed_schema():
+    from sendspin_bridge.api.app import create_app
+
+    spec = create_app().openapi()
+    out = spec["components"]["schemas"]["DevicePatchOut"]
+    assert set(out["properties"]) == {"enabled", "restart_required", "playout_sync_enabled", "device"}
+    assert out.get("required", []) == []
+    device = out["properties"]["device"]
+    assert {"$ref": "#/components/schemas/Device"} in device.get("anyOf", [device])
+
+
+def test_the_legacy_enabled_reply_is_byte_identical(two_players, tmp_config, applied):
+    kitchen = two_players["players"][0]["id"]
+    resp = make_client().patch(f"/api/v1/devices/{kitchen}", json={"enabled": False})
+
+    assert resp.content == b'{"enabled":false,"restart_required":true}'
+    assert resp.headers["content-type"] == "application/json"

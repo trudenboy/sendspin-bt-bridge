@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from sendspin_bridge.config import effective_playout_mode
 from sendspin_bridge.config.players import BLUETOOTH, device_entries, player_to_device_entry
 
 logger = logging.getLogger(__name__)
@@ -325,8 +326,17 @@ def _label_for_device(dev: dict[str, Any]) -> str:
     return str(dev.get("player_name") or dev.get("mac") or "device")
 
 
-def _diff_device(old: _PlayerView | None, new: _PlayerView | None) -> list[ReconfigAction]:
-    """Compute actions for a single player's config change."""
+def _diff_device(
+    old: _PlayerView | None,
+    new: _PlayerView | None,
+    old_cfg: dict[str, Any] | None = None,
+    new_cfg: dict[str, Any] | None = None,
+) -> list[ReconfigAction]:
+    """Compute actions for a single player's config change.
+
+    ``old_cfg``/``new_cfg`` are the whole snapshots, for fields whose effect
+    depends on a global key (``playout_sync_enabled`` on ``PLAYOUT_SYNC``).
+    """
     actions: list[ReconfigAction] = []
     view = new or old
     if view is None:
@@ -417,6 +427,11 @@ def _diff_device(old: _PlayerView | None, new: _PlayerView | None) -> list[Recon
         )
 
     warm_fields = sorted(f for f in _DEVICE_WARM_FIELDS if _field_changed(old_dev, new_dev, f))
+    if "playout_sync_enabled" in warm_fields and effective_playout_mode(
+        old_dev, old_cfg or {}
+    ) == effective_playout_mode(new_dev, new_cfg or {}):
+        # The daemon would be spawned with the same mode (e.g. PLAYOUT_SYNC off): no restart.
+        warm_fields.remove("playout_sync_enabled")
     hot_fields = sorted(f for f in _DEVICE_HOT_FIELDS if _field_changed(old_dev, new_dev, f))
 
     if warm_fields:
@@ -581,7 +596,7 @@ def diff_configs(old: dict[str, Any] | None, new: dict[str, Any] | None) -> list
             actions.extend(_diff_device(old_view, None))
             actions.extend(_diff_device(None, new_view))
             continue
-        actions.extend(_diff_device(old_view, new_view))
+        actions.extend(_diff_device(old_view, new_view, old, new))
 
     actions.extend(_diff_global(old, new))
 
