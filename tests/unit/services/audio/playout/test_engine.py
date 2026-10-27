@@ -417,3 +417,23 @@ def test_placement_right_after_a_pa_step_uses_the_new_port_position():
     snap = eng.snapshot()
     assert snap["pa_steps"] == 1 and snap["last_jump_reason"] == "delay"
     assert abs(snap["error_ms"]) < 1.0 and snap["error_p95_ms"] < 1.0
+
+
+def test_fall_back_reports_the_fallback_state_and_reason():
+    eng, port, raw = engine_with_port()
+    drive(eng, port, raw, 1.0)
+    assert eng.snapshot()["fallback_reason"] is None
+    eng.fall_back("no audio clock from the sink within 2 s")
+    snap = eng.snapshot()
+    assert snap["state"] == "fallback"
+    assert snap["fallback_reason"] == "no audio clock from the sink within 2 s"
+
+
+def test_queued_follows_submitted_audio():
+    eng, _port, raw = engine_with_port()
+    assert eng.queued is False and eng.queued_chunks == 0
+    eng.submit(int(raw.t_us + 5_000_000), TONE_FRAME * 480)
+    eng.submit(int(raw.t_us + 5_010_000), TONE_FRAME * 480)
+    assert eng.queued is True and eng.queued_chunks == 2
+    eng.clear()
+    assert eng.queued is False and eng.queued_chunks == 0

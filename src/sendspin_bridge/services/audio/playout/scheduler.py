@@ -272,6 +272,10 @@ class PlayoutScheduler:
         return bool(self._queue)
 
     @property
+    def queued_chunks(self) -> int:
+        return len(self._queue)
+
+    @property
     def last_placement_reason(self) -> str | None:
         return self._last_reason
 

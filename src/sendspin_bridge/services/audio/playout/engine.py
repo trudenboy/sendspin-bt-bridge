@@ -97,6 +97,7 @@ class PlayoutEngine:
         self._late_start_us: float | None = None
         self._started = False  # the start placement was requested
         self._degraded_warned_s: float | None = None
+        self._fallback_reason: str | None = None
 
     # -- commands -------------------------------------------------------------------------
 
@@ -116,6 +117,21 @@ class PlayoutEngine:
         playing = self._sched.shift(shift_us)
         self._request_placement("delay")
         return playing
+
+    def fall_back(self, reason: str) -> None:
+        """Report that this engine cannot run here (the daemon switches to the legacy player)."""
+        if self._fallback_reason is None:
+            logger.info("playout: falling back (%s)", reason)
+            self._fallback_reason = reason
+
+    @property
+    def queued(self) -> bool:
+        """Program audio is queued and not yet written."""
+        return self._sched.queued
+
+    @property
+    def queued_chunks(self) -> int:
+        return self._sched.queued_chunks
 
     # -- the two ticks --------------------------------------------------------------------
 
@@ -276,7 +292,7 @@ class PlayoutEngine:
             "hold_left_s": None,
             "late_start_ms": None if self._late_start_us is None else round(self._late_start_us / 1000.0, 3),
             "trim_us": self._settings.trim_us,
-            "fallback_reason": None,
+            "fallback_reason": self._fallback_reason,
         }
 
     # -- internals ------------------------------------------------------------------------
@@ -286,6 +302,8 @@ class PlayoutEngine:
             self._now_us = now_us
 
     def _state(self) -> str:
+        if self._fallback_reason is not None:
+            return "fallback"
         if self._opened_us is None:
             return "idle"
         if self._suspended:
