@@ -86,6 +86,29 @@ def transport_connect_line(previous_path: str | None, snapshot: BluetoothTranspo
     codec = "unknown"
     if snapshot.codec_id is not None:
         codec = f"{snapshot.codec_name or 'codec'} (0x{snapshot.codec_id:02x})"
-    delay = f"{snapshot.delay_ms:.1f} ms (reported by the speaker)" if snapshot.delay_supported else "absent"
+    delay = (
+        f"{snapshot.delay_ms:.1f} ms (reported by the speaker)"
+        if snapshot.delay_supported
+        else "absent (the speaker does not report an A2DP delay)"
+    )
     volume = f"{snapshot.volume}/127" if snapshot.volume is not None else "absent"
     return f"BT transport {snapshot.path}: codec {codec}, Delay {delay}, Volume {volume}, state {snapshot.state or 'unknown'}"
+
+
+#: Smallest change in the reported Delay worth a log line; BlueZ forwards every
+#: Delay Report and some sinks wobble by a few tenths of a millisecond.
+DELAY_CHANGE_LOG_THRESHOLD_MS = 1.0
+
+
+def delay_change_line(previous_ms: float | None, snapshot: BluetoothTransportSnapshot) -> str | None:
+    """One INFO line when the speaker's reported Delay appears or moves by >= 1 ms.
+
+    *previous_ms* is the value last logged for this transport (None when no
+    value was logged yet). An absent Delay never produces a line: the connect
+    line already said the speaker does not report one.
+    """
+    if not snapshot.delay_supported or snapshot.delay_ms is None:
+        return None
+    if previous_ms is not None and abs(snapshot.delay_ms - previous_ms) < DELAY_CHANGE_LOG_THRESHOLD_MS:
+        return None
+    return f"A2DP delay report: {snapshot.delay_ms:.1f} ms"
