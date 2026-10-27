@@ -59,6 +59,7 @@ class LoopController:
         self._run: deque[tuple[float, float]] = deque()  # (t_s, raw e_w) of the last JUMP_PERSIST_S
         self._last_event_s: float | None = None
         self._holdoff_until_s = 0.0
+        self._quiet_wait = False  # waiting for the interval after the last event is expected
 
     @property
     def rate_estimate(self) -> float:
@@ -68,8 +69,12 @@ class LoopController:
     def holdoff_until_s(self) -> float:
         return self._holdoff_until_s
 
-    def placed(self, t_s: float, residual_us: float = 0.0) -> None:
-        """A placement or steady jump happened: reset EMA and Hampel to residual, hold P off."""
+    def placed(self, t_s: float, residual_us: float = 0.0, *, quiet_wait: bool = False) -> None:
+        """A placement or steady jump happened: reset EMA and Hampel to residual, hold P off.
+
+        ``quiet_wait``: a persistent error that waits for the 10 s interval after this event is
+        expected (a placement, or a clamped jump with more steps to come), not "degraded".
+        """
         self._ema = residual_us
         self._window.clear()
         self._window.append(residual_us)
@@ -77,6 +82,7 @@ class LoopController:
         self._run.clear()
         self._last_event_s = t_s
         self._holdoff_until_s = t_s + HOLDOFF_S
+        self._quiet_wait = quiet_wait
 
     def _check_jump(self, t_s: float, e_w_us: float) -> tuple[float | None, bool]:
         threshold = JUMP_US[self._mode]
@@ -94,7 +100,7 @@ class LoopController:
         if beyond < JUMP_PERSIST_FRACTION * len(run):
             return None, False
         if self._last_event_s is not None and t_s - self._last_event_s < JUMP_MIN_INTERVAL_S:
-            return None, True
+            return None, not self._quiet_wait
         return last, False
 
     def _gate(self, e_w_us: float) -> bool:
@@ -120,8 +126,9 @@ class LoopController:
     def update(self, t_s: float, e_w_us: float) -> Decision:
         jump, degraded = self._check_jump(t_s, e_w_us)
         if jump is not None:
-            self.placed(t_s)
-            if abs(jump) > MAX_STEADY_JUMP_US:
+            clamped = abs(jump) > MAX_STEADY_JUMP_US
+            self.placed(t_s, quiet_wait=clamped)
+            if clamped:
                 return Decision(0.0, math.copysign(MAX_STEADY_JUMP_US, jump), self._ema, False, False, False, jump)
             return Decision(0.0, jump, self._ema, False, False, False)
         accepted = self._gate(e_w_us)

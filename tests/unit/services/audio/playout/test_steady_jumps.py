@@ -80,9 +80,13 @@ def test_steady_correction_over_the_bound_is_clamped_and_logged(caplog):
     eng, port, raw = playing(40.0)
     drive(eng, port, raw, 12.0)
     port.skip(-100.0)  # the port falls 100 ms behind: corrected in two clamped steps
+    states = []
     with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
-        drive(eng, port, raw, 25.0)
+        drive(eng, port, raw, 25.0, on_sense=lambda: states.append(eng.snapshot()["state"]))
     snap = eng.snapshot()
+    # The second step waiting for the 10 s interval is expected: no WARNING, never degraded.
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert set(states) == {"playing"}
     assert steady_jumps(caplog) == [pytest.approx(50.0), pytest.approx(50.0, abs=1.0)]
     clamped = [r for r in caplog.records if r.levelno == logging.INFO and "clamped" in r.getMessage()]
     assert clamped and "100." in clamped[0].getMessage() and "50." in clamped[0].getMessage()
@@ -94,8 +98,11 @@ def test_persistent_100_ms_error_after_start_is_corrected_within_25_s(caplog):
     eng, port, raw = playing(40.0)
     drive(eng, port, raw, 1.5)  # the start placement is done
     port.skip(-100.0)
+    states = []
     with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
-        drive(eng, port, raw, 23.5)
+        drive(eng, port, raw, 23.5, on_sense=lambda: states.append(eng.snapshot()["state"]))
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert set(states) == {"playing"}
     assert abs(eng.snapshot()["error_ms"]) < 20.0
     assert eng.snapshot()["state"] == "playing"
     assert sum(steady_jumps(caplog)) == pytest.approx(100.0, abs=1.0)
@@ -214,3 +221,35 @@ def test_offset_left_by_a_stall_is_a_baseline_too(caplog):
         drive(eng, port, raw, 20.0)
     assert steady_jumps(caplog) == []
     assert eng.snapshot()["error_ms"] == pytest.approx(30.0, abs=3.0)
+
+
+@pytest.mark.parametrize(("baseline_ms", "skip_ms", "expected"), [(30.0, 60.0, [-50.0]), (2.0, 40.0, [-40.0])])
+def test_real_step_against_the_baseline_sign_is_corrected(caplog, baseline_ms, skip_ms, expected):
+    # The raw error stays far from the reading's zero, so this is a real step, not the
+    # baseline's offset clearing: it is corrected (clamped), not absorbed as a new baseline.
+    eng, port, raw = playing(70.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(800.0)
+        drive_until_underruns(eng, port, raw, 1, then=lambda: port.slew(-baseline_ms, 300.0))
+        drive(eng, port, raw, 12.0)
+        port.skip(skip_ms)  # PA dropped audio: heard early
+        drive(eng, port, raw, 12.0)
+    assert steady_jumps(caplog) == [pytest.approx(e, abs=1.0) for e in expected]
+    assert not [r for r in caplog.records if "re-measur" in r.getMessage()]
+
+
+def test_a_re_measured_small_baseline_clears_the_degraded_state(caplog):
+    eng, port, raw = playing(70.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(800.0)
+        drive_until_underruns(eng, port, raw, 1, then=lambda: port.slew(-80.0, 300.0))
+        drive(eng, port, raw, 10.0)
+        assert eng.snapshot()["state"] == "degraded"  # baseline 80 ms
+        port.slew(80.0, 1000.0)  # the artefact clears; the baseline is re-measured near 0
+        drive(eng, port, raw, 25.0)
+    snap = eng.snapshot()
+    assert steady_jumps(caplog) == []
+    assert snap["state"] == "playing"
+    assert any("re-measured" in r.getMessage() for r in caplog.records)

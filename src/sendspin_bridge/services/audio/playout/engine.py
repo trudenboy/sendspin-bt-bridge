@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
-from sendspin_bridge.services.audio.playout.controller import LoopController
+from sendspin_bridge.services.audio.playout.controller import JUMP_US, LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
 from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
 from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap
@@ -58,6 +58,7 @@ BASELINE_MEDIAN_READINGS = 10  # 1 s
 BASELINE_STABLE_US = 5_000.0
 BASELINE_TIMEOUT_READINGS = 60  # 6 s
 BASELINE_WARN_US = 50_000.0
+BASELINE_MIN_US = 2_000.0  # a smaller baseline is taken as 0
 _BASELINE_REASONS = ("underrun", "stall")
 
 
@@ -313,15 +314,20 @@ class PlayoutEngine:
             )
         if d.jump_us is not None:
             wanted = d.jump_us if d.clamped_from_us is None else d.clamped_from_us
-            if self._baseline_us and abs(wanted + self._baseline_us) < abs(wanted):
-                # The error went back toward the reading's own zero: the offset the baseline
-                # held has cleared, so measure it again instead of moving the audio.
+            raw_error = wanted + self._baseline_us
+            if self._baseline_us and abs(raw_error) <= JUMP_US[self._settings.mode]:
+                # The raw reading came back near its own zero: the offset the baseline held has
+                # cleared, so measure it again instead of moving the audio. A raw error still
+                # beyond the threshold is a real step and is corrected below.
                 logger.info(
-                    "playout: error moved %.1f ms back toward the reading; re-measuring the baseline",
-                    wanted / 1000.0,
+                    "playout: error is back at %.1f ms of the reading; re-measuring the %.1f ms baseline",
+                    raw_error / 1000.0,
+                    self._baseline_us / 1000.0,
                 )
                 self._baseline_samples = []
                 self._baseline_medians = []
+                self._baseline_reason = "re-measure"
+                self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
                 return
             if d.clamped_from_us is not None:
                 logger.info(
@@ -344,22 +350,23 @@ class PlayoutEngine:
         stable = len(medians) >= 2 and abs(medians[-1] - medians[-2]) <= BASELINE_STABLE_US
         if not stable and len(samples) < BASELINE_TIMEOUT_READINGS:
             return False
-        self._baseline_us = medians[-1]
+        baseline = medians[-1]
+        self._baseline_us = 0.0 if abs(baseline) < BASELINE_MIN_US else baseline
         self._baseline_samples = None
         self._baseline_medians = []
-        if abs(self._baseline_us) >= 1000.0:
-            logger.info(
-                "playout: error baseline after the %s is %.1f ms%s",
-                self._baseline_reason,
-                self._baseline_us / 1000.0,
-                "" if stable else " (not stable after 6 s)",
-            )
-        if abs(self._baseline_us) > BASELINE_WARN_US:
-            self._baseline_degraded = True
+        what = "re-measured" if self._baseline_reason == "re-measure" else f"after the {self._baseline_reason}"
+        logger.info(
+            "playout: error baseline %s is %.1f ms%s",
+            what,
+            baseline / 1000.0,
+            "" if stable else " (not stable after 6 s)",
+        )
+        self._baseline_degraded = abs(self._baseline_us) > BASELINE_WARN_US
+        if self._baseline_degraded:
             self._warn.warning(
                 "baseline",
-                "playout: error baseline after the %s is %.1f ms; reported, not corrected",
-                self._baseline_reason,
+                "playout: error baseline %s is %.1f ms; reported, not corrected",
+                what,
                 self._baseline_us / 1000.0,
             )
         return True
@@ -477,7 +484,7 @@ class PlayoutEngine:
 
     def _record_placement(self, reason: str, size_us: float, t_s: float) -> None:
         self._pending_place = None
-        self._controller.placed(t_s)
+        self._controller.placed(t_s, quiet_wait=True)  # an error right after it waits quietly
         self._record_event(size_us, reason)
         # A placement aligns to the port as read now, so the error restarts at 0; after an
         # underrun or a stall the reading may still settle, so a fresh baseline is measured first (and

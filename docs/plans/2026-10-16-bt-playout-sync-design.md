@@ -891,8 +891,13 @@ probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-ga
   reaches the placed audio, `e_w` is taken in 1 s medians and the baseline is the last of two
   consecutive medians within 5 ms (or the last one after 6 s); steady jumps then correct `e_w`
   minus the baseline. The baseline is reported in `error_ms`, not corrected (as R3); over 50 ms
-  it is a WARNING and state `degraded` until the next placement. A decided jump that would move
-  the error back toward the reading's own zero re-measures the baseline instead. Out of scope:
+  it is a WARNING and state `degraded` until the next placement; a baseline under 2 ms counts as
+  0. A decided jump whose raw error (`e_w` itself) is back within `J` of the reading's own zero
+  re-measures the baseline instead (the offset has cleared); a raw error still beyond `J` is a real
+  step and is corrected, clamped. A drift of up to ~3.5 ms/s during the 2 s of stable medians can
+  leave 5–9 ms of it in an accepted baseline; that part is reported, not corrected. Waiting for
+  the 10 s interval after a placement or a clamped jump is expected and stays quiet (no WARNING,
+  not `degraded`); only a second steady jump wanted within 10 s of an unclamped one warns. Out of scope:
   the per-start sensor bias of about ±15 ms seen live on the PipeWire stand (measure vs `off`
   on the same sink differed by 6–21 ms between fresh starts and stayed constant within one).
 - The coherent click estimator (cycle-folded matched filter) measures a cheap headset microphone in
