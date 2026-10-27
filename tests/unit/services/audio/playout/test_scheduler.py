@@ -397,3 +397,13 @@ def test_reanchor_refuses_while_program_is_queued():
     before = m.at(s.x_w_ns)
     assert not s.reanchor(2_000_000.0)
     assert m.at(s.x_w_ns) == before
+
+
+def test_reanchor_turns_a_pending_reason_into_starved():
+    s, _ = sched()
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    s.request_placement("stall")
+    assert s.reanchor(1_010_000.0)
+    s.submit(1_020_000, tone(480))
+    s.render(audible_us=1_010_000.0, now_us=10_000.0)
+    assert s.last_placement_reason == "starved"

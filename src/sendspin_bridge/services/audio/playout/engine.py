@@ -140,18 +140,26 @@ class PlayoutEngine:
             # A placement is due anyway: with program queued it re-aligns the next frame at
             # this render, so the jump is dropped (passing it would drop audio the placement
             # then re-aligns, and count it twice). With only silence the jump re-anchors it.
-            if not self._sched.queued and self._sched.reanchor(audible):
-                self._record_event(jump, "steady")
+            if not self._sched.queued:
+                if self._sched.reanchor(audible):
+                    self._record_event(jump, "steady")
+                else:  # an insert is still being written; the next readings decide again
+                    logger.debug("playout: steady jump of %.1f ms dropped (insert owed)", jump / 1000.0)
             jump = None
 
         block = self._sched.render(audible_us=audible, now_us=now_us, rate=0.0, jump_us=jump)
+        # R10: frames that belong to a jump are not loop corrections; separate them.
+        jump_dropped = jump_inserted = 0
         if jump is not None:
             self._record_event(jump, "steady")  # the controller reset itself when it decided it
-            if jump < 0 and self._fmt is not None:
-                owed = round(-jump * self._fmt.sample_rate / 1e6)
-                self._insert_left = max(0, owed - block.inserted)
-        elif self._insert_left:
-            self._insert_left = max(0, self._insert_left - block.inserted)
+            frames = round(abs(jump) * self._fmt.sample_rate / 1e6) if self._fmt is not None else 0
+            if jump > 0:
+                jump_dropped = min(block.dropped, frames)
+            else:
+                self._insert_left = frames
+        if self._insert_left:
+            jump_inserted = min(block.inserted, self._insert_left)
+            self._insert_left -= jump_inserted
 
         count = self._sched.placement_count
         if count != self._placements_seen:
@@ -161,7 +169,7 @@ class PlayoutEngine:
                 self._late_start_us = block.late_drop_us
             if self._reading is not None:  # before the first reading a placement is provisional
                 self._record_placement(reason, size_us, t_s)
-        self._stats.correction(t_s, block.inserted, block.dropped)
+        self._stats.correction(t_s, block.inserted - jump_inserted, block.dropped - jump_dropped)
         return block
 
     def sense(self, now_us: float, delivered_ns: int) -> None:
@@ -183,6 +191,7 @@ class PlayoutEngine:
             self._stats.port(t_s, a_minus_t)
             if self._prev_a_minus_t is not None and not r.recovered and a_minus_t - self._prev_a_minus_t > PA_STEP_US:
                 self._stats.pa_step()
+                self._offsets.clear()  # the port moved: older readings no longer date it
             self._prev_a_minus_t = a_minus_t
         if r.underrun:
             self._stats.underrun()

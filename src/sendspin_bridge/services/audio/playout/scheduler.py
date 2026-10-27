@@ -147,11 +147,16 @@ class PlayoutScheduler:
 
         Only while nothing is queued and no placement silence or jump insert is owed (the
         engine places silence this way; program is placed by ``request_placement``). It is
-        not a counted placement. Returns whether the schedule was moved.
+        not a counted placement. A pending reason was served by it, so the next chunk is
+        placed as ``starved`` (silence was written before it). Returns whether the schedule
+        was moved.
         """
         if self._fmt is None or self._queue or self._owed_insert or self._pending_silence is not None:
             return False
         self._append(self.x_w_ns, audible_us, "silence")
+        if self._placement is not None:
+            self._placement = "starved"
+            self._decided = False
         return True
 
     # -- output -------------------------------------------------------------------------

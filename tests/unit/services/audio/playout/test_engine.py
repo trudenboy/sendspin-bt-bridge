@@ -120,7 +120,8 @@ def test_persistent_late_offset_gives_one_steady_jump():
     assert snap["jumps"] == before["jumps"] + 1
     assert snap["last_jump_reason"] == "steady"
     assert snap["last_jump_ms"] == pytest.approx(25.0, abs=0.5)
-    assert snap["dropped"] == pytest.approx(1200, abs=1) and snap["inserted"] == 0
+    # R10: jump frames are not loop corrections
+    assert (snap["dropped"], snap["inserted"], snap["corrections_per_s"]) == (0, 0, 0.0)
     assert abs(snap["error_ms"]) < 1.0 and snap["error_p95_ms"] < 1.0
     assert snap["pa_steps"] == 0
 
@@ -135,7 +136,7 @@ def test_persistent_early_offset_gives_one_steady_insert():
     assert snap["pa_steps"] == 1
     assert snap["jumps"] == before["jumps"] + 1 and snap["last_jump_reason"] == "steady"
     assert snap["last_jump_ms"] == pytest.approx(-25.0, abs=0.5)
-    assert snap["inserted"] == pytest.approx(1200, abs=1) and snap["dropped"] == 0
+    assert (snap["dropped"], snap["inserted"], snap["corrections_per_s"]) == (0, 0, 0.0)
     assert abs(snap["error_ms"]) < 1.0 and snap["error_p95_ms"] < 1.0
     assert snap["rejected_samples"] <= 5  # the step itself, held back by the gate until the jump
 
@@ -207,7 +208,7 @@ def test_controller_waits_while_a_long_insert_is_written():
     snap = eng.snapshot()
     assert snap["last_jump_reason"] == "steady"
     assert snap["last_jump_ms"] == pytest.approx(-300.0, abs=0.5)
-    assert snap["inserted"] == pytest.approx(14_400, abs=1)
+    assert (snap["dropped"], snap["inserted"], snap["corrections_per_s"]) == (0, 0, 0.0)
     # Only the step itself is held back by the gate (4 readings, the 5th decides the jump);
     # readings during the insert are not judged against the old schedule.
     assert snap["rejected_samples"] == 4
@@ -280,7 +281,7 @@ class SpikyPort:
 def test_one_outlier_reading_does_not_move_a_placement():
     raw = FakeRaw(1_000_000.0)
     port = SimulatedPort(raw)
-    spiky = SpikyPort(port, spike_at=-1, spike_ms=30.0)
+    spiky = SpikyPort(port, spike_at=-1, spike_ms=12.0)  # below a PA step (R5)
     eng = PlayoutEngine(settings=PlayoutSettings(mode="measure"), port=spiky)
     eng.set_format(InputFormat(sample_rate=48000))
     eng.submit(int(raw.t_us + 1e6), TONE_FRAME * 48000 * 10)
@@ -356,3 +357,63 @@ def test_44k1_chunk_is_heard_at_its_play_time():
     drive(eng, port, raw, 2.0)
     assert port.heard_at_us(first_nonzero=True) == pytest.approx(due, abs=50)
     assert abs(eng.snapshot()["error_ms"]) < 0.1
+
+
+def test_jump_frames_are_not_loop_corrections_even_mid_insert():
+    eng, port, raw = playing(40.0)
+    drive(eng, port, raw, 12.0)
+    port.skip(300.0)
+    seen = []
+    drive(eng, port, raw, 3.0, on_sense=lambda: seen.append(eng.snapshot()["corrections_per_s"]))
+    assert set(seen) == {0.0}
+
+
+def test_program_after_a_silence_placement_is_not_recorded_with_the_stale_reason():
+    eng, port, raw = engine_with_port()
+    drive(eng, port, raw, 2.0)
+    port.stall(600.0)
+    drive(eng, port, raw, 2.0)
+    before = eng.snapshot()
+    assert before["last_jump_reason"] == "stall"
+    eng.submit(int(raw.t_us + 1e6), TONE_FRAME * 4800)
+    drive(eng, port, raw, 2.0)
+    snap = eng.snapshot()
+    assert snap["jumps"] == before["jumps"] + 1 and snap["last_jump_reason"] == "starved"
+
+
+def test_jump_while_an_insert_is_owed_in_silence_is_dropped_and_logged(monkeypatch, caplog):
+    eng, port, raw = engine_with_port()
+    drive(eng, port, raw, 2.0)
+    eng._sched._owed_insert = 2400  # an insert still being written, nothing queued
+    eng._pending_jump_us = 25_000.0
+    renders = []
+    real_render = eng._sched.render
+
+    def render(**kw):
+        renders.append(kw.get("jump_us"))
+        return real_render(**kw)
+
+    monkeypatch.setattr(eng._sched, "render", render)
+    before = eng.snapshot()["jumps"]
+    with caplog.at_level("DEBUG", logger="sendspin_bridge.services.audio.playout.engine"):
+        eng.next_block(raw.t_us)
+    assert renders == [None]
+    assert eng.snapshot()["jumps"] == before
+    assert any("jump" in rec.getMessage() and rec.levelname == "DEBUG" for rec in caplog.records)
+
+
+def test_placement_right_after_a_pa_step_uses_the_new_port_position():
+    eng, port, raw = playing(40.0)
+    drive(eng, port, raw, 3.0)
+    port.skip(18.0)  # below the jump threshold: only a placement can remove it
+    fired = []
+
+    def on_sense():
+        if not fired:
+            fired.append(True)
+            eng.resync(0)  # the very next reading is the first after the step
+
+    drive(eng, port, raw, 3.0, on_sense=on_sense)
+    snap = eng.snapshot()
+    assert snap["pa_steps"] == 1 and snap["last_jump_reason"] == "delay"
+    assert abs(snap["error_ms"]) < 1.0 and snap["error_p95_ms"] < 1.0
