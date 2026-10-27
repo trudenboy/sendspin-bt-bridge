@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `PLAYOUT_SYNC=measure`: steady corrections now need the timing error
+  to persist for 5 s, so the sawtooth of the PipeWire output clock no
+  longer triggers them; real drift is still corrected
+  ([#556](https://github.com/trudenboy/sendspin-bt-bridge/issues/556)).
+- `PLAYOUT_SYNC=measure`: one steady correction moves the audio by at
+  most 50 ms; a larger persistent error is corrected in several steps
+  instead of one large jump that could drop up to half a second of audio
+  ([#556](https://github.com/trudenboy/sendspin-bt-bridge/issues/556)).
+- `PLAYOUT_SYNC=measure`: after an underrun or a stalled output, the
+  timing error is measured from a fresh, stable baseline before steady
+  corrections resume, so an offset that appears while the output
+  recovers is reported instead of corrected; one over 50 ms shows as a
+  warning and a degraded state
+  ([#556](https://github.com/trudenboy/sendspin-bt-bridge/issues/556)).
+
 ## [3.1.0-beta.15] - 2026-10-27
 
 ### Fixed
