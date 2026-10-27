@@ -47,6 +47,12 @@ REJECTED_WARN_FRACTION = 0.30
 REJECTED_WINDOW = 600  # readings (60 s)
 SENSOR_DEAD_READS = 10  # consecutive empty readings (1 s) = sensor unavailable
 PREDICT_READINGS = 9  # readings whose median offset dates the port for a placement
+# After an underrun placement (R3) the error restarts from a fresh baseline: once the port
+# reaches the placed audio, the median e_w of this many readings (2 s) is the reference that
+# steady jumps correct against. The port clock settling after the underrun moves the error
+# by up to hundreds of ms (459 ms in #556) without moving the audio; that offset is
+# reported, not corrected.
+BASELINE_READINGS = 20
 
 
 def _wall_iso() -> str:
@@ -102,6 +108,8 @@ class PlayoutEngine:
         self._in_underrun = False
         self._degraded = False
         self._error_ema_us: float | None = None
+        self._baseline_us = 0.0  # reference of e_w for steady jumps (non-zero after an underrun)
+        self._baseline_samples: list[float] | None = None  # collecting a fresh baseline
         self._opened_us: float | None = None
         self._opened_x_ns = 0
         # x_port/1000 - t of the recent readings since the last k change; their median dates
@@ -278,7 +286,17 @@ class PlayoutEngine:
             return
         rho = self._controller.rate_estimate
         e_w = r.t_us + (self._reading_x_w_ns - r.x_port_ns) / 1000.0 * (1.0 + rho) - s_w
-        d = self._controller.update(t_s, e_w)
+        if self._baseline_samples is not None:
+            if self._settle_x_ns is not None and r.x_port_ns < self._settle_x_ns:
+                return  # the port still plays audio from before the placement
+            self._baseline_samples.append(e_w)
+            if len(self._baseline_samples) < BASELINE_READINGS:
+                return  # controller frozen until the baseline is known
+            self._baseline_us = statistics.median(self._baseline_samples)
+            self._baseline_samples = None
+            if abs(self._baseline_us) >= 1000.0:
+                logger.info("playout: error baseline after the underrun is %.1f ms", self._baseline_us / 1000.0)
+        d = self._controller.update(t_s, e_w - self._baseline_us)
         if d.rejected:
             self._stats.rejected()
         if d.refused_us is not None:
@@ -298,7 +316,7 @@ class PlayoutEngine:
             )
         if d.jump_us is not None:
             self._pending_jump_us = d.jump_us
-        self._error_ema_us = d.error_us
+        self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
 
     def _check_warnings(self, t_s: float) -> None:
         """Rate-limited WARNINGs (once per 10 min per kind) and the periodic DEBUG summary."""
@@ -415,6 +433,12 @@ class PlayoutEngine:
         self._pending_place = None
         self._controller.placed(t_s)
         self._record_event(size_us, reason)
+        # A placement aligns to the port as read now, so the error restarts at 0; after an
+        # underrun the reading may still settle, so a fresh baseline is measured first (and
+        # measured again if another placement lands while it is being measured).
+        self._baseline_us = 0.0
+        collecting = reason == "underrun" or self._baseline_samples is not None
+        self._baseline_samples = [] if collecting else None
 
     def _record_event(self, size_us: float, reason: str) -> None:
         """Count a placement or steady jump; the stats window restarts and in-flight audio settles."""

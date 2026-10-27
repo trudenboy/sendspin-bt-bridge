@@ -80,3 +80,56 @@ def test_steady_correction_over_the_bound_is_refused_and_logged(caplog):
     refused = [r for r in caplog.records if r.levelno == logging.WARNING and "refused" in r.getMessage()]
     assert len(refused) == 1 and "100." in refused[0].getMessage()
     assert snap["state"] == "degraded"
+
+
+# --- 3. after an underrun the error restarts from a fresh baseline --------------------------
+
+
+def test_two_underruns_then_a_clock_settling_back_give_no_459_ms_jump(caplog):
+    # Live: underrun 201 ms, underrun 62 ms, then "steady, 459.0 ms". The reported clock ran
+    # ahead while the port was starved and converges back once data flows again.
+    eng, port, raw = playing(60.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(840.0)
+        drive_until_underruns(eng, port, raw, 1)
+        drive(eng, port, raw, 0.5)
+        port.starve(700.0)
+        drive_until_underruns(eng, port, raw, 2, then=lambda: port.slew(-459.0, 600.0))
+        drive(eng, port, raw, 20.0)
+    snap = eng.snapshot()
+    assert snap["underruns"] == 2
+    assert steady_jumps(caplog) == []
+    # Not merely refused by the bound: the offset is the post-underrun baseline.
+    assert not [r for r in caplog.records if "refused" in r.getMessage()]
+
+
+def test_offset_left_by_an_underrun_is_the_new_baseline_and_later_steps_are_corrected(caplog):
+    eng, port, raw = playing(60.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(800.0)
+        drive_until_underruns(eng, port, raw, 1, then=lambda: port.slew(-30.0, 300.0))
+        drive(eng, port, raw, 15.0)
+        assert steady_jumps(caplog) == []  # within the bound, but left by the underrun (R3)
+        assert eng.snapshot()["error_ms"] == pytest.approx(30.0, abs=3.0)  # still reported
+        port.skip(-25.0)  # a real step after the baseline is corrected as before
+        drive(eng, port, raw, 12.0)
+    assert steady_jumps(caplog) == [pytest.approx(25.0, abs=1.0)]
+
+
+def test_a_placement_while_the_baseline_is_measured_does_not_cancel_it(caplog):
+    eng, port, raw = playing(60.0)
+    drive(eng, port, raw, 12.0)
+
+    def delay_then_settle():
+        eng.resync(0)  # a delay change right after the underrun placement
+        drive(eng, port, raw, 0.2)
+        assert eng.snapshot()["last_jump_reason"] == "delay"
+        port.slew(-30.0, 300.0)
+
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(800.0)
+        drive_until_underruns(eng, port, raw, 1, then=delay_then_settle)
+        drive(eng, port, raw, 15.0)
+    assert steady_jumps(caplog) == []
