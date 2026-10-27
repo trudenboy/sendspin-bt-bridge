@@ -117,10 +117,14 @@ def test_room_noise_without_clicks_is_no_clicks():
     assert (m.status, m.reason) == ("not_heard", "no_clicks")
 
 
-def test_clicks_barely_above_the_noise_are_low_snr():
-    m = est.estimate(synth("a", lag_s=0.1, noise=0.05, gain=0.1))
-    assert (m.status, m.reason) == ("not_heard", "low_snr")
-    assert m.clicks >= 2 and m.confidence == 0.0
+def test_clicks_barely_above_the_noise_are_low_snr_one_by_one_but_measured_together():
+    # #553: the per-click path finds the sequence but below MIN_SNR_DB; the coherent path measures it when the two
+    # agree
+    rec = synth("a", lag_s=0.1, noise=0.05, gain=0.1)
+    weak = est.estimate_per_click(rec)
+    assert (weak.status, weak.reason) == ("not_heard", "low_snr")
+    assert weak.clicks >= 2 and weak.confidence == 0.0
+    assert abs(_phase(est.estimate(rec)) - 100.0) <= 1.0
 
 
 def _mix(a: Recording, b: Recording) -> Recording:
