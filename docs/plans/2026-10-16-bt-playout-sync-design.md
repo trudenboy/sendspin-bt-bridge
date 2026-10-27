@@ -870,8 +870,10 @@ probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-ga
 - `PLAYOUT_SYNC=measure`: ENEBY20 plays 377 ms after Chrome (one cycle; spreads 0.4–0.5 ms). The engine
   reported its error near 0 after the start placement; no steady jump in this run.
 - Reading: measure places audio at the PulseAudio port as well as the legacy player does (difference
-  within the reference's own drift). The ~375 ms is beyond the sink (A2DP link + ENEBY20's buffer/DSP):
-  the "per-speaker offset" of Stage 4, today fixable with `static_delay_ms ≈ 375`. The 40–57 ms late
+  within the reference's own drift). ENEBY20 already had `static_delay_ms` = 218 (set from Music
+  Assistant earlier that day) during both runs, so the speaker-side latency beyond the sink (A2DP link +
+  ENEBY20's buffer/DSP) is ≈ 218 + 375 ≈ 593 ms: the "per-speaker offset" of Stage 4, today fixable by
+  raising the speaker's delay to ≈ 593 ms. The 40–57 ms late
   error seen right after some starts (then one steady jump) did not occur here; whether it is real or a
   sensor bias stays open (E2/H4 need a warm output, i.e. Stage 2).
 - Also found: the output rate came from freed pulsectl memory (32681 Hz), fixed in 3.1.0-beta.14;
