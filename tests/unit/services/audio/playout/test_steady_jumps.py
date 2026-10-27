@@ -62,3 +62,21 @@ def test_real_drift_is_still_corrected_by_steady_jumps(caplog, delta_ppm):
     assert len(jumps) >= 3
     assert all(20.0 < j <= 50.0 for j in jumps)
     assert abs(eng.snapshot()["error_ms"]) < 50.0
+
+
+# --- 2. a steady correction has an upper bound ----------------------------------------------
+
+
+def test_steady_correction_over_the_bound_is_refused_and_logged(caplog):
+    eng, port, raw = playing(40.0)
+    drive(eng, port, raw, 12.0)
+    before = eng.snapshot()
+    port.skip(-100.0)  # the port falls 100 ms behind: far beyond a residual
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        drive(eng, port, raw, 20.0)
+    snap = eng.snapshot()
+    assert steady_jumps(caplog) == []
+    assert snap["jumps"] == before["jumps"]
+    refused = [r for r in caplog.records if r.levelno == logging.WARNING and "refused" in r.getMessage()]
+    assert len(refused) == 1 and "100." in refused[0].getMessage()
+    assert snap["state"] == "degraded"

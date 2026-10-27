@@ -1,6 +1,6 @@
 import pytest
 
-from sendspin_bridge.services.audio.playout.controller import HAMPEL_FLOOR_US, LoopController
+from sendspin_bridge.services.audio.playout.controller import HAMPEL_FLOOR_US, MAX_STEADY_JUMP_US, LoopController
 
 
 def run(ctrl, samples, t0=0.0):
@@ -56,3 +56,14 @@ def test_step_of_five_outliers_is_accepted_and_reseeds():
     d = run(LoopController(mode="measure"), [0.0] * 20 + [15_000.0] * 8)
     assert [x.rejected for x in d[20:25]] == [True] * 4 + [False]
     assert d[-1].error_us > 5000.0
+
+
+def test_steady_jump_over_the_bound_is_refused_and_does_not_reset():
+    assert MAX_STEADY_JUMP_US == 50_000.0
+    ctrl = LoopController(mode="measure")
+    ctrl.placed(0.0)
+    d = run(ctrl, [80_000.0] * 60, t0=10.0)
+    assert all(x.jump_us is None for x in d)
+    assert d[-1].refused_us == pytest.approx(80_000.0) and d[-1].degraded
+    ok = run(LoopController(mode="measure"), [0.0] * 20 + [45_000.0] * 60)
+    assert [x.jump_us for x in ok if x.jump_us is not None] == [pytest.approx(45_000.0)]

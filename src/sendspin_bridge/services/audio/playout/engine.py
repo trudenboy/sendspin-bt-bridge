@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
-from sendspin_bridge.services.audio.playout.controller import LoopController
+from sendspin_bridge.services.audio.playout.controller import MAX_STEADY_JUMP_US, LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
 from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
 from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap
@@ -281,7 +281,15 @@ class PlayoutEngine:
         d = self._controller.update(t_s, e_w)
         if d.rejected:
             self._stats.rejected()
-        if d.degraded:
+        if d.refused_us is not None:
+            self._degraded = True
+            self._warn.warning(
+                "steady_jump_bound",
+                "playout: error %.1f ms persists but a steady jump is refused (over the %.0f ms bound)",
+                d.refused_us / 1000.0,
+                MAX_STEADY_JUMP_US / 1000.0,
+            )
+        elif d.degraded:
             self._degraded = True
             self._warn.warning(
                 "steady_jumps",

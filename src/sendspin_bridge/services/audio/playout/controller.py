@@ -26,6 +26,9 @@ JUMP_CONFIRM = 5  # the jump size is the median of the last 5 raw samples
 # drift stays beyond it: at 3.5 ms/s (#546) the jump comes at ~36 ms, inside the bound.
 JUMP_PERSIST_S = 5.0
 JUMP_PERSIST_FRACTION = 0.9
+# Steady jumps remove a small residual error. A larger one is not trusted to be the audio's
+# (a 459 ms jump followed two underruns in #556); it is refused and reported instead.
+MAX_STEADY_JUMP_US = 50_000.0
 JUMP_MIN_INTERVAL_S = 10.0
 HOLDOFF_S = 1.0
 _MAD_SCALE = 1.4826
@@ -40,7 +43,8 @@ class Decision:
     error_us: float | None  # filtered error (EMA), None before the first accepted sample
     rejected: bool
     saturated: bool
-    degraded: bool  # a steady jump was refused by the 10 s interval
+    degraded: bool  # a steady jump was refused (10 s interval or MAX_STEADY_JUMP_US)
+    refused_us: float | None = None  # the steady jump refused for exceeding MAX_STEADY_JUMP_US
 
 
 class LoopController:
@@ -72,7 +76,7 @@ class LoopController:
         self._last_event_s = t_s
         self._holdoff_until_s = t_s + HOLDOFF_S
 
-    def _check_jump(self, t_s: float, e_w_us: float) -> tuple[float | None, bool]:
+    def _check_jump(self, t_s: float, e_w_us: float) -> tuple[float | None, bool, float | None]:
         threshold = JUMP_US[self._mode]
         run = self._run
         run.append((t_s, e_w_us))
@@ -80,16 +84,18 @@ class LoopController:
             run.popleft()
         # The window (cleared by every event) must span JUMP_PERSIST_S of readings.
         if t_s - run[0][0] < JUMP_PERSIST_S - T_S * 1.5:
-            return None, False
+            return None, False, None
         last = statistics.median(e for _, e in list(run)[-JUMP_CONFIRM:])
         if abs(last) <= threshold:
-            return None, False
+            return None, False, None
         beyond = sum(1 for _, e in run if (e > threshold if last > 0 else e < -threshold))
         if beyond < JUMP_PERSIST_FRACTION * len(run):
-            return None, False
+            return None, False, None
         if self._last_event_s is not None and t_s - self._last_event_s < JUMP_MIN_INTERVAL_S:
-            return None, True
-        return last, False
+            return None, True, None
+        if abs(last) > MAX_STEADY_JUMP_US:
+            return None, True, last
+        return last, False, None
 
     def _gate(self, e_w_us: float) -> bool:
         """Return True when the sample is accepted."""
@@ -112,11 +118,11 @@ class LoopController:
         return False
 
     def update(self, t_s: float, e_w_us: float) -> Decision:
-        jump, degraded = self._check_jump(t_s, e_w_us)
+        jump, degraded, refused = self._check_jump(t_s, e_w_us)
         if jump is not None:
             self.placed(t_s)
             return Decision(0.0, jump, self._ema, False, False, False)
         accepted = self._gate(e_w_us)
         if accepted:
             self._ema = e_w_us if self._ema is None else self._ema + self._alpha * (e_w_us - self._ema)
-        return Decision(0.0, None, self._ema, not accepted, False, degraded)
+        return Decision(0.0, None, self._ema, not accepted, False, degraded, refused)

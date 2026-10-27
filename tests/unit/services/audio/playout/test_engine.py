@@ -1,5 +1,6 @@
 import pytest
 
+from sendspin_bridge.services.audio.playout import controller
 from sendspin_bridge.services.audio.playout.engine import PlayoutEngine, PlayoutSettings
 from sendspin_bridge.services.audio.playout.scheduler import InputFormat
 from tests.unit.services.audio.playout.sim import FakeRaw, SimulatedPort, drive
@@ -200,7 +201,9 @@ def test_jump_is_never_passed_while_a_placement_is_pending(monkeypatch, event):
     assert abs(snap["error_ms"]) < 1.0
 
 
-def test_controller_waits_while_a_long_insert_is_written():
+def test_controller_waits_while_a_long_insert_is_written(monkeypatch):
+    # A steady jump this long is over MAX_STEADY_JUMP_US (#556); lift the bound to test the wait.
+    monkeypatch.setattr(controller, "MAX_STEADY_JUMP_US", 400_000.0)
     eng, port, raw = playing(40.0)
     drive(eng, port, raw, 12.0)
     port.skip(300.0)  # 300 ms early: a 300 ms insert takes 30 blocks, across three readings
@@ -359,13 +362,15 @@ def test_44k1_chunk_is_heard_at_its_play_time():
     assert abs(eng.snapshot()["error_ms"]) < 0.1
 
 
-def test_jump_frames_are_not_loop_corrections_even_mid_insert():
+def test_jump_frames_are_not_loop_corrections_even_mid_insert(monkeypatch):
+    monkeypatch.setattr(controller, "MAX_STEADY_JUMP_US", 400_000.0)  # a long insert (#556)
     eng, port, raw = playing(40.0)
     drive(eng, port, raw, 12.0)
     port.skip(300.0)
     seen = []
-    drive(eng, port, raw, 3.0, on_sense=lambda: seen.append(eng.snapshot()["corrections_per_s"]))
+    drive(eng, port, raw, 8.0, on_sense=lambda: seen.append(eng.snapshot()["corrections_per_s"]))
     assert set(seen) == {0.0}
+    assert eng.snapshot()["last_jump_ms"] == pytest.approx(-300.0, abs=0.5)
 
 
 def test_program_after_a_silence_placement_is_not_recorded_with_the_stale_reason():
