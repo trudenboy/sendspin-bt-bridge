@@ -3135,6 +3135,17 @@
             "title": "Min Buffer Ms",
             "type": "integer"
           },
+          "pa_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pa Latency Ms"
+          },
           "playback_position_us": {
             "anyOf": [
               {
@@ -3222,6 +3233,7 @@
           "clock_offset_ms",
           "clock_uncertainty_ms",
           "clock_slew_ppm",
+          "pa_latency_ms",
           "required_lead_time_ms",
           "min_buffer_ms",
           "declared_lead_time_ms",

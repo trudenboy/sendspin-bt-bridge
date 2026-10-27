@@ -135,6 +135,7 @@ class DeviceTiming(ResponseModel):
     clock_offset_ms: float | None = None
     clock_uncertainty_ms: float | None = None
     clock_slew_ppm: float | None = None
+    pa_latency_ms: float | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250
     declared_lead_time_ms: int | None = None
@@ -368,6 +369,7 @@ class Device(ResponseModel):
                 clock_offset_ms=g("clock_offset_ms"),
                 clock_uncertainty_ms=g("clock_uncertainty_ms"),
                 clock_slew_ppm=g("clock_slew_ppm"),
+                pa_latency_ms=g("pa_latency_ms"),
                 required_lead_time_ms=int(g("required_lead_time_ms") or 250),
                 min_buffer_ms=int(g("min_buffer_ms") or 250),
                 declared_lead_time_ms=g("declared_lead_time_ms"),

@@ -312,6 +312,13 @@ def _make_slew_estimator():
     return ClockSlewEstimator()
 
 
+async def _read_pa_latency_ms() -> float | None:
+    """PulseAudio latency of this daemon's own stream (module level so tests can inject a fake)."""
+    from sendspin_bridge.services.audio.pa_stream_latency import read_own_stream_latency_ms
+
+    return await read_own_stream_latency_ms(os.getpid())
+
+
 async def _timing_telemetry_watcher(
     daemon,
     status: StatusStore | dict,
@@ -326,10 +333,22 @@ async def _timing_telemetry_watcher(
     next_metrics_at = 0.0
     failure_reported = False
     slew = _make_slew_estimator()
+    next_pa_latency_at = 0.0
     while not stop_event.is_set():
         try:
-            slew.sample()
-            slew_ppm = slew.ppm()
+            try:
+                slew.sample()
+                slew_ppm = slew.ppm()
+            except Exception as exc:
+                logger.debug("clock slew estimate failed: %s", exc)
+                slew_ppm = None
+            pa_latency_ms: float | None = None
+            if status.get("playing") and time.monotonic() >= next_pa_latency_at:
+                next_pa_latency_at = time.monotonic() + 1.0
+                try:
+                    pa_latency_ms = await _read_pa_latency_ms()
+                except Exception as exc:
+                    logger.debug("PulseAudio latency read failed: %s", exc)
             audio_handler = getattr(daemon, "_audio_handler", None)
             client = getattr(daemon, "_client", None)
             changed = False
@@ -340,12 +359,18 @@ async def _timing_telemetry_watcher(
                 snapshot = collect_timing_snapshot(audio_handler, client)
                 if slew_ppm is not None:
                     snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
+                if pa_latency_ms is not None:
+                    snapshot["pa_latency_ms"] = round(pa_latency_ms, 1)
+                    pa_latency_ms = None
                 _patch_status(status, snapshot)
                 changed = True
                 next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
             elif slew_ppm is not None and status.get("clock_slew_ppm") is None:
                 # First estimate: publish at once instead of waiting for the next metrics tick.
                 _patch_status(status, {"clock_slew_ppm": round(slew_ppm, 1)})
+                changed = True
+            if pa_latency_ms is not None:
+                _patch_status(status, {"pa_latency_ms": round(pa_latency_ms, 1)})
                 changed = True
             if changed and callable(on_status_change):
                 on_status_change()

@@ -3550,6 +3550,8 @@ export interface components {
              * @default 250
              */
             min_buffer_ms: number;
+            /** Pa Latency Ms */
+            pa_latency_ms: number | null;
             /** Playback Position Us */
             playback_position_us: number | null;
             /**

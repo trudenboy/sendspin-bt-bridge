@@ -273,6 +273,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "clock_uncertainty_ms",
         "timing_sampled_at",
         "clock_slew_ppm",
+        "pa_latency_ms",
         "required_lead_time_ms",
         "min_buffer_ms",
         "declared_lead_time_ms",
@@ -422,6 +423,7 @@ class DeviceStatus:
     clock_offset_ms: float | None = None
     clock_uncertainty_ms: float | None = None
     clock_slew_ppm: float | None = None
+    pa_latency_ms: float | None = None
     timing_sampled_at: str | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250
