@@ -41,21 +41,37 @@ controller's queue was empty:
 * no ACL TX on the handle for more than :data:`IDLE_SYNC_S` while the parser's
   queue is empty (the controller has transmitted or flushed everything; the
   credits for pre-capture fragments arrived as "excess" and were discarded).
-  The start of the capture counts as the previous send. Leftover fragments in
-  the parser's queue block this on purpose: after a lost completion they stay
-  uncredited for good, but they are indistinguishable from a controller that
-  stalled with fragments queued, whose late credits would land on new ones.
-  Such a link stays out of step until it reconnects (or the controller resets).
+  The start of the capture counts as the previous send for a handle never seen
+  before; a link forgotten to make room keeps its last send time (bounded
+  memory, see :data:`MAX_EVICTED_KEYS`; past that, re-created links count from
+  their first new send). Leftover fragments in the parser's queue block this on
+  purpose: after a lost completion they stay uncredited for good, but they are
+  indistinguishable from a controller that stalled with fragments queued, whose
+  late credits would land on new ones. The rule assumes the controller
+  transmits or flushes within that time; one that stalls longer while holding
+  pre-capture fragments the parser never saw defeats it (releasing credited
+  times only at the next send, below, catches the stall's late credit only if
+  it arrives before that send).
 
-From there the link is *in step*. A credited time is only released once the
-parser's queue drains again while still in step; it must drain within
-:data:`DRAIN_DEADLINE_S` / :data:`DRAIN_DEADLINE_EVENTS` NOCP events, otherwise a
-completion was probably lost (or the controller holds a backlog) and the link
-leaves step. The link also leaves step on an excess credit while in step, on a
-growing btsnoop drop counter (on every link: the counter is not attributed to
-an index), and when its queue overflows :data:`MAX_IN_FLIGHT`. Anything not
-proven stays ``t_complete=None``; a lost TX record that is not reported as a
-drop is the one case these rules cannot catch.
+From there the link is *in step*. A credited time is held until the parser's
+queue has drained and the link sends again while still in step, so a late
+credit for a fragment the parser never saw shows up as "excess" first. If the
+queue does not drain within :data:`DRAIN_DEADLINE_S` /
+:data:`DRAIN_DEADLINE_EVENTS` NOCP events (a lost completion, or a radio that
+fell behind), the held packets are released with ``None`` — the link stays in
+step, so crediting resumes as soon as the queue drains again; after a lost
+completion it never drains and every packet stays ``None``. The link leaves
+step on an excess credit, on a growing monitor drop counter (on every link:
+the counter is not attributed to an index), when its queue overflows
+:data:`MAX_IN_FLIGHT`, and on a controller reset. Anything not proven stays
+``t_complete=None``; a lost TX record that is not reported as a drop is the one
+case these rules cannot catch. :meth:`A2dpAirParser.link_states` exposes
+per-link counters so a caller can tell a "blind" link from a working one.
+
+Monitor drops: ``btmon -w`` writes 0 in every btsnoop record's drop field, so
+offline captures never report drops. A live reader of the monitor socket must
+feed the kernel's receive-queue overflow count (``SO_RXQ_OVFL`` ancillary data)
+as ``drops``; there is no live reader yet.
 """
 
 from __future__ import annotations
@@ -63,7 +79,7 @@ from __future__ import annotations
 import enum
 import gzip
 import struct
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
@@ -84,6 +100,7 @@ __all__ = [
     "AclReassembler",
     "ChannelMode",
     "L2capSdu",
+    "LinkState",
     "MediaPacket",
     "MonitorRecord",
     "ParseStats",
@@ -122,6 +139,7 @@ IDLE_SYNC_S = 0.5  # no sends for this long with nothing outstanding: the contro
 DRAIN_DEADLINE_S = 1.0  # while in step the queue must empty at least this often ...
 DRAIN_DEADLINE_EVENTS = 64  # ... and within this many NOCP events for the link
 MAX_IN_FLIGHT = 256  # fragments outstanding per link before it is cleared
+MAX_EVICTED_KEYS = 4096  # last send times remembered for links forgotten to make room
 BTSNOOP_MAGIC = b"btsnoop\0"
 BTSNOOP_DATALINK_MONITOR = 2001
 BTSNOOP_EPOCH_DELTA_US = 0x00DCDDB30F2F8000  # microseconds from 0000-01-01 to 1970-01-01
@@ -507,6 +525,17 @@ class _Fragment:
     packet: MediaPacket | None = None  # set on the last fragment of a media packet
 
 
+@dataclass(frozen=True, slots=True)
+class LinkState:
+    """Completion-crediting state of one ``(index, handle)`` for health reporting."""
+
+    in_step: bool
+    in_flight: int
+    credited: int  # media packets released with a completion time
+    released_none: int  # media packets released without one
+    desyncs: int  # times this link left step
+
+
 @dataclass
 class _Link:
     reassembler: AclReassembler
@@ -517,7 +546,11 @@ class _Link:
     held: list[MediaPacket] = field(default_factory=list)  # credited, waiting for the queue to drain
     busy_since: float | None = None  # when the queue last went from empty to non-empty
     events_since_drain: int = 0
+    drained: bool = False  # queue emptied while in step; held packets go out at the next send
     sbc_streams: set[int] = field(default_factory=set)
+    credited: int = 0
+    released_none: int = 0
+    desyncs: int = 0
 
     @property
     def idle(self) -> bool:
@@ -551,6 +584,14 @@ class A2dpAirParser:
         self._links: dict[tuple[int, int], _Link] = {}
         self._start: float | None = None
         self._drops = 0
+        self._evicted: OrderedDict[tuple[int, int], float] = OrderedDict()
+        self._forgot_evicted = False
+
+    def link_states(self) -> dict[tuple[int, int], LinkState]:
+        return {
+            key: LinkState(link.in_step, len(link.in_flight), link.credited, link.released_none, link.desyncs)
+            for key, link in self._links.items()
+        }
 
     def feed(self, t: float, index: int, opcode: int, payload: bytes, drops: int | None = None) -> list[MediaPacket]:
         """One monitor record; *drops* is the btsnoop cumulative drop counter when known."""
@@ -578,27 +619,35 @@ class A2dpAirParser:
             out += self._clear(link)
         return out
 
+    def _emit(self, link: _Link, packets: list[MediaPacket]) -> list[MediaPacket]:
+        for p in packets:
+            if p.t_complete is None:
+                link.released_none += 1
+            else:
+                link.credited += 1
+        return packets
+
     # -- link bookkeeping ---------------------------------------------------
 
-    @staticmethod
-    def _release(link: _Link, *, confirmed: bool) -> list[MediaPacket]:
+    def _release(self, link: _Link, *, confirmed: bool) -> list[MediaPacket]:
         held = link.held
         link.held = []
-        return held if confirmed else [replace(p, t_complete=None) for p in held]
+        link.drained = False
+        return self._emit(link, held if confirmed else [replace(p, t_complete=None) for p in held])
 
-    @staticmethod
-    def _clear(link: _Link, *, reassembly: bool = True) -> list[MediaPacket]:
+    def _clear(self, link: _Link, *, reassembly: bool = True) -> list[MediaPacket]:
         out = [f.packet for f in link.in_flight if f.packet is not None]
         link.in_flight.clear()
         link.busy_since = None
         link.events_since_drain = 0
         if reassembly:
             link.reassembler.reset()
-        return out
+        return self._emit(link, out)
 
     def _leave_step(self, link: _Link, *, count: bool = True) -> list[MediaPacket]:
         if link.in_step and count:
             self.stats.desyncs += 1
+            link.desyncs += 1
         link.in_step = False
         for frag in link.in_flight:
             frag.in_step = False
@@ -619,20 +668,36 @@ class A2dpAirParser:
 
     def _new_link(self, key: tuple[int, int], t: float) -> _Link | None:
         if len(self._links) >= self.max_links:
-            idle = [(link.last_seen, k) for k, link in self._links.items() if link.idle]
+            idle = [
+                (link.last_seen, k) for k, link in self._links.items() if link.idle and t - link.last_seen > IDLE_SYNC_S
+            ]
             if not idle:
                 self.stats.links_refused += 1
                 return None
-            del self._links[min(idle)[1]]
+            victim = min(idle)[1]
+            self._evicted[victim] = self._links.pop(victim).last_tx
+            self._evicted.move_to_end(victim)
+            if len(self._evicted) > MAX_EVICTED_KEYS:
+                self._evicted.popitem(last=False)
+                self._forgot_evicted = True
             self.stats.links_evicted += 1
-        start = self._start if self._start is not None else t
-        link = self._links[key] = _Link(AclReassembler(self.max_sdu, self.stats), last_tx=start, last_seen=t)
+        if key in self._evicted:
+            last_tx = self._evicted.pop(key)
+        elif self._forgot_evicted:
+            last_tx = t  # it may be a forgotten link: only a fresh idle gap counts
+        else:
+            last_tx = self._start if self._start is not None else t
+        link = self._links[key] = _Link(AclReassembler(self.max_sdu, self.stats), last_tx=last_tx, last_seen=t)
         return link
 
     def _check_deadline(self, link: _Link, t: float) -> list[MediaPacket]:
-        if link.in_step and link.busy_since is not None:
-            if t - link.busy_since > DRAIN_DEADLINE_S or link.events_since_drain > DRAIN_DEADLINE_EVENTS:
-                return self._leave_step(link)
+        """Bound the wait for a drain: release what is held as unknown, but stay in step."""
+        if link.busy_since is not None and (
+            t - link.busy_since > DRAIN_DEADLINE_S or link.events_since_drain > DRAIN_DEADLINE_EVENTS
+        ):
+            link.busy_since = t
+            link.events_since_drain = 0
+            return self._release(link, confirmed=False)
         return []
 
     # -- records ------------------------------------------------------------
@@ -648,6 +713,8 @@ class A2dpAirParser:
         if link is None:
             return []
         out: list[MediaPacket] = []
+        if link.drained:
+            out += self._release(link, confirmed=link.in_step)
         if not link.in_flight:
             if not link.in_step and t - link.last_tx > IDLE_SYNC_S:
                 link.in_step = True  # idle long enough: the controller's queue is empty
@@ -716,18 +783,18 @@ class A2dpAirParser:
             if frag.in_step and link.in_step:
                 link.held.append(replace(frag.packet, t_complete=t))
             else:
-                out.append(frag.packet)
+                out += self._emit(link, [frag.packet])
         if count > credited:
             self.stats.excess_completions += count - credited
             out += self._leave_step(link)
         if not link.in_flight:
-            out += self._release(link, confirmed=link.in_step)
+            link.drained = link.in_step and bool(link.held)
             link.busy_since = None
             link.events_since_drain = 0
         else:
             out += self._check_deadline(link, t)
         if len(link.held) > MAX_IN_FLIGHT:
-            out += self._leave_step(link)
+            out += self._release(link, confirmed=False)
         return out
 
 

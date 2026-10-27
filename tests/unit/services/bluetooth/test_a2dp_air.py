@@ -386,6 +386,8 @@ def simulate(
     lose_nocp: set[int] | None = None,
     drop_at: int | None = None,
     parser: air.A2dpAirParser | None = None,
+    slow: tuple[float, float, float] | None = None,
+    extra: list[tuple[float, int, int, bytes]] | None = None,
 ):
     """A FIFO controller: it transmits one fragment per *slot* and reports each in its own NOCP (count 1).
 
@@ -393,8 +395,9 @@ def simulate(
     *backlog* fragments sent before the capture are still queued at its start; with ``slot == period / 3``
     the controller keeps that backlog for ever. Completion j of the queue happens at
     ``max(c[j-1], send[j]) + slot``. *lose_nocp* drops the NOCP events of those queue positions (counting
-    the backlog); *drop_at* marks the record at that packet's send with a monitor drop.
-    Returns (emitted packets, true completion time of each packet's last fragment by seq, parser)."""
+    the backlog); *drop_at* marks the record at that packet's send with a monitor drop. *slow* =
+    (start, end, slot) uses that slot for transmissions starting in [start, end) seconds after *t0*.
+    *extra* records (t, index, opcode, payload) are merged in. Returns (emitted packets, true completion time of each packet's last fragment by seq, parser)."""
     p = parser if parser is not None else air.A2dpAirParser()
     sends: list[tuple[float, int, int, bytes]] = []  # (t, seq, pb, chunk)
     t = t0
@@ -408,7 +411,8 @@ def simulate(
     truth: dict[int, float] = {}
     c = t0
     for j, (st, seq) in enumerate(queue):
-        c = max(c, st) + slot
+        begin = max(c, st)
+        c = begin + (slow[2] if slow and slow[0] <= begin - t0 < slow[1] else slot)
         if seq >= 0:
             truth[seq] = c  # the last fragment of a packet overwrites the earlier ones
         if j not in (lose_nocp or set()):
@@ -416,16 +420,19 @@ def simulate(
     for st, _seq, pb, chunk in sends:
         events.append((st, 0, acl(HANDLE, pb, chunk), MONITOR_ACL_TX_PKT))
     events.sort(key=lambda e: (e[0], e[1]))  # a send and a completion at the same instant: the send first
+    merged = [(et, 1, opcode, payload) for et, _o, payload, opcode in events]
+    merged += [(et, index, opcode, payload) for et, index, opcode, payload in (extra or [])]
+    merged.sort(key=lambda e: e[0])
     out: list[air.MediaPacket] = []
     if connect:
         out += p.feed(t0 - 0.5, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
     drops = 0
     drop_t = sends[3 * drop_at][0] if drop_at is not None else None
-    for et, _order, payload, opcode in events:
+    for et, index, opcode, payload in merged:
         if drop_t is not None and et >= drop_t:
             drops, drop_t = 1, None
-        out += p.feed(et, 1, opcode, payload, drops=drops)
-    return out + p.flush(), truth, p
+        out += p.feed(et, index, opcode, payload, drops=drops)
+    return [pk for pk in out + p.flush() if pk.handle == HANDLE], truth, p
 
 
 def assert_no_wrong_times(pkts, truth):
@@ -477,7 +484,10 @@ def test_a_lost_completion_event_never_yields_wrong_times():
     pkts, truth, p = simulate(80, connect=True, lose_nocp={3 * 20 + 1})
     assert_no_wrong_times(pkts, truth)
     assert sum(pk.t_complete is not None for pk in pkts[:20]) >= 19
-    assert p.stats.desyncs >= 1
+    assert all(pk.t_complete is None for pk in pkts[21:])
+    state = p.link_states()[(1, HANDLE)]
+    assert state.in_step and state.desyncs == 0  # stays in step; the leftover keeps the queue from draining
+    assert state.credited >= 19 and state.released_none >= 59
     # the uncredited leftover could equally be a stalled controller, so an idle gap does not resync
     pkts, truth, _ = simulate(80, connect=True, lose_nocp={3 * 20 + 1}, gaps={50: 0.6})
     assert_no_wrong_times(pkts, truth)
@@ -500,7 +510,9 @@ def test_completion_split_over_several_events_uses_the_last_fragment():
         out += feed_media(p, t, media_sdu(i, 0))
         out += p.feed(t + 0.1, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 2)))
         out += p.feed(t + 0.3, 1, MONITOR_EVENT_PKT, nocp((0x0999, 4), (HANDLE, 1)))  # other handle in the event
+    out += feed_media(p, 10.0, media_sdu(10, 0))  # the next send releases the last drained packet
     out += p.flush()
+    out = out[:10]
     assert len(out) == 10
     assert all(pk.t_complete == pytest.approx(pk.seq + 0.3) for pk in out)
 
@@ -562,8 +574,81 @@ def test_controller_reset_drops_the_links_of_that_index(opcode, payload):
     out = p.feed(0.05, 1, opcode, payload)
     assert [(pk.seq, pk.t_complete) for pk in out] == [(1, None)]
     assert p.feed(0.06, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3))) == []  # nothing left to credit on hci1
-    (other,) = p.feed(0.07, 0, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))
+    assert p.feed(0.07, 0, MONITOR_EVENT_PKT, nocp((HANDLE, 3))) == []  # held until hci0 sends again
+    (other,) = feed_media(p, 0.08, media_sdu(3, 0), index=0)
     assert other.seq == 2 and other.t_complete == pytest.approx(0.07)  # hci0 untouched
+
+
+def test_an_evicted_link_does_not_inherit_the_capture_start():
+    # max_links=1 and a standing backlog of 2 on HANDLE (the controller is only marginally faster than
+    # the host). Just before packet 40 the parser's queue is momentarily empty and another handle sends
+    # one fragment, completed at once. Neither link may be evicted while it was active within
+    # IDLE_SYNC_S, and a re-created HANDLE must not treat the capture start as its last send.
+    t40 = 100.0 + 40 * 0.020
+    other = [
+        (t40 - 0.0001, 1, MONITOR_ACL_TX_PKT, acl(0x0999, 0b10, l2cap(CID, b"x"))),
+        (t40 - 0.00005, 1, MONITOR_EVENT_PKT, nocp((0x0999, 1))),
+    ]
+    pkts, truth, p = simulate(80, backlog=2, slot=0.0066, parser=air.A2dpAirParser(max_links=1), extra=other)
+    assert_no_wrong_times(pkts, truth)
+    assert all(pk.t_complete is None for pk in pkts)
+    assert p.stats.links_evicted == 0 and p.stats.links_refused == 1
+
+
+def other_handle_during_pause(pause_start: float) -> list[tuple[float, int, int, bytes]]:
+    """Another handle sends once 0.55 s into HANDLE's pause and is completed right away."""
+    t = pause_start + 0.55
+    return [
+        (t, 1, MONITOR_ACL_TX_PKT, acl(0x0999, 0b10, l2cap(CID, b"x"))),
+        (t + 0.001, 1, MONITOR_EVENT_PKT, nocp((0x0999, 1))),
+    ]
+
+
+def test_a_link_evicted_during_a_pause_keeps_its_last_send_time():
+    # HANDLE pauses 1.2 s (its backlog of 2 drains); the other handle takes its slot 0.55 s into the
+    # pause; HANDLE comes back, evicting the other one in turn: its own last send was > 0.5 s ago
+    pause_start = 100.0 + 40 * 0.020
+    p = air.A2dpAirParser(max_links=1)
+    pkts, truth, p = simulate(
+        80, backlog=2, slot=0.004, gaps={40: 1.2}, parser=p, extra=other_handle_during_pause(pause_start)
+    )
+    assert_no_wrong_times(pkts, truth)
+    assert p.stats.links_evicted == 2 and p.stats.links_refused == 0
+    assert sum(pk.t_complete is not None for pk in pkts[40:]) >= 39
+
+
+def test_a_link_recreated_after_its_send_time_was_forgotten_needs_a_fresh_gap(monkeypatch):
+    monkeypatch.setattr(air, "MAX_EVICTED_KEYS", 0)
+    pause_start = 100.0 + 40 * 0.020
+    p = air.A2dpAirParser(max_links=1)
+    pkts, truth, p = simulate(80, slot=0.004, gaps={40: 1.2}, parser=p, extra=other_handle_during_pause(pause_start))
+    assert_no_wrong_times(pkts, truth)
+    assert p.stats.links_evicted == 2
+    assert all(pk.t_complete is None for pk in pkts)
+
+
+def test_a_transient_slow_radio_does_not_blind_the_link():
+    # 2 s with the radio 3x slower than the host: the queue backs up (~200 fragments) past the drain
+    # deadline, then drains; crediting must resume afterwards
+    pkts, truth, p = simulate(400, connect=True, slow=(1.0, 3.0, 0.020))
+    assert_no_wrong_times(pkts, truth)
+    state = p.link_states()[(1, HANDLE)]
+    assert state.in_step and state.desyncs == 0 and state.released_none > 0
+    assert sum(pk.t_complete is not None for pk in pkts[300:]) >= 99
+    assert p.stats.in_flight_overflows == 0
+
+
+def test_a_late_credit_before_the_next_send_is_excess():
+    # in step, the queue drains, then one more credit arrives (a fragment the monitor never saw):
+    # the drained packet must not be released with a time
+    p = air.A2dpAirParser()
+    out = p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    out += feed_media(p, 0.0, media_sdu(1, 0))
+    out += p.feed(0.01, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))
+    out += p.feed(0.012, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 1)))
+    out += feed_media(p, 0.02, media_sdu(2, 0))
+    assert [(pk.seq, pk.t_complete) for pk in out] == [(1, None)]
+    assert p.link_states()[(1, HANDLE)].desyncs == 1
 
 
 def test_parse_records_runs_the_parser_over_monitor_records():
