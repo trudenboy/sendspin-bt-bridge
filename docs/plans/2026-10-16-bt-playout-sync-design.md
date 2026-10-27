@@ -858,3 +858,24 @@ group on, play anything, then power it off. Then in the HAOS terminal run
 the probe (`buffer-time` 200, then 800) while the phone records near the speaker. For E3, use the
 underrun runner (the probe is `SIGSTOP`ped 800 ms at t = 30 s). Hand both recordings and the
 probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-gap lateness.
+
+## Stage 1 findings (2026-10-27, HAOS stand, 3.1.0-beta.14)
+
+- Setup: sync group "Chrome (Renso's Linux, Sendspin web player) + ENEBY20 (bridge)"; the click track
+  played as a normal item; MA `volume_mute` alternated the soloed member every ~28 s; one continuous
+  phone voice memo; phases from `sendspin_sync.estimator` on 18 s windows of the same recording, so
+  both members share one clock (no phone clock sync needed).
+- `PLAYOUT_SYNC=off`: ENEBY20 plays 372 ms after Chrome (two cycles: 369.2 / 375.8 ms; Chrome itself
+  moved 5.6 ms between its windows; spreads 0.3–2.0 ms).
+- `PLAYOUT_SYNC=measure`: ENEBY20 plays 377 ms after Chrome (one cycle; spreads 0.4–0.5 ms). The engine
+  reported its error near 0 after the start placement; no steady jump in this run.
+- Reading: measure places audio at the PulseAudio port as well as the legacy player does (difference
+  within the reference's own drift). The ~375 ms is beyond the sink (A2DP link + ENEBY20's buffer/DSP):
+  the "per-speaker offset" of Stage 4, today fixable with `static_delay_ms ≈ 375`. The 40–57 ms late
+  error seen right after some starts (then one steady jump) did not occur here; whether it is real or a
+  sensor bias stays open (E2/H4 need a warm output, i.e. Stage 2).
+- Also found: the output rate came from freed pulsectl memory (32681 Hz), fixed in 3.1.0-beta.14;
+  output open takes ~1.1 s in both players (first 0.1–0.2 s of each stream dropped as overdue);
+  the Lenco LS-500 does not reproduce the click track at all (likely an amplifier noise gate on sparse
+  clicks); the group-tuning wizard was unreliable on the stand (not heard / unstable / lost the bridge
+  connection through HA ingress and lost the session on reload).
