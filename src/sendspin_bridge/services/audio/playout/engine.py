@@ -16,6 +16,7 @@ scheduler; only placements and steady jumps act on the audio.
 from __future__ import annotations
 
 import logging
+import os
 import statistics
 from collections import deque
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ from typing import TYPE_CHECKING, Literal
 
 from sendspin_bridge.services.audio.playout.controller import LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
-from sendspin_bridge.services.audio.playout.stats import PlayoutStats
+from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
 from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap
 
 if TYPE_CHECKING:
@@ -38,7 +39,13 @@ logger = logging.getLogger(__name__)
 
 # Ruling R5: a forward step of (a - t) larger than this between consecutive readings is a PA step.
 PA_STEP_US = 15_000.0
-WARN_EVERY_S = 600.0
+SUMMARY_EVERY_S = 10.0  # DEBUG summary cadence; 1 s with SENDSPIN_PLAYOUT_DEBUG=1
+SUMMARY_DEBUG_EVERY_S = 1.0
+UNDERRUN_WARN_COUNT = 3  # more than this many underruns within UNDERRUN_WARN_WINDOW_S
+UNDERRUN_WARN_WINDOW_S = 600.0
+REJECTED_WARN_FRACTION = 0.30
+REJECTED_WINDOW = 600  # readings (60 s)
+SENSOR_DEAD_READS = 10  # consecutive empty readings (1 s) = sensor unavailable
 PREDICT_READINGS = 9  # readings whose median offset dates the port for a placement
 
 
@@ -74,6 +81,14 @@ class PlayoutEngine:
         self._observer = PortObserver(k0_ns=k0_ns)
         self._controller = LoopController(mode=settings.mode)
         self._stats = PlayoutStats()
+        self._warn = RateLimitedLog(logger, clock=lambda: (self._now_us or 0.0) / 1e6)
+        debug = os.environ.get("SENDSPIN_PLAYOUT_DEBUG", "") not in ("", "0")
+        self._summary_every_s = SUMMARY_DEBUG_EVERY_S if debug else SUMMARY_EVERY_S
+        self._summary_next_s: float | None = None
+        self._underrun_times: deque[float] = deque()
+        self._underruns_seen = 0
+        self._recent_rejected: deque[bool] = deque(maxlen=REJECTED_WINDOW)
+        self._empty_reads = 0
         self._reading: PortReading | None = None
         self._reading_x_w_ns = 0  # write head at the last reading
         self._fmt: InputFormat | None = None
@@ -96,7 +111,6 @@ class PlayoutEngine:
         self._now_us: float | None = None
         self._late_start_us: float | None = None
         self._started = False  # the start placement was requested
-        self._degraded_warned_s: float | None = None
         self._fallback_reason: str | None = None
 
     # -- commands -------------------------------------------------------------------------
@@ -190,10 +204,18 @@ class PlayoutEngine:
 
     def sense(self, now_us: float, delivered_ns: int) -> None:
         self._tick(now_us)
+        rejected_before = self._stats.rejected_samples
+        self._sense(now_us, delivered_ns)
+        self._recent_rejected.append(self._stats.rejected_samples > rejected_before)
+        self._check_warnings(now_us / 1e6)
+
+    def _sense(self, now_us: float, delivered_ns: int) -> None:
         sample = self._port.read()
         if sample is None:
             self._stats.rejected()
+            self._empty_reads += 1
             return
+        self._empty_reads = 0
         r = self._observer.observe(sample, delivered_ns)
         self._reading = r
         self._reading_x_w_ns = self._sched.x_w_ns
@@ -254,14 +276,51 @@ class PlayoutEngine:
             self._stats.rejected()
         if d.degraded:
             self._degraded = True
-            if self._degraded_warned_s is None or t_s - self._degraded_warned_s >= WARN_EVERY_S:
-                self._degraded_warned_s = t_s
-                logger.warning(
-                    "playout: error %.1f ms persists but a steady jump is refused (one per 10 s)", e_w / 1000.0
-                )
+            self._warn.warning(
+                "steady_jumps",
+                "playout: error %.1f ms persists but a steady jump is refused (one per 10 s)",
+                e_w / 1000.0,
+            )
         if d.jump_us is not None:
             self._pending_jump_us = d.jump_us
         self._error_ema_us = d.error_us
+
+    def _check_warnings(self, t_s: float) -> None:
+        """Rate-limited WARNINGs (once per 10 min per kind) and the periodic DEBUG summary."""
+        if self._empty_reads >= SENSOR_DEAD_READS:
+            self._warn.warning("sensor", "playout: the port clock is unavailable; no timing readings")
+        while self._underruns_seen < self._stats.underruns:
+            self._underruns_seen += 1
+            self._underrun_times.append(t_s)
+        while self._underrun_times and t_s - self._underrun_times[0] > UNDERRUN_WARN_WINDOW_S:
+            self._underrun_times.popleft()
+        if len(self._underrun_times) > UNDERRUN_WARN_COUNT:
+            self._warn.warning(
+                "underruns",
+                "playout: %d underruns in the last 10 min; the sink is starved",
+                len(self._underrun_times),
+            )
+        n = len(self._recent_rejected)
+        if n >= REJECTED_WINDOW // 4:
+            frac = sum(self._recent_rejected) / n
+            if frac > REJECTED_WARN_FRACTION:
+                self._warn.warning("rejected", "playout: %.0f%% of timing samples were rejected", frac * 100.0)
+        if self._summary_next_s is None:
+            self._summary_next_s = t_s + self._summary_every_s
+        elif t_s >= self._summary_next_s:
+            self._summary_next_s = t_s + self._summary_every_s
+            if logger.isEnabledFor(logging.DEBUG):
+                snap = self.snapshot()
+                logger.debug(
+                    "playout summary: e=%s ms p95=%s ms r=%s ppm corrections/s=%s slope=%s ms/s jumps=%s underruns=%s",
+                    snap["error_ms"],
+                    snap["error_p95_ms"],
+                    snap["correction_ppm"],
+                    snap["corrections_per_s"],
+                    snap["error_slope_ms_per_s"],
+                    snap["jumps"],
+                    snap["underruns"],
+                )
 
     def snapshot(self) -> dict[str, object]:
         """The status ``playout`` dict (spec "Status")."""

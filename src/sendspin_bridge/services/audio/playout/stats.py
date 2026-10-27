@@ -8,6 +8,7 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import logging
     from collections.abc import Callable
 
 
@@ -179,3 +180,23 @@ class PlayoutStats:
             "rejected_samples": self.rejected_samples,
             "sink_rate_ppm": None if port_slope is None else round(port_slope, 1),
         }
+
+
+class RateLimitedLog:
+    """Emit a WARNING of one ``kind`` at most once per ``window_s`` (default 10 min)."""
+
+    def __init__(self, log: logging.Logger, *, clock: Callable[[], float], window_s: float = 600.0) -> None:
+        self._log = log
+        self._clock = clock
+        self._window_s = float(window_s)
+        self._last: dict[str, float] = {}
+
+    def warning(self, kind: str, msg: str, *args: object) -> bool:
+        """Log the warning unless one of this kind went out within the window; True if logged."""
+        now = self._clock()
+        last = self._last.get(kind)
+        if last is not None and now - last < self._window_s:
+            return False
+        self._last[kind] = now
+        self._log.warning(msg, *args)
+        return True

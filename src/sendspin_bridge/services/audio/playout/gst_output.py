@@ -271,7 +271,7 @@ class PlayoutPlayer:
 
     def adopt_output(self, output: PlayoutOutput, audio_format: PcmFormat) -> None:
         """Make a prepared output the current one and start its feeder thread."""
-        self.stop()
+        self.stop("replaced by a new output")
         self._out = output
         self._pipeline = output.pipeline
         self._appsrc = output.appsrc
@@ -342,7 +342,7 @@ class PlayoutPlayer:
 
     def end_stream(self) -> None:
         """Stage 1: the same as ``stop()`` (Stage 2 holds the output warm instead)."""
-        self.stop()
+        self.stop("end of stream")
 
     def close_stream(self) -> None:
         """Compatibility no-op: marks the stream closed, keeps the output running."""
@@ -354,7 +354,7 @@ class PlayoutPlayer:
         if self._out is not None:
             self._enqueue(("volume", *self._volume))
 
-    def stop(self) -> None:
+    def stop(self, reason: str = "stop") -> None:
         """Join the feeder and close the output; idempotent."""
         thread, self._thread = self._thread, None
         if thread is not None:
@@ -380,7 +380,7 @@ class PlayoutPlayer:
             from sendspin_bridge.services.audio.player.gst_support import Gst
 
             out.pipeline.set_state(Gst.State.NULL)
-            logger.info("playout output closed")
+            logger.info("playout output closed (%s)", reason)
 
     def is_drained(self) -> bool:
         """No program audio waits to be written (silence fill does not count)."""
