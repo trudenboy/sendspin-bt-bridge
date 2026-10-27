@@ -529,6 +529,8 @@
       "audioSink": "Audio Sink",
       "connected": "Connected",
       "codec": "Codec",
+      "reportedDelay": "Reported delay",
+      "reportedDelayHint": "Delay the speaker reports over Bluetooth (A2DP Delay Reporting). Advisory: reported by the speaker, not measured.",
       "sampleRate": "Sample Rate"
     },
     "config": {
