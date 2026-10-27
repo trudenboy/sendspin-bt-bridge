@@ -68,6 +68,10 @@ class SimulatedPort:
         self._heard_nonzero: float | None = None
         self._first_out: float | None = None
         self.underrun_ns = 0.0  # silence the port played because the ring was empty
+        # Reading errors of the reported clock (the true port is unaffected): a sawtooth
+        # (amplitude ns, period µs, start µs) and linear slews (start µs, length µs, ns).
+        self._saw: tuple[float, float, float] | None = None
+        self._slews: list[tuple[float, float, float]] = []
         self.next_sense_us: float | None = None  # drive()'s sensor schedule, kept across calls
 
     # -- time -----------------------------------------------------------------------------
@@ -110,12 +114,39 @@ class SimulatedPort:
         if self._noise_us:
             a += self._rng.gauss(0.0, self._noise_us) * 1000.0
         t = self._raw.t_us
+        a += self._reading_error_ns(t)
         return PortSample(t_us=t, a_ns=int(a), mono_us=t, bracket_us=0.0)
 
     def skip(self, ms: float) -> None:
         """PA "Skipping": A jumps forward by ``ms`` (negative: the port falls behind by ``-ms``)."""
         self._sync()
         self._a_ns += ms * 1e6
+
+    def sawtooth(self, amplitude_ms: float, period_s: float) -> None:
+        """The reported clock lags the port by a ramp to ``amplitude_ms`` that resets every ``period_s``.
+
+        The pulsesink clock under PipeWire (stand experiment E1): the smoother extrapolates
+        slow, then a timing update steps it forward. The audio itself does not drift.
+        """
+        self._saw = (amplitude_ms * 1e6, period_s * 1e6, self._raw.t_us)
+
+    def slew(self, ms: float, over_ms: float) -> None:
+        """From now on the reported clock moves by ``ms`` relative to the port, linearly over ``over_ms``.
+
+        Negative: the reading falls behind the port (audio looks late), as when a smoother
+        that ran ahead during an underrun converges back once data flows again.
+        """
+        self._slews.append((self._raw.t_us, over_ms * 1000.0, ms * 1e6))
+
+    def _reading_error_ns(self, t: float) -> float:
+        err = 0.0
+        if self._saw is not None:
+            amp, period, t0 = self._saw
+            err -= amp * (((t - t0) % period) / period)
+        for t0, length, size in self._slews:
+            if t > t0:
+                err += size * min(1.0, (t - t0) / length)
+        return err
 
     def starve(self, ms: float) -> None:
         """Deliveries are held back for the next ``ms`` (the port keeps playing)."""

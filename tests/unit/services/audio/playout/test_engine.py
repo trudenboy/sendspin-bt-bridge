@@ -190,7 +190,7 @@ def test_jump_is_never_passed_while_a_placement_is_pending(monkeypatch, event):
                 eng.submit(int(raw.t_us + 1e6), TONE_FRAME * 44100 * 5)
 
     port.skip(-25.0)
-    drive(eng, port, raw, 3.0, on_sense=on_sense)
+    drive(eng, port, raw, 8.0, on_sense=on_sense)  # the jump needs JUMP_PERSIST_S (#556)
     snap = eng.snapshot()
     assert fired and fired[0] == pytest.approx(25_000.0, abs=500.0)
     assert not [j for pending, j in renders if pending and j]
@@ -204,7 +204,7 @@ def test_controller_waits_while_a_long_insert_is_written():
     eng, port, raw = playing(40.0)
     drive(eng, port, raw, 12.0)
     port.skip(300.0)  # 300 ms early: a 300 ms insert takes 30 blocks, across three readings
-    drive(eng, port, raw, 3.0)
+    drive(eng, port, raw, 8.0)  # the jump needs JUMP_PERSIST_S (#556)
     snap = eng.snapshot()
     assert snap["last_jump_reason"] == "steady"
     assert snap["last_jump_ms"] == pytest.approx(-300.0, abs=0.5)

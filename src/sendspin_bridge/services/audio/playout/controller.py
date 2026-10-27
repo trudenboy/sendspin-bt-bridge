@@ -17,7 +17,15 @@ HAMPEL_N, HAMPEL_K, STEP_CONFIRM = 9, 3.0, 5
 HAMPEL_FLOOR_US = 8000.0
 TAU_F_S = 1.0
 JUMP_US = {"measure": 20_000.0, "loop": 10_000.0}
-JUMP_CONFIRM = 5
+JUMP_CONFIRM = 5  # the jump size is the median of the last 5 raw samples
+# A steady jump needs the raw error beyond the threshold, with one sign, in at least
+# JUMP_PERSIST_FRACTION of the samples over the last JUMP_PERSIST_S (a low percentile of the
+# error in that direction exceeds the threshold). The pulsesink clock under PipeWire is a
+# sawtooth of up to ~30 ms that resets every few seconds (E1, #556): it crosses the
+# threshold but falls back inside it within the window, so it is never corrected. A real
+# drift stays beyond it: at 3.5 ms/s (#546) the jump comes at ~36 ms, inside the bound.
+JUMP_PERSIST_S = 5.0
+JUMP_PERSIST_FRACTION = 0.9
 JUMP_MIN_INTERVAL_S = 10.0
 HOLDOFF_S = 1.0
 _MAD_SCALE = 1.4826
@@ -42,7 +50,7 @@ class LoopController:
         self._window: deque[float] = deque(maxlen=HAMPEL_N)
         self._ema: float | None = None
         self._outliers = 0
-        self._run: list[float] = []
+        self._run: deque[tuple[float, float]] = deque()  # (t_s, raw e_w) of the last JUMP_PERSIST_S
         self._last_event_s: float | None = None
         self._holdoff_until_s = 0.0
 
@@ -66,17 +74,22 @@ class LoopController:
 
     def _check_jump(self, t_s: float, e_w_us: float) -> tuple[float | None, bool]:
         threshold = JUMP_US[self._mode]
-        if abs(e_w_us) <= threshold:
-            self._run.clear()
+        run = self._run
+        run.append((t_s, e_w_us))
+        while t_s - run[0][0] > JUMP_PERSIST_S:
+            run.popleft()
+        # The window (cleared by every event) must span JUMP_PERSIST_S of readings.
+        if t_s - run[0][0] < JUMP_PERSIST_S - T_S * 1.5:
             return None, False
-        if self._run and (self._run[-1] > 0) != (e_w_us > 0):
-            self._run.clear()
-        self._run.append(e_w_us)
-        if len(self._run) < JUMP_CONFIRM:
+        last = statistics.median(e for _, e in list(run)[-JUMP_CONFIRM:])
+        if abs(last) <= threshold:
+            return None, False
+        beyond = sum(1 for _, e in run if (e > threshold if last > 0 else e < -threshold))
+        if beyond < JUMP_PERSIST_FRACTION * len(run):
             return None, False
         if self._last_event_s is not None and t_s - self._last_event_s < JUMP_MIN_INTERVAL_S:
             return None, True
-        return statistics.median(self._run[-JUMP_CONFIRM:]), False
+        return last, False
 
     def _gate(self, e_w_us: float) -> bool:
         """Return True when the sample is accepted."""

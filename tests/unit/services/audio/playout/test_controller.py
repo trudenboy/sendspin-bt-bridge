@@ -24,16 +24,16 @@ def test_single_outlier_is_rejected():
 
 def test_persistent_step_over_the_threshold_jumps_once():
     ctrl = LoopController(mode="measure")
-    d = run(ctrl, [0.0] * 20 + [25_000.0] * 10)
+    d = run(ctrl, [0.0] * 20 + [25_000.0] * 60)  # persistent over JUMP_PERSIST_S (#556)
     jumps = [x.jump_us for x in d if x.jump_us is not None]
     assert jumps == [pytest.approx(25_000.0, rel=0.01)]
 
 
 def test_second_steady_jump_within_10_s_is_refused_and_marks_degraded():
     ctrl = LoopController(mode="measure")
-    run(ctrl, [0.0] * 20 + [25_000.0] * 10)
-    ctrl.placed(3.0)
-    d = run(ctrl, [-25_000.0] * 10, t0=3.1)
+    run(ctrl, [0.0] * 20 + [25_000.0] * 60)
+    ctrl.placed(8.0)
+    d = run(ctrl, [-25_000.0] * 60, t0=8.1)  # persistent over JUMP_PERSIST_S, inside 10 s
     assert all(x.jump_us is None for x in d) and d[-1].degraded
 
 
@@ -48,8 +48,8 @@ def test_hampel_floor_pins_the_gate_width():
 def test_negative_steady_error_jumps_negative_after_interval():
     ctrl = LoopController(mode="measure")
     ctrl.placed(0.0)
-    d = run(ctrl, [-30_000.0] * 5, t0=10.0)
-    assert d[-1].jump_us == pytest.approx(-30_000.0)
+    d = run(ctrl, [-30_000.0] * 51, t0=10.0)  # persistent over JUMP_PERSIST_S (#556)
+    assert [x.jump_us for x in d if x.jump_us is not None] == [pytest.approx(-30_000.0)]
 
 
 def test_step_of_five_outliers_is_accepted_and_reseeds():
