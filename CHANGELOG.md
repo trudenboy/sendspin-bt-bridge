@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.6] - 2026-10-27
+
 ### Fixed
 
 - Bug reports sent from the web interface without a GitHub account keep
