@@ -327,7 +327,7 @@ pacing; constant or slow) plus steps (PA drops, time-filter jumps), and `r` is o
 | Frame events | phase accumulator: per rendered block `acc += r · fs_in · Δt`; while `acc ≥ 1` drop one input frame, while `acc ≤ −1` insert one; at most one event per 10 ms block | — | Spreads corrections evenly; one per block is enough up to 100/s. |
 | Crossfade | linear over 16 frames around the cut/duplicate | `16` (0.33 ms at 48 kHz) | sendspin-js uses 8 samples; 16 halves the click energy on tonal content at no cost. |
 | Jump (placement) | at stream start, `stream/clear`, a delay change, after an underrun or a stall: place the next program frame exactly (insert silence or drop the head) | 1 frame | Free before the audio starts; keeps 3.1.0-beta.5's "delay changes take effect at once, of any size". |
-| Jump (steady) | 5 consecutive raw `e_w` samples (0.5 s, before the outlier gate, which would hold a fresh step back) beyond `J` with the same sign: fade out 2 ms, insert/drop `round(median·fs)` frames (median of the 5), fade in; the controller then resets as after a placement; at most one per 10 s (more → WARNING, state `degraded`) | `J = 10 ms` (`loop`), `20 ms` (`measure`, parity with GStreamer's skew bound) | Spec "large errors": a one-shot resync, rare. 10 ms takes the loop ≥ 10 s at R_max; a jump is better. |
+| Jump (steady) | raw `e_w` (before the outlier gate, which would hold a fresh step back) beyond `J` with the same sign in ≥ 90 % of the readings over the last 5 s (R14): fade out 2 ms, insert/drop `round(median·fs)` frames (median of the last 5 samples, clamped to ±50 ms), fade in; the controller then resets as after a placement; at most one per 10 s (more → WARNING, state `degraded`). After an underrun or stall placement the jump acts on `e_w` minus a fresh baseline (R14) | `J = 10 ms` (`loop`), `20 ms` (`measure`, parity with GStreamer's skew bound); clamp 50 ms | Spec "large errors": a one-shot resync, rare. 10 ms takes the loop ≥ 10 s at R_max; a jump is better. The 5 s persistence keeps the PipeWire clock sawtooth (E1) from triggering it (#556). |
 | After a jump | reset the EMA and the Hampel window to the post-jump value; keep I (the rate estimate is still valid); P term held off 1 s | — | Avoids reacting to the jump's own transient. |
 | Saturation watch | \|I\| > 300 ppm for 60 s → one WARNING per 10 min ("the speaker's sink runs X ppm off the Sendspin clock") | 300 ppm, 60 s | Flags NTP trouble or a broken sink clock; corrections stay legal. |
 | `measure` mode | the same estimator and placement jumps; `r = 0` (no fine corrections); steady jump at 20 ms | — | Pure measurement with no worse behaviour than GStreamer's ±20 ms. |
@@ -882,6 +882,19 @@ probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-ga
   per-speaker delay alone cannot fix it.
 - Engine defects seen on a desktop PipeWire sink (#556): false steady jumps of 20–27 ms every
   15–20 s (pulsesink clock sawtooth read as error) and a 459 ms steady jump after two underruns.
+- **R14 (steady jumps, #556).** A steady jump needs the raw `e_w` beyond `J`, with one sign, in
+  ≥ 90 % of the readings over the last 5 s; the pulsesink clock sawtooth under PipeWire crosses
+  `J` but falls back inside it within that window, while a real drift stays beyond it (3.5 ms/s
+  jumps at ~36 ms). One jump moves the audio by at most 50 ms (clamp, logged at INFO); a larger
+  persistent error is corrected in clamped steps under the usual persistence and 10 s interval.
+  After an underrun or stall placement the error restarts from a fresh baseline: once the port
+  reaches the placed audio, `e_w` is taken in 1 s medians and the baseline is the last of two
+  consecutive medians within 5 ms (or the last one after 6 s); steady jumps then correct `e_w`
+  minus the baseline. The baseline is reported in `error_ms`, not corrected (as R3); over 50 ms
+  it is a WARNING and state `degraded` until the next placement. A decided jump that would move
+  the error back toward the reading's own zero re-measures the baseline instead. Out of scope:
+  the per-start sensor bias of about ±15 ms seen live on the PipeWire stand (measure vs `off`
+  on the same sink differed by 6–21 ms between fresh starts and stayed constant within one).
 - The coherent click estimator (cycle-folded matched filter) measures a cheap headset microphone in
   a noisy room where the per-click detector reports not heard.
 - Also found: the output rate came from freed pulsectl memory (32681 Hz), fixed in 3.1.0-beta.14;
