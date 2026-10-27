@@ -107,6 +107,14 @@ def test_zero_latency_preserved(tmp_path):
     assert cfg["PULSE_LATENCY_MSEC"] == 0
 
 
+def test_playout_sync_preserved_across_addon_restart(tmp_path):
+    _write_json(tmp_path / "options.json", _minimal_options())
+    _write_json(tmp_path / "config.json", {"PLAYOUT_SYNC": "loop"})
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    assert _read_json(tmp_path / "config.json")["PLAYOUT_SYNC"] == "loop"
+
+
 def test_default_latency(tmp_path):
     """When pulse_latency_msec is absent, default to 600."""
     opts = _minimal_options()
@@ -917,3 +925,34 @@ def test_playout_settings_have_defaults_and_a_web_ui_choice_survives_addon_resta
     cfg = _read_json(tmp_path / "config.json")
     assert cfg["COMPENSATE_OUTPUT_LATENCY"] is False
     assert cfg["PLAYOUT_DIAG"] is True
+
+
+def test_playout_sync_enabled_of_a_speaker_preserved_across_addon_restart(tmp_path):
+    """The per-speaker opt-out is a web UI setting, not an add-on option."""
+    existing = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "playout_sync_enabled": False}]}
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    devs = {d["mac"]: d for d in _read_json(tmp_path / "config.json")["BLUETOOTH_DEVICES"]}
+    assert devs["AA:BB:CC:DD:EE:FF"]["playout_sync_enabled"] is False
+
+
+def test_playout_sync_enabled_preserved_for_a_v6_players_config(tmp_path):
+    """A config.json already at schema v6 keeps the per-speaker opt-out too."""
+    from tests.support.config_v6 import v6_config
+
+    existing = v6_config([{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Speaker", "playout_sync_enabled": False}])
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    players = cfg.get("players") or []
+    stored = [p for p in players if (p.get("backend") or {}).get("mac") == "AA:BB:CC:DD:EE:FF"]
+    legacy = [d for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac") == "AA:BB:CC:DD:EE:FF"]
+    assert (stored or legacy)[0]["playout_sync_enabled"] is False

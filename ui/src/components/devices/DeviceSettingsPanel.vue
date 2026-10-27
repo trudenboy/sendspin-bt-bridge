@@ -147,6 +147,18 @@ async function removeSpeaker() {
   }
 }
 
+// Saved state: a speaker follows the bridge's playout sync unless it opted out.
+const playoutSync = computed(() => entry.value?.playout_sync_enabled !== false)
+
+async function togglePlayoutSync(on: boolean) {
+  try {
+    await deviceStore.setPlayoutSync(props.device.id, on)
+    await load()
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('drawer.config.saveFailed'))
+  }
+}
+
 async function toggleEnabled(enabled: boolean) {
   try {
     const result = (await deviceStore.setEnabled(props.device.id, enabled)) as { restart_required?: boolean } | undefined
@@ -170,6 +182,9 @@ async function toggleEnabled(enabled: boolean) {
       <div class="divide-y divide-border">
         <SettingsRow :label="t('drawer.config.enabled')" :help="t('drawer.config.enabledHelp')">
           <SbToggle :model-value="device.enabled" @update:model-value="toggleEnabled" />
+        </SettingsRow>
+        <SettingsRow :label="t('drawer.config.playoutSync')" :help="t('drawer.config.playoutSyncHelp')">
+          <SbToggle id="playout-sync-toggle" :model-value="playoutSync" @update:model-value="togglePlayoutSync" />
         </SettingsRow>
         <SettingsRow v-if="device.bluetooth?.mac" :label="t('drawer.config.mac')">
           <span class="font-mono text-sm text-text-secondary">{{ device.bluetooth?.mac }}</span>

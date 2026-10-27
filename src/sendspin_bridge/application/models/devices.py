@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, ValidationError
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, supported_actions_for
@@ -124,6 +124,50 @@ class LatencySuggestion(ResponseModel):
     double_count_risk: bool = False
 
 
+class PlayoutTiming(ResponseModel):
+    """The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
+
+    mode: str = "off"
+    state: str | None = None
+    error_ms: float | None = None
+    error_p95_ms: float | None = None
+    error_slope_ms_per_s: float | None = None
+    correction_ppm: float | None = None
+    corrections_per_s: float | None = None
+    inserted: int = 0
+    dropped: int = 0
+    jumps: int = 0
+    last_jump_ms: float | None = None
+    last_jump_reason: str | None = None
+    last_jump_at: str | None = None
+    underruns: int = 0
+    pa_steps: int = 0
+    rejected_samples: int = 0
+    host_latency_ms: float | None = None
+    pa_latency_ms: float | None = None
+    sink_rate_ppm: float | None = None
+    clock_slew_ppm: float | None = None
+    warm: bool = False
+    warm_s: float | None = None
+    warmup_s: float | None = None
+    hold_reason: str | None = None
+    hold_left_s: float | None = None
+    late_start_ms: float | None = None
+    trim_us: int | None = None
+    fallback_reason: str | None = None
+
+
+def _playout_or_none(raw: object) -> PlayoutTiming | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return PlayoutTiming.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 class DeviceTiming(ResponseModel):
     available: bool = False
     sampled_at: str | None = None
@@ -134,10 +178,17 @@ class DeviceTiming(ResponseModel):
     clock_synchronized: bool = False
     clock_offset_ms: float | None = None
     clock_uncertainty_ms: float | None = None
+    clock_slew_ppm: float | None = None
+    pa_latency_ms: float | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250
     declared_lead_time_ms: int | None = None
     """The startup lead actually declared to Music Assistant (at least the configured one)."""
+    effective_required_lead_time_ms: int | None = None
+    """The start lead the player runs with: in ``measure``/``loop`` the configured lead raised to
+    cover the engine's buffer (PULSE_LATENCY_MSEC + 40 ms ring + 100 ms margin), in ``off`` the
+    configured lead itself; null while the player is not running."""
+    playout: PlayoutTiming | None = None
     reanchoring: bool = False
     reanchor_count: int = 0
     reanchor_count_session: int = 0
@@ -251,6 +302,10 @@ class Device(ResponseModel):
     )
     name: str | None = None
     enabled: bool = True
+    playout_sync_enabled: bool = Field(
+        default=True,
+        description="false: this speaker runs the way it did before playout sync (not held warm, no automatic offset).",
+    )
     state_changed_at: str | None = None
     uptime: str | None = None
     last_error: str | None = None
@@ -272,7 +327,7 @@ class Device(ResponseModel):
     recent_events: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
-    def from_status(cls, d: dict[str, Any], config_id: str | None = None) -> Device:
+    def from_status(cls, d: dict[str, Any], config_id: str | None = None, playout_sync_enabled: bool = True) -> Device:
         g = d.get
         pair_failure = None
         if g("pair_failure_kind"):
@@ -288,6 +343,7 @@ class Device(ResponseModel):
         return cls(
             id=str(g("player_id") or ""),
             config_id=config_id,
+            playout_sync_enabled=playout_sync_enabled,
             name=g("player_name"),
             enabled=bool(g("enabled", True)),
             state_changed_at=g("state_changed_at"),
@@ -366,9 +422,13 @@ class Device(ResponseModel):
                 clock_synchronized=bool(g("clock_synchronized")),
                 clock_offset_ms=g("clock_offset_ms"),
                 clock_uncertainty_ms=g("clock_uncertainty_ms"),
+                clock_slew_ppm=g("clock_slew_ppm"),
+                pa_latency_ms=g("pa_latency_ms"),
                 required_lead_time_ms=int(g("required_lead_time_ms") or 250),
                 min_buffer_ms=int(g("min_buffer_ms") or 250),
                 declared_lead_time_ms=g("declared_lead_time_ms"),
+                effective_required_lead_time_ms=g("effective_required_lead_time_ms"),
+                playout=_playout_or_none(g("playout")),
                 reanchoring=bool(g("reanchoring")),
                 reanchor_count=int(g("reanchor_count") or 0),
                 reanchor_count_session=int(g("reanchor_count_session") or 0),

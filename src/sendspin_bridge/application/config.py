@@ -1024,6 +1024,9 @@ def save_config(config: dict) -> dict:
         )
         if pulse_latency is not None:
             config["PULSE_LATENCY_MSEC"] = pulse_latency
+        playout_sync = config.get("PLAYOUT_SYNC")
+        if playout_sync is not None and playout_sync not in ("off", "measure", "loop"):
+            raise _error("PLAYOUT_SYNC must be one of: off, measure, loop")
         bt_check_interval = _parse_optional_int(
             config.get("BT_CHECK_INTERVAL"), "BT_CHECK_INTERVAL", min_value=1, max_value=3600
         )

@@ -13,7 +13,7 @@ import re
 import uuid
 from typing import Annotated, Any, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,9 @@ class Player(BaseModel):
     keep_alive_method: Literal["infrasound", "silence", "none"] | None = None
     room_id: str | None = None
     room_name: str | None = None
+    # false = this speaker runs the way it did before playout sync (legacy player,
+    # not held warm, no automatic offset); null / true follow PLAYOUT_SYNC.
+    playout_sync_enabled: StrictBool | None = None
     backend: Backend
 
     @field_validator("keepalive_interval")

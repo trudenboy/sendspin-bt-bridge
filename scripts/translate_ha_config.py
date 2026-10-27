@@ -278,6 +278,7 @@ def main() -> None:
             "SENDSPIN_OWN_SERVER_ONLY",
             "COMPENSATE_OUTPUT_LATENCY",
             "PLAYOUT_DIAG",
+            "PLAYOUT_SYNC",
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
             "EXPERIMENTAL_PA_MODULE_RELOAD",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
@@ -366,6 +367,9 @@ def main() -> None:
                     "idle_disconnect_minutes",
                     "idle_mode",
                     "power_save_delay_minutes",
+                    # Per-speaker opt-out of playout sync: a web UI setting
+                    # that is not part of the add-on options schema.
+                    "playout_sync_enabled",
                     # Preserve MA-pushed static_delay_ms across addon restarts.
                     # The Supervisor options.json is the source of truth for
                     # fields the user touched in the HA addon UI; everything

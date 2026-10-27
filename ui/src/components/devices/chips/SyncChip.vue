@@ -41,9 +41,26 @@ onBeforeUnmount(() => {
 })
 
 const badge = computed(() => syncBadge(props.device, holdUntil.value != null))
+const titleKey = computed(() => {
+  const kind = badge.value?.kind
+  if (kind === 'reanchoring') return t('device.chips.sync.reanchoringTitle')
+  if (kind === 'playout') return t('device.chips.sync.playoutTitle')
+  if (kind === 'warming') return t('device.chips.sync.warmingTitle', { s: badge.value?.warmInS ?? 0 })
+  return t('device.chips.sync.title')
+})
+const labelText = computed(() => {
+  const kind = badge.value?.kind
+  if (kind === 'reanchoring') return t('device.chips.sync.reanchoring')
+  if (kind === 'playout') return t('device.chips.sync.playout')
+  if (kind === 'warming') return t('device.chips.sync.warming', { s: badge.value?.warmInS ?? 0 })
+  return t('device.chips.sync.label')
+})
 const dash = (n: number | null) => (n == null ? '—' : String(n))
+const isPlayout = computed(() => badge.value?.kind === 'playout' || badge.value?.kind === 'warming')
 const countTitle = computed(() =>
-  badge.value
+  badge.value && isPlayout.value
+    ? t('device.chips.sync.jumpsTitle', { count: badge.value.count })
+    : badge.value
     ? t('device.chips.sync.countTitle', {
         count: badge.value.count,
         m5: dash(badge.value.count5m),
@@ -58,7 +75,7 @@ const countTitle = computed(() =>
     <span
       data-chip="sync"
       class="inline-flex"
-      :title="badge.kind === 'reanchoring' ? t('device.chips.sync.reanchoringTitle') : t('device.chips.sync.title')"
+      :title="titleKey"
     >
       <SbBadge :tone="badge.tone" size="sm">
         <span
@@ -66,11 +83,11 @@ const countTitle = computed(() =>
           :class="{ 'animate-pulse': badge.pulse }"
           aria-hidden="true"
         />
-        {{ badge.kind === 'reanchoring' ? t('device.chips.sync.reanchoring') : t('device.chips.sync.label') }}
+        {{ labelText }}
         <span v-if="badge.errorMs != null" class="tabular-nums opacity-80">{{ t('device.chips.sync.errorMs', { ms: badge.errorMs }) }}</span>
       </SbBadge>
     </span>
-    <span v-if="badge.count > 0" data-chip="reanchors" class="inline-flex" :title="countTitle">
+    <span v-if="badge.count > 0" :data-chip="isPlayout ? 'jumps' : 'reanchors'" class="inline-flex" :title="countTitle">
       <SbBadge :tone="badge.countTone" size="sm"><span class="tabular-nums">{{ t('device.chips.sync.count', { count: badge.count }) }}</span></SbBadge>
     </span>
   </template>

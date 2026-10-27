@@ -144,6 +144,9 @@ python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--tb=short",
+    # Integration tests need external services (pactl, GStreamer pulsesink) and run for
+    # seconds; opt in with `-m integration`.
+    "-m=not integration",
     # Parallel execution (pytest-xdist). Cuts the local full-suite run
     # from 191s → 17s on a 4-core box. Override with `pytest -n0` to
     # debug a single test or trace state pollution.

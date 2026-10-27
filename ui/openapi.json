@@ -1258,6 +1258,24 @@
             "description": "Playback clock diagnostics: let the audio sink provide its own clock so the log's Clock diag line also reports the sink's audio clock rate. Playback timing is unchanged. The SENDSPIN_PLAYOUT_DIAG environment variable overrides it.",
             "title": "Playout Diag"
           },
+          "PLAYOUT_SYNC": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "measure",
+                  "loop"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "off",
+            "description": "Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.",
+            "title": "Playout Sync"
+          },
           "PREFER_SBC_CODEC": {
             "anyOf": [
               {
@@ -1950,6 +1968,12 @@
           "playback": {
             "$ref": "#/components/schemas/DevicePlayback"
           },
+          "playout_sync_enabled": {
+            "default": true,
+            "description": "false: this speaker runs the way it did before playout sync (not held warm, no automatic offset).",
+            "title": "Playout Sync Enabled",
+            "type": "boolean"
+          },
           "recent_events": {
             "items": {
               "additionalProperties": true,
@@ -2015,6 +2039,7 @@
           "config_id",
           "name",
           "enabled",
+          "playout_sync_enabled",
           "state_changed_at",
           "uptime",
           "last_error",
@@ -2628,6 +2653,90 @@
         "title": "DeviceMusicAssistant",
         "type": "object"
       },
+      "DevicePatchIn": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enable or disable the speaker.",
+            "title": "Enabled"
+          },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "false runs this speaker the way it worked before playout sync; true follows the bridge setting.",
+            "title": "Playout Sync Enabled"
+          }
+        },
+        "title": "DevicePatchIn",
+        "type": "object"
+      },
+      "DevicePatchOut": {
+        "description": "Only the parts that were changed are sent (a key is left out, never null).",
+        "properties": {
+          "device": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Device"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The updated speaker, a complete Device, when it is running."
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sent when ``enabled`` was changed.",
+            "title": "Enabled"
+          },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sent when the opt-out was changed.",
+            "title": "Playout Sync Enabled"
+          },
+          "restart_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sent with ``enabled``.",
+            "title": "Restart Required"
+          }
+        },
+        "title": "DevicePatchOut",
+        "type": "object"
+      },
       "DevicePlayback": {
         "properties": {
           "connected": {
@@ -3049,6 +3158,17 @@
             ],
             "title": "Clock Offset Ms"
           },
+          "clock_slew_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Slew Ppm"
+          },
           "clock_synchronized": {
             "default": false,
             "title": "Clock Synchronized",
@@ -3075,6 +3195,17 @@
               }
             ],
             "title": "Declared Lead Time Ms"
+          },
+          "effective_required_lead_time_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Required Lead Time Ms"
           },
           "last_reanchor_at": {
             "anyOf": [
@@ -3106,6 +3237,17 @@
             "title": "Min Buffer Ms",
             "type": "integer"
           },
+          "pa_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pa Latency Ms"
+          },
           "playback_position_us": {
             "anyOf": [
               {
@@ -3116,6 +3258,16 @@
               }
             ],
             "title": "Playback Position Us"
+          },
+          "playout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayoutTiming"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reanchor_count": {
             "default": 0,
@@ -3192,9 +3344,13 @@
           "clock_synchronized",
           "clock_offset_ms",
           "clock_uncertainty_ms",
+          "clock_slew_ppm",
+          "pa_latency_ms",
           "required_lead_time_ms",
           "min_buffer_ms",
           "declared_lead_time_ms",
+          "effective_required_lead_time_ms",
+          "playout",
           "reanchoring",
           "reanchor_count",
           "reanchor_count_session",
@@ -3297,37 +3453,6 @@
           "room_name"
         ],
         "title": "DisabledDevice",
-        "type": "object"
-      },
-      "EnabledIn": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "EnabledIn",
-        "type": "object"
-      },
-      "EnabledOut": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "restart_required": {
-            "title": "Restart Required",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled",
-          "restart_required"
-        ],
-        "title": "EnabledOut",
         "type": "object"
       },
       "Group": {
@@ -4658,6 +4783,17 @@
             "title": "Name",
             "type": "string"
           },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playout Sync Enabled"
+          },
           "power_save_delay_minutes": {
             "anyOf": [
               {
@@ -4785,6 +4921,303 @@
           "backend"
         ],
         "title": "Player",
+        "type": "object"
+      },
+      "PlayoutTiming": {
+        "description": "The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.",
+        "properties": {
+          "clock_slew_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Slew Ppm"
+          },
+          "correction_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Ppm"
+          },
+          "corrections_per_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrections Per S"
+          },
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "error_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Ms"
+          },
+          "error_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error P95 Ms"
+          },
+          "error_slope_ms_per_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Slope Ms Per S"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "hold_left_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Left S"
+          },
+          "hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason"
+          },
+          "host_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Latency Ms"
+          },
+          "inserted": {
+            "default": 0,
+            "title": "Inserted",
+            "type": "integer"
+          },
+          "jumps": {
+            "default": 0,
+            "title": "Jumps",
+            "type": "integer"
+          },
+          "last_jump_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jump At"
+          },
+          "last_jump_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jump Ms"
+          },
+          "last_jump_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jump Reason"
+          },
+          "late_start_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Late Start Ms"
+          },
+          "mode": {
+            "default": "off",
+            "title": "Mode",
+            "type": "string"
+          },
+          "pa_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pa Latency Ms"
+          },
+          "pa_steps": {
+            "default": 0,
+            "title": "Pa Steps",
+            "type": "integer"
+          },
+          "rejected_samples": {
+            "default": 0,
+            "title": "Rejected Samples",
+            "type": "integer"
+          },
+          "sink_rate_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sink Rate Ppm"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "trim_us": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trim Us"
+          },
+          "underruns": {
+            "default": 0,
+            "title": "Underruns",
+            "type": "integer"
+          },
+          "warm": {
+            "default": false,
+            "title": "Warm",
+            "type": "boolean"
+          },
+          "warm_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warm S"
+          },
+          "warmup_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warmup S"
+          }
+        },
+        "required": [
+          "mode",
+          "state",
+          "error_ms",
+          "error_p95_ms",
+          "error_slope_ms_per_s",
+          "correction_ppm",
+          "corrections_per_s",
+          "inserted",
+          "dropped",
+          "jumps",
+          "last_jump_ms",
+          "last_jump_reason",
+          "last_jump_at",
+          "underruns",
+          "pa_steps",
+          "rejected_samples",
+          "host_latency_ms",
+          "pa_latency_ms",
+          "sink_rate_ppm",
+          "clock_slew_ppm",
+          "warm",
+          "warm_s",
+          "warmup_s",
+          "hold_reason",
+          "hold_left_s",
+          "late_start_ms",
+          "trim_us",
+          "fallback_reason"
+        ],
+        "title": "PlayoutTiming",
         "type": "object"
       },
       "PowerIn": {
@@ -9000,6 +9433,7 @@
         ]
       },
       "patch": {
+        "description": "Enable or disable the speaker, and/or opt it out of (or back into) playout sync.",
         "operationId": "patch_device_api_v1_devices__device_id__patch",
         "parameters": [
           {
@@ -9016,7 +9450,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EnabledIn"
+                "$ref": "#/components/schemas/DevicePatchIn"
               }
             }
           },
@@ -9027,7 +9461,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnabledOut"
+                  "$ref": "#/components/schemas/DevicePatchOut"
                 }
               }
             },
@@ -9056,7 +9490,7 @@
             "description": "Server error"
           }
         },
-        "summary": "Enable or disable a speaker",
+        "summary": "Change a speaker's settings",
         "tags": [
           "devices"
         ]

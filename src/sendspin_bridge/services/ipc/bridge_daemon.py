@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
@@ -28,8 +28,11 @@ from aiosendspin.models.core import (
 from aiosendspin.models.types import PlayerCommand, UndefinedField
 
 from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
-from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory
+from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory, playout_pulsesink_factory
 from sendspin_bridge.services.audio.player.player import InPlaceShift, PcmFormat, StreamPlayer
+from sendspin_bridge.services.audio.playout.engine import PlayoutSettings
+from sendspin_bridge.services.audio.playout.gst_output import LEAD_MS as _PLAYOUT_LEAD_MS
+from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
 from sendspin_bridge.services.ipc.status_store import StatusStore
 
@@ -49,6 +52,12 @@ _MAX_IN_PLACE_SHIFT_US = 2_000_000
 # the sink's lookahead (PA "sink latency") ahead of its play time; the declared
 # lead covers a measured lookahead plus this much.
 _LEAD_MARGIN_MS = 50.0
+# The modes that run the playout engine (PLAYOUT_SYNC); anything else is ``off``.
+PLAYOUT_MODES = ("measure", "loop")
+# In those modes a chunk must reach the engine before the PulseAudio buffer, the
+# appsrc lead and this margin ahead of its play time: the declared start lead is
+# raised to cover them.
+_PLAYOUT_LEAD_MARGIN_MS = 100.0
 _monotonic = time.monotonic
 # Opening a PulseAudio output can take a second or more (a Bluetooth sink waits
 # for its A2DP transport). It runs in a worker thread; the chunks that arrive
@@ -109,6 +118,11 @@ class DaemonArgs:
     # Let pulsesink provide its audio clock so its rate can be logged
     # (SENDSPIN_PLAYOUT_DIAG=1). The pipeline stays on the system clock.
     playout_diag: bool = False
+    # PLAYOUT_SYNC: ``off`` keeps the legacy StreamPlayer (3.1.0-beta.5
+    # behaviour); ``measure`` and ``loop`` run the playout engine.
+    playout_mode: str = "off"
+    # The spawn's ``playout`` dict: PlayoutSettings fields beyond the mode.
+    playout: dict | None = None
 
 
 class BridgeDaemon:
@@ -149,8 +163,12 @@ class BridgeDaemon:
         self._client: Any = None
         self._listener: Any = None
         self._connection_lock: asyncio.Lock | None = None
-        self._player: StreamPlayer | None = None
+        self._player: StreamPlayer | PlayoutPlayer | None = None
         self._audio_handler: Any = None
+        # The sink the current player plays to, and whether the playout engine
+        # gave up for the rest of this process (see fall_back_to_legacy).
+        self._sink_name: str | None = None
+        self._playout_fell_back = False
         self._decoder: Any = None
         self._decoder_format: tuple[str, int, int, int, bytes | None] | None = None
         self._next_play_time_us: int | None = None
@@ -230,7 +248,7 @@ class BridgeDaemon:
             self._bridge_status["sendspin_client_id"] = self._identity.peer_id
         self._client = self._create_client(self._static_delay_ms)
         sink_name = self._args.sink_name or self._bluetooth_sink_name
-        self._player = self._new_player(sink_name)
+        self._player = self._make_player(sink_name)
         self._audio_handler = self._player
         self._clock_diag_task = asyncio.create_task(self._clock_diag_loop())
         # Loaded on the first FLAC stream/start, PyAV's import would hold the
@@ -435,6 +453,88 @@ class BridgeDaemon:
         self._notify()
         self._report_player_state()
 
+    @property
+    def _playout_active(self) -> bool:
+        """Whether new players run the playout engine (PLAYOUT_SYNC on, no fallback yet)."""
+        args = getattr(self, "_args", None)
+        return getattr(args, "playout_mode", "off") in PLAYOUT_MODES and not getattr(self, "_playout_fell_back", False)
+
+    def _make_player(self, sink_name: str | None) -> StreamPlayer | PlayoutPlayer:
+        """The player for ``sink_name``: the playout engine in ``measure``/``loop``
+        (until a fallback), else the legacy StreamPlayer."""
+        self._sink_name = sink_name
+        if not self._playout_active:
+            return self._new_player(sink_name)
+        return self._new_playout_player(sink_name)
+
+    def _playout_settings(self) -> PlayoutSettings:
+        known = {f for f in PlayoutSettings.__dataclass_fields__ if f != "mode"}
+        extra = {k: v for k, v in (self._args.playout or {}).items() if k in known}
+        mode: Literal["measure", "loop"] = "loop" if self._args.playout_mode == "loop" else "measure"
+        return PlayoutSettings(mode=mode, **extra)
+
+    def _new_playout_player(self, sink_name: str | None) -> PlayoutPlayer:
+        buffer_time_us = max(1, int(self._args.pulse_latency_msec)) * 1000
+        return PlayoutPlayer(
+            sink_factory=playout_pulsesink_factory(
+                device=sink_name,
+                client_name=self._args.client_name,
+                buffer_time_us=buffer_time_us,
+            ),
+            settings=self._playout_settings(),
+        )
+
+    def _retire_player(self, player: Any) -> None:
+        """Stop a replaced player.
+
+        The legacy StreamPlayer is stopped here, as in 3.1.0-beta.5 (off-mode
+        parity). PlayoutPlayer's stop can block (it joins its feeder, up to
+        2 s, and sets its pipeline to NULL), so with a running loop it runs in
+        a worker; without one (start-up, tests) here.
+        """
+        if not isinstance(player, PlayoutPlayer):
+            player.stop()
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            player.stop()
+            return
+
+        def _stopped(done: asyncio.Future[Any]) -> None:
+            if not done.cancelled() and done.exception() is not None:
+                logger.warning("Stopping the replaced player failed: %s", done.exception())
+
+        loop.run_in_executor(None, player.stop).add_done_callback(_stopped)
+
+    def fall_back_to_legacy(self, reason: str) -> None:
+        """Replace the playout engine with the legacy StreamPlayer for the rest of the process.
+
+        Called once by the telemetry watcher when the engine reports the
+        ``fallback`` state (no audio clock from the sink, a GStreamer error, a
+        feeder failure). The sink, the volume and the mute are kept. The status
+        keeps ``playout`` with ``state: "fallback"`` and the reason, so the
+        operator sees why the engine is not running.
+        """
+        if self._playout_fell_back:
+            return
+        self._playout_fell_back = True
+        logger.warning("Playout engine unavailable (%s); falling back to the legacy player", reason)
+        previous = self._bridge_status.get("playout")
+        playout = dict(previous) if isinstance(previous, dict) else {}
+        playout.update(state="fallback", fallback_reason=reason)
+        self._bridge_status["playout"] = playout
+        old = self._player
+        # An open in flight belongs to the engine: its output is closed when it finishes.
+        self._forget_open()
+        self._player = self._make_player(self._sink_name)
+        self._audio_handler = self._player
+        if old is not None:
+            self._retire_player(old)
+        if self._scales_stream:
+            self._apply_stream_volume()
+        self._notify()
+
     def _new_player(self, sink_name: str | None) -> StreamPlayer:
         buffer_time_us = max(1, int(self._args.pulse_latency_msec)) * 1000
         return StreamPlayer(
@@ -467,10 +567,28 @@ class BridgeDaemon:
         output takes to open: that no longer holds the loop, and covering it
         would delay every start of the whole group.
         """
+        value_ms = self._effective_lead_for(value_ms)
         lookahead = getattr(self, "_sink_lookahead_ms", None)
         if lookahead is None or not self._args.compensate_output_latency:
             return float(value_ms)
         return max(float(value_ms), lookahead + _LEAD_MARGIN_MS)
+
+    def _effective_lead_for(self, configured_ms: float) -> float:
+        """A configured lead raised, in ``measure``/``loop``, to cover the output buffer.
+
+        The engine writes a chunk into a PulseAudio buffer of PULSE_LATENCY_MSEC
+        behind an appsrc lead of LEAD_MS: a chunk that arrives later than both
+        (plus a margin) ahead of its play time is partly dropped as overdue.
+        """
+        args = getattr(self, "_args", None)
+        if getattr(args, "playout_mode", "off") not in PLAYOUT_MODES:
+            return float(configured_ms)
+        floor = float(getattr(args, "pulse_latency_msec", 0)) + _PLAYOUT_LEAD_MS + _PLAYOUT_LEAD_MARGIN_MS
+        return max(float(configured_ms), floor)
+
+    def _effective_lead_ms(self) -> float:
+        """The configured start lead after the playout floor (before any sink lookahead)."""
+        return self._effective_lead_for(getattr(self, "_required_lead_time_ms", 250.0))
 
     def _note_sink_lookahead(self, sink_ms: float) -> None:
         """Keep the largest sink lookahead seen this session (the lead only grows)."""
@@ -482,9 +600,14 @@ class BridgeDaemon:
             return
         # An open in flight belongs to the old sink: its output is closed when it finishes.
         self._forget_open()
-        self._player.stop()
-        self._player = self._new_player(sink_name)
+        old = self._player
+        if not isinstance(old, PlayoutPlayer):
+            # Legacy player: stopped before the new one, exactly as before playout sync.
+            old.stop()
+        self._player = self._make_player(sink_name)
         self._audio_handler = self._player
+        if isinstance(old, PlayoutPlayer):
+            self._retire_player(old)
         if self._scales_stream:
             self._apply_stream_volume()
 
@@ -523,6 +646,7 @@ class BridgeDaemon:
         status = getattr(self, "_bridge_status", None)
         if status is not None:
             status["declared_lead_time_ms"] = round(lead)
+            status["effective_required_lead_time_ms"] = round(self._effective_lead_ms())
         return lead
 
     def _create_client(self, static_delay_ms: float = 0.0):
@@ -1030,8 +1154,13 @@ class BridgeDaemon:
         elif isinstance(result, InPlaceShift):
             verb = "inserted" if result.shift_us > 0 else "dropped"
             outcome = f"shifted in place ({verb} {abs(result.shift_us) / 1000:g} ms)"
+        elif not result:
+            outcome = "applies to the next stream"
+        elif isinstance(self._player, PlayoutPlayer):
+            # The engine re-places the queued audio exactly; its output is never rebuilt.
+            outcome = "player resynchronised (placed exactly, output kept)"
         else:
-            outcome = "player resynchronised (output rebuilt)" if result else "applies to the next stream"
+            outcome = "player resynchronised (output rebuilt)"
         logger.info("Output delay changed %g→%g ms; %s", old_ms, new_ms, outcome)
 
     # ── MA group updates ─────────────────────────────────────────────────────
@@ -1278,7 +1407,9 @@ class BridgeDaemon:
             self._player.forget_reopen()
         self._forget_open()
 
-    def _on_output_opened(self, done: asyncio.Future[Any], player: StreamPlayer, fmt: PcmFormat) -> None:
+    def _on_output_opened(
+        self, done: asyncio.Future[Any], player: StreamPlayer | PlayoutPlayer, fmt: PcmFormat
+    ) -> None:
         """Adopt the output opened off the loop and hand it the chunks that waited."""
         current = self._opening is done
         chunks: list[tuple[int, bytes, PcmFormat]] = []

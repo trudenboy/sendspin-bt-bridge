@@ -47,8 +47,15 @@ function set(v: unknown) {
 const choices = computed(() =>
   props.field.optionsFrom
     ? (props.dynamicOptions ?? [])
-    : (props.field.options ?? []).map((o) => ({ value: o, label: optionLabel(o) })),
+    : offeredOptions().map((o) => ({ value: o, label: optionLabel(o) })),
 )
+
+function offeredOptions(): readonly string[] {
+  const { options = [], offered } = props.field
+  if (!offered) return options
+  const current = value.value
+  return options.filter((o) => offered.includes(o) || o === current)
+}
 
 function optionLabel(option: string) {
   const key = `${base.value}.options.${option}`

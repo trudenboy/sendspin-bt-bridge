@@ -623,7 +623,10 @@ export interface paths {
         delete: operations["delete_device_api_v1_devices__device_id__delete"];
         options?: never;
         head?: never;
-        /** Enable or disable a speaker */
+        /**
+         * Change a speaker's settings
+         * @description Enable or disable the speaker, and/or opt it out of (or back into) playout sync.
+         */
         patch: operations["patch_device_api_v1_devices__device_id__patch"];
         trace?: never;
     };
@@ -2845,6 +2848,12 @@ export interface components {
              */
             PLAYOUT_DIAG?: boolean | null;
             /**
+             * Playout Sync
+             * @description Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.
+             * @default off
+             */
+            PLAYOUT_SYNC?: ("off" | "measure" | "loop") | null;
+            /**
              * Prefer Sbc Codec
              * @description Prefer SBC codec over AAC/aptX for Bluetooth audio.
              * @default false
@@ -3148,6 +3157,12 @@ export interface components {
             /** Name */
             name: string | null;
             playback: components["schemas"]["DevicePlayback"];
+            /**
+             * Playout Sync Enabled
+             * @description false: this speaker runs the way it did before playout sync (not held warm, no automatic offset).
+             * @default true
+             */
+            playout_sync_enabled: boolean;
             /** Recent Events */
             recent_events: {
                 [key: string]: unknown;
@@ -3390,6 +3405,42 @@ export interface components {
             /** Syncgroup Id */
             syncgroup_id: string | null;
         };
+        /** DevicePatchIn */
+        DevicePatchIn: {
+            /**
+             * Enabled
+             * @description Enable or disable the speaker.
+             */
+            enabled?: boolean | null;
+            /**
+             * Playout Sync Enabled
+             * @description false runs this speaker the way it worked before playout sync; true follows the bridge setting.
+             */
+            playout_sync_enabled?: boolean | null;
+        };
+        /**
+         * DevicePatchOut
+         * @description Only the parts that were changed are sent (a key is left out, never null).
+         */
+        DevicePatchOut: {
+            /** @description The updated speaker, a complete Device, when it is running. */
+            device?: components["schemas"]["Device"] | null;
+            /**
+             * Enabled
+             * @description Sent when ``enabled`` was changed.
+             */
+            enabled?: boolean | null;
+            /**
+             * Playout Sync Enabled
+             * @description Sent when the opt-out was changed.
+             */
+            playout_sync_enabled?: boolean | null;
+            /**
+             * Restart Required
+             * @description Sent with ``enabled``.
+             */
+            restart_required?: boolean | null;
+        };
         /** DevicePlayback */
         DevicePlayback: {
             /**
@@ -3523,6 +3574,8 @@ export interface components {
             calibration_metronome_active: boolean;
             /** Clock Offset Ms */
             clock_offset_ms: number | null;
+            /** Clock Slew Ppm */
+            clock_slew_ppm: number | null;
             /**
              * Clock Synchronized
              * @default false
@@ -3532,6 +3585,8 @@ export interface components {
             clock_uncertainty_ms: number | null;
             /** Declared Lead Time Ms */
             declared_lead_time_ms: number | null;
+            /** Effective Required Lead Time Ms */
+            effective_required_lead_time_ms: number | null;
             /** Last Reanchor At */
             last_reanchor_at: number | null;
             /** Last Sync Error Ms */
@@ -3542,8 +3597,11 @@ export interface components {
              * @default 250
              */
             min_buffer_ms: number;
+            /** Pa Latency Ms */
+            pa_latency_ms: number | null;
             /** Playback Position Us */
             playback_position_us: number | null;
+            playout: components["schemas"]["PlayoutTiming"] | null;
             /**
              * Reanchor Count
              * @default 0
@@ -3606,18 +3664,6 @@ export interface components {
             sink: string | null;
         } & {
             [key: string]: unknown;
-        };
-        /** EnabledIn */
-        EnabledIn: {
-            /** Enabled */
-            enabled: boolean;
-        };
-        /** EnabledOut */
-        EnabledOut: {
-            /** Enabled */
-            enabled: boolean;
-            /** Restart Required */
-            restart_required: boolean;
         };
         /**
          * Group
@@ -4190,6 +4236,8 @@ export interface components {
              * @default
              */
             name?: string;
+            /** Playout Sync Enabled */
+            playout_sync_enabled?: boolean | null;
             /**
              * Power Save Delay Minutes
              * @default 1
@@ -4215,6 +4263,92 @@ export interface components {
             volume_controller?: ("pa" | "sendspin") | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * PlayoutTiming
+         * @description The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.
+         */
+        PlayoutTiming: {
+            /** Clock Slew Ppm */
+            clock_slew_ppm: number | null;
+            /** Correction Ppm */
+            correction_ppm: number | null;
+            /** Corrections Per S */
+            corrections_per_s: number | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
+            /** Error Ms */
+            error_ms: number | null;
+            /** Error P95 Ms */
+            error_p95_ms: number | null;
+            /** Error Slope Ms Per S */
+            error_slope_ms_per_s: number | null;
+            /** Fallback Reason */
+            fallback_reason: string | null;
+            /** Hold Left S */
+            hold_left_s: number | null;
+            /** Hold Reason */
+            hold_reason: string | null;
+            /** Host Latency Ms */
+            host_latency_ms: number | null;
+            /**
+             * Inserted
+             * @default 0
+             */
+            inserted: number;
+            /**
+             * Jumps
+             * @default 0
+             */
+            jumps: number;
+            /** Last Jump At */
+            last_jump_at: string | null;
+            /** Last Jump Ms */
+            last_jump_ms: number | null;
+            /** Last Jump Reason */
+            last_jump_reason: string | null;
+            /** Late Start Ms */
+            late_start_ms: number | null;
+            /**
+             * Mode
+             * @default off
+             */
+            mode: string;
+            /** Pa Latency Ms */
+            pa_latency_ms: number | null;
+            /**
+             * Pa Steps
+             * @default 0
+             */
+            pa_steps: number;
+            /**
+             * Rejected Samples
+             * @default 0
+             */
+            rejected_samples: number;
+            /** Sink Rate Ppm */
+            sink_rate_ppm: number | null;
+            /** State */
+            state: string | null;
+            /** Trim Us */
+            trim_us: number | null;
+            /**
+             * Underruns
+             * @default 0
+             */
+            underruns: number;
+            /**
+             * Warm
+             * @default false
+             */
+            warm: boolean;
+            /** Warm S */
+            warm_s: number | null;
+            /** Warmup S */
+            warmup_s: number | null;
         };
         /** PowerIn */
         PowerIn: {
@@ -6756,7 +6890,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EnabledIn"];
+                "application/json": components["schemas"]["DevicePatchIn"];
             };
         };
         responses: {
@@ -6766,7 +6900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EnabledOut"];
+                    "application/json": components["schemas"]["DevicePatchOut"];
                 };
             };
             /** @description Client error */

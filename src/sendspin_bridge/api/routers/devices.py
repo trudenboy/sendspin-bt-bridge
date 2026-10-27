@@ -5,13 +5,15 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field, StrictBool
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, StrictBool, model_validator
 
 from sendspin_bridge.api.auth import require_principal
 from sendspin_bridge.api.errors import PROBLEM_RESPONSES
 from sendspin_bridge.application import devices as dev
 from sendspin_bridge.application import playback
 from sendspin_bridge.application.jobs import Job
+from sendspin_bridge.application.models.devices import Device
 
 router = APIRouter(tags=["devices"], dependencies=[Depends(require_principal)], responses=PROBLEM_RESPONSES)
 
@@ -54,15 +56,6 @@ class TransportIn(BaseModel):
     )
 
 
-class EnabledIn(BaseModel):
-    enabled: bool
-
-
-class EnabledOut(BaseModel):
-    enabled: bool
-    restart_required: bool
-
-
 class ManagementIn(BaseModel):
     enabled: bool = Field(description="false releases the speaker to the host, true reclaims it.")
 
@@ -89,9 +82,53 @@ class LatencyOut(BaseModel):
     value: int
 
 
-@router.patch("/devices/{device_id}", response_model=EnabledOut, summary="Enable or disable a speaker")
-def patch_device(device_id: str, body: EnabledIn) -> EnabledOut:
-    return EnabledOut(**dev.set_enabled(device_id, body.enabled))
+class DevicePatchIn(BaseModel):
+    enabled: bool | None = Field(default=None, description="Enable or disable the speaker.")
+    playout_sync_enabled: StrictBool | None = Field(
+        default=None,
+        description="false runs this speaker the way it worked before playout sync; true follows the bridge setting.",
+    )
+
+    @model_validator(mode="after")
+    def _something_to_change(self) -> DevicePatchIn:
+        if self.enabled is None and self.playout_sync_enabled is None:
+            raise ValueError("send enabled and/or playout_sync_enabled")
+        return self
+
+
+class DevicePatchOut(BaseModel):
+    """Only the parts that were changed are sent (a key is left out, never null)."""
+
+    enabled: bool | None = Field(default=None, description="Sent when ``enabled`` was changed.")
+    restart_required: bool | None = Field(default=None, description="Sent with ``enabled``.")
+    playout_sync_enabled: bool | None = Field(default=None, description="Sent when the opt-out was changed.")
+    device: Device | None = Field(
+        default=None, description="The updated speaker, a complete Device, when it is running."
+    )
+
+
+@router.patch(
+    "/devices/{device_id}",
+    response_model=DevicePatchOut,
+    summary="Change a speaker's settings",
+)
+def patch_device(device_id: str, body: DevicePatchIn) -> JSONResponse:
+    """Enable or disable the speaker, and/or opt it out of (or back into) playout sync."""
+    result: dict[str, Any] = {}
+    if body.enabled is not None:
+        result.update(dev.set_enabled(device_id, body.enabled))
+    if body.playout_sync_enabled is not None:
+        result.update(dev.set_playout_sync(device_id, body.playout_sync_enabled))
+    # Built part by part: unchanged parts are left out, while ``device`` keeps
+    # every key of a Device (its null values included).
+    content: dict[str, Any] = {}
+    for key in ("enabled", "restart_required", "playout_sync_enabled"):
+        if result.get(key) is not None:
+            content[key] = result[key]
+    device = result.get("device")
+    if device is not None:
+        content["device"] = Device.model_validate(device).model_dump(mode="json")
+    return JSONResponse(content)
 
 
 class RemovedOut(BaseModel):

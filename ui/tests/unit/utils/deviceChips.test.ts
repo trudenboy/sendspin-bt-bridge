@@ -55,6 +55,43 @@ describe('syncBadge', () => {
     expect(syncBadge(streaming({ reanchor_count: 3 }))!.countTone).toBe('success')
     expect(syncBadge(streaming({ reanchor_count: 101 }))!.countTone).toBe('error')
   })
+  describe('playout', () => {
+    const playout = (extra: Record<string, unknown> = {}) =>
+      streaming({
+        sync_error_ms: -3.6,
+        playout: { mode: 'measure', state: 'playing', warm: true, warm_s: 90, warmup_s: 60, error_ms: 0.4, jumps: 2, ...extra },
+      })
+
+    it('shows the playout error with one decimal and tones it by size in loop mode (1 / 5 ms)', () => {
+      expect(syncBadge(playout({ mode: 'loop' }))).toMatchObject({ kind: 'playout', tone: 'success', errorMs: 0.4, count: 2 })
+      expect(syncBadge(playout({ mode: 'loop', error_ms: -3.24 }))).toMatchObject({ kind: 'playout', tone: 'warning', errorMs: 3.2 })
+      expect(syncBadge(playout({ mode: 'loop', error_ms: 12 }))).toMatchObject({ kind: 'playout', tone: 'error', errorMs: 12 })
+    })
+
+    it('tones the error for measure noise in measure mode (5 / 20 ms)', () => {
+      expect(syncBadge(playout({ error_ms: -3.24 }))).toMatchObject({ kind: 'playout', tone: 'success', errorMs: 3.2 })
+      expect(syncBadge(playout({ error_ms: 5 }))).toMatchObject({ tone: 'success' })
+      expect(syncBadge(playout({ error_ms: 12 }))).toMatchObject({ tone: 'warning', errorMs: 12 })
+      expect(syncBadge(playout({ error_ms: 20 }))).toMatchObject({ tone: 'warning' })
+      expect(syncBadge(playout({ error_ms: -20.5 }))).toMatchObject({ tone: 'error', errorMs: 20.5 })
+    })
+
+    it('tones the jump count at the 10 / 11 boundary', () => {
+      expect(syncBadge(playout({ jumps: 10 }))).toMatchObject({ count: 10, countTone: 'success' })
+      expect(syncBadge(playout({ jumps: 11 }))).toMatchObject({ count: 11, countTone: 'warning' })
+    })
+
+    it('says warming with the seconds left until the stream is warm', () => {
+      expect(syncBadge(playout({ warm: false, warm_s: 25 }))).toMatchObject({ kind: 'warming', tone: 'neutral', warmInS: 35 })
+    })
+
+    it('keeps the legacy badge when mode is off, state is fallback or playout is null', () => {
+      for (const p of [{ mode: 'off' }, { state: 'fallback', fallback_reason: 'no_sink' }]) {
+        expect(syncBadge(playout(p))).toMatchObject({ kind: 'sync', errorMs: 4 })
+      }
+      expect(syncBadge(streaming({ sync_error_ms: -3.6, playout: null }))).toMatchObject({ kind: 'sync', errorMs: 4 })
+    })
+  })
 })
 
 describe('signalInfo', () => {

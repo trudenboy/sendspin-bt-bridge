@@ -7,6 +7,11 @@ export function setDeviceEnabled(deviceId: string, enabled: boolean) {
   return unwrap(api().PATCH('/api/v1/devices/{device_id}', { ...path(deviceId), body: { enabled } }))
 }
 
+/** Opt the speaker out of (false) or back into (true) playout sync; its player restarts to apply it. */
+export function setDevicePlayoutSync(deviceId: string, playoutSyncEnabled: boolean) {
+  return unwrap(api().PATCH('/api/v1/devices/{device_id}', { ...path(deviceId), body: { playout_sync_enabled: playoutSyncEnabled } }))
+}
+
 /** Take the speaker off the bridge; the bridge also removes its Bluetooth pairing. */
 export function removeDevice(deviceId: string) {
   return unwrap(api().DELETE('/api/v1/devices/{device_id}', path(deviceId)))

@@ -117,7 +117,12 @@
         "title": "Playback in sync with the group",
         "reanchoringTitle": "Re-anchoring stream timing",
         "count": "×{count}",
-        "countTitle": "Re-anchors: {count} this session · {m5} in 5 min · {m30} in 30 min"
+        "countTitle": "Re-anchors: {count} this session · {m5} in 5 min · {m30} in 30 min",
+        "playout": "Playout",
+        "playoutTitle": "Measured playout error at the speaker output",
+        "warming": "Warming {s} s",
+        "warmingTitle": "Stream warming up; playout measurement ready in {s} s",
+        "jumpsTitle": "Playout jumps: {count} this session"
       },
       "signal": {
         "value": "{value} Δ dB",
@@ -540,6 +545,8 @@
       "autoAdapter": "Auto (default)",
       "autoPort": "Auto",
       "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
+      "playoutSync": "Playout sync",
+      "playoutSyncHelp": "Turn off to run this speaker the way it worked before playout sync: the plain audio output, with no playout measurement.",
       "notConfigured": "This speaker is not in the configuration."
     },
     "events": {
@@ -852,6 +859,15 @@
       "COMPENSATE_OUTPUT_LATENCY": {
         "label": "Compensate the audio buffer latency",
         "help": "Play on schedule whatever the PulseAudio latency is. Off restores the older timing, behind by that latency."
+      },
+      "PLAYOUT_SYNC": {
+        "label": "Playout sync",
+        "help": "Off keeps the plain audio output. Measure is experimental: it measures the playout error at the speaker output and reports it, without correcting it. Takes effect after the speakers restart.",
+        "options": {
+          "off": "Off",
+          "measure": "Measure only",
+          "loop": "Measure and correct"
+        }
       },
       "PLAYOUT_DIAG": {
         "label": "Playback clock diagnostics",
@@ -1235,6 +1251,27 @@
       "empty": "No timing samples yet; they appear while the speaker plays.",
       "buffer": "Buffered audio",
       "error": "Sync error"
+    },
+    "playout": {
+      "title": "Playout",
+      "yes": "Yes",
+      "no": "No",
+      "warming": "in {s} s",
+      "fallback": "Playout sync fell back to the plain output: {reason}",
+      "unknownReason": "unknown reason",
+      "rows": {
+        "error": "Error",
+        "p95": "Error p95",
+        "slope": "Error drift",
+        "corrections": "Corrections",
+        "jumps": "Jumps",
+        "underruns": "Underruns",
+        "paLatency": "PulseAudio latency",
+        "hostLatency": "Host latency",
+        "sinkRate": "Sink rate",
+        "clockSlew": "Clock slew",
+        "warm": "Warm"
+      }
     }
   },
   "system": {

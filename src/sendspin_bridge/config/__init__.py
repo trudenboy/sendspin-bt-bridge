@@ -114,6 +114,8 @@ DEFAULT_CONFIG = {
     "HA_ADAPTER_AREA_MAP": {},
     "TZ": "Australia/Melbourne",
     "PULSE_LATENCY_MSEC": 600,
+    # BT playout sync engine (see the playout sync spec): off = 3.1.0-beta.5 behaviour.
+    "PLAYOUT_SYNC": "off",
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
     # v2.70.0-rc.2 (#263) — was 0 (unlimited) prior; new default is 5 so
@@ -624,6 +626,16 @@ def load_player_state_for_mac(mac: str) -> dict:
         logger.debug("Could not read saved state for %s: %s", mac, exc)
         return {}
     return dict(state) if isinstance(state, dict) else {}
+
+
+def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> str:
+    """The playout mode one player runs: ``off`` when it opted out, else ``PLAYOUT_SYNC``.
+
+    ``playout_sync_enabled`` of ``None``, missing or ``True`` follows the global mode.
+    """
+    if player_cfg.get("playout_sync_enabled") is False:
+        return "off"
+    return str(cfg.get("PLAYOUT_SYNC", "off"))
 
 
 def load_config() -> dict:

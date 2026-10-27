@@ -212,6 +212,10 @@ class BridgeConfig(BaseModel):
     """
     PulseAudio latency in milliseconds.
     """
+    PLAYOUT_SYNC: Literal["off", "measure", "loop"] | None = "off"
+    """
+    Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.
+    """
     PREFER_SBC_CODEC: bool | None = False
     """
     Prefer SBC codec over AAC/aptX for Bluetooth audio.

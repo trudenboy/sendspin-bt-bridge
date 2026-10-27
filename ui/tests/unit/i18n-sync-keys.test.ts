@@ -38,3 +38,16 @@ describe('sync texts', () => {
     expect(String(s['delayHeading'])).toContain('larger = earlier')
   })
 })
+
+describe('playout texts', () => {
+  const keys = [
+    'device.chips.sync.playout', 'device.chips.sync.playoutTitle', 'device.chips.sync.warming', 'device.chips.sync.warmingTitle', 'device.chips.sync.jumpsTitle',
+    'timing.playout.title', 'timing.playout.fallback', 'timing.playout.rows.error', 'timing.playout.rows.clockSlew', 'timing.playout.rows.warm',
+  ]
+  it('has the playout chip and timing keys in English and Russian', () => {
+    for (const [name, lang] of [['en', en], ['ru', ru]] as const) {
+      const flat = flatten(lang)
+      for (const k of keys) expect(flat[k], `${name}:${k}`).toBeTruthy()
+    }
+  })
+})

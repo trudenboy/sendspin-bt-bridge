@@ -5,6 +5,7 @@ import {
   reconnectDevice,
   removeDevice,
   setDeviceEnabled,
+  setDevicePlayoutSync,
   setManagement,
   setPowerSave as apiSetPowerSave,
   standbyDevice,
@@ -313,6 +314,10 @@ export const useDeviceStore = defineStore('devices', () => {
     return setDeviceEnabled(id, enabled)
   }
 
+  async function setPlayoutSync(id: string, enabled: boolean) {
+    return setDevicePlayoutSync(id, enabled)
+  }
+
   return {
     selectedDeviceId,
     filter,
@@ -333,5 +338,6 @@ export const useDeviceStore = defineStore('devices', () => {
     release,
     remove,
     setEnabled,
+    setPlayoutSync,
   }
 })

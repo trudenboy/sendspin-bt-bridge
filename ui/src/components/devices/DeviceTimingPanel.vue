@@ -131,6 +131,38 @@ function path(key: keyof TimingSample) {
     .map((v, i) => `${((i / (values.length - 1)) * 300).toFixed(1)},${(30 - (v / max) * 26).toFixed(1)}`)
     .join(' ')
 }
+/* The engine's rows; off mode ({mode: 'off'}) has none to show. */
+const playout = computed(() => {
+  const p = props.device.timing.playout
+  return p && p.mode !== 'off' ? p : null
+})
+const fmt = (v: number | null | undefined, unit: string, digits = 1) => (v == null ? '—' : `${v.toFixed(digits)} ${unit}`)
+/* Plain timing rows, shown in every mode when the daemon reports them. */
+const latencyRows = computed(() => {
+  const timing = props.device.timing
+  const p = timing.playout
+  const pa = timing.pa_latency_ms ?? p?.pa_latency_ms
+  const slew = timing.clock_slew_ppm ?? p?.clock_slew_ppm
+  const rows: [string, string][] = []
+  if (pa != null) rows.push(['paLatency', fmt(pa, 'ms', 0)])
+  if (slew != null) rows.push(['clockSlew', fmt(slew, 'ppm', 1)])
+  return rows
+})
+const playoutRows = computed(() => {
+  const p = playout.value
+  if (!p) return []
+  return [
+    ['error', fmt(p.error_ms, 'ms')],
+    ['p95', fmt(p.error_p95_ms, 'ms')],
+    ['slope', fmt(p.error_slope_ms_per_s, 'ms/s', 2)],
+    ['corrections', fmt(p.corrections_per_s, '/s', 2)],
+    ['jumps', String(p.jumps ?? 0)],
+    ['underruns', String(p.underruns ?? 0)],
+    ['hostLatency', fmt(p.host_latency_ms, 'ms')],
+    ['sinkRate', fmt(p.sink_rate_ppm, 'ppm', 0)],
+    ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.warming', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
+  ] as [string, string][]
+})
 const syncError = computed(() => props.device.timing.sync_error_ms)
 </script>
 
@@ -183,6 +215,26 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
         </RouterLink>
       </SettingsRow>
     </div>
+
+    <dl v-if="latencyRows.length" class="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm" data-testid="timing-latency">
+      <template v-for="[key, value] in latencyRows" :key="key">
+        <dt class="text-text-secondary">{{ t(`timing.playout.rows.${key}`) }}</dt>
+        <dd class="tabular-nums text-text-primary">{{ value }}</dd>
+      </template>
+    </dl>
+
+    <section v-if="playout" class="mt-4" data-testid="playout-block">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.playout.title') }}</h3>
+      <p v-if="playout.state === 'fallback'" class="mt-1 text-sm text-warning" data-testid="playout-fallback">
+        {{ t('timing.playout.fallback', { reason: playout.fallback_reason ?? t('timing.playout.unknownReason') }) }}
+      </p>
+      <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+        <template v-for="[key, value] in playoutRows" :key="key">
+          <dt class="text-text-secondary">{{ t(`timing.playout.rows.${key}`) }}</dt>
+          <dd class="tabular-nums text-text-primary">{{ value }}</dd>
+        </template>
+      </dl>
+    </section>
 
     <section class="mt-4">
       <div class="flex items-center justify-between">

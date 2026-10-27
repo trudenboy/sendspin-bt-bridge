@@ -74,7 +74,11 @@ def _device(running_device, config: dict) -> Device:
         player = find_player_by_id(config, str(status.get("player_id") or ""))
     else:
         player = find_player_by_mac(config, str(mac)) if mac else None
-    return Device.from_status(status, config_id=str(player["id"]) if player and player.get("id") else None)
+    return Device.from_status(
+        status,
+        config_id=str(player["id"]) if player and player.get("id") else None,
+        playout_sync_enabled=not (player and player.get("playout_sync_enabled") is False),
+    )
 
 
 def build_status(*, auth_enabled: bool) -> BridgeStatus:

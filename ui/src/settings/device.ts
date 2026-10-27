@@ -86,6 +86,8 @@ export const DEVICE_MANAGED_KEYS: readonly string[] = [
   'id',
   'backend',
   'enabled',
+  // Applied at once from its own switch (PATCH), not saved with the form.
+  'playout_sync_enabled',
   // Not edited in the app: the bind address and the format hint.
   'listen_host',
   'preferred_format',

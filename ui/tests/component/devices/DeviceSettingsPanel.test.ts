@@ -1,9 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceSettingsPanel from '@/components/devices/DeviceSettingsPanel.vue'
 import en from '@/i18n/en.json'
+import ru from '@/i18n/ru.json'
+import { setDevicePlayoutSync } from '@/api/devices'
 import { makeDevice } from '../../fixtures/device'
 
 vi.mock('@/api/config', () => ({
@@ -11,10 +13,16 @@ vi.mock('@/api/config', () => ({
     players: [
       { id: 'cfg-other', name: 'Other', backend: { type: 'bluetooth_a2dp', mac: '11:22:33:44:55:66' } },
       { id: 'cfg-y', name: 'Kitchen', backend: { type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF' } },
+      { id: 'cfg-off', name: 'Legacy', playout_sync_enabled: false, backend: { type: 'bluetooth_a2dp', mac: '66:55:44:33:22:11' } },
       { id: 'cfg-p', name: 'Desk', backend: { type: 'pulse_sink', sink: 'alsa_output.gone' } },
     ],
   }),
   saveConfig: vi.fn().mockResolvedValue({ warnings: [], reconfig: {} }),
+}))
+
+vi.mock('@/api/devices', () => ({
+  setDeviceEnabled: vi.fn(),
+  setDevicePlayoutSync: vi.fn().mockResolvedValue({ playout_sync_enabled: true }),
 }))
 
 vi.mock('@/api/audio', () => ({
@@ -79,5 +87,38 @@ describe('DeviceSettingsPanel', () => {
   it('still shows the adapter for a Bluetooth speaker', async () => {
     const w = await mountPanel(makeDevice({ id: 'runtime-x', config_id: 'cfg-y' }))
     expect(w.text()).toContain(en.settings.device.backend.adapter.label)
+  })
+
+  describe('playout sync opt-out', () => {
+    beforeEach(() => vi.mocked(setDevicePlayoutSync).mockClear())
+    const toggle = (w: Awaited<ReturnType<typeof mountPanel>>) => w.find('#playout-sync-toggle')
+
+    it('is on for a speaker that follows the bridge setting', async () => {
+      const w = await mountPanel(makeDevice({ id: 'runtime-x', config_id: 'cfg-y' }))
+      expect(toggle(w).attributes('aria-checked')).toBe('true')
+    })
+
+    it('shows the saved opt-out', async () => {
+      const w = await mountPanel(makeDevice({ id: 'runtime-x', config_id: 'cfg-off' }))
+      expect(toggle(w).attributes('aria-checked')).toBe('false')
+    })
+
+    it('sends the choice for this speaker only', async () => {
+      const w = await mountPanel(makeDevice({ id: 'runtime-x', config_id: 'cfg-y' }))
+      await toggle(w).trigger('click')
+      await flushPromises()
+      expect(setDevicePlayoutSync).toHaveBeenCalledExactlyOnceWith('runtime-x', false)
+    })
+
+    it('explains it in both languages', async () => {
+      const w = await mountPanel(makeDevice({ id: 'runtime-x', config_id: 'cfg-y' }))
+      expect(w.text()).toContain(
+        'Turn off to run this speaker the way it worked before playout sync: the plain audio output, with no playout measurement.',
+      )
+      expect(en.drawer.config.playoutSync).toBe('Playout sync')
+      expect(ru.drawer.config.playoutSync).toBeTruthy()
+      expect(ru.drawer.config.playoutSyncHelp).toBeTruthy()
+      expect(ru.drawer.config.playoutSyncHelp).not.toBe(en.drawer.config.playoutSyncHelp)
+    })
   })
 })
