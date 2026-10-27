@@ -598,3 +598,20 @@ def test_a_user_mute_during_the_tail_outlasts_it():
     assert rig.muted
     assert False not in rig.probe.mute_history[1:]
     rig.close()
+
+
+_PACTL_SINKS_SHORT = (
+    "1\tsendspin_fallback\tmodule-null-sink.c\ts16le 2ch 44100Hz\tIDLE\n"
+    "11\tbluez_sink.30_21_0E_0A_AE_5A.a2dp_sink\tmodule-bluez5-device.c\ts16le 2ch 48000Hz\tRUNNING\n"
+    "12\tbluez_sink.FC_58_FA_EB_08_6C.a2dp_sink\tmodule-bluez5-device.c\ts16le 2ch 44100Hz\tRUNNING\n"
+)
+
+
+def test_sink_rate_is_read_from_pactl_short_listing():
+    """pulsectl's sample_spec points at freed memory (HAOS read 32655 Hz, 96 ch)."""
+    from sendspin_bridge.services.audio.playout.gst_output import sink_rate_from_pactl
+
+    assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink") == 44100
+    assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink") == 48000
+    assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.missing") is None
+    assert sink_rate_from_pactl("garbage\n", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink") is None

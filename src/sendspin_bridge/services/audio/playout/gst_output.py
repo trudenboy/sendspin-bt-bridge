@@ -18,6 +18,8 @@ query, as in ``StreamPlayer``).
 from __future__ import annotations
 
 import logging
+import re
+import subprocess
 import threading
 import time
 from collections import deque
@@ -75,16 +77,23 @@ def k0_from_latencies(*, resample_ns: int | None, convert_ns: int | None) -> int
     return max(0, int(resample_ns) - int(convert_ns or 0))
 
 
-def _pulse_sink_rate(device: str) -> int | None:
-    import pulsectl
+def sink_rate_from_pactl(listing: str, device: str) -> int | None:
+    """The sample rate of ``device`` in ``pactl list short sinks`` output, else None."""
+    for line in listing.splitlines():
+        fields = line.split("\t")
+        if len(fields) >= 4 and fields[1] == device:
+            match = re.search(r"(\d+)Hz", fields[3])
+            return int(match.group(1)) if match else None
+    return None
 
-    pulse = pulsectl.Pulse("sendspin-playout-rate", connect=False)
-    try:
-        pulse.connect(timeout=1.0)
-        info = pulse.get_sink_by_name(device)
-        return int(info.sample_spec.rate)
-    finally:
-        pulse.close()
+
+def _pulse_sink_rate(device: str) -> int | None:
+    # pulsectl's ``sample_spec`` points at memory freed after the query
+    # returns (HAOS read 32655 Hz, 96 channels), so ask pactl instead.
+    listing = subprocess.run(
+        ["pactl", "list", "short", "sinks"], capture_output=True, text=True, timeout=2, check=True
+    ).stdout
+    return sink_rate_from_pactl(listing, device)
 
 
 def output_rate(device: str | None, *, probe: Callable[[str], int | None] = _pulse_sink_rate) -> int:
