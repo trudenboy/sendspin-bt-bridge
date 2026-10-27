@@ -96,6 +96,22 @@ def test_cli_without_matching_traffic_fails(tool, capsys):
     assert tool.main([str(FIXTURE), "--index", "0"]) == 1
 
 
+@pytest.mark.parametrize(
+    ("rate", "subbands", "expected"),
+    [
+        (44100, 8, [1, 2]),  # bands of 2756 Hz: 2.76-8.27 kHz covers 81 % of the sweep, band 0 dropped
+        (48000, 8, [1]),  # bands of 3 kHz: band 2 starts exactly at 6 kHz and is out
+        (44100, 4, [0, 1]),  # band 1 (5.5-11 kHz) covers 12 % of the sweep: band 0 kept
+        (48000, 4, [0]),  # band 1 starts at 6 kHz
+        (32000, 8, [1, 2]),  # bands of 2 kHz: 2-6 kHz exactly
+        (16000, 8, [2, 3, 4, 5]),  # bands of 1 kHz
+    ],
+)
+def test_chirp_subbands(tool, rate, subbands, expected):
+    frame = air.SbcFrame(rate, 16, subbands, air.ChannelMode.JOINT_STEREO, False, 32, 0, (), ())
+    assert list(tool.chirp_subbands(frame)) == expected
+
+
 LIBSBC = ROOT / "tests" / "fixtures" / "a2dp_air" / "libsbc"
 LIBSBC_LEADS = (0, 17, 40, 64, 100, 127)
 

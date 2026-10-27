@@ -33,6 +33,7 @@ with ``t`` in unix seconds (``--epoch-s`` defaults to 0).
 from __future__ import annotations
 
 import argparse
+import math
 import statistics
 import sys
 from collections import Counter
@@ -87,19 +88,22 @@ def busiest_tx_link(records: Iterable[MonitorRecord], index: int | None = None) 
 
 
 def chirp_subbands(frame: SbcFrame) -> range:
-    """Sub-bands overlapping the chirp's 2–6 kHz sweep.
+    """Sub-bands overlapping the chirp's 2–6 kHz sweep (a band starting at 6 kHz or above is out).
 
-    The lowest sub-band also carries bass, so it is left out when the others still cover at least
-    half of the sweep (8 sub-bands at 44.1 kHz: bands 1–2 cover 2.76–6 kHz). Leaving it out drops
-    the sweep's first part and moves the energy centre later (about +0.4 ms with 8 sub-bands); the
-    other approximations (Hann edges under a peak-amplitude proxy, the half-maximum centre) pull
-    the other way, and on libsbc-encoded click tracks the net error stays within ±0.35 ms with a
-    mean near 0 (``tests/fixtures/a2dp_air/libsbc``). With 4 sub-bands band 1 (5.5–11 kHz) covers
+    The tool expects the click track alone on the stream: the energy proxy cannot tell a chirp
+    from music in the same sub-bands, and with 4 sub-bands band 0 (which also carries bass) is
+    part of the proxy. The lowest sub-band is left out when the others still cover at least half
+    of the sweep (8 sub-bands at 44.1 kHz: bands 1–2 cover 2.76–6 kHz; at 48 kHz band 1 alone
+    covers 3–6 kHz). Leaving it out drops the sweep's first part and moves the energy centre later
+    (about +0.4 ms with 8 sub-bands at 44.1 kHz); the other approximations (Hann edges under a
+    peak-amplitude proxy, the half-maximum centre) pull the other way, and on libsbc-encoded click
+    tracks the net error stays within ±0.35 ms with a mean near 0
+    (``tests/fixtures/a2dp_air/libsbc``). With 4 sub-bands at 44.1 kHz band 1 (5.5–11 kHz) covers
     only the sweep's end, so band 0 is kept; leaving it out would bias the phase by about +1.1 ms.
     """
     width = frame.sampling_rate / 2 / frame.subbands
     lo = int(ct.CHIRP_F0 // width)
-    hi = min(frame.subbands - 1, int(ct.CHIRP_F1 // width))
+    hi = min(frame.subbands - 1, math.ceil(ct.CHIRP_F1 / width) - 1)
     if lo == 0 and hi >= 1:
         covered_above = min(ct.CHIRP_F1, (hi + 1) * width) - width
         if covered_above >= (ct.CHIRP_F1 - ct.CHIRP_F0) / 2:

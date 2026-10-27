@@ -651,6 +651,29 @@ def test_a_late_credit_before_the_next_send_is_excess():
     assert p.link_states()[(1, HANDLE)].desyncs == 1
 
 
+def test_held_times_of_a_link_that_stops_sending_are_released_after_a_second():
+    p = air.A2dpAirParser()
+    out = p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    out += feed_media(p, 0.0, media_sdu(1, 0))
+    out += p.feed(0.01, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))
+    # unrelated records within the second keep it held; the first record after it releases it
+    out += p.feed(0.5, 0, MONITOR_EVENT_PKT, nocp((0x0999, 1)))
+    assert out == []
+    out += p.feed(1.2, 0, MONITOR_EVENT_PKT, nocp((0x0999, 1)))
+    assert [(pk.seq, pk.t_complete) for pk in out] == [(1, pytest.approx(0.01))]
+    assert p.flush() == []
+
+
+def test_an_excess_credit_within_the_second_still_wins():
+    p = air.A2dpAirParser()
+    out = p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    out += feed_media(p, 0.0, media_sdu(1, 0))
+    out += p.feed(0.01, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))
+    out += p.feed(0.9, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 1)))
+    out += p.feed(2.0, 0, MONITOR_EVENT_PKT, nocp((0x0999, 1)))
+    assert [(pk.seq, pk.t_complete) for pk in out] == [(1, None)]
+
+
 def test_parse_records_runs_the_parser_over_monitor_records():
     records = [
         air.MonitorRecord(1.0, 1, MONITOR_ACL_TX_PKT, acl(HANDLE, pb, c)) for pb, c in fragments(media_sdu(4, 8))

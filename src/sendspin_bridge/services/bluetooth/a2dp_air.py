@@ -54,18 +54,25 @@ controller's queue was empty:
   it arrives before that send).
 
 From there the link is *in step*. A credited time is held until the parser's
-queue has drained and the link sends again while still in step, so a late
-credit for a fragment the parser never saw shows up as "excess" first. If the
+queue has drained and the link sends again while still in step — or, if it
+does not send, until :data:`HELD_RELEASE_S` has passed without an excess credit
+(checked on any later record) — so a late credit for a fragment the parser
+never saw shows up as "excess" first. If the
 queue does not drain within :data:`DRAIN_DEADLINE_S` /
 :data:`DRAIN_DEADLINE_EVENTS` NOCP events (a lost completion, or a radio that
 fell behind), the held packets are released with ``None`` — the link stays in
 step, so crediting resumes as soon as the queue drains again; after a lost
-completion it never drains and every packet stays ``None``. The link leaves
+completion it never drains and every packet stays ``None`` (``link_states``
+shows it in step with ``credited`` frozen). A lost ACL TX record blinds a
+continuous link too: the parser's queue is one short, the controller's extra
+credit arrives as excess and the link leaves step until a pause of more than
+:data:`IDLE_SYNC_S` or a reconnect (``in_step=False``, ``desyncs > 0``). The link leaves
 step on an excess credit, on a growing monitor drop counter (on every link:
 the counter is not attributed to an index), when its queue overflows
 :data:`MAX_IN_FLIGHT`, and on a controller reset. Anything not proven stays
-``t_complete=None``; a lost TX record that is not reported as a drop is the one
-case these rules cannot catch. :meth:`A2dpAirParser.link_states` exposes
+``t_complete=None``. The one wrong-time window left: a lost TX record whose
+excess credit arrives only after the next send (or after :data:`HELD_RELEASE_S`)
+lets the packets held at that drain go out with times one fragment late. :meth:`A2dpAirParser.link_states` exposes
 per-link counters so a caller can tell a "blind" link from a working one.
 
 Monitor drops: ``btmon -w`` writes 0 in every btsnoop record's drop field, so
@@ -139,6 +146,7 @@ IDLE_SYNC_S = 0.5  # no sends for this long with nothing outstanding: the contro
 DRAIN_DEADLINE_S = 1.0  # while in step the queue must empty at least this often ...
 DRAIN_DEADLINE_EVENTS = 64  # ... and within this many NOCP events for the link
 MAX_IN_FLIGHT = 256  # fragments outstanding per link before it is cleared
+HELD_RELEASE_S = 1.0  # a drained link that does not send again releases its held times after this
 MAX_EVICTED_KEYS = 4096  # last send times remembered for links forgotten to make room
 BTSNOOP_MAGIC = b"btsnoop\0"
 BTSNOOP_DATALINK_MONITOR = 2001
@@ -547,6 +555,7 @@ class _Link:
     busy_since: float | None = None  # when the queue last went from empty to non-empty
     events_since_drain: int = 0
     drained: bool = False  # queue emptied while in step; held packets go out at the next send
+    drained_at: float = 0.0
     sbc_streams: set[int] = field(default_factory=set)
     credited: int = 0
     released_none: int = 0
@@ -586,6 +595,7 @@ class A2dpAirParser:
         self._drops = 0
         self._evicted: OrderedDict[tuple[int, int], float] = OrderedDict()
         self._forgot_evicted = False
+        self._drained: dict[int, _Link] = {}  # id(link) -> link waiting to release its held times
 
     def link_states(self) -> dict[tuple[int, int], LinkState]:
         return {
@@ -598,6 +608,12 @@ class A2dpAirParser:
         if self._start is None:
             self._start = t
         out: list[MediaPacket] = []
+        for link_id, link in list(self._drained.items()):
+            if not link.drained:
+                del self._drained[link_id]
+            elif t - link.drained_at > HELD_RELEASE_S:
+                del self._drained[link_id]
+                out += self._release(link, confirmed=link.in_step)
         if drops is not None and drops != self._drops:
             if drops > self._drops:
                 self.stats.monitor_drops += 1
@@ -789,6 +805,9 @@ class A2dpAirParser:
             out += self._leave_step(link)
         if not link.in_flight:
             link.drained = link.in_step and bool(link.held)
+            if link.drained:
+                link.drained_at = t
+                self._drained[id(link)] = link
             link.busy_since = None
             link.events_since_drain = 0
         else:
