@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.14] - 2026-10-27
+
+### Fixed
+
+- In `PLAYOUT_SYNC=measure` the output now opens at the speaker's own sample
+  rate. It read a wrong rate (for example 32681 Hz) and resampled every
+  stream needlessly.
+
 ## [3.1.0-beta.13] - 2026-10-27
 
 ### Added
