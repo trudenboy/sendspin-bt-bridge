@@ -6,6 +6,7 @@ The fixture is rebuilt by ``tests/fixtures/a2dp_air/build_fixture.py`` from the 
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import itertools
 import subprocess
@@ -95,20 +96,46 @@ def test_cli_without_matching_traffic_fails(tool, capsys):
     assert tool.main([str(FIXTURE), "--index", "0"]) == 1
 
 
-def test_sbc_encoder_delay(tool):
-    # analysis window of 10*M taps, symmetric about (10M-1)/2 behind the newest sample of a block;
-    # a block is placed at its oldest new sample, M-1 before the newest: (10M-1)/2 - (M-1) = 4M + 1/2
-    assert tool.sbc_encoder_delay_samples(8) == 32.5
-    assert tool.sbc_encoder_delay_samples(4) == 16.5
+LIBSBC = ROOT / "tests" / "fixtures" / "a2dp_air" / "libsbc"
+LIBSBC_LEADS = (0, 17, 40, 64, 100, 127)
+
+
+def libsbc_phase_error_ms(tool, subbands: int, lead: int) -> float:
+    """Phase the tool finds in the libsbc-encoded click track minus the true one (lead samples / 44.1 kHz)."""
+    data = gzip.decompress((LIBSBC / f"m{subbands}_lead{lead}.sbc.gz").read_bytes())
+    frames, complete = air.parse_sbc_frames(data)  # CRC-checked: libsbc output must parse cleanly
+    assert complete and frames
+    f0 = frames[0]
+    assert (f0.sampling_rate, f0.subbands, f0.blocks, f0.channel_mode) == (
+        44100,
+        subbands,
+        16,
+        air.ChannelMode.JOINT_STEREO,
+    )
+    frame_s = f0.samples / f0.sampling_rate
+    rows = [(i * frame_s, tool.frame_energy(f)) for i, f in enumerate(frames)]
+    delay_s = tool.sbc_encoder_delay_samples(subbands) / f0.sampling_rate
+    got = tool.click_phase_ms(rows, frame_s, epoch_s=0.0, encoder_delay_s=delay_s)
+    assert got is not None
+    cycle = ct.CYCLE_S * 1000.0
+    return (got - lead / 44.1 + cycle / 2) % cycle - cycle / 2
+
+
+@pytest.mark.parametrize("subbands", [8, 4])
+def test_phase_of_a_libsbc_encoded_click_track(tool, subbands):
+    """End to end against the real encoder: scale-factor proxy, sub-band choice, encoder delay, fold."""
+    errors = [libsbc_phase_error_ms(tool, subbands, lead) for lead in LIBSBC_LEADS]
+    assert max(abs(e) for e in errors) < 0.5, errors
+    assert abs(sum(errors) / len(errors)) < 0.2, errors
 
 
 @pytest.mark.parametrize("phase_ms", [0.0, 1234.56, 5000.3, 9829.71, 3333.0])
 def test_fold_returns_the_chirp_start(tool, phase_ms):
     """Per-frame energy shaped like the real proxy: the peak chirp amplitude the SBC analysis window sees.
 
-    A frame placed at media sample m is computed from PCM delayed by the encoder (32.5 samples for
+    A frame placed at media sample m is computed from PCM delayed by the encoder (36 samples for
     8 sub-bands) and smeared by the 80-tap window (±40 samples); the proxy follows the peak amplitude."""
-    rate, spf, delay, half_window = 44100, 128, 32.5, 40
+    rate, spf, delay, half_window = 44100, 128, 36.0, 40
     frame_s = spf / rate
     epoch = 1_700_000_000.0
     template = [abs(v) for v in ct.chirp(rate)]

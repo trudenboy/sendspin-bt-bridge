@@ -16,7 +16,7 @@ find where the clicks left the host:
   the media rate;
 * the folded profile is matched against the click pattern (click k at
   ``k·PERIOD_S``, its partner ``gap_ms(k)`` later); the peak's centre minus half
-  a chirp and the SBC encoder's analysis delay (4·M + ½ samples) is the chirp
+  a chirp and the SBC encoder's analysis delay (4.5·M samples) is the chirp
   start in PCM time, the same instant the estimator reports for a recording.
 
 Completion-anchored phases need trusted completion times, which the parser only
@@ -87,10 +87,23 @@ def busiest_tx_link(records: Iterable[MonitorRecord], index: int | None = None) 
 
 
 def chirp_subbands(frame: SbcFrame) -> range:
-    """Sub-bands overlapping the chirp band, without the lowest (bass) sub-band."""
+    """Sub-bands overlapping the chirp's 2–6 kHz sweep.
+
+    The lowest sub-band also carries bass, so it is left out when the others still cover at least
+    half of the sweep (8 sub-bands at 44.1 kHz: bands 1–2 cover 2.76–6 kHz). Leaving it out drops
+    the sweep's first part and moves the energy centre later (about +0.4 ms with 8 sub-bands); the
+    other approximations (Hann edges under a peak-amplitude proxy, the half-maximum centre) pull
+    the other way, and on libsbc-encoded click tracks the net error stays within ±0.35 ms with a
+    mean near 0 (``tests/fixtures/a2dp_air/libsbc``). With 4 sub-bands band 1 (5.5–11 kHz) covers
+    only the sweep's end, so band 0 is kept; leaving it out would bias the phase by about +1.1 ms.
+    """
     width = frame.sampling_rate / 2 / frame.subbands
-    lo = max(1, int(ct.CHIRP_F0 // width))
+    lo = int(ct.CHIRP_F0 // width)
     hi = min(frame.subbands - 1, int(ct.CHIRP_F1 // width))
+    if lo == 0 and hi >= 1:
+        covered_above = min(ct.CHIRP_F1, (hi + 1) * width) - width
+        if covered_above >= (ct.CHIRP_F1 - ct.CHIRP_F0) / 2:
+            lo = 1
     return range(lo, hi + 1)
 
 
@@ -150,17 +163,21 @@ def air_profile(packets: Sequence[MediaPacket], use: str) -> list[tuple[float, f
 
 
 def sbc_encoder_delay_samples(subbands: int) -> float:
-    """Samples between a PCM sample and the SBC block whose sub-band output it peaks in.
+    """Samples by which a PCM sample's energy lags it on the frames' media timeline.
 
     The SBC analysis filter (A2DP v1.3 §12.5) runs a 10·M-tap window, symmetric about its middle,
-    over the newest 10·M input samples for each block of M new samples. An input sample therefore
-    peaks in the block whose window is centred on it, i.e. whose newest sample is (10M−1)/2 later.
-    Blocks sit on the media timeline at their oldest new sample (the frame's RTP timestamp plus
-    j·M), M−1 before their newest, so the sub-band timeline lags the PCM by
-    (10M−1)/2 − (M−1) = 4M + ½ samples: 32.5 for 8 sub-bands (0.74 ms at 44.1 kHz), 16.5 for 4.
-    (Twice this plus the decoder's half gives the usual 73-sample SBC codec delay for M = 8.)
+    over the newest 10·M input samples for each block of M new samples, so an input sample peaks
+    in the block whose newest sample is (10M−1)/2 later. That block's own samples sit on the RTP
+    timeline (the frame's timestamp plus j·M) centred (M−1)/2 before its newest sample, so the
+    energy lags the PCM by (10M−1)/2 − (M−1)/2 = 4.5·M samples: 36 for 8 sub-bands (0.82 ms at
+    44.1 kHz), 18 for 4. Measured with libsbc 1.3.1: an impulse shows up in frame k for input
+    samples 128k − 72 … 128k + 126, centred 36.5 samples before the frame's centre.
+    For scale: the whole codec (encoder + decoder) delays SBC by 73 ≈ 80 − 8 + 1 samples for
+    M = 8; the encoder's share is 32.5–36.5 samples depending on where a block is anchored, and
+    this tool anchors frames at their sample centres. Host buffering before the encoder (samples
+    are assumed to get RTP timestamps as they enter it) is not modelled.
     """
-    return 4 * subbands + 0.5
+    return 4.5 * subbands
 
 
 def click_phase_ms(
