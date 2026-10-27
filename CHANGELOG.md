@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.16] - 2026-10-27
+
 ### Fixed
 
 - `PLAYOUT_SYNC=measure`: steady corrections now need the timing error
