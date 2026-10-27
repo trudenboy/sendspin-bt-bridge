@@ -255,5 +255,194 @@ def _per_click(recording: Recording, epoch_s: float, x: list[float], env: list[f
     )
 
 
+# --- coherent estimate: every click of the window accumulated on the click track's known schedule ----------------
+#
+# A headset or laptop microphone in an ordinary room hears each chirp only a few dB above the room's noise: too weak
+# to detect one by one, yet the window holds up to ten pairs on a schedule known to the millisecond. Folding the
+# band envelope over the 10 s cycle and scoring every cycle phase against the ten expected chirp offsets adds them
+# all up (coarse, 1 ms); a matched filter summed over every expected chirp then places it to a sample (refine).
+
+# Best phase score over the runner-up (both above the median), see _coarse_phase. 300 windows of noise alone (band
+# limited, bursts, a real headset in a room; 6-20 s) never scored above 1.36; the click track scores ~2 clean and
+# >= 1.7 down to 0 dB of chirp-band SNR.
+COHERENT_MIN_QUALITY = 1.5
+_COARSE_WINDOW_MS = 8  # a chirp's band energy spreads over its 8 ms
+_RUNNER_UP_MS = 50  # the runner-up phase lies outside the best one's neighbourhood
+_COHERENT_REFINE_MS = 4.0  # matched-filter search around the coarse position
+_COHERENT_EARLIER = 0.7  # the earliest profile peak this strong (above its floor) is the direct sound
+_HEARD_RATIO = 8.0  # a click's peak matched-filter energy over the room's median at the same filter (9 dB)
+
+
+@dataclass(frozen=True)
+class _Coherent:
+    phase_ms: float
+    quality: float  # (best - median) / (runner-up - median) of the phase scores; a click track gives ~2
+    chirps: int  # expected chirp positions inside the window, all used
+    heard: int  # clicks whose peak matched-filter energy stands _HEARD_RATIO over the room's
+    spread_ms: float  # RMS of each heard click's own arrival around the window's
+
+
+def _quadrature(sr: int) -> tuple[list[float], list[float]]:
+    """The chirp and its 90 degree shifted twin: ``|x.c|^2 + |x.c90|^2`` is a smooth envelope of its arrival."""
+    c = ct.chirp(sr)
+    n = len(c)
+    rate = (ct.CHIRP_F1 - ct.CHIRP_F0) / (n / sr)
+    q = []
+    for i in range(n):
+        t = i / sr
+        window = 0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1))
+        q.append(window * math.cos(2 * math.pi * (ct.CHIRP_F0 * t + 0.5 * rate * t * t)))
+    return c, q
+
+
+def _mf_energy(x: list[float], c: list[float], q: list[float], i: int) -> float:
+    seg = x[i : i + len(c)]
+    a = sum(map(operator.mul, seg, c))
+    b = sum(map(operator.mul, seg, q))
+    return a * a + b * b
+
+
+def _coarse_phase(env: list[float], sr: int, clock_s: float) -> tuple[int, float]:
+    """The cycle phase (ms) of click 0's first chirp on ``clock_s`` (the capture clock minus the epoch), and the
+    quality of that choice."""
+    frame = max(1, round(sr / 1000))
+    d = max(1, round(sr / 8000))  # the comb's delay: band_envelope's frame i starts at sample d + i * frame
+    bins = round(ct.CYCLE_S * 1000)
+    floor = sorted(env)[len(env) // 2]
+    acc, cnt = [0.0] * bins, [0] * bins
+    for i, e in enumerate(env):
+        b = int(((clock_s + (d + i * frame) / sr) % ct.CYCLE_S) * 1000) % bins
+        acc[b] += max(0.0, e - floor)  # steady noise adds nothing, only what stands above the floor counts
+        cnt[b] += 1
+    folded = [a / c if c else 0.0 for a, c in zip(acc, cnt, strict=True)]
+    ring = folded + folded[:_COARSE_WINDOW_MS]
+    prefix = [0.0]
+    for v in ring:
+        prefix.append(prefix[-1] + v)
+    chirp_energy = [prefix[p + _COARSE_WINDOW_MS] - prefix[p] for p in range(bins)]
+    period_ms = round(ct.PERIOD_S * 1000)
+    offsets = [k * period_ms + g for k in range(ct.CYCLE_CLICKS) for g in (0, ct.gap_ms(k))]
+    score = [0.0] * bins
+    for o in offsets:
+        shifted = chirp_energy[o:] + chirp_energy[:o]
+        score = list(map(operator.add, score, shifted))
+    best = max(range(bins), key=score.__getitem__)
+    median = sorted(score)[bins // 2]
+    runner_up = max(
+        (s for p, s in enumerate(score) if min((p - best) % bins, (best - p) % bins) > _RUNNER_UP_MS), default=median
+    )
+    if score[best] <= median:
+        return best, 0.0
+    # a click track repeats every PERIOD_S, so the best phase shifted by a period still matches every first chirp:
+    # clean, the quality is ~2; a phase that only matches noise has a runner-up as good as itself (~1)
+    return best, (score[best] - median) / max(runner_up - median, 1e-12 * score[best])
+
+
+def _earliest_peak(profile: list[float]) -> int:
+    """Index of the earliest local maximum within _COHERENT_EARLIER of the highest (both above the floor)."""
+    top, low = max(profile), sorted(profile)[len(profile) // 4]
+    threshold = low + _COHERENT_EARLIER * (top - low)
+    last = len(profile) - 1
+    for i, v in enumerate(profile):
+        if v >= threshold and v >= profile[max(i - 1, 0)] and v >= profile[min(i + 1, last)]:
+            return i
+    return profile.index(top)
+
+
+def _coherent(x: list[float], env: list[float], sr: int, clock_s: float) -> _Coherent | None:
+    coarse_ms, quality = _coarse_phase(env, sr, clock_s)
+    c, q = _quadrature(sr)
+    n_t, n_x = len(c), len(x)
+    half = round(sr * _COHERENT_REFINE_MS / 1000)
+    # every expected chirp of the window: (sample where it starts at the coarse phase, click id)
+    first = coarse_ms / 1000 + ct.CYCLE_S * math.floor((clock_s - coarse_ms / 1000) / ct.CYCLE_S)
+    chirps: list[tuple[int, int]] = []
+    cycle = first - ct.CYCLE_S
+    while cycle < clock_s + n_x / sr:
+        for k in range(ct.CYCLE_CLICKS):
+            for g in (0.0, ct.gap_ms(k) / 1000):
+                s = round((cycle + k * ct.PERIOD_S + g - clock_s) * sr)
+                if s - half >= 0 and s + half + n_t <= n_x:
+                    chirps.append((s, round((cycle - first) / ct.CYCLE_S) * ct.CYCLE_CLICKS + k))
+        cycle += ct.CYCLE_S
+    if len(chirps) < 2:
+        return None
+    # refine: the matched-filter energy summed over every chirp, on a grid, then to the sample around its peak
+    step = max(1, sr // 16000)
+    grid = list(range(-half, half + 1, step))
+    energy = [[_mf_energy(x, c, q, s + dlt) for dlt in grid] for s, _ in chirps]
+    profile = [sum(col) for col in zip(*energy, strict=True)]
+    pick = _earliest_peak(profile)  # the direct sound arrives before its reflections
+    best_d, best_e = grid[pick], profile[pick]
+    for dlt in range(max(-half, grid[pick] - step + 1), min(half, grid[pick] + step - 1) + 1):
+        if dlt != grid[pick]:
+            e = sum(_mf_energy(x, c, q, s + dlt) for s, _ in chirps)
+            if e > best_e:
+                best_d, best_e = dlt, e
+    # the room's energy at the same filter: a second after (or before) a click the track is silent
+    noise = []
+    for s, _ in chirps:
+        quiet = s + sr if s + sr + 2 * n_t <= n_x else s - sr
+        noise += [_mf_energy(x, c, q, i) for i in (quiet - n_t, quiet, quiet + n_t) if 0 <= i <= n_x - n_t]
+    noise.sort()
+    room = noise[len(noise) // 2] if noise else 0.0
+    clicks: dict[int, list[list[float]]] = {}
+    for (_, click), row in zip(chirps, energy, strict=True):
+        clicks.setdefault(click, []).append(row)
+    # each heard click's own arrival (its earliest strong peak, the same rule) around the window's: a speaker whose
+    # timing wanders during the window shows here, the sum alone would average it into one confident number
+    devs = []
+    for rows in clicks.values():
+        per = [sum(col) / len(rows) for col in zip(*rows, strict=True)]
+        if max(per) > _HEARD_RATIO * room:
+            devs.append((grid[_earliest_peak(per)] - grid[pick]) / sr * 1000)
+    spread = math.sqrt(sum(v * v for v in devs) / len(devs)) if devs else 0.0
+    phase = ((coarse_ms / 1000 + best_d / sr - ct.LEAD_IN_S) * 1000.0) % (ct.CYCLE_S * 1000.0)
+    return _Coherent(phase_ms=phase, quality=quality, chirps=len(chirps), heard=len(devs), spread_ms=spread)
+
+
+def _coherent_measurement(member: str, found: _Coherent | None) -> Measurement:
+    if found is None or found.quality < COHERENT_MIN_QUALITY:
+        return Measurement(member=member, status="not_heard", reason="low_snr", clicks=found.chirps if found else 0)
+    if found.heard < MIN_CLICKS:
+        return Measurement(member=member, status="not_heard", reason="too_few_clicks", clicks=found.chirps)
+    confidence = max(0.0, min(1.0, (found.quality - COHERENT_MIN_QUALITY) / (2.0 - COHERENT_MIN_QUALITY)))
+    return Measurement(
+        member=member,
+        status="ok" if found.spread_ms <= MAX_SPREAD_MS else "unstable",
+        reason="" if found.spread_ms <= MAX_SPREAD_MS else "spread",
+        phase_ms=round(found.phase_ms, 2),
+        clicks=found.chirps,
+        spread_ms=round(found.spread_ms, 2),
+        confidence=round(confidence, 3),
+    )
+
+
+def estimate_coherent(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
+    """The click track's phase from all clicks of the window at once: works where each chirp alone is too weak
+    to detect (issue #553). ``clicks`` counts the chirp positions used."""
+    if not _valid(recording, epoch_s):
+        return _invalid(recording.member)
+    x = pcm_to_floats(recording.pcm)
+    env = band_envelope(x, recording.sample_rate)
+    found = _coherent(x, env, recording.sample_rate, recording.start_time_s - epoch_s)
+    return _coherent_measurement(recording.member, found)
+
+
 def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
-    return estimate_per_click(recording, epoch_s=epoch_s)
+    """The per-click estimate where it found the click sequence (the most precise on a clean recording); where it
+    found none, the coherent estimate when that hears the clicks.
+
+    A per-click verdict on clicks it did find stands: ``unstable`` (they disagree: the coherent sum would average
+    a speaker whose timing moved into one confident number) and ``low_snr`` with the sequence found (its SNR,
+    measured on the clicks themselves, is below ``MIN_SNR_DB``)."""
+    if not _valid(recording, epoch_s):
+        return _invalid(recording.member)
+    x = pcm_to_floats(recording.pcm)
+    env = band_envelope(x, recording.sample_rate)
+    per_click = _per_click(recording, epoch_s, x, env)
+    if per_click.status != "not_heard" or per_click.clicks >= MIN_CLICKS:
+        return per_click
+    found = _coherent(x, env, recording.sample_rate, recording.start_time_s - epoch_s)
+    coherent = _coherent_measurement(recording.member, found)
+    return coherent if coherent.status != "not_heard" else per_click
