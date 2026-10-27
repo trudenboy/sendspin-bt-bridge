@@ -122,9 +122,11 @@ class PlayoutEngine:
     def submit(self, play_time_us: int, pcm: bytes) -> None:
         self._sched.submit(play_time_us, pcm)
 
-    def clear(self) -> None:
-        self._sched.clear()
+    def clear(self) -> int:
+        """Drop queued program audio; returns ``x_end``, the write head at the clear (ns)."""
+        x_end = self._sched.clear()
         self._request_placement("clear")
+        return x_end
 
     def resync(self, shift_us: int) -> bool:
         """Shift queued audio by ``shift_us`` and place the next frame exactly; True if audio was queued."""
@@ -137,6 +139,11 @@ class PlayoutEngine:
         if self._fallback_reason is None:
             logger.info("playout: falling back (%s)", reason)
             self._fallback_reason = reason
+
+    @property
+    def port_x_ns(self) -> int | None:
+        """``x_port`` at the last port reading (written-audio time, ns); None before one."""
+        return None if self._reading is None else self._reading.x_port_ns
 
     @property
     def queued(self) -> bool:

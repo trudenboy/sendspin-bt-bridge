@@ -469,3 +469,132 @@ def test_the_real_feeder_thread_feeds_and_stops():
     pts = [(b.pts, b.duration) for b in handed]
     assert len(pts) >= 10
     assert all(p2 == p1 + d1 for (p1, d1), (p2, _) in itertools.pairwise(pts))
+
+
+# -- R13: tail mute on clear ---------------------------------------------------------------
+
+
+class _SetPort:
+    """A port clock whose audio position the test sets (k stays 0 while it trails the data)."""
+
+    def __init__(self) -> None:
+        self.a_ns = 0
+        self._t_us = 1_000_000.0
+
+    def read(self) -> PortSample:
+        self._t_us += 100_000.0
+        return PortSample(t_us=self._t_us, a_ns=self.a_ns, mono_us=self._t_us, bracket_us=10.0)
+
+
+class _MuteProbe:
+    """Stands in for pulsesink's volume/mute properties."""
+
+    def __init__(self) -> None:
+        self.props: dict[str, object] = {}
+        self.mute_history: list[bool] = []
+
+    def find_property(self, name: str):
+        return True if name in ("volume", "mute") else None
+
+    def set_property(self, name: str, value) -> None:
+        self.props[name] = value
+        if name == "mute":
+            self.mute_history.append(bool(value))
+
+    def get_property(self, name: str):
+        return self.props.get(name)
+
+
+class _TailRig:
+    def __init__(self) -> None:
+        self.port = _SetPort()
+        self.player = _player(port_factory=lambda sink: self.port)
+        self.player.start(PCM_S16_STEREO_48K)
+        self.probe = _MuteProbe()
+        self.player._sink = self.probe
+        self.now = 1_000_000.0
+        self.player.submit(int(self.now) + 100_000, bytes(192_000))  # 1 s of audio
+
+    def run(self, ticks: int) -> None:
+        for _ in range(ticks):
+            self.now += 5_000
+            self.player._tick(now_us=self.now)
+            time.sleep(0.001)
+
+    def clear(self) -> int:
+        """Clear and let the feeder apply it; returns x_end (the write head at the clear)."""
+        self.player.clear()
+        x_end = self.player._x_w_ns
+        self.run(1)
+        return x_end
+
+    @property
+    def muted(self) -> bool:
+        return bool(self.probe.get_property("mute"))
+
+    def close(self) -> None:
+        self.player._sink = None
+        self.player.stop()
+
+
+@requires_gst
+def test_a_clear_mutes_the_stream_until_the_port_passes_the_end_plus_20_ms():
+    rig = _TailRig()
+    rig.run(40)
+    assert not rig.muted
+    x_end = rig.clear()
+    assert rig.muted
+    rig.run(20)
+    rig.port.a_ns = x_end + 19_000_000
+    rig.run(25)
+    assert rig.muted, "the port has not yet passed x_end + 20 ms"
+    rig.port.a_ns = x_end + 20_500_000
+    rig.run(25)
+    assert not rig.muted
+    rig.close()
+
+
+@requires_gst
+def test_a_user_muted_stream_stays_muted_after_the_tail():
+    rig = _TailRig()
+    rig.player.set_volume(0.5, True)
+    rig.run(40)
+    x_end = rig.clear()
+    rig.run(20)
+    rig.port.a_ns = x_end + 30_000_000
+    rig.run(25)
+    assert rig.muted
+    assert rig.probe.get_property("volume") == pytest.approx(0.5)
+    assert False not in rig.probe.mute_history
+    rig.close()
+
+
+@requires_gst
+def test_a_user_unmute_during_the_tail_waits_for_the_tail_to_end():
+    rig = _TailRig()
+    rig.player.set_volume(0.5, True)
+    rig.run(40)
+    x_end = rig.clear()
+    rig.player.set_volume(0.7, False)
+    rig.run(20)
+    assert rig.muted
+    assert rig.probe.get_property("volume") == pytest.approx(0.7)
+    rig.port.a_ns = x_end + 30_000_000
+    rig.run(25)
+    assert not rig.muted
+    rig.close()
+
+
+@requires_gst
+def test_a_user_mute_during_the_tail_outlasts_it():
+    rig = _TailRig()
+    rig.player.set_volume(0.5, False)
+    rig.run(40)
+    x_end = rig.clear()
+    rig.player.set_volume(0.5, True)
+    rig.run(20)
+    rig.port.a_ns = x_end + 30_000_000
+    rig.run(25)
+    assert rig.muted
+    assert False not in rig.probe.mute_history[1:]
+    rig.close()

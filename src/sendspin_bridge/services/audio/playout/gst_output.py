@@ -53,6 +53,9 @@ WRITE_AHEAD_RATE = 1.001
 JOIN_TIMEOUT_S = 2.0
 
 _LEAD_NS = LEAD_MS * 1_000_000
+# After a clear the stream stays muted until the port is this far past the clear's write
+# head, so the old audio already in the PulseAudio buffer is not heard (R13).
+TAIL_MUTE_MARGIN_NS = 20_000_000
 _FALLBACK_NO_CLOCK = "no audio clock from the sink within 2 s of PLAYING"
 
 
@@ -199,6 +202,8 @@ class PlayoutPlayer:
         self._x_w_ns = 0
         self._input_format_set = False
         self._feeder_failed = False
+        self._feeder_volume: tuple[float, bool] | None = None  # the user's, as last applied
+        self._tail_until_ns: int | None = None  # muted until the port passes this x
 
         # Published for metrics()/resync()/is_drained().
         self._pub_lock = threading.Lock()
@@ -283,6 +288,8 @@ class PlayoutPlayer:
         self._x_w_ns = 0
         self._input_format_set = False
         self._feeder_failed = False
+        self._feeder_volume = None
+        self._tail_until_ns = None
         self._generation += 1
         self._first_lead_us = None
         self._stream_closed = False
@@ -467,14 +474,34 @@ class PlayoutPlayer:
             self._queued = engine.queued
             self._counters.queued_chunks = engine.queued_chunks
         if sensed:
+            self._end_tail_mute(engine)
             self._publish_snapshot(engine)
+
+    def _end_tail_mute(self, engine: PlayoutEngine) -> None:
+        """Unmute once the port has played past the cleared audio (plus the margin)."""
+        until = self._tail_until_ns
+        x_port = engine.port_x_ns
+        if until is None or x_port is None or x_port < until:
+            return
+        self._tail_until_ns = None
+        self._apply_output_volume()
+
+    def _apply_output_volume(self) -> None:
+        """The user's volume and mute, with the tail mute on top (it never unmutes a user mute)."""
+        tail = self._tail_until_ns is not None
+        user = self._feeder_volume
+        if user is None:
+            _apply_mute_to(self._sink, tail)
+        else:
+            _apply_volume_to(self._sink, (user[0], user[1] or tail))
 
     def _apply(self, out: PlayoutOutput, engine: PlayoutEngine, cmd: tuple[Any, ...]) -> None:
         kind = cmd[0]
         if kind == "submit":
             engine.submit(cmd[1], cmd[2])
         elif kind == "clear":
-            engine.clear()
+            self._tail_until_ns = engine.clear() + TAIL_MUTE_MARGIN_NS
+            self._apply_output_volume()
         elif kind == "resync":
             engine.resync(cmd[1])
             with self._pub_lock:
@@ -491,7 +518,8 @@ class PlayoutPlayer:
             )
             self._input_format_set = True
         elif kind == "volume":
-            _apply_volume_to(self._sink, (cmd[1], cmd[2]))
+            self._feeder_volume = (cmd[1], cmd[2])
+            self._apply_output_volume()
 
     def _feed(self, out: PlayoutOutput, engine: PlayoutEngine, now_us: float) -> None:
         """Write blocks until appsrc holds ``LEAD_MS`` (bounded per tick and by the elapsed time)."""
@@ -512,7 +540,7 @@ class PlayoutPlayer:
     def _push(self, out: PlayoutOutput, block: Block) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
 
-        buf = Gst.Buffer.new_wrapped(bytes(block.pcm))
+        buf = Gst.Buffer.new_wrapped(block.pcm)  # already bytes (scheduler joins the parts)
         buf.pts = block.x0_ns
         buf.duration = block.duration_ns
         result = out.appsrc.emit("push-buffer", buf)
@@ -607,6 +635,11 @@ def _src_latency_ns(element: Any) -> int | None:
         return None
     _live, min_latency, _max_latency = query.parse_latency()
     return int(min_latency)
+
+
+def _apply_mute_to(sink: Any, muted: bool) -> None:
+    if sink is not None and sink.find_property("mute") is not None:
+        sink.set_property("mute", muted)
 
 
 def _apply_volume_to(sink: Any, volume: tuple[float, bool]) -> None:
