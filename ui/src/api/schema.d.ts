@@ -3540,6 +3540,8 @@ export interface components {
             clock_uncertainty_ms: number | null;
             /** Declared Lead Time Ms */
             declared_lead_time_ms: number | null;
+            /** Effective Required Lead Time Ms */
+            effective_required_lead_time_ms: number | null;
             /** Last Reanchor At */
             last_reanchor_at: number | null;
             /** Last Sync Error Ms */
@@ -3554,6 +3556,7 @@ export interface components {
             pa_latency_ms: number | null;
             /** Playback Position Us */
             playback_position_us: number | null;
+            playout: components["schemas"]["PlayoutTiming"] | null;
             /**
              * Reanchor Count
              * @default 0
@@ -4225,6 +4228,92 @@ export interface components {
             volume_controller?: ("pa" | "sendspin") | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * PlayoutTiming
+         * @description The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.
+         */
+        PlayoutTiming: {
+            /** Clock Slew Ppm */
+            clock_slew_ppm: number | null;
+            /** Correction Ppm */
+            correction_ppm: number | null;
+            /** Corrections Per S */
+            corrections_per_s: number | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
+            /** Error Ms */
+            error_ms: number | null;
+            /** Error P95 Ms */
+            error_p95_ms: number | null;
+            /** Error Slope Ms Per S */
+            error_slope_ms_per_s: number | null;
+            /** Fallback Reason */
+            fallback_reason: string | null;
+            /** Hold Left S */
+            hold_left_s: number | null;
+            /** Hold Reason */
+            hold_reason: string | null;
+            /** Host Latency Ms */
+            host_latency_ms: number | null;
+            /**
+             * Inserted
+             * @default 0
+             */
+            inserted: number;
+            /**
+             * Jumps
+             * @default 0
+             */
+            jumps: number;
+            /** Last Jump At */
+            last_jump_at: string | null;
+            /** Last Jump Ms */
+            last_jump_ms: number | null;
+            /** Last Jump Reason */
+            last_jump_reason: string | null;
+            /** Late Start Ms */
+            late_start_ms: number | null;
+            /**
+             * Mode
+             * @default off
+             */
+            mode: string;
+            /** Pa Latency Ms */
+            pa_latency_ms: number | null;
+            /**
+             * Pa Steps
+             * @default 0
+             */
+            pa_steps: number;
+            /**
+             * Rejected Samples
+             * @default 0
+             */
+            rejected_samples: number;
+            /** Sink Rate Ppm */
+            sink_rate_ppm: number | null;
+            /** State */
+            state: string | null;
+            /** Trim Us */
+            trim_us: number | null;
+            /**
+             * Underruns
+             * @default 0
+             */
+            underruns: number;
+            /**
+             * Warm
+             * @default false
+             */
+            warm: boolean;
+            /** Warm S */
+            warm_s: number | null;
+            /** Warmup S */
+            warmup_s: number | null;
         };
         /** PowerIn */
         PowerIn: {

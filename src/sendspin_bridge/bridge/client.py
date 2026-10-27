@@ -426,6 +426,9 @@ class DeviceStatus:
     clock_uncertainty_ms: float | None = None
     clock_slew_ppm: float | None = None
     pa_latency_ms: float | None = None
+    # Playout engine snapshot (dict) and the lead it needs; None while playout is off.
+    playout: dict | None = None
+    effective_required_lead_time_ms: int | None = None
     timing_sampled_at: str | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250

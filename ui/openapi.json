@@ -3105,6 +3105,17 @@
             ],
             "title": "Declared Lead Time Ms"
           },
+          "effective_required_lead_time_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Required Lead Time Ms"
+          },
           "last_reanchor_at": {
             "anyOf": [
               {
@@ -3156,6 +3167,16 @@
               }
             ],
             "title": "Playback Position Us"
+          },
+          "playout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayoutTiming"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reanchor_count": {
             "default": 0,
@@ -3237,6 +3258,8 @@
           "required_lead_time_ms",
           "min_buffer_ms",
           "declared_lead_time_ms",
+          "effective_required_lead_time_ms",
+          "playout",
           "reanchoring",
           "reanchor_count",
           "reanchor_count_session",
@@ -4827,6 +4850,303 @@
           "backend"
         ],
         "title": "Player",
+        "type": "object"
+      },
+      "PlayoutTiming": {
+        "description": "The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.",
+        "properties": {
+          "clock_slew_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Slew Ppm"
+          },
+          "correction_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Ppm"
+          },
+          "corrections_per_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrections Per S"
+          },
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "error_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Ms"
+          },
+          "error_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error P95 Ms"
+          },
+          "error_slope_ms_per_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Slope Ms Per S"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "hold_left_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Left S"
+          },
+          "hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason"
+          },
+          "host_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Latency Ms"
+          },
+          "inserted": {
+            "default": 0,
+            "title": "Inserted",
+            "type": "integer"
+          },
+          "jumps": {
+            "default": 0,
+            "title": "Jumps",
+            "type": "integer"
+          },
+          "last_jump_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jump At"
+          },
+          "last_jump_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jump Ms"
+          },
+          "last_jump_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jump Reason"
+          },
+          "late_start_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Late Start Ms"
+          },
+          "mode": {
+            "default": "off",
+            "title": "Mode",
+            "type": "string"
+          },
+          "pa_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pa Latency Ms"
+          },
+          "pa_steps": {
+            "default": 0,
+            "title": "Pa Steps",
+            "type": "integer"
+          },
+          "rejected_samples": {
+            "default": 0,
+            "title": "Rejected Samples",
+            "type": "integer"
+          },
+          "sink_rate_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sink Rate Ppm"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "trim_us": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trim Us"
+          },
+          "underruns": {
+            "default": 0,
+            "title": "Underruns",
+            "type": "integer"
+          },
+          "warm": {
+            "default": false,
+            "title": "Warm",
+            "type": "boolean"
+          },
+          "warm_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warm S"
+          },
+          "warmup_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warmup S"
+          }
+        },
+        "required": [
+          "mode",
+          "state",
+          "error_ms",
+          "error_p95_ms",
+          "error_slope_ms_per_s",
+          "correction_ppm",
+          "corrections_per_s",
+          "inserted",
+          "dropped",
+          "jumps",
+          "last_jump_ms",
+          "last_jump_reason",
+          "last_jump_at",
+          "underruns",
+          "pa_steps",
+          "rejected_samples",
+          "host_latency_ms",
+          "pa_latency_ms",
+          "sink_rate_ppm",
+          "clock_slew_ppm",
+          "warm",
+          "warm_s",
+          "warmup_s",
+          "hold_reason",
+          "hold_left_s",
+          "late_start_ms",
+          "trim_us",
+          "fallback_reason"
+        ],
+        "title": "PlayoutTiming",
         "type": "object"
       },
       "PowerIn": {
