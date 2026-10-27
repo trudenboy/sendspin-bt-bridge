@@ -907,3 +907,48 @@ probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-ga
   the Lenco LS-500 does not reproduce the click track at all (likely an amplifier noise gate on sparse
   clicks); the group-tuning wizard was unreliable on the stand (not heard / unstable / lost the bridge
   connection through HA ingress and lost the session on reload).
+
+## Stage 2 gate experiment (2026-10-27/28, HAOS stand, 3.1.0-beta.16)
+
+Design review before Stage 2 (warm stream): first prove that a warm stream addresses the variance.
+Method: ENEBY20 (HAOS bridge) vs a local reference bridge in `off` on the desktop, one sync
+group, MA mutes alternating the solo, headset microphone + the coherent click estimator; 8
+cycles per mode. In the last two series a `btmon` capture on the HAOS add-on gave the time each
+click left over the air (SBC scale factors folded over the click cycle, RTP media time mapped to
+the send time of its packet).
+
+| Mode | Player | ENEBY20 − reference spread | σ |
+|---|---|---|---|
+| Cold start (stop, ~6.5 s gap, new stream) | measure | 136 ms (two outliers) / 52 ms (repeat) | 44 / 15 |
+| "Seek" (MA sends stream end + start, ~0.2 s gap) | measure | 33 ms | 12 |
+| Bluetooth reconnect | measure | 18 ms | 5 |
+| Cold start | off | 40 ms | 12 |
+
+Findings:
+- **The A2DP stream to the speaker never stops between our streams.** On HAOS (PulseAudio 17,
+  no `module-suspend-on-idle`) the bluez sink keeps sending silence in the gaps; the HCI capture
+  shows continuous media packets across a cold gap. Only our PulseAudio stream is recreated.
+- **The speaker's latency from the air to the sound is stable**: 203 ms, σ 3.1 ms over 8 cold
+  starts; 192 ms, σ 4.8 ms over 8 reconnects (the medians include the desktop↔HAOS clock offset,
+  which may differ between series). One acoustic calibration per speaker suffices.
+- **All of the start-to-start variance is host-side, before the air**: where a new stream lands in
+  the running Bluetooth stream. The measure engine sees part of it (residual error +7…+13 ms in
+  the slower starts, correlation 0.6 with the microphone) but leaves it inside the 20 ms dead band;
+  the rest is invisible to the pulsesink clock sensor.
+- AVDTP Delay Reporting is absent on both test speakers (no `MediaTransport1.Delay`); PulseAudio
+  17 ignores it anyway; PipeWire uses it (125 ms fallback when absent).
+
+Decisions (design review, 2026-10-28):
+- Stage 2 as planned (warm hold) is not needed for speaker stability. It shrinks to one open
+  question: hosts that suspend the Bluetooth sink in gaps (WirePlumber's suspend timeout,
+  `module-suspend-on-idle`) restart AVDTP; if the speaker re-buffers then, keep the output alive or
+  document disabling the suspend. To be tested on a PipeWire stand.
+- New direction: an **air-time sensor** — know from the HCI monitor channel when our audio
+  actually left over the air (needs `CAP_NET_RAW`, already used for AVRCP correlation), match our
+  PCM envelope to the SBC scale-factor envelope, and correct the host-side placement against it;
+  plus one acoustic calibration of the speaker's air-to-sound latency. Prototype offline on music
+  first. SBC only (AAC/aptX/LDAC would need decoding); fall back to the pulsesink sensor without
+  `CAP_NET_RAW` or with other codecs.
+- The residual inside the measure dead band stays for Stage 3; the dead band is re-derived for the
+  new sensor's accuracy.
+- AVDTP delay reports: telemetry only (#559). LE Audio presentation delay: research track.
