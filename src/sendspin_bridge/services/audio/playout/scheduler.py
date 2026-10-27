@@ -48,9 +48,12 @@ class Block:
     x0_ns: int
     duration_ns: int
     program: bool  # any program frame in the block
+    # Corrections and jumps only; placement silence and late drops are not counted here.
     dropped: int  # frames removed by corrections or a jump
     inserted: int  # frames added by corrections or a jump
-    late_drop_us: float  # head of a placed chunk dropped because it was already due
+    # Audio dropped by a placement because it was already due: the head of the placed
+    # chunk, plus any chunk dropped whole because all of it was due.
+    late_drop_us: float
 
 
 class _Chunk:
@@ -89,6 +92,7 @@ class PlayoutScheduler:
         self._seg: tuple[int, float, SegmentKind] | None = None
         self._placement: str | None = "start"  # pending placement reason
         self._pending_silence: int | None = None  # silence frames a decided placement still owes
+        self._owed_insert = 0  # silence frames a negative jump still has to write
         self._expect_us: float | None = None  # play time of the frame after the last chunk
         self._decided = False  # the pending placement was already counted
         self._placed: _Chunk | None = None  # chunk aligned by the last placement
@@ -104,8 +108,7 @@ class PlayoutScheduler:
         if self._fmt is not None:
             self._epoch_x0_ns = self.x_w_ns
             self._epoch_frames = 0
-            if self._queue:
-                self._drop_queue("format")
+            self._drop_queue("format")  # queued bytes are in the old format; re-place the next chunk
         self._fmt = fmt
 
     def submit(self, play_time_us: int, pcm: bytes) -> None:
@@ -151,10 +154,15 @@ class PlayoutScheduler:
     ) -> Block:
         """One block at the write head. ``audible_us`` is the predicted RAW time at which the write
         head will leave the port (engine: t + (x_w − x_port)(1 + ρ̂)). Placement aligns the next
-        program frame to it exactly; ``rate``/``jump_us`` arrive in Stage 3."""
+        program frame to it exactly.
+
+        ``jump_us`` (None or 0.0 = no jump) is executed frame-exact at the write head: > 0 drops
+        that much audio (owed placement silence first, then queued program), < 0 inserts that
+        much ``fill``; the frames are reported in ``Block.dropped``/``inserted``. ``rate``
+        corrections arrive in Stage 3."""
         del now_us  # used by the corrections of Stage 3
-        if rate != 0.0 or jump_us is not None:
-            raise NotImplementedError("rate corrections and jumps arrive in Stage 3")
+        if rate != 0.0:
+            raise NotImplementedError("rate corrections arrive in Stage 3")
         fmt = self._require_format()
         fs = fmt.sample_rate
         fb = fmt.frame_bytes()
@@ -163,10 +171,27 @@ class PlayoutScheduler:
         parts: list[bytes | memoryview] = []
         program = False
         late_drop_frames = 0
+        dropped = 0
+        inserted = 0
+        if jump_us:
+            jump = round(jump_us * fs / _US_PER_S)
+            if jump > 0:
+                dropped = self._jump_drop(jump, fs)
+            elif jump < 0:
+                self._owed_insert += -jump
         i = 0  # frames written in this block
 
         while i < n_block:
             room = n_block - i
+            if self._owed_insert:
+                n = min(room, self._owed_insert)
+                self._write_silence(parts, i, n, audible_us)
+                i += n
+                inserted += n
+                self._owed_insert -= n
+                if not self._owed_insert:
+                    self._resume_program(i)
+                continue
             if self._pending_silence is not None:
                 n = min(room, self._pending_silence)
                 self._write_silence(parts, i, n, audible_us)
@@ -214,8 +239,8 @@ class PlayoutScheduler:
             x0_ns=x0,
             duration_ns=self.x_w_ns - x0,
             program=program,
-            dropped=0,
-            inserted=0,
+            dropped=dropped,
+            inserted=inserted,
             late_drop_us=late_drop_frames * _US_PER_S / fs,
         )
 
@@ -263,6 +288,7 @@ class PlayoutScheduler:
         self._queue.clear()
         self._expect_us = None
         self._placed = None
+        self._owed_insert = 0
         self.request_placement(reason)
 
     def _write_silence(self, parts: list[bytes | memoryview], i: int, n: int, audible_us: float) -> None:
@@ -302,6 +328,35 @@ class PlayoutScheduler:
         chunk.pos += drop
         self._start_program(i, chunk)
         return drop
+
+    def _jump_drop(self, frames: int, fs: int) -> int:
+        """Drop ``frames`` at the write head; returns how many were actually dropped."""
+        left = frames
+        cancel = min(left, self._owed_insert)  # an unfinished insert is undone first
+        self._owed_insert -= cancel
+        left -= cancel
+        if self._pending_silence is not None:
+            n = min(left, self._pending_silence)
+            self._pending_silence -= n
+            left -= n
+            if self._pending_silence:
+                return frames - left - cancel
+            self._pending_silence = None
+        while left and self._queue:
+            chunk = self._queue[0]
+            n = min(left, chunk.frames - chunk.pos)
+            chunk.pos += n
+            left -= n
+            if chunk.pos == chunk.frames:
+                self._finish(self._queue.popleft(), fs)
+        self._resume_program(0)
+        return frames - left - cancel
+
+    def _resume_program(self, i: int) -> None:
+        """After a jump, schedule the next program frame at offset ``i`` with its own time."""
+        if self._queue and self._placement is None and self._pending_silence is None and not self._owed_insert:
+            self._start_program(i, self._queue[0])
+            self._placed = self._queue[0]
 
     def _start_program(self, i: int, chunk: _Chunk) -> None:
         assert self._fmt is not None
