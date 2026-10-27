@@ -96,7 +96,7 @@ pipe = Gst.parse_launch(
 pipe.use_clock(Gst.SystemClock.obtain())
 src, sink = pipe.get_by_name("src"), pipe.get_by_name("sink")
 pipe.set_state(Gst.State.PLAYING)
-block, pos, written = 1920, 0, 0
+block, pos, written = 480, 0, 0  # 480 frames = 10 ms at 48 kHz
 def feeder():
     global pos, written
     while pos < len(pcm):

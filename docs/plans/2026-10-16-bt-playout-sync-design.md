@@ -712,7 +712,18 @@ plan's script with the device, `buffer-time` and stream volume as arguments, 140
 sampled every 100 ms, first 2 s dropped. Items marked PENDING-STAND need the HAOS stand or the
 phone; the commands are at the end of this note.
 
-- **Audio clock on bluez5 (PA 17):** PENDING-STAND (E1).
+- **Audio clock on bluez5 (PA 17):** measured 2026-10-27 on HAOS (QEMU VM, 2 vCPU), ENEBY20
+  `bluez_sink…a2dp_sink` (SBC), `buffer-time` 600 ms, 140 s, while the speaker's sync group was
+  also playing music through the bridge. `provide_clock()` non-NULL within the first 0.1 s; `A`
+  monotonic over all 1361 samples; rate −7.6 ppm vs RAW (inside ±500). Noise σ of `A − t` after
+  the linear fit **4.0 ms** (1 s mean 3.2, 5 s mean 2.7, 10 s mean 2.2 ms) — the same sawtooth as
+  on pipewire-pulse (49 steps > 2 ms, median 2.2 ms), slightly smaller. Bracket p99 **4.3 ms**,
+  max 54.5 ms: reading the clock on the VM is much slower than locally (p99 39–79 µs), partly
+  GIL contention with the feeder thread in the probe. Consequences: the windowed-fit observer from
+  the local note is required on PA 17 too; the trim deadband ≥ 2 ms stands; the observer must
+  reject samples with a bracket above ~1 ms instead of trusting each read.
+  Probe fix: the plan's script pushes 1920-frame (40 ms) blocks labelled 10 ms, so `written`
+  and `F` read 4× slow; `A` is unaffected. Use 480-frame blocks for the fill analysis.
 - **Audio clock on pipewire-pulse:** available: yes. `provide_clock()` returns
   `GstPulseSinkClock` (`GstAudioClock`) within 0.0–0.13 s of `PLAYING` in all 10 runs; `A`
   never went backwards. Single-stream runs, rate of `A` vs RAW: analog −0.1 / +10.9 / −15.8 ppm
@@ -744,7 +755,15 @@ phone; the commands are at the end of this note.
   and (ENEBY20) `Volume`, but no `Delay` property: neither speaker reports delay on this stack,
   so the per-speaker offset has to come from the phone measurement here. PipeWire:
   PENDING-STAND (Docker VM 105 with a delay-reporting speaker).
-- **group/update while a sync group is powered / off:** PENDING-STAND (E5). The local bridge log
+- **group/update while a sync group is powered / off:** measured 2026-10-27 with MA dev sync group
+  "Beta" = ENEBY20 + Lenco LS-500 (both bridge players). Powered and playing: both daemons get
+  the **same** `group_id` (`291a170b…`) with `name` = the leader's player name (ENEBY20), not the
+  sync group's name. Power off: both get `state=STOPPED` on that id, then the non-leader gets a
+  fresh solo id with its own name (`8904c94c…`). Power on: the non-leader first gets another fresh
+  solo id (`1db35897…`), then joins `291a170b…` again; `PLAYING` follows within ~40 ms. So the
+  leader's group id is stable across power cycles, solo ids are per session, and "in an active
+  sync group" is detectable as `group name ≠ own player name` or a group id shared with another
+  bridge player. Earlier local note: the local bridge log
   has only solo players: `Group update: id='64ae3ccc-…'` and `id='77efd219-…'`, each with
   `name` = the player's own name and `state=STOPPED`. So an ungrouped player does receive a
   per-player group id. That id is not its player id in `config.json`. The powered sync group case
