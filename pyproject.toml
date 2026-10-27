@@ -38,7 +38,7 @@ dependencies = [
 # Pin the project resolver used by contributors and CI to the same version as
 # Docker and pre-commit. The armv7 Docker fallback installs this version from
 # PyPI because the GHCR image manifest lacks linux/arm/v7.
-required-version = "==0.12.5"
+required-version = "==0.13.5"
 
 constraint-dependencies = [
     # piwheels publishes CPython 3.13 armv7 binary wheels for yarl 1.24.2,
