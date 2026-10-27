@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `PLAYOUT_SYNC=measure` no longer drops 20–30 ms of audio every 15–20 s
+  on PipeWire: the sawtooth of the PipeWire output clock was read as a
+  timing error. A steady correction now needs the error to persist for
+  5 s, so real drift is still corrected
+  ([#556](https://github.com/trudenboy/sendspin-bt-bridge/issues/556)).
+- `PLAYOUT_SYNC=measure` never applies a steady correction larger than
+  50 ms: a larger one is refused and logged as a warning instead of
+  dropping up to half a second of audio
+  ([#556](https://github.com/trudenboy/sendspin-bt-bridge/issues/556)).
+- After an underrun, `PLAYOUT_SYNC=measure` measures the timing error
+  from a fresh baseline once playback has settled, so the output clock
+  catching up after the underrun no longer causes a large false
+  correction that left the speaker hundreds of ms early
+  ([#556](https://github.com/trudenboy/sendspin-bt-bridge/issues/556)).
+
 ## [3.1.0-beta.15] - 2026-10-27
 
 ### Fixed
