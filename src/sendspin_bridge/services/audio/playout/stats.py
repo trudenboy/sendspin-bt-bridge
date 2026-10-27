@@ -138,10 +138,9 @@ class PlayoutStats:
         self.rejected_samples += 1
 
     def reset_window(self) -> None:
-        """Forget the error and sink-rate windows (counters are kept)."""
+        """Forget the error window (counters and the sink-rate trend are kept)."""
         self._errors.clear()
         self._error_trend.reset()
-        self._port_trend.reset()
 
     def _p95_ms(self) -> float | None:
         if not self._errors:

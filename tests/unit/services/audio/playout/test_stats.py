@@ -109,3 +109,11 @@ def test_stats_empty_snapshot():
     assert snap["sink_rate_ppm"] is None
     assert snap["jumps"] == 0
     assert snap["corrections_per_s"] == 0.0
+
+
+def test_stats_sink_rate_survives_reset_window():
+    st = PlayoutStats()
+    for i in range(61):
+        st.port(float(i), 100.0 * i)
+    st.reset_window()
+    assert st.snapshot()["sink_rate_ppm"] == pytest.approx(100.0)
