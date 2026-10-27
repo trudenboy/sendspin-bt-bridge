@@ -278,6 +278,7 @@ def main() -> None:
             "SENDSPIN_OWN_SERVER_ONLY",
             "COMPENSATE_OUTPUT_LATENCY",
             "PLAYOUT_DIAG",
+            "PLAYOUT_SYNC",
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
             "EXPERIMENTAL_PA_MODULE_RELOAD",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",

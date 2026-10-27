@@ -107,6 +107,14 @@ def test_zero_latency_preserved(tmp_path):
     assert cfg["PULSE_LATENCY_MSEC"] == 0
 
 
+def test_playout_sync_preserved_across_addon_restart(tmp_path):
+    _write_json(tmp_path / "options.json", _minimal_options())
+    _write_json(tmp_path / "config.json", {"PLAYOUT_SYNC": "loop"})
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    assert _read_json(tmp_path / "config.json")["PLAYOUT_SYNC"] == "loop"
+
+
 def test_default_latency(tmp_path):
     """When pulse_latency_msec is absent, default to 600."""
     opts = _minimal_options()

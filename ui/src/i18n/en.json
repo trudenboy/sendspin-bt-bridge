@@ -853,6 +853,15 @@
         "label": "Compensate the audio buffer latency",
         "help": "Play on schedule whatever the PulseAudio latency is. Off restores the older timing, behind by that latency."
       },
+      "PLAYOUT_SYNC": {
+        "label": "Playout sync",
+        "help": "Off keeps the plain audio output. Measure only measures the playout error; loop also corrects it. Takes effect after the speakers restart.",
+        "options": {
+          "off": "Off",
+          "measure": "Measure only",
+          "loop": "Measure and correct"
+        }
+      },
       "PLAYOUT_DIAG": {
         "label": "Playback clock diagnostics",
         "help": "Also log the speaker sink's own clock rate in the minute-by-minute Clock diag line. Playback is unchanged."

@@ -1258,6 +1258,24 @@
             "description": "Playback clock diagnostics: let the audio sink provide its own clock so the log's Clock diag line also reports the sink's audio clock rate. Playback timing is unchanged. The SENDSPIN_PLAYOUT_DIAG environment variable overrides it.",
             "title": "Playout Diag"
           },
+          "PLAYOUT_SYNC": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "measure",
+                  "loop"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "off",
+            "description": "PulseAudio latency in milliseconds.",
+            "title": "Playout Sync"
+          },
           "PREFER_SBC_CODEC": {
             "anyOf": [
               {
@@ -1283,7 +1301,6 @@
               }
             ],
             "default": 600,
-            "description": "PulseAudio latency in milliseconds.",
             "title": "Pulse Latency Msec"
           },
           "PULSE_SINK_RESET_ON_START": {

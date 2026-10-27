@@ -114,6 +114,8 @@ DEFAULT_CONFIG = {
     "HA_ADAPTER_AREA_MAP": {},
     "TZ": "Australia/Melbourne",
     "PULSE_LATENCY_MSEC": 600,
+    # BT playout sync engine (see the playout sync spec): off = 3.1.0-beta.5 behaviour.
+    "PLAYOUT_SYNC": "off",
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
     # v2.70.0-rc.2 (#263) — was 0 (unlimited) prior; new default is 5 so

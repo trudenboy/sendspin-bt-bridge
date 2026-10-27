@@ -75,6 +75,7 @@ _GLOBAL_RESTART_FIELDS: frozenset[str] = frozenset(
         "SENDSPIN_OWN_SERVER_ONLY",
         "BRIDGE_NAME",
         "PULSE_LATENCY_MSEC",
+        "PLAYOUT_SYNC",
         "PREFER_SBC_CODEC",
         "BT_CHECK_INTERVAL",
         "BT_MAX_RECONNECT_FAILS",

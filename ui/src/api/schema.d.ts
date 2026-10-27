@@ -2845,6 +2845,12 @@ export interface components {
              */
             PLAYOUT_DIAG?: boolean | null;
             /**
+             * Playout Sync
+             * @description PulseAudio latency in milliseconds.
+             * @default off
+             */
+            PLAYOUT_SYNC?: ("off" | "measure" | "loop") | null;
+            /**
              * Prefer Sbc Codec
              * @description Prefer SBC codec over AAC/aptX for Bluetooth audio.
              * @default false
@@ -2852,7 +2858,6 @@ export interface components {
             PREFER_SBC_CODEC?: boolean | null;
             /**
              * Pulse Latency Msec
-             * @description PulseAudio latency in milliseconds.
              * @default 600
              */
             PULSE_LATENCY_MSEC?: number | null;
