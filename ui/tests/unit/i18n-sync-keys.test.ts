@@ -41,7 +41,7 @@ describe('sync texts', () => {
 
 describe('playout texts', () => {
   const keys = [
-    'device.chips.sync.playout', 'device.chips.sync.playoutTitle', 'device.chips.sync.warming', 'device.chips.sync.warmingTitle',
+    'device.chips.sync.playout', 'device.chips.sync.playoutTitle', 'device.chips.sync.warming', 'device.chips.sync.warmingTitle', 'device.chips.sync.jumpsTitle',
     'timing.playout.title', 'timing.playout.fallback', 'timing.playout.rows.error', 'timing.playout.rows.clockSlew', 'timing.playout.rows.warm',
   ]
   it('has the playout chip and timing keys in English and Russian', () => {

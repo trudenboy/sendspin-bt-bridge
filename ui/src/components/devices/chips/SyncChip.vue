@@ -56,8 +56,11 @@ const labelText = computed(() => {
   return t('device.chips.sync.label')
 })
 const dash = (n: number | null) => (n == null ? '—' : String(n))
+const isPlayout = computed(() => badge.value?.kind === 'playout' || badge.value?.kind === 'warming')
 const countTitle = computed(() =>
-  badge.value
+  badge.value && isPlayout.value
+    ? t('device.chips.sync.jumpsTitle', { count: badge.value.count })
+    : badge.value
     ? t('device.chips.sync.countTitle', {
         count: badge.value.count,
         m5: dash(badge.value.count5m),
@@ -84,7 +87,7 @@ const countTitle = computed(() =>
         <span v-if="badge.errorMs != null" class="tabular-nums opacity-80">{{ t('device.chips.sync.errorMs', { ms: badge.errorMs }) }}</span>
       </SbBadge>
     </span>
-    <span v-if="badge.count > 0" data-chip="reanchors" class="inline-flex" :title="countTitle">
+    <span v-if="badge.count > 0" :data-chip="isPlayout ? 'jumps' : 'reanchors'" class="inline-flex" :title="countTitle">
       <SbBadge :tone="badge.countTone" size="sm"><span class="tabular-nums">{{ t('device.chips.sync.count', { count: badge.count }) }}</span></SbBadge>
     </span>
   </template>

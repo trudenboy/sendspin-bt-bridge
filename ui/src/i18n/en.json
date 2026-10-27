@@ -121,7 +121,8 @@
         "playout": "Playout",
         "playoutTitle": "Measured playout error at the speaker output",
         "warming": "Warming {s} s",
-        "warmingTitle": "Stream warming up; playout measurement ready in {s} s"
+        "warmingTitle": "Stream warming up; playout measurement ready in {s} s",
+        "jumpsTitle": "Playout jumps: {count} this session"
       },
       "signal": {
         "value": "{value} Δ dB",

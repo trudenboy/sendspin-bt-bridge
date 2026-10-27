@@ -68,6 +68,11 @@ describe('syncBadge', () => {
       expect(syncBadge(playout({ error_ms: 12 }))).toMatchObject({ kind: 'playout', tone: 'error', errorMs: 12 })
     })
 
+    it('tones the jump count at the 10 / 11 boundary', () => {
+      expect(syncBadge(playout({ jumps: 10 }))).toMatchObject({ count: 10, countTone: 'success' })
+      expect(syncBadge(playout({ jumps: 11 }))).toMatchObject({ count: 11, countTone: 'warning' })
+    })
+
     it('says warming with the seconds left until the stream is warm', () => {
       expect(syncBadge(playout({ warm: false, warm_s: 25 }))).toMatchObject({ kind: 'warming', tone: 'neutral', warmInS: 35 })
     })
