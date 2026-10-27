@@ -62,3 +62,18 @@ def test_device_timing_carries_the_declared_lead_from_the_status():
     device = Device.from_status({"player_name": "ENEBY Portable", "declared_lead_time_ms": 450})
 
     assert device.timing.declared_lead_time_ms == 450
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("config", "mode"), [({}, "off"), ({"PLAYOUT_SYNC": "measure"}, "measure")])
+async def test_the_playout_sync_mode_reaches_the_daemon(monkeypatch, config, mode):
+    params = await _spawn_params(monkeypatch, config)
+
+    assert params["playout"] == {"mode": mode}
+
+
+def test_the_daemon_playout_status_passes_the_ipc_allowlist():
+    from sendspin_bridge.bridge.client import _IPC_ALLOWED_KEYS
+
+    assert "playout" in _IPC_ALLOWED_KEYS
+    assert "effective_required_lead_time_ms" in _IPC_ALLOWED_KEYS

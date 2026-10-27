@@ -319,6 +319,21 @@ async def _read_pa_latency_ms() -> float | None:
     return await read_own_stream_latency_ms(os.getpid())
 
 
+# How often ``status["playout"]`` is refreshed in ``measure``/``loop``.
+_PLAYOUT_STATUS_PLAYING_S = 1.0
+_PLAYOUT_STATUS_IDLE_S = 5.0
+
+
+def _read_playout(audio_handler: object) -> dict | None:
+    """The engine's snapshot from ``metrics()["playout"]``; None when the player has none."""
+    metrics_fn = getattr(audio_handler, "metrics", None)
+    if not callable(metrics_fn):
+        return None
+    metrics = metrics_fn()
+    playout = metrics.get("playout") if isinstance(metrics, dict) else None
+    return dict(playout) if isinstance(playout, dict) else None
+
+
 async def _timing_telemetry_watcher(
     daemon,
     status: StatusStore | dict,
@@ -334,6 +349,10 @@ async def _timing_telemetry_watcher(
     failure_reported = False
     slew = _make_slew_estimator()
     next_pa_latency_at = 0.0
+    playout_on = getattr(getattr(daemon, "_args", None), "playout_mode", "off") in ("measure", "loop")
+    next_playout_at = 0.0
+    fell_back = False
+    playout_error_ms: float | None = None
     while not stop_event.is_set():
         try:
             try:
@@ -342,6 +361,35 @@ async def _timing_telemetry_watcher(
             except Exception as exc:
                 logger.debug("clock slew estimate failed: %s", exc)
                 slew_ppm = None
+            playout_changed = False
+            if playout_on:
+                # The engine's snapshot (1 s while playing, 5 s otherwise) and its
+                # fallback, checked every tick. After a fallback the legacy player
+                # has no snapshot: the last one (state "fallback") stays.
+                try:
+                    playout = _read_playout(getattr(daemon, "_audio_handler", None))
+                    if playout is None:
+                        playout_error_ms = None
+                    elif playout.get("state") == "fallback" and not fell_back:
+                        fell_back = True
+                        playout_error_ms = None
+                        _patch_status(status, {"playout": playout})
+                        playout_changed = True
+                        try:
+                            daemon.fall_back_to_legacy(str(playout.get("fallback_reason") or "playout engine fallback"))
+                        except Exception as exc:
+                            logger.warning("Falling back to the legacy player failed: %s", exc)
+                    elif time.monotonic() >= next_playout_at:
+                        playing = bool(status.get("playing"))
+                        next_playout_at = time.monotonic() + (
+                            _PLAYOUT_STATUS_PLAYING_S if playing else _PLAYOUT_STATUS_IDLE_S
+                        )
+                        error = playout.get("error_ms")
+                        playout_error_ms = float(error) if isinstance(error, int | float) else None
+                        _patch_status(status, {"playout": playout, "playback_sync_error_ms": playout_error_ms})
+                        playout_changed = True
+                except Exception as exc:
+                    logger.debug("playout status update failed: %s", exc)
             pa_latency_ms: float | None = None
             if status.get("playing") and time.monotonic() >= next_pa_latency_at:
                 next_pa_latency_at = time.monotonic() + 1.0
@@ -351,12 +399,15 @@ async def _timing_telemetry_watcher(
                     logger.debug("PulseAudio latency read failed: %s", exc)
             audio_handler = getattr(daemon, "_audio_handler", None)
             client = getattr(daemon, "_client", None)
-            changed = False
+            changed = playout_changed
             if audio_handler is not None:
-                changed = _observe_structured_reanchor(audio_handler, status)
+                changed = _observe_structured_reanchor(audio_handler, status) or changed
             now = time.monotonic()
             if audio_handler is not None and client is not None and now >= next_metrics_at:
                 snapshot = collect_timing_snapshot(audio_handler, client)
+                if playout_error_ms is not None:
+                    # In measure/loop the sync error is the engine's.
+                    snapshot["playback_sync_error_ms"] = playout_error_ms
                 if slew_ppm is not None:
                     snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
                 if pa_latency_ms is not None:
@@ -591,6 +642,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 setter(sent)
                 setattr(daemon, f"_{attr}", value_ms)
                 daemon._bridge_status[attr] = round(value_ms)
+                effective = getattr(daemon, "_effective_lead_ms", None)
+                if attr == "required_lead_time_ms" and callable(effective):
+                    daemon._bridge_status["effective_required_lead_time_ms"] = round(effective())
                 daemon._notify()
                 if getattr(client, "connected", False):
                     volume = int(getattr(daemon, "_volume", 100))
@@ -713,6 +767,13 @@ async def _run(params: dict) -> None:
     if not str(pairing_path).startswith(str(config_dir)):
         pairing_path = config_dir / "pairing" / "default.json"
 
+    # PLAYOUT_SYNC (the parent's ``playout`` dict); anything unknown runs the legacy player.
+    raw_playout = params.get("playout")
+    playout_params: dict | None = raw_playout if isinstance(raw_playout, dict) else None
+    playout_mode = str((playout_params or {}).get("mode", "off"))
+    if playout_mode not in ("measure", "loop"):
+        playout_mode = "off"
+
     args = DaemonArgs(
         client_id=client_id,
         client_name=player_name,
@@ -732,6 +793,8 @@ async def _run(params: dict) -> None:
             "SENDSPIN_COMPENSATE_OUTPUT_LATENCY", default=bool(params.get("compensate_output_latency", True))
         ),
         playout_diag=_env_flag("SENDSPIN_PLAYOUT_DIAG", default=bool(params.get("playout_diag", False))),
+        playout_mode=playout_mode,
+        playout=playout_params,
     )
 
     status = StatusStore(

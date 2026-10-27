@@ -277,6 +277,8 @@ _IPC_ALLOWED_KEYS = frozenset(
         "required_lead_time_ms",
         "min_buffer_ms",
         "declared_lead_time_ms",
+        "effective_required_lead_time_ms",
+        "playout",
         "pairing_pin",
         "pairing_window_open",
         "pairing_state",
@@ -2007,6 +2009,8 @@ class SendspinClient:
                             "own_server_only": bool(spawn_config.get("SENDSPIN_OWN_SERVER_ONLY", True)),
                             "compensate_output_latency": bool(spawn_config.get("COMPENSATE_OUTPUT_LATENCY", True)),
                             "playout_diag": bool(spawn_config.get("PLAYOUT_DIAG", False)),
+                            # PLAYOUT_SYNC: off (legacy player) / measure / loop.
+                            "playout": {"mode": spawn_config.get("PLAYOUT_SYNC", "off")},
                         }
                     )
                 )
