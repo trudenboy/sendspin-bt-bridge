@@ -256,3 +256,16 @@ def test_taps_alone_in_a_short_window_are_not_heard(duration_s, seed):
     # seeds are ones a gate of two clicks and quality 1.5 accepted (a phase out of nothing)
     rec = Recording("a", 20.0 + seed * 1.37, SR, _pcm(_taps(round(duration_s * SR), seed)))
     assert est.estimate(rec).status == "not_heard"
+
+
+@pytest.mark.parametrize(
+    ("duration_s", "snr_db", "start_time_s"),
+    [(5.9, 8.0, 21.6), (5.9, 6.0, 30.1), (18.0, 6.0, 23.0)],
+    ids=["device_point_8db", "device_point_6db", "clicker_6db"],
+)
+def test_production_windows_in_a_noisy_room_are_measured(duration_s, snr_db, start_time_s):
+    # the wizard's windows: 5.9 s for the device point (7 s solo minus the settle and tail), up to 18 s otherwise
+    rec = _window(lag_s=0.31, start_time_s=start_time_s, duration_s=duration_s, snr_db=snr_db, seed=11)
+    m = est.estimate(rec)
+    assert m.status == "ok", m
+    assert _err_ms(m.phase_ms, 310.0) <= 1.0

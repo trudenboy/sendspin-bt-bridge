@@ -483,15 +483,22 @@ def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
     """The per-click estimate where it holds (the most precise on a clean recording); where it does not hear the
     clicks, the coherent estimate when that measures them (status ok).
 
-    A per-click verdict on clicks it did find stands: ``unstable`` (they disagree: the coherent sum would average
-    a speaker whose timing moved into one confident number) and ``low_snr`` with the sequence found."""
+    A per-click ``unstable`` stands: its clicks were heard and disagree, and the coherent sum would average a
+    speaker whose timing moved into one confident number. A click sequence it found but judged too weak
+    (``low_snr``) is measured by the coherent path when the two agree within MAX_SPREAD_MS."""
     if not _valid(recording, epoch_s):
         return _invalid(recording.member)
     x = pcm_to_floats(recording.pcm)
     env = band_envelope(x, recording.sample_rate)
-    per_click, _weak_phase = _per_click(recording, epoch_s, x, env)
-    if per_click.status != "not_heard" or per_click.clicks >= MIN_CLICKS:
+    per_click, weak_phase = _per_click(recording, epoch_s, x, env)
+    if per_click.status != "not_heard":
         return per_click
     found = _coherent(x, env, recording.sample_rate, recording.start_time_s - epoch_s)
     coherent = _coherent_measurement(recording.member, found)
-    return coherent if coherent.status == "ok" else per_click
+    if coherent.status != "ok" or coherent.phase_ms is None:  # an unstable sum over weak clicks proves nothing
+        return per_click
+    if weak_phase is not None:
+        cycle_ms = ct.CYCLE_S * 1000.0
+        if abs((coherent.phase_ms - weak_phase + cycle_ms / 2) % cycle_ms - cycle_ms / 2) > MAX_SPREAD_MS:
+            return per_click
+    return coherent
