@@ -23,26 +23,39 @@ Completion crediting
 --------------------
 BR/EDR ACL flow control is per packet: every ACL fragment the host sends is
 later reported once in a *Number Of Completed Packets* (NOCP) event, in order
-per connection handle. Crediting NOCP counts FIFO to the fragments seen on the
-monitor therefore gives each fragment its completion time — provided the
-monitor saw every fragment still in the controller. A capture (or a live
-monitor socket) that starts mid-stream misses the fragments already queued, so
-the first NOCP credits belong to packets that are not in the capture and a
-naive FIFO would misalign every later packet by that unknown count.
+per connection handle. NOCP counts packets that were *transmitted or flushed*
+(Core v5.x Vol 4 Part E §7.7.19), so a completion time is "left the
+controller", not "acknowledged by the speaker". Crediting NOCP counts FIFO to
+the fragments seen on the monitor gives each fragment its completion time —
+but only if the parser's queue holds exactly the fragments the controller
+holds. A capture (or a live monitor socket) that starts while the controller
+still has K fragments queued is K short, and with a standing backlog (the
+controller transmitting as fast as the host sends) the parser's queue empties
+on every credit while the real one never does: a naive FIFO then hands every
+packet the completion of the packet K fragments earlier. Counts alone cannot
+tell K = 0 from K > 0, so alignment is trusted only on evidence that the
+controller's queue was empty:
 
-The tracker handles this conservatively:
+* a *Connection Complete* for the handle inside the capture (nothing can be
+  queued on a new connection), or
+* no ACL TX on the handle for more than :data:`IDLE_SYNC_S` while the parser's
+  queue is empty (the controller has transmitted or flushed everything; the
+  credits for pre-capture fragments arrived as "excess" and were discarded).
+  The start of the capture counts as the previous send. Leftover fragments in
+  the parser's queue block this on purpose: after a lost completion they stay
+  uncredited for good, but they are indistinguishable from a controller that
+  stalled with fragments queued, whose late credits would land on new ones.
+  Such a link stays out of step until it reconnects (or the controller resets).
 
-* A credit that arrives while no captured fragment is outstanding belongs to a
-  pre-capture fragment and is discarded ("excess"). This makes the queue
-  converge to the truth at the first moment the controller really drains.
-* Until then the alignment is unknown, so fragments sent before the link is
-  *in step* are credited with ``None``. The link counts as in step after
-  ``sync_drains`` consecutive NOCP events that left the queue empty without any
-  excess credit. A2DP drains between packets on a healthy link, so this costs
-  a few packets at the start of a capture; a link whose queue never drains
-  stays out of step and reports ``None`` (unknown) rather than a wrong time.
-* An excess credit after the link was in step (a fragment the monitor missed)
-  is counted in ``ParseStats.desyncs`` and drops the link out of step again.
+From there the link is *in step*. A credited time is only released once the
+parser's queue drains again while still in step; it must drain within
+:data:`DRAIN_DEADLINE_S` / :data:`DRAIN_DEADLINE_EVENTS` NOCP events, otherwise a
+completion was probably lost (or the controller holds a backlog) and the link
+leaves step. The link also leaves step on an excess credit while in step, on a
+growing btsnoop drop counter (on every link: the counter is not attributed to
+an index), and when its queue overflows :data:`MAX_IN_FLIGHT`. Anything not
+proven stays ``t_complete=None``; a lost TX record that is not reported as a
+drop is the one case these rules cannot catch.
 """
 
 from __future__ import annotations
@@ -54,7 +67,13 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from sendspin_bridge.services.bluetooth.hci_socket import MONITOR_ACL_TX_PKT, MONITOR_EVENT_PKT
+from sendspin_bridge.services.bluetooth.hci_socket import (
+    MONITOR_ACL_TX_PKT,
+    MONITOR_COMMAND_PKT,
+    MONITOR_DEL_INDEX,
+    MONITOR_EVENT_PKT,
+    MONITOR_NEW_INDEX,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -96,6 +115,13 @@ SBC_SAMPLING_RATES = (16000, 32000, 44100, 48000)
 SBC_BLOCKS = (4, 8, 12, 16)
 _SBC_CRC_POLY = 0x1D  # x^8 + x^4 + x^3 + x^2 + 1
 _SBC_CRC_INIT = 0x0F
+HCI_EVT_CONNECTION_COMPLETE = 0x03
+HCI_EVT_HARDWARE_ERROR = 0x10
+HCI_OP_RESET = 0x0C03
+IDLE_SYNC_S = 0.5  # no sends for this long with nothing outstanding: the controller's queue is empty
+DRAIN_DEADLINE_S = 1.0  # while in step the queue must empty at least this often ...
+DRAIN_DEADLINE_EVENTS = 64  # ... and within this many NOCP events for the link
+MAX_IN_FLIGHT = 256  # fragments outstanding per link before it is cleared
 BTSNOOP_MAGIC = b"btsnoop\0"
 BTSNOOP_DATALINK_MONITOR = 2001
 BTSNOOP_EPOCH_DELTA_US = 0x00DCDDB30F2F8000  # microseconds from 0000-01-01 to 1970-01-01
@@ -118,7 +144,11 @@ class ParseStats:
     dropped_malformed: int = 0  # SDU longer than declared or above the size bound
     sbc_errors: int = 0  # SBC payload whose frames stopped early (bad header / CRC / truncated)
     excess_completions: int = 0  # NOCP credits with no captured fragment outstanding
-    desyncs: int = 0  # excess credits after the link was in step
+    desyncs: int = 0  # times a link left step (excess credit, missed drain deadline)
+    monitor_drops: int = 0  # increases of the btsnoop cumulative drop counter
+    in_flight_overflows: int = 0  # links cleared because their queue exceeded MAX_IN_FLIGHT
+    links_evicted: int = 0  # idle links forgotten to make room for a new one
+    controller_resets: int = 0  # index added/removed, HCI_Reset, Hardware Error
 
 
 # ── monitor records / btsnoop ──────────────────────────────────────────────
@@ -132,6 +162,7 @@ class MonitorRecord:
     index: int
     opcode: int
     payload: bytes
+    drops: int = 0  # btsnoop cumulative drop counter at this record
 
 
 def read_btsnoop(path: str | Path, stats: ParseStats | None = None) -> Iterator[MonitorRecord]:
@@ -157,13 +188,13 @@ def read_btsnoop(path: str | Path, stats: ParseStats | None = None) -> Iterator[
                 return
             if len(head) < _BTSNOOP_RECORD.size:
                 break
-            _orig_len, incl_len, flags, _drops, ts = _BTSNOOP_RECORD.unpack(head)
+            _orig_len, incl_len, flags, drops, ts = _BTSNOOP_RECORD.unpack(head)
             if incl_len > _BTSNOOP_MAX_RECORD:
                 break
             data = f.read(incl_len)
             if len(data) < incl_len:
                 break
-            yield MonitorRecord((ts - BTSNOOP_EPOCH_DELTA_US) / 1e6, flags >> 16, flags & 0xFFFF, data)
+            yield MonitorRecord((ts - BTSNOOP_EPOCH_DELTA_US) / 1e6, flags >> 16, flags & 0xFFFF, data, drops)
     if stats is not None:
         stats.truncated_records += 1
 
@@ -215,9 +246,26 @@ def sbc_frame_length(mode: ChannelMode, subbands: int, blocks: int, bitpool: int
     return base + (bits + 7) // 8
 
 
+def _crc8_table() -> tuple[int, ...]:
+    table = []
+    for byte in range(256):
+        crc = byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ _SBC_CRC_POLY) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+        table.append(crc)
+    return tuple(table)
+
+
+_SBC_CRC_TABLE = _crc8_table()
+
+
 def _sbc_crc8(data: bytes, nbits: int) -> int:
+    """SBC CRC-8 over the first *nbits* bits of *data* (whole bytes by table, the tail bit by bit)."""
     crc = _SBC_CRC_INIT
-    for i in range(nbits):
+    whole = nbits >> 3
+    for byte in data[:whole]:
+        crc = _SBC_CRC_TABLE[crc ^ byte]
+    for i in range(whole * 8, nbits):
         bit = (data[i >> 3] >> (7 - (i & 7))) & 1
         top = crc >> 7
         crc = (crc << 1) & 0xFF
@@ -290,10 +338,11 @@ class RtpHeader:
     timestamp: int
     ssrc: int
     header_len: int  # fixed header + CSRC list + extension
+    padding: int = 0  # trailing padding bytes (P bit), already validated against the length
 
 
 def parse_rtp(data: bytes) -> RtpHeader | None:
-    """RFC 3550 fixed header (plus CSRC list and header extension), or ``None``."""
+    """RFC 3550 fixed header (plus CSRC list, header extension and padding), or ``None``."""
     if len(data) < RTP_HEADER_LEN or data[0] >> 6 != RTP_VERSION:
         return None
     b0, b1, seq, ts, ssrc = struct.unpack_from(">BBHII", data, 0)
@@ -305,7 +354,12 @@ def parse_rtp(data: bytes) -> RtpHeader | None:
         end += 4 + 4 * words
     if len(data) < end:
         return None
-    return RtpHeader(b1 & 0x7F, bool(b1 & 0x80), seq, ts, ssrc, end)
+    padding = 0
+    if b0 & 0x20:
+        padding = data[-1]
+        if padding == 0 or end + padding > len(data):
+            return None
+    return RtpHeader(b1 & 0x7F, bool(b1 & 0x80), seq, ts, ssrc, end, padding)
 
 
 # ── ACL reassembly ─────────────────────────────────────────────────────────
@@ -407,18 +461,25 @@ class MediaPacket:
     sbc_fragmented: bool = False  # one SBC frame split over several packets (frames not decoded)
 
 
-def _media_packet(t: float, index: int, handle: int, sdu: L2capSdu, stats: ParseStats) -> MediaPacket | None:
+def _media_packet(
+    t: float, index: int, handle: int, sdu: L2capSdu, stats: ParseStats, sbc_streams: set[int]
+) -> MediaPacket | None:
+    """*sbc_streams* holds the CIDs of this link already seen carrying SBC (for S=0 frame fragments)."""
     if sdu.cid < L2CAP_FIRST_DYNAMIC_CID:
         return None
     rtp = parse_rtp(sdu.payload)
-    if rtp is None or rtp.payload_type not in RTP_DYNAMIC_PT or len(sdu.payload) <= rtp.header_len:
+    if rtp is None or rtp.payload_type not in RTP_DYNAMIC_PT:
         return None
-    body = sdu.payload[rtp.header_len :]
+    body = sdu.payload[rtp.header_len : len(sdu.payload) - rtp.padding]
+    if not body:
+        return None
     codec, fragmented = "unknown", False
     frames: tuple[SbcFrame, ...] = ()
-    if len(body) > SBC_HEADER_LEN and body[1] == SBC_SYNCWORD:
-        # SBC media payload header: F S L RFA frame-count(4)
+    # SBC media payload header: F S L RFA frame-count(4)
+    starts_frame = len(body) > SBC_HEADER_LEN and body[1] == SBC_SYNCWORD
+    if starts_frame or (body[0] & 0x80 and not body[0] & 0x40 and sdu.cid in sbc_streams):
         codec = "sbc"
+        sbc_streams.add(sdu.cid)
         fragmented = bool(body[0] & 0x80)
         if not fragmented:
             frames, complete = parse_sbc_frames(body[1:])
@@ -449,18 +510,32 @@ class _Fragment:
 @dataclass
 class _Link:
     reassembler: AclReassembler
+    last_tx: float  # time of the previous ACL TX (the capture start before the first one)
+    last_seen: float
     in_flight: deque[_Fragment] = field(default_factory=deque)
     in_step: bool = False
-    drains: int = 0
+    held: list[MediaPacket] = field(default_factory=list)  # credited, waiting for the queue to drain
+    busy_since: float | None = None  # when the queue last went from empty to non-empty
+    events_since_drain: int = 0
+    sbc_streams: set[int] = field(default_factory=set)
+
+    @property
+    def idle(self) -> bool:
+        return not self.in_flight and not self.held and self.reassembler.buffered == 0
+
+
+def _is_hci_reset(opcode: int, payload: bytes) -> bool:
+    return opcode == MONITOR_COMMAND_PKT and len(payload) >= 2 and int.from_bytes(payload[:2], "little") == HCI_OP_RESET
 
 
 class A2dpAirParser:
     """Feed HCI monitor records; get back :class:`MediaPacket` as their fate is known.
 
-    A packet is returned by :meth:`feed` once the NOCP credit for its last
-    fragment arrived (or the link disconnected), so packets of one link come
-    out in send order. :meth:`flush` returns the rest with ``t_complete=None``.
-    Only host→controller traffic (ACL TX) is considered.
+    A packet is returned by :meth:`feed` once its completion is proven (the
+    queue drained after its last fragment was credited) or known to be
+    unknowable, so packets of one link come out in send order. :meth:`flush`
+    returns the rest with ``t_complete=None``. Only host→controller traffic
+    (ACL TX) is credited; see the module docstring for when completions count.
     """
 
     def __init__(
@@ -468,43 +543,123 @@ class A2dpAirParser:
         *,
         max_links: int = 64,
         max_sdu: int = L2CAP_MAX_SDU,
-        sync_drains: int = 2,
         stats: ParseStats | None = None,
     ) -> None:
         self.max_links = max_links
         self.max_sdu = max_sdu
-        self.sync_drains = sync_drains
         self.stats = stats if stats is not None else ParseStats()
         self._links: dict[tuple[int, int], _Link] = {}
+        self._start: float | None = None
+        self._drops = 0
 
-    def feed(self, t: float, index: int, opcode: int, payload: bytes) -> list[MediaPacket]:
+    def feed(self, t: float, index: int, opcode: int, payload: bytes, drops: int | None = None) -> list[MediaPacket]:
+        """One monitor record; *drops* is the btsnoop cumulative drop counter when known."""
+        if self._start is None:
+            self._start = t
+        out: list[MediaPacket] = []
+        if drops is not None and drops != self._drops:
+            if drops > self._drops:
+                self.stats.monitor_drops += 1
+                for link in self._links.values():
+                    out += self._leave_step(link, count=False)
+            self._drops = drops
         if opcode == MONITOR_ACL_TX_PKT:
-            self._acl_tx(t, index, payload)
-            return []
-        if opcode == MONITOR_EVENT_PKT:
-            return self._event(t, index, payload)
-        return []
+            out += self._acl_tx(t, index, payload)
+        elif opcode == MONITOR_EVENT_PKT:
+            out += self._event(t, index, payload)
+        elif opcode in (MONITOR_NEW_INDEX, MONITOR_DEL_INDEX) or _is_hci_reset(opcode, payload):
+            out += self._reset_index(index)
+        return out
 
     def flush(self) -> list[MediaPacket]:
         out: list[MediaPacket] = []
         for link in self._links.values():
-            out += [f.packet for f in link.in_flight if f.packet is not None]
-            link.in_flight.clear()
+            out += self._release(link, confirmed=False)
+            out += self._clear(link)
         return out
 
-    def _acl_tx(self, t: float, index: int, payload: bytes) -> None:
+    # -- link bookkeeping ---------------------------------------------------
+
+    @staticmethod
+    def _release(link: _Link, *, confirmed: bool) -> list[MediaPacket]:
+        held = link.held
+        link.held = []
+        return held if confirmed else [replace(p, t_complete=None) for p in held]
+
+    @staticmethod
+    def _clear(link: _Link, *, reassembly: bool = True) -> list[MediaPacket]:
+        out = [f.packet for f in link.in_flight if f.packet is not None]
+        link.in_flight.clear()
+        link.busy_since = None
+        link.events_since_drain = 0
+        if reassembly:
+            link.reassembler.reset()
+        return out
+
+    def _leave_step(self, link: _Link, *, count: bool = True) -> list[MediaPacket]:
+        if link.in_step and count:
+            self.stats.desyncs += 1
+        link.in_step = False
+        for frag in link.in_flight:
+            frag.in_step = False
+        return self._release(link, confirmed=False)
+
+    def _drop_link(self, key: tuple[int, int]) -> list[MediaPacket]:
+        link = self._links.pop(key, None)
+        if link is None:
+            return []
+        return self._release(link, confirmed=False) + self._clear(link)
+
+    def _reset_index(self, index: int) -> list[MediaPacket]:
+        self.stats.controller_resets += 1
+        out: list[MediaPacket] = []
+        for key in [k for k in self._links if k[0] == index]:
+            out += self._drop_link(key)
+        return out
+
+    def _new_link(self, key: tuple[int, int], t: float) -> _Link | None:
+        if len(self._links) >= self.max_links:
+            idle = [(link.last_seen, k) for k, link in self._links.items() if link.idle]
+            if not idle:
+                self.stats.links_refused += 1
+                return None
+            del self._links[min(idle)[1]]
+            self.stats.links_evicted += 1
+        start = self._start if self._start is not None else t
+        link = self._links[key] = _Link(AclReassembler(self.max_sdu, self.stats), last_tx=start, last_seen=t)
+        return link
+
+    def _check_deadline(self, link: _Link, t: float) -> list[MediaPacket]:
+        if link.in_step and link.busy_since is not None:
+            if t - link.busy_since > DRAIN_DEADLINE_S or link.events_since_drain > DRAIN_DEADLINE_EVENTS:
+                return self._leave_step(link)
+        return []
+
+    # -- records ------------------------------------------------------------
+
+    def _acl_tx(self, t: float, index: int, payload: bytes) -> list[MediaPacket]:
         if len(payload) < ACL_HEADER_LEN:
             self.stats.malformed_records += 1
-            return
+            return []
         flags, length = struct.unpack_from("<HH", payload, 0)
         handle, pb = flags & 0x0FFF, (flags >> 12) & 0b11
         key = (index, handle)
-        link = self._links.get(key)
+        link = self._links.get(key) or self._new_link(key, t)
         if link is None:
-            if len(self._links) >= self.max_links:
-                self.stats.links_refused += 1
-                return
-            link = self._links[key] = _Link(AclReassembler(self.max_sdu, self.stats))
+            return []
+        out: list[MediaPacket] = []
+        if not link.in_flight:
+            if not link.in_step and t - link.last_tx > IDLE_SYNC_S:
+                link.in_step = True  # idle long enough: the controller's queue is empty
+            link.busy_since = t
+            link.events_since_drain = 0
+        link.last_tx = link.last_seen = t
+        if len(link.in_flight) >= MAX_IN_FLIGHT:
+            self.stats.in_flight_overflows += 1
+            out += self._leave_step(link)
+            out += self._clear(link, reassembly=False)
+            link.busy_since = t
+        out += self._check_deadline(link, t)
         # Every ACL packet costs one completion credit, even one we cannot parse.
         frag = _Fragment(link.in_step)
         link.in_flight.append(frag)
@@ -512,10 +667,11 @@ class A2dpAirParser:
         if len(data) < length:
             self.stats.malformed_records += 1
             link.reassembler.reset()
-            return
+            return out
         sdu = link.reassembler.push(pb, data)
         if sdu is not None:
-            frag.packet = _media_packet(t, index, handle, sdu, self.stats)
+            frag.packet = _media_packet(t, index, handle, sdu, self.stats, link.sbc_streams)
+        return out
 
     def _event(self, t: float, index: int, payload: bytes) -> list[MediaPacket]:
         if len(payload) < 2 or len(payload) < 2 + payload[1]:
@@ -533,33 +689,45 @@ class A2dpAirParser:
                 if link is not None:
                     out += self._credit(link, t, count)
             return out
+        if code == HCI_EVT_CONNECTION_COMPLETE and len(params) >= 10 and params[0] == 0 and params[9] == 0x01:
+            (handle,) = struct.unpack_from("<H", params, 1)
+            key = (index, handle & 0x0FFF)
+            out = self._drop_link(key)
+            link = self._new_link(key, t)
+            if link is not None:
+                link.in_step = True  # nothing can be queued on a new connection
+            return out
         if code == HCI_EVT_DISCONNECT_COMPLETE and len(params) >= 3 and params[0] == 0:
             (handle,) = struct.unpack_from("<H", params, 1)
-            link = self._links.pop((index, handle & 0x0FFF), None)
-            if link is not None:
-                return [f.packet for f in link.in_flight if f.packet is not None]
+            return self._drop_link((index, handle & 0x0FFF))
+        if code == HCI_EVT_HARDWARE_ERROR:
+            return self._reset_index(index)
         return []
 
     def _credit(self, link: _Link, t: float, count: int) -> list[MediaPacket]:
         out: list[MediaPacket] = []
-        excess = False
-        for _ in range(count):
-            if not link.in_flight:
-                excess = True
-                self.stats.excess_completions += 1
-                continue
+        link.last_seen = t
+        link.events_since_drain += 1
+        credited = min(count, len(link.in_flight))
+        for _ in range(credited):
             frag = link.in_flight.popleft()
-            if frag.packet is not None:
-                out.append(replace(frag.packet, t_complete=t) if frag.in_step else frag.packet)
-        if excess:
-            if link.in_step:
-                self.stats.desyncs += 1
-            link.in_step = False
-            link.drains = 0
-        elif not link.in_flight:
-            link.drains += 1
-            if link.drains >= self.sync_drains:
-                link.in_step = True
+            if frag.packet is None:
+                continue
+            if frag.in_step and link.in_step:
+                link.held.append(replace(frag.packet, t_complete=t))
+            else:
+                out.append(frag.packet)
+        if count > credited:
+            self.stats.excess_completions += count - credited
+            out += self._leave_step(link)
+        if not link.in_flight:
+            out += self._release(link, confirmed=link.in_step)
+            link.busy_since = None
+            link.events_since_drain = 0
+        else:
+            out += self._check_deadline(link, t)
+        if len(link.held) > MAX_IN_FLIGHT:
+            out += self._leave_step(link)
         return out
 
 
@@ -568,5 +736,5 @@ def parse_records(records: Iterable[MonitorRecord], parser: A2dpAirParser | None
     p = parser if parser is not None else A2dpAirParser()
     out: list[MediaPacket] = []
     for rec in records:
-        out += p.feed(rec.t, rec.index, rec.opcode, rec.payload)
+        out += p.feed(rec.t, rec.index, rec.opcode, rec.payload, rec.drops)
     return out + p.flush()

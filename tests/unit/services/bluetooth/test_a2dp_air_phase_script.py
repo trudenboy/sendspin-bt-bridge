@@ -23,7 +23,6 @@ FIXTURE = ROOT / "tests" / "fixtures" / "a2dp_air" / "eneby_clicks.btsnoop.gz"
 
 # What the script reports on the full 66 s capture (hci1 handle 70).
 FULL_CAPTURE_PHASE_SEND_MS = 9834.6
-FULL_CAPTURE_PHASE_COMPLETE_MS = 9843.7
 TOLERANCE_MS = 3.0
 
 
@@ -60,12 +59,11 @@ def test_fixture_media_packets_and_sbc_parameters():
     # consecutive RTP sequence numbers, 7 x 128 samples apart
     assert all(b.seq == (a.seq + 1) & 0xFFFF for a, b in itertools.pairwise(packets))
     assert all(b.rtp_ts - a.rtp_ts == 896 for a, b in itertools.pairwise(packets))
-    # the window starts mid-stream: its first credits are for packets sent before it
+    # the window starts mid-stream with no Connection Complete and no idle gap: nothing proves the
+    # controller's queue empty, so no completion time is trusted (its first credits arrive as excess)
     assert stats.excess_completions > 0
-    assert stats.sbc_errors == stats.dropped_malformed == stats.desyncs == 0
-    completed = [p for p in packets if p.t_complete is not None]
-    assert len(completed) >= len(packets) - 5
-    assert all(0 < p.t_complete - p.t_send < 0.1 for p in completed)
+    assert stats.sbc_errors == stats.dropped_malformed == 0
+    assert all(p.t_complete is None for p in packets)
 
 
 def test_default_link_is_the_busiest_tx_handle(tool):
@@ -78,7 +76,7 @@ def test_phase_on_the_fixture_matches_the_full_capture(tool):
     assert rep.nominal_hz == 44100
     assert rep.pacing_hz == pytest.approx(44100, rel=1e-3)
     assert circular_diff_ms(rep.phase_send_ms, FULL_CAPTURE_PHASE_SEND_MS) <= TOLERANCE_MS
-    assert circular_diff_ms(rep.phase_complete_ms, FULL_CAPTURE_PHASE_COMPLETE_MS) <= TOLERANCE_MS
+    assert rep.completed == 0 and rep.phase_complete_ms is None  # no evidence of an empty controller queue
 
 
 def test_cli_prints_the_report():

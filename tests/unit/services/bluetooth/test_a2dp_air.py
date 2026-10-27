@@ -177,11 +177,21 @@ def test_parse_rtp_skips_csrc_list_and_extension():
     assert hdr.header_len == 12 + 8 + 8
 
 
+def test_parse_rtp_reports_padding():
+    # P=1: the last byte counts the padding bytes (itself included)
+    data = bytes([0xA0]) + REAL_RTP_HEADER[1:] + b"\x07payload" + b"\x00\x00\x03"
+    hdr = air.parse_rtp(data)
+    assert hdr is not None
+    assert (hdr.header_len, hdr.padding) == (12, 3)
+
+
 @pytest.mark.parametrize(
     "data",
     [
         b"",
         REAL_RTP_HEADER[:11],
+        bytes([0xA0]) + REAL_RTP_HEADER[1:] + b"\x07\x40",  # padding count beyond the payload
+        bytes([0xA0]) + REAL_RTP_HEADER[1:] + b"\x07\x00",  # padding count 0 is invalid
         bytes([0x40]) + REAL_RTP_HEADER[1:],  # version 1
         bytes([0x8F]) + REAL_RTP_HEADER[1:],  # 15 CSRCs announced, none present
         bytes([0x90]) + REAL_RTP_HEADER[1:] + b"\xbe\xde\x00\x09",  # extension longer than the packet
@@ -299,6 +309,24 @@ def test_fragmented_sbc_frame_is_reported_without_frames():
     assert pkt.codec == "sbc" and pkt.frames == () and pkt.sbc_fragmented
 
 
+def test_padded_sbc_packet_decodes_without_errors():
+    sdu = bytes([0xA0]) + media_sdu(9, 0, frames=2)[1:] + b"\x00\x00\x00\x04"
+    p = air.A2dpAirParser()
+    feed_media(p, 1.0, sdu)
+    (pkt,) = p.flush()
+    assert len(pkt.frames) == 2 and p.stats.sbc_errors == 0
+
+
+def test_continuation_of_a_fragmented_sbc_frame_stays_sbc():
+    p = air.A2dpAirParser()
+    first = struct.pack(">BBHII", 0x80, 0x60, 1, 0, 1) + bytes([0b1100_0001]) + REAL_SBC_FRAME[:60]
+    rest = struct.pack(">BBHII", 0x80, 0x60, 2, 0, 1) + bytes([0b1010_0000]) + REAL_SBC_FRAME[60:]
+    feed_media(p, 1.0, first)
+    feed_media(p, 1.1, rest)
+    a, b = p.flush()
+    assert (a.codec, a.sbc_fragmented, b.codec, b.sbc_fragmented) == ("sbc", True, "sbc", True)
+
+
 def test_signalling_and_short_sdus_are_not_media():
     p = air.A2dpAirParser()
     # AVDTP signalling on the same dynamic CID range: label 8, single, command, Start (0x07)
@@ -324,72 +352,187 @@ def test_parser_never_raises_on_garbage_records():
 def test_parser_bounds_the_number_of_links():
     p = air.A2dpAirParser(max_links=4)
     for h in range(10):
-        p.feed(0.0, 0, MONITOR_ACL_TX_PKT, acl(h, 0b10, l2cap(CID, b"x")))
+        p.feed(0.0, 0, MONITOR_ACL_TX_PKT, acl(h, 0b10, l2cap(CID, b"x")))  # never completed: links stay busy
     assert p.stats.links_refused == 6
+
+
+def test_idle_links_are_evicted_to_make_room():
+    p = air.A2dpAirParser(max_links=2)
+    for h in (1, 2):
+        p.feed(0.0 + h, 0, MONITOR_ACL_TX_PKT, acl(h, 0b10, l2cap(CID, b"x")))
+        p.feed(0.1 + h, 0, MONITOR_EVENT_PKT, nocp((h, 1)))  # completed: the link is idle
+    p.feed(5.0, 0, MONITOR_ACL_TX_PKT, acl(3, 0b10, l2cap(CID, b"x")))
+    assert p.stats.links_refused == 0
+    assert p.stats.links_evicted == 1
 
 
 # ── Parser: completion crediting ───────────────────────────────────────────
 
 
-def stream(parser: air.A2dpAirParser, n: int, *, pre_in_flight: int = 0, period: float = 0.020, latency: float = 0.008):
-    """n media packets of 3 fragments every *period*; the controller completes each packet *latency* later.
+def conn_complete(handle: int) -> bytes:
+    # status, handle, bdaddr, link type ACL, encryption off
+    return bytes([0x03, 11, 0x00]) + struct.pack("<H", handle) + bytes.fromhex("6c08ebfa58fc") + b"\x01\x00"
 
-    *pre_in_flight* fragments were queued before the capture started: their completion arrives just after
-    the first packet is sent, i.e. while that packet is still in flight. Returns (emitted packets,
-    true completion time per sequence number)."""
-    out, truth = [], {}
+
+def simulate(
+    n: int,
+    *,
+    backlog: int = 0,
+    slot: float = 0.004,
+    period: float = 0.020,
+    t0: float = 100.0,
+    connect: bool = False,
+    gaps: dict[int, float] | None = None,
+    lose_nocp: set[int] | None = None,
+    drop_at: int | None = None,
+    parser: air.A2dpAirParser | None = None,
+):
+    """A FIFO controller: it transmits one fragment per *slot* and reports each in its own NOCP (count 1).
+
+    The host sends a 3-fragment media packet every *period* (plus *gaps*[i] seconds before packet i).
+    *backlog* fragments sent before the capture are still queued at its start; with ``slot == period / 3``
+    the controller keeps that backlog for ever. Completion j of the queue happens at
+    ``max(c[j-1], send[j]) + slot``. *lose_nocp* drops the NOCP events of those queue positions (counting
+    the backlog); *drop_at* marks the record at that packet's send with a monitor drop.
+    Returns (emitted packets, true completion time of each packet's last fragment by seq, parser)."""
+    p = parser if parser is not None else air.A2dpAirParser()
+    sends: list[tuple[float, int, int, bytes]] = []  # (t, seq, pb, chunk)
+    t = t0
     for i in range(n):
-        t = 100.0 + i * period
-        out += feed_media(parser, t, media_sdu(i, i * 896))
-        if i == 0 and pre_in_flight:
-            out += parser.feed(t + 0.001, 1, MONITOR_EVENT_PKT, nocp((HANDLE, pre_in_flight)))
-        out += parser.feed(t + latency, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))
-        truth[i] = t + latency
-    return out + parser.flush(), truth
+        t += (gaps or {}).get(i, 0.0)
+        for pb, chunk in fragments(media_sdu(i, i * 896)):
+            sends.append((t, i, pb, chunk))
+        t += period
+    queue = [(-1.0, -1)] * backlog + [(st, seq) for st, seq, _, _ in sends]
+    events: list[tuple[float, int, bytes, int]] = []  # (t, order, payload, kind)
+    truth: dict[int, float] = {}
+    c = t0
+    for j, (st, seq) in enumerate(queue):
+        c = max(c, st) + slot
+        if seq >= 0:
+            truth[seq] = c  # the last fragment of a packet overwrites the earlier ones
+        if j not in (lose_nocp or set()):
+            events.append((c, 1, nocp((HANDLE, 1)), MONITOR_EVENT_PKT))
+    for st, _seq, pb, chunk in sends:
+        events.append((st, 0, acl(HANDLE, pb, chunk), MONITOR_ACL_TX_PKT))
+    events.sort(key=lambda e: (e[0], e[1]))  # a send and a completion at the same instant: the send first
+    out: list[air.MediaPacket] = []
+    if connect:
+        out += p.feed(t0 - 0.5, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    drops = 0
+    drop_t = sends[3 * drop_at][0] if drop_at is not None else None
+    for et, _order, payload, opcode in events:
+        if drop_t is not None and et >= drop_t:
+            drops, drop_t = 1, None
+        out += p.feed(et, 1, opcode, payload, drops=drops)
+    return out + p.flush(), truth, p
 
 
-def test_completions_are_credited_fifo_to_the_last_fragment():
-    pkts, truth = stream(air.A2dpAirParser(), 20)
-    assert [pk.seq for pk in pkts] == list(range(20))
-    credited = [pk for pk in pkts if pk.t_complete is not None]
-    assert len(credited) >= 17  # a few at the start are spent proving the queue is in step
-    for pk in credited:
-        assert pk.t_complete == pytest.approx(truth[pk.seq])
-        assert pk.t_complete > pk.t_send
+def assert_no_wrong_times(pkts, truth):
+    for pk in pkts:
+        if pk.t_complete is not None:
+            assert pk.t_complete == pytest.approx(truth[pk.seq]), f"seq {pk.seq} credited a foreign completion"
 
 
-@pytest.mark.parametrize("pre", [1, 2, 3, 5])
-def test_capture_starting_mid_flight_never_misaligns(pre):
-    pkts, truth = stream(air.A2dpAirParser(), 30, pre_in_flight=pre)
-    credited = [pk for pk in pkts if pk.t_complete is not None]
-    assert len(credited) >= 25
-    for pk in credited:
-        assert pk.t_complete == pytest.approx(truth[pk.seq]), pk.seq
-    assert pkts[0].t_complete is None  # its first fragments were "completed" by pre-capture credits
-    assert pkts[0].seq == 0
+def test_connection_complete_proves_an_empty_queue():
+    pkts, truth, _ = simulate(30, connect=True)
+    assert [pk.seq for pk in pkts] == list(range(30))
+    assert_no_wrong_times(pkts, truth)
+    assert sum(pk.t_complete is not None for pk in pkts) >= 29
+    assert all(pk.t_complete > pk.t_send for pk in pkts if pk.t_complete is not None)
+
+
+@pytest.mark.parametrize("backlog", [1, 2, 3])
+def test_standing_backlog_never_yields_wrong_times(backlog):
+    # The controller transmits exactly as fast as the host sends: the pre-capture backlog never drains,
+    # the parser's queue (backlog fragments short) empties after every credit while the real one never does.
+    pkts, truth, _ = simulate(40, backlog=backlog, slot=0.020 / 3)
+    assert len(pkts) == 40
+    assert_no_wrong_times(pkts, truth)
+    assert all(pk.t_complete is None for pk in pkts)
+
+
+@pytest.mark.parametrize("backlog", [0, 2])
+def test_capture_without_evidence_reports_unknown(backlog):
+    pkts, truth, _ = simulate(30, backlog=backlog)
+    assert_no_wrong_times(pkts, truth)
+    assert all(pk.t_complete is None for pk in pkts)
+
+
+def test_an_idle_gap_proves_an_empty_queue():
+    # a standing backlog of 2 before the gap; > 500 ms without sends lets the controller drain it
+    pkts, truth, _ = simulate(60, backlog=2, slot=0.004, gaps={30: 0.6})
+    assert_no_wrong_times(pkts, truth)
+    assert all(pk.t_complete is None for pk in pkts[:30])
+    assert sum(pk.t_complete is not None for pk in pkts[30:]) >= 29
+
+
+def test_a_short_gap_is_not_evidence():
+    pkts, truth, _ = simulate(60, backlog=2, gaps={30: 0.3})
+    assert_no_wrong_times(pkts, truth)
+    assert all(pk.t_complete is None for pk in pkts)
+
+
+def test_a_lost_completion_event_never_yields_wrong_times():
+    pkts, truth, p = simulate(80, connect=True, lose_nocp={3 * 20 + 1})
+    assert_no_wrong_times(pkts, truth)
+    assert sum(pk.t_complete is not None for pk in pkts[:20]) >= 19
+    assert p.stats.desyncs >= 1
+    # the uncredited leftover could equally be a stalled controller, so an idle gap does not resync
+    pkts, truth, _ = simulate(80, connect=True, lose_nocp={3 * 20 + 1}, gaps={50: 0.6})
+    assert_no_wrong_times(pkts, truth)
+    assert all(pk.t_complete is None for pk in pkts[50:])
+
+
+def test_a_monitor_drop_takes_links_out_of_step():
+    pkts, truth, p = simulate(40, connect=True, drop_at=20)
+    assert_no_wrong_times(pkts, truth)
+    assert sum(pk.t_complete is not None for pk in pkts[:19]) >= 18
+    assert all(pk.t_complete is None for pk in pkts[20:])
+    assert p.stats.monitor_drops == 1
 
 
 def test_completion_split_over_several_events_uses_the_last_fragment():
     p = air.A2dpAirParser()
-    out = []
+    out = p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
     for i in range(10):
         t = float(i)
         out += feed_media(p, t, media_sdu(i, 0))
         out += p.feed(t + 0.1, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 2)))
         out += p.feed(t + 0.3, 1, MONITOR_EVENT_PKT, nocp((0x0999, 4), (HANDLE, 1)))  # other handle in the event
     out += p.flush()
-    credited = [pk for pk in out if pk.t_complete is not None]
-    assert credited and all(pk.t_complete == pytest.approx(pk.seq + 0.3) for pk in credited)
+    assert len(out) == 10
+    assert all(pk.t_complete == pytest.approx(pk.seq + 0.3) for pk in out)
 
 
 def test_completions_on_another_index_are_not_credited():
     p = air.A2dpAirParser()
-    out = []
+    out = p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
     for i in range(10):
         out += feed_media(p, float(i), media_sdu(i, 0))
         out += p.feed(i + 0.1, 0, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))  # hci0, same handle number
     out += p.flush()
     assert len(out) == 10 and all(pk.t_complete is None for pk in out)
+
+
+def test_a_hostile_completion_count_is_counted_not_looped():
+    p = air.A2dpAirParser()
+    p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    feed_media(p, 0.0, media_sdu(1, 0))
+    for _ in range(2000):
+        p.feed(0.1, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 0xFFFF)))
+    assert p.stats.excess_completions == 0xFFFF - 3 + 1999 * 0xFFFF
+
+
+def test_in_flight_queue_is_capped():
+    p = air.A2dpAirParser()
+    p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    out = []
+    for i in range(200):  # 600 fragments, none completed
+        out += feed_media(p, i * 0.02, media_sdu(i, 0))
+    assert p.stats.in_flight_overflows >= 1
+    out += p.flush()
+    assert len(out) == 200 and all(pk.t_complete is None for pk in out)
 
 
 def test_disconnect_resets_the_link():
@@ -399,6 +542,28 @@ def test_disconnect_resets_the_link():
     assert [pk.seq for pk in out] == [1] and out[0].t_complete is None
     # a stray completion for the old handle after the disconnect is not credited to anything
     assert p.feed(1.2, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3))) == []
+
+
+@pytest.mark.parametrize(
+    ("opcode", "payload"),
+    [
+        (0, bytes(16)),  # MONITOR_NEW_INDEX
+        (1, b""),  # MONITOR_DEL_INDEX
+        (2, struct.pack("<HB", 0x0C03, 0)),  # HCI_Reset command
+        (MONITOR_EVENT_PKT, bytes([0x10, 1, 0x05])),  # Hardware Error event
+    ],
+)
+def test_controller_reset_drops_the_links_of_that_index(opcode, payload):
+    p = air.A2dpAirParser()
+    p.feed(-1.0, 1, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    p.feed(-1.0, 0, MONITOR_EVENT_PKT, conn_complete(HANDLE))
+    feed_media(p, 0.0, media_sdu(1, 0), index=1)
+    feed_media(p, 0.0, media_sdu(2, 0), index=0)
+    out = p.feed(0.05, 1, opcode, payload)
+    assert [(pk.seq, pk.t_complete) for pk in out] == [(1, None)]
+    assert p.feed(0.06, 1, MONITOR_EVENT_PKT, nocp((HANDLE, 3))) == []  # nothing left to credit on hci1
+    (other,) = p.feed(0.07, 0, MONITOR_EVENT_PKT, nocp((HANDLE, 3)))
+    assert other.seq == 2 and other.t_complete == pytest.approx(0.07)  # hci0 untouched
 
 
 def test_parse_records_runs_the_parser_over_monitor_records():
@@ -414,11 +579,19 @@ def test_parse_records_runs_the_parser_over_monitor_records():
 _EPOCH_DELTA_US = 0x00DCDDB30F2F8000  # btsnoop microseconds since 0000-01-01 at the unix epoch
 
 
-def _btsnoop(records: list[tuple[int, int, int, bytes]], datalink: int = 2001) -> bytes:
+def _btsnoop(records: list[tuple], datalink: int = 2001) -> bytes:
     out = b"btsnoop\0" + struct.pack(">II", 1, datalink)
-    for ts_us, index, opcode, data in records:
-        out += struct.pack(">IIIIq", len(data), len(data), (index << 16) | opcode, 0, ts_us + _EPOCH_DELTA_US) + data
+    for ts_us, index, opcode, data, *drops in records:
+        flags = (index << 16) | opcode
+        out += struct.pack(">IIIIq", len(data), len(data), flags, drops[0] if drops else 0, ts_us + _EPOCH_DELTA_US)
+        out += data
     return out
+
+
+def test_read_btsnoop_keeps_the_cumulative_drops(tmp_path: Path):
+    path = tmp_path / "d.btsnoop"
+    path.write_bytes(_btsnoop([(1_000_000, 1, 4, b"a", 0), (2_000_000, 1, 4, b"b", 2)]))
+    assert [r.drops for r in air.read_btsnoop(path)] == [0, 2]
 
 
 def test_read_btsnoop_yields_unix_times_index_and_opcode(tmp_path: Path):
