@@ -115,3 +115,22 @@ async def test_an_opted_out_player_spawns_off_while_another_keeps_the_engine(mon
 
     assert await _spawn_mode(monkeypatch, config, "off-one") == "off"
     assert await _spawn_mode(monkeypatch, config, "on-one") == "loop"
+
+
+@pytest.mark.asyncio
+async def test_a_stop_clears_the_engine_snapshot_so_a_restart_in_off_is_not_stale():
+    client = SendspinClient("Speaker", "localhost", 9000)
+    client._update_status(
+        {
+            "playout": {"mode": "loop", "state": "playing", "error_ms": 1.2},
+            "effective_required_lead_time_ms": 900,
+            "playback_sync_error_ms": 1.2,
+        }
+    )
+
+    with patch("sendspin_bridge.bridge.client._state.notify_status_changed"):
+        await client.stop_sendspin()
+
+    assert client.status["playout"] is None
+    assert client.status["effective_required_lead_time_ms"] is None
+    assert client.status["playback_sync_error_ms"] is None

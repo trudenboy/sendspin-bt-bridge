@@ -847,6 +847,9 @@ async def _run(params: dict) -> None:
             "required_lead_time_ms": round(required_lead_time_ms),
             "min_buffer_ms": round(min_buffer_ms),
             "timing_metrics_available": False,
+            # The legacy player (global off or this speaker opted out) says so once;
+            # measure/loop publish their own snapshot from the watcher.
+            **({"playout": {"mode": "off"}} if playout_mode == "off" else {}),
         }
     )
 

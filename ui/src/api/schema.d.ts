@@ -3418,16 +3418,8 @@ export interface components {
              */
             playout_sync_enabled?: boolean | null;
         };
-        /** DevicePatchOut */
         DevicePatchOut: {
-            /** @description The updated speaker, when it is running. */
-            device?: components["schemas"]["Device"] | null;
-            /** Enabled */
-            enabled?: boolean | null;
-            /** Playout Sync Enabled */
-            playout_sync_enabled?: boolean | null;
-            /** Restart Required */
-            restart_required?: boolean | null;
+            [key: string]: unknown;
         };
         /** DevicePlayback */
         DevicePlayback: {

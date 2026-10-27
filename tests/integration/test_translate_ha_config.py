@@ -938,3 +938,21 @@ def test_playout_sync_enabled_of_a_speaker_preserved_across_addon_restart(tmp_pa
 
     devs = {d["mac"]: d for d in _read_json(tmp_path / "config.json")["BLUETOOTH_DEVICES"]}
     assert devs["AA:BB:CC:DD:EE:FF"]["playout_sync_enabled"] is False
+
+
+def test_playout_sync_enabled_preserved_for_a_v6_players_config(tmp_path):
+    """A config.json already at schema v6 keeps the per-speaker opt-out too."""
+    from tests.support.config_v6 import v6_config
+
+    existing = v6_config([{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Speaker", "playout_sync_enabled": False}])
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    players = cfg.get("players") or []
+    stored = [p for p in players if (p.get("backend") or {}).get("mac") == "AA:BB:CC:DD:EE:FF"]
+    legacy = [d for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac") == "AA:BB:CC:DD:EE:FF"]
+    assert (stored or legacy)[0]["playout_sync_enabled"] is False

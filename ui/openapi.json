@@ -2684,53 +2684,7 @@
         "type": "object"
       },
       "DevicePatchOut": {
-        "properties": {
-          "device": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Device"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The updated speaker, when it is running."
-          },
-          "enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Enabled"
-          },
-          "playout_sync_enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playout Sync Enabled"
-          },
-          "restart_required": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Restart Required"
-          }
-        },
-        "title": "DevicePatchOut",
+        "additionalProperties": true,
         "type": "object"
       },
       "DevicePlayback": {

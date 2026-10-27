@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field, StrictBool, model_validator
+from pydantic import BaseModel, Field, StrictBool, model_serializer, model_validator
 
 from sendspin_bridge.api.auth import require_principal
 from sendspin_bridge.api.errors import PROBLEM_RESPONSES
@@ -82,7 +82,7 @@ class LatencyOut(BaseModel):
 
 
 class DevicePatchIn(BaseModel):
-    enabled: StrictBool | None = Field(default=None, description="Enable or disable the speaker.")
+    enabled: bool | None = Field(default=None, description="Enable or disable the speaker.")
     playout_sync_enabled: StrictBool | None = Field(
         default=None,
         description="false runs this speaker the way it worked before playout sync; true follows the bridge setting.",
@@ -101,11 +101,15 @@ class DevicePatchOut(BaseModel):
     playout_sync_enabled: bool | None = None
     device: Device | None = Field(default=None, description="The updated speaker, when it is running.")
 
+    @model_serializer(mode="wrap")
+    def _omit_unset_parts(self, handler: Any) -> dict[str, Any]:
+        """Leave out the parts that were not changed; ``device`` stays a complete Device."""
+        return {key: value for key, value in handler(self).items() if value is not None}
+
 
 @router.patch(
     "/devices/{device_id}",
     response_model=DevicePatchOut,
-    response_model_exclude_none=True,
     summary="Change a speaker's settings",
 )
 def patch_device(device_id: str, body: DevicePatchIn) -> DevicePatchOut:

@@ -371,3 +371,28 @@ async def test_the_spawned_playout_mode_reaches_the_daemon_args(monkeypatch, pla
 
     assert args.playout_mode == mode
     assert args.playout == playout
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("playout", "published"), [({"mode": "off"}, {"mode": "off"}), (None, {"mode": "off"}), ({"mode": "loop"}, None)]
+)
+async def test_the_daemon_says_so_once_when_it_runs_the_legacy_player(monkeypatch, playout, published):
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+    from sendspin_bridge.services.ipc.daemon_process import _run
+
+    captured: dict = {}
+
+    class _Stop(BaseException):
+        pass
+
+    def _daemon_factory(*_args, **kwargs):
+        captured.update(kwargs)
+        raise _Stop
+
+    monkeypatch.setattr(bridge_daemon_mod, "DaemonArgs", lambda **kw: SimpleNamespace(**kw))
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _daemon_factory)
+    with pytest.raises(_Stop):
+        await _run({"player_name": "X", "client_id": "x", "listen_port": 8933, "playout": playout})
+
+    assert captured["status"].get("playout") == published

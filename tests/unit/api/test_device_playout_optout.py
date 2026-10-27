@@ -73,6 +73,12 @@ def test_a_running_speaker_answers_its_device(two_players, tmp_config, applied, 
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["device"]["id"] == kitchen
+    from sendspin_bridge.application.models.devices import Device
+
+    # The nested device is a complete Device: required keys with null values stay.
+    assert Device.model_validate(resp.json()["device"]).playout_sync_enabled is False
+    assert "config_id" in resp.json()["device"]
+    assert "enabled" not in resp.json()
     assert resp.json()["device"]["playout_sync_enabled"] is False
 
 
@@ -92,7 +98,7 @@ def test_setting_the_stored_value_again_restarts_nothing(two_players, tmp_config
     applied.clear()
 
     assert client.patch(f"/api/v1/devices/{kitchen}", json={"playout_sync_enabled": False}).status_code == 200
-    assert applied == [] or applied == [[]]
+    assert applied == []
 
 
 def test_an_unknown_speaker_is_404(two_players, applied):
@@ -146,3 +152,10 @@ def test_a_session_write_needs_the_csrf_token(secured, tmp_config):
     )
     assert ok.status_code == 200, ok.text
     assert _stored(tmp_config, kitchen)["playout_sync_enabled"] is False
+
+
+def test_the_legacy_enabled_reply_is_unchanged(two_players, tmp_config, applied):
+    kitchen = two_players["players"][0]["id"]
+    resp = make_client().patch(f"/api/v1/devices/{kitchen}", json={"enabled": False})
+
+    assert resp.json() == {"enabled": False, "restart_required": True}

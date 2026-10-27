@@ -2895,6 +2895,11 @@ class SendspinClient:
                 "reanchoring": False,
                 "group_name": None,
                 "group_id": None,
+                # The engine's snapshot belongs to the daemon that is gone; a restart
+                # in another mode must not inherit it.
+                "playout": None,
+                "effective_required_lead_time_ms": None,
+                "playback_sync_error_ms": None,
             }
         )
 
