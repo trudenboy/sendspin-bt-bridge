@@ -870,12 +870,20 @@ probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-ga
 - `PLAYOUT_SYNC=measure`: ENEBY20 plays 377 ms after Chrome (one cycle; spreads 0.4–0.5 ms). The engine
   reported its error near 0 after the start placement; no steady jump in this run.
 - Reading: measure places audio at the PulseAudio port as well as the legacy player does (difference
-  within the reference's own drift). ENEBY20 already had `static_delay_ms` = 218 (set from Music
-  Assistant earlier that day) during both runs, so the speaker-side latency beyond the sink (A2DP link +
-  ENEBY20's buffer/DSP) is ≈ 218 + 375 ≈ 593 ms: the "per-speaker offset" of Stage 4, today fixable by
-  raising the speaker's delay to ≈ 593 ms. The 40–57 ms late
-  error seen right after some starts (then one steady jump) did not occur here; whether it is real or a
-  sensor bias stays open (E2/H4 need a warm output, i.e. Stage 2).
+  within the reference's own drift). Correction (later the same day): the phone runs used the PC
+  speakers as the Chrome reference, and those add ~210 ms of their own, and ENEBY20's delay was 0 at
+  16:42 (218 was set at 16:51). Re-measured with a headset as the Chrome output: delay 218 → ENEBY20
+  49–68 ms early, 160 → 10.5 ms late, linear, so ENEBY20's speaker-side latency is ≈ 170 ms (set).
+- Session-to-session variance (#556): with the delay unchanged and the bridge telemetry unchanged
+  (PA sink-input latency 195–199 ms, time sync in range), a fresh session at 18:23 put ENEBY20
+  205 ms early vs Chrome and 216 ms vs a second local bridge (which agreed with Chrome within
+  4–11 ms across fresh starts). The variance is after PulseAudio, in the Bluetooth link or the
+  speaker buffer: H1 confirmed in practice, and the case for Stage 2's warm stream. A stored
+  per-speaker delay alone cannot fix it.
+- Engine defects seen on a desktop PipeWire sink (#556): false steady jumps of 20–27 ms every
+  15–20 s (pulsesink clock sawtooth read as error) and a 459 ms steady jump after two underruns.
+- The coherent click estimator (cycle-folded matched filter) measures a cheap headset microphone in
+  a noisy room where the per-click detector reports not heard.
 - Also found: the output rate came from freed pulsectl memory (32681 Hz), fixed in 3.1.0-beta.14;
   output open takes ~1.1 s in both players (first 0.1–0.2 s of each stream dropped as overdue);
   the Lenco LS-500 does not reproduce the click track at all (likely an amplifier noise gate on sparse
