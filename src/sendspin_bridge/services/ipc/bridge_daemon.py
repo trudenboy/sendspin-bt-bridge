@@ -485,12 +485,16 @@ class BridgeDaemon:
         )
 
     def _retire_player(self, player: Any) -> None:
-        """Stop a replaced player without holding the loop.
+        """Stop a replaced player.
 
-        A stop can block: PlayoutPlayer joins its feeder (up to 2 s) and both
-        players set their pipeline to NULL. With a running loop it runs in a
-        worker; without one (start-up, tests) here.
+        The legacy StreamPlayer is stopped here, as in 3.1.0-beta.5 (off-mode
+        parity). PlayoutPlayer's stop can block (it joins its feeder, up to
+        2 s, and sets its pipeline to NULL), so with a running loop it runs in
+        a worker; without one (start-up, tests) here.
         """
+        if not isinstance(player, PlayoutPlayer):
+            player.stop()
+            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -597,9 +601,13 @@ class BridgeDaemon:
         # An open in flight belongs to the old sink: its output is closed when it finishes.
         self._forget_open()
         old = self._player
+        if not isinstance(old, PlayoutPlayer):
+            # Legacy player: stopped before the new one, exactly as before playout sync.
+            old.stop()
         self._player = self._make_player(sink_name)
         self._audio_handler = self._player
-        self._retire_player(old)
+        if isinstance(old, PlayoutPlayer):
+            self._retire_player(old)
         if self._scales_stream:
             self._apply_stream_volume()
 

@@ -93,3 +93,54 @@ async def test_failing_pa_read_does_not_drop_other_telemetry(monkeypatch):
     assert status["timing_metrics_available"] is True
     assert status["clock_slew_ppm"] == 5.0
     assert status.get("pa_latency_ms") is None
+
+
+@pytest.mark.asyncio
+async def test_a_hanging_pa_read_times_out_and_does_not_block_the_watcher(monkeypatch, caplog):
+    import logging
+
+    _patch_common(monkeypatch, SimpleNamespace(sample=lambda: None, ppm=lambda: None))
+    assert daemon_process._PA_LATENCY_TIMEOUT_S == 0.5
+    monkeypatch.setattr(daemon_process, "_PA_LATENCY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(daemon_process, "_pa_latency_timeout_logged", False)
+
+    async def hanging_read():
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(daemon_process, "_read_pa_latency_ms", hanging_read)
+    caplog.set_level(logging.DEBUG, logger=daemon_process.__name__)
+    for _ in range(2):
+        status: dict = {"playing": True}
+        loop = asyncio.get_running_loop()
+        began = loop.time()
+        await _run_until(status, "timing_metrics_available", SimpleNamespace(_audio_handler=object(), _client=object()))
+        assert status.get("timing_metrics_available") is True
+        assert loop.time() - began < 1.0
+        assert status.get("pa_latency_ms") is None
+    assert caplog.text.count("PulseAudio latency read timed out") == 1
+
+
+@pytest.mark.asyncio
+async def test_off_mode_sends_pa_latency_with_the_metrics_tick_not_every_second(monkeypatch):
+    _patch_common(monkeypatch, SimpleNamespace(sample=lambda: None, ppm=lambda: None))
+    reads: list[int] = []
+
+    async def fake_read():
+        reads.append(1)
+        return 600.0
+
+    monkeypatch.setattr(daemon_process, "_read_pa_latency_ms", fake_read)
+    status: dict = {"playing": True}
+    changes = MagicMock()
+    stop_event = asyncio.Event()
+    daemon = SimpleNamespace(_audio_handler=object(), _client=object(), _args=SimpleNamespace(playout_mode="off"))
+    watcher = asyncio.create_task(
+        daemon_process._timing_telemetry_watcher(daemon, status, changes, stop_event, poll_interval=0.01)
+    )
+    await asyncio.sleep(2.3)
+    stop_event.set()
+    await watcher
+
+    assert status["pa_latency_ms"] == 600.0
+    assert reads == [1]
+    assert changes.call_count == 1

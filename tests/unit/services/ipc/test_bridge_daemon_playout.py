@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer
 from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon, DaemonArgs
 
 if TYPE_CHECKING:
@@ -197,6 +198,19 @@ class _BlockingStopPlayer:
         pass
 
 
+class _BlockingStopPlayout(PlayoutPlayer, _BlockingStopPlayer):
+    """The playout engine's stop (feeder join + pipeline NULL), blocking."""
+
+    def __init__(self, block_s: float = 0.3) -> None:
+        _BlockingStopPlayer.__init__(self, block_s)
+
+    def stop(self) -> None:
+        _BlockingStopPlayer.stop(self)
+
+    def set_volume(self, value: float, muted: bool) -> None:
+        pass
+
+
 async def _wait_stopped(player: _BlockingStopPlayer) -> None:
     for _ in range(200):
         if player.stopped.is_set():
@@ -208,7 +222,7 @@ async def _wait_stopped(player: _BlockingStopPlayer) -> None:
 @pytest.mark.asyncio
 async def test_the_fallback_stops_the_old_player_off_the_loop(tmp_path):
     daemon = _daemon(tmp_path, playout_mode="measure")
-    old = _BlockingStopPlayer()
+    old = _BlockingStopPlayout()
     daemon._player = old
 
     began = time.monotonic()
@@ -224,7 +238,7 @@ async def test_the_fallback_stops_the_old_player_off_the_loop(tmp_path):
 @pytest.mark.asyncio
 async def test_a_retarget_stops_the_old_player_off_the_loop(tmp_path):
     daemon = _daemon(tmp_path, playout_mode="measure")
-    old = _BlockingStopPlayer()
+    old = _BlockingStopPlayout()
     daemon._player = old
 
     began = time.monotonic()
@@ -232,6 +246,54 @@ async def test_a_retarget_stops_the_old_player_off_the_loop(tmp_path):
     held_ms = (time.monotonic() - began) * 1000
 
     assert held_ms < 100
+    await _wait_stopped(old)
+    assert old.stop_thread is not threading.main_thread()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["off", "measure"])
+async def test_a_retarget_stops_a_legacy_player_inline_before_the_new_one(tmp_path, mode):
+    """Off-mode parity (3.1.0-beta.5): a StreamPlayer is stopped on the spot,
+    before the new player exists, even with a running loop."""
+    daemon = _daemon(tmp_path, playout_mode=mode)
+    if mode == "measure":
+        daemon._playout_fell_back = True  # the legacy player is what runs after a fallback
+    old = _BlockingStopPlayer(block_s=0.0)
+    daemon._player = old
+    stopped_when_made: list[bool] = []
+    make = daemon._make_player
+    daemon._make_player = lambda sink: stopped_when_made.append(old.stopped.is_set()) or make(sink)  # type: ignore[method-assign]
+
+    daemon.retarget_sink("other")
+
+    assert stopped_when_made == [True]
+    assert old.stop_thread is threading.main_thread()
+    assert type(daemon._player).__name__ == "StreamPlayer"
+
+
+@pytest.mark.asyncio
+async def test_a_replaced_legacy_player_is_stopped_inline_by_retire(tmp_path):
+    daemon = _daemon(tmp_path)
+    old = _BlockingStopPlayer(block_s=0.0)
+
+    daemon._retire_player(old)
+
+    assert old.stopped.is_set()
+    assert old.stop_thread is threading.main_thread()
+
+
+@pytest.mark.asyncio
+async def test_a_retarget_of_the_playout_player_retires_it_off_the_loop_after_the_new_one(tmp_path):
+    daemon = _daemon(tmp_path, playout_mode="measure")
+    old = _BlockingStopPlayout()
+    daemon._player = old
+    stopped_when_made: list[bool] = []
+    make = daemon._make_player
+    daemon._make_player = lambda sink: stopped_when_made.append(old.stopped.is_set()) or make(sink)  # type: ignore[method-assign]
+
+    daemon.retarget_sink("other")
+
+    assert stopped_when_made == [False]
     await _wait_stopped(old)
     assert old.stop_thread is not threading.main_thread()
 

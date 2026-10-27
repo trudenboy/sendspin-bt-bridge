@@ -319,6 +319,26 @@ async def _read_pa_latency_ms() -> float | None:
     return await read_own_stream_latency_ms(os.getpid())
 
 
+# A PulseAudio latency read that takes longer is dropped (None) so it never
+# holds the telemetry watcher; the timeout is logged once at DEBUG.
+_PA_LATENCY_TIMEOUT_S = 0.5
+_pa_latency_timeout_logged = False
+
+
+async def _pa_latency_or_none() -> float | None:
+    """``_read_pa_latency_ms`` bounded by ``_PA_LATENCY_TIMEOUT_S``; None on timeout or error."""
+    global _pa_latency_timeout_logged
+    try:
+        return await asyncio.wait_for(_read_pa_latency_ms(), _PA_LATENCY_TIMEOUT_S)
+    except TimeoutError:
+        if not _pa_latency_timeout_logged:
+            _pa_latency_timeout_logged = True
+            logger.debug("PulseAudio latency read timed out after %.1f s", _PA_LATENCY_TIMEOUT_S)
+    except Exception as exc:
+        logger.debug("PulseAudio latency read failed: %s", exc)
+    return None
+
+
 # How often ``status["playout"]`` is refreshed in ``measure``/``loop``.
 _PLAYOUT_STATUS_PLAYING_S = 1.0
 _PLAYOUT_STATUS_IDLE_S = 5.0
@@ -390,20 +410,21 @@ async def _timing_telemetry_watcher(
                         playout_changed = True
                 except Exception as exc:
                     logger.debug("playout status update failed: %s", exc)
-            pa_latency_ms: float | None = None
-            if status.get("playing") and time.monotonic() >= next_pa_latency_at:
-                next_pa_latency_at = time.monotonic() + 1.0
-                try:
-                    pa_latency_ms = await _read_pa_latency_ms()
-                except Exception as exc:
-                    logger.debug("PulseAudio latency read failed: %s", exc)
             audio_handler = getattr(daemon, "_audio_handler", None)
             client = getattr(daemon, "_client", None)
+            metrics_due = audio_handler is not None and client is not None and time.monotonic() >= next_metrics_at
+            pa_latency_ms: float | None = None
+            # measure/loop: read every second alongside the playout snapshot;
+            # off: only with the metrics tick, so it adds no status patches.
+            pa_due = time.monotonic() >= next_pa_latency_at if playout_on else metrics_due
+            if status.get("playing") and pa_due:
+                next_pa_latency_at = time.monotonic() + 1.0
+                pa_latency_ms = await _pa_latency_or_none()
             changed = playout_changed
             if audio_handler is not None:
                 changed = _observe_structured_reanchor(audio_handler, status) or changed
             now = time.monotonic()
-            if audio_handler is not None and client is not None and now >= next_metrics_at:
+            if metrics_due:
                 snapshot = collect_timing_snapshot(audio_handler, client)
                 if playout_error_ms is not None:
                     # In measure/loop the sync error is the engine's.
