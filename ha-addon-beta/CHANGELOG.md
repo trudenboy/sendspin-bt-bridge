@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.13] - 2026-10-27
+
+### Added
+
+- Playout telemetry for every player: PulseAudio stream latency and system
+  clock slew in the timing panel.
+- Experimental `PLAYOUT_SYNC=measure`: the bridge times Bluetooth playout
+  itself and shows the playout error against the Sendspin clock. On a seek
+  or skip the old audio still in the output buffer is muted.
+- A per-speaker "Playout sync" switch to opt a single speaker out of the
+  bridge's own playout timing while `PLAYOUT_SYNC` is on.
+
 ## [3.1.0-beta.12] - 2026-10-27
 
 ### Added
