@@ -113,7 +113,7 @@ describe('DeviceSettingsPanel', () => {
     it('explains it in both languages', async () => {
       const w = await mountPanel(makeDevice({ id: 'runtime-x', config_id: 'cfg-y' }))
       expect(w.text()).toContain(
-        'Turn off to run this speaker the way it worked before playout sync; it is then not held warm and gets no automatic offset.',
+        'Turn off to run this speaker the way it worked before playout sync: the plain audio output, with no playout measurement.',
       )
       expect(en.drawer.config.playoutSync).toBe('Playout sync')
       expect(ru.drawer.config.playoutSync).toBeTruthy()

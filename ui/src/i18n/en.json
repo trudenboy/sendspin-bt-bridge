@@ -546,7 +546,7 @@
       "autoPort": "Auto",
       "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
       "playoutSync": "Playout sync",
-      "playoutSyncHelp": "Turn off to run this speaker the way it worked before playout sync; it is then not held warm and gets no automatic offset.",
+      "playoutSyncHelp": "Turn off to run this speaker the way it worked before playout sync: the plain audio output, with no playout measurement.",
       "notConfigured": "This speaker is not in the configuration."
     },
     "events": {
@@ -862,7 +862,7 @@
       },
       "PLAYOUT_SYNC": {
         "label": "Playout sync",
-        "help": "Off keeps the plain audio output. Measure is the experimental option: it measures the playout error and reports it. Loop is reserved and experimental. Takes effect after the speakers restart.",
+        "help": "Off keeps the plain audio output. Measure is experimental: it measures the playout error at the speaker output and reports it, without correcting it. Takes effect after the speakers restart.",
         "options": {
           "off": "Off",
           "measure": "Measure only",

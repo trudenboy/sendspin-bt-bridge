@@ -18,7 +18,7 @@ const mountChip = (playout: Record<string, unknown>) =>
     },
     global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
   })
-const base = { mode: 'measure', state: 'running', warm: true, warm_s: 90, warmup_s: 60, error_ms: 0.4, jumps: 3 }
+const base = { mode: 'measure', state: 'playing', warm: true, warm_s: 90, warmup_s: 60, error_ms: 0.4, jumps: 3 }
 
 describe('SyncChip playout', () => {
   beforeEach(() => resetReanchorMemory())

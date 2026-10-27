@@ -59,13 +59,21 @@ describe('syncBadge', () => {
     const playout = (extra: Record<string, unknown> = {}) =>
       streaming({
         sync_error_ms: -3.6,
-        playout: { mode: 'measure', state: 'running', warm: true, warm_s: 90, warmup_s: 60, error_ms: 0.4, jumps: 2, ...extra },
+        playout: { mode: 'measure', state: 'playing', warm: true, warm_s: 90, warmup_s: 60, error_ms: 0.4, jumps: 2, ...extra },
       })
 
-    it('shows the playout error with one decimal and tones it by size', () => {
-      expect(syncBadge(playout())).toMatchObject({ kind: 'playout', tone: 'success', errorMs: 0.4, count: 2 })
-      expect(syncBadge(playout({ error_ms: -3.24 }))).toMatchObject({ kind: 'playout', tone: 'warning', errorMs: 3.2 })
-      expect(syncBadge(playout({ error_ms: 12 }))).toMatchObject({ kind: 'playout', tone: 'error', errorMs: 12 })
+    it('shows the playout error with one decimal and tones it by size in loop mode (1 / 5 ms)', () => {
+      expect(syncBadge(playout({ mode: 'loop' }))).toMatchObject({ kind: 'playout', tone: 'success', errorMs: 0.4, count: 2 })
+      expect(syncBadge(playout({ mode: 'loop', error_ms: -3.24 }))).toMatchObject({ kind: 'playout', tone: 'warning', errorMs: 3.2 })
+      expect(syncBadge(playout({ mode: 'loop', error_ms: 12 }))).toMatchObject({ kind: 'playout', tone: 'error', errorMs: 12 })
+    })
+
+    it('tones the error for measure noise in measure mode (5 / 20 ms)', () => {
+      expect(syncBadge(playout({ error_ms: -3.24 }))).toMatchObject({ kind: 'playout', tone: 'success', errorMs: 3.2 })
+      expect(syncBadge(playout({ error_ms: 5 }))).toMatchObject({ tone: 'success' })
+      expect(syncBadge(playout({ error_ms: 12 }))).toMatchObject({ tone: 'warning', errorMs: 12 })
+      expect(syncBadge(playout({ error_ms: 20 }))).toMatchObject({ tone: 'warning' })
+      expect(syncBadge(playout({ error_ms: -20.5 }))).toMatchObject({ tone: 'error', errorMs: 20.5 })
     })
 
     it('tones the jump count at the 10 / 11 boundary', () => {

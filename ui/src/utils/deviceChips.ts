@@ -50,7 +50,9 @@ export function syncBadge(d: Device, held = false): SyncBadge | null {
       }
     }
     const err = playout.error_ms == null ? null : Math.round(Math.abs(playout.error_ms) * 10) / 10
-    const tone: Tone = err == null ? 'neutral' : err <= 1 ? 'success' : err <= 5 ? 'warning' : 'error'
+    /* measure reports a noisy EMA (±2–3 ms on PA bluez5); loop holds ~1 ms. */
+    const [good, fair] = playout.mode === 'measure' ? [5, 20] : [1, 5]
+    const tone: Tone = err == null ? 'neutral' : err <= good ? 'success' : err <= fair ? 'warning' : 'error'
     return { kind: 'playout', tone, pulse: false, errorMs: err, ...jc }
   }
   const common = { count, countTone, count5m: timing.reanchor_count_5m, count30m: timing.reanchor_count_30m }
