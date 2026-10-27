@@ -209,9 +209,12 @@ class BridgeConfig(BaseModel):
     Timezone (IANA format).
     """
     PULSE_LATENCY_MSEC: int | None = Field(600, ge=0, le=5000)
-    PLAYOUT_SYNC: Literal["off", "measure", "loop"] | None = "off"
     """
     PulseAudio latency in milliseconds.
+    """
+    PLAYOUT_SYNC: Literal["off", "measure", "loop"] | None = "off"
+    """
+    Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.
     """
     PREFER_SBC_CODEC: bool | None = False
     """

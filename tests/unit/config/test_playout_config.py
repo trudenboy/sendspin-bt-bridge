@@ -38,3 +38,23 @@ def test_post_config_accepts_the_key():
     from sendspin_bridge.application.config import _ALLOWED_POST_CONFIG_KEYS
 
     assert "PLAYOUT_SYNC" in _ALLOWED_POST_CONFIG_KEYS
+
+
+def test_put_config_refuses_unknown_playout_mode(tmp_path, monkeypatch):
+    import sendspin_bridge.application.config as config_uc
+    import sendspin_bridge.config as config
+    from tests.support.api_client import make_client
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(config_uc, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(config_uc, "_sync_ha_options", lambda *_: None)
+    (tmp_path / "config.json").write_text(json.dumps({"CONFIG_SCHEMA_VERSION": 6, "players": []}))
+
+    client = make_client()
+    bad = client.put("/api/v1/config", json={"PLAYOUT_SYNC": "fast", "players": []})
+    assert bad.status_code == 400
+    assert "invalid_config" in json.dumps(bad.json())
+    ok = client.put("/api/v1/config", json={"PLAYOUT_SYNC": "measure", "players": []})
+    assert ok.status_code == 200
+    assert json.loads((tmp_path / "config.json").read_text())["PLAYOUT_SYNC"] == "measure"

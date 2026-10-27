@@ -1273,7 +1273,7 @@
               }
             ],
             "default": "off",
-            "description": "PulseAudio latency in milliseconds.",
+            "description": "Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.",
             "title": "Playout Sync"
           },
           "PREFER_SBC_CODEC": {
@@ -1301,6 +1301,7 @@
               }
             ],
             "default": 600,
+            "description": "PulseAudio latency in milliseconds.",
             "title": "Pulse Latency Msec"
           },
           "PULSE_SINK_RESET_ON_START": {

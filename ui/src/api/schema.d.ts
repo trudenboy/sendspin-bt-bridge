@@ -2846,7 +2846,7 @@ export interface components {
             PLAYOUT_DIAG?: boolean | null;
             /**
              * Playout Sync
-             * @description PulseAudio latency in milliseconds.
+             * @description Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.
              * @default off
              */
             PLAYOUT_SYNC?: ("off" | "measure" | "loop") | null;
@@ -2858,6 +2858,7 @@ export interface components {
             PREFER_SBC_CODEC?: boolean | null;
             /**
              * Pulse Latency Msec
+             * @description PulseAudio latency in milliseconds.
              * @default 600
              */
             PULSE_LATENCY_MSEC?: number | null;
