@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
-from sendspin_bridge.services.audio.playout.controller import MAX_STEADY_JUMP_US, LoopController
+from sendspin_bridge.services.audio.playout.controller import LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
 from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
 from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap
@@ -47,12 +47,18 @@ REJECTED_WARN_FRACTION = 0.30
 REJECTED_WINDOW = 600  # readings (60 s)
 SENSOR_DEAD_READS = 10  # consecutive empty readings (1 s) = sensor unavailable
 PREDICT_READINGS = 9  # readings whose median offset dates the port for a placement
-# After an underrun placement (R3) the error restarts from a fresh baseline: once the port
-# reaches the placed audio, the median e_w of this many readings (2 s) is the reference that
-# steady jumps correct against. The port clock settling after the underrun moves the error
-# by up to hundreds of ms (459 ms in #556) without moving the audio; that offset is
-# reported, not corrected.
-BASELINE_READINGS = 20
+# After an underrun or stall placement (R3, R14) the error restarts from a fresh baseline:
+# once the port reaches the placed audio, e_w is taken in 1 s medians; the baseline is the
+# last of two consecutive medians within BASELINE_STABLE_US (or the last one after
+# BASELINE_TIMEOUT_READINGS). Steady jumps then correct e_w minus the baseline. A port clock
+# that settles after the event can move the error by hundreds of ms without moving the
+# audio (a likely reading of the 459 ms jump in #556); that offset is reported, not
+# corrected, and over BASELINE_WARN_US it is a WARNING and state degraded.
+BASELINE_MEDIAN_READINGS = 10  # 1 s
+BASELINE_STABLE_US = 5_000.0
+BASELINE_TIMEOUT_READINGS = 60  # 6 s
+BASELINE_WARN_US = 50_000.0
+_BASELINE_REASONS = ("underrun", "stall")
 
 
 def _wall_iso() -> str:
@@ -110,6 +116,9 @@ class PlayoutEngine:
         self._error_ema_us: float | None = None
         self._baseline_us = 0.0  # reference of e_w for steady jumps (non-zero after an underrun)
         self._baseline_samples: list[float] | None = None  # collecting a fresh baseline
+        self._baseline_medians: list[float] = []  # 1 s medians of the baseline being measured
+        self._baseline_reason = ""
+        self._baseline_degraded = False  # |baseline| > BASELINE_WARN_US until the next placement
         self._opened_us: float | None = None
         self._opened_x_ns = 0
         # x_port/1000 - t of the recent readings since the last k change; their median dates
@@ -289,34 +298,71 @@ class PlayoutEngine:
         if self._baseline_samples is not None:
             if self._settle_x_ns is not None and r.x_port_ns < self._settle_x_ns:
                 return  # the port still plays audio from before the placement
-            self._baseline_samples.append(e_w)
-            if len(self._baseline_samples) < BASELINE_READINGS:
+            if not self._measure_baseline(e_w):
                 return  # controller frozen until the baseline is known
-            self._baseline_us = statistics.median(self._baseline_samples)
-            self._baseline_samples = None
-            if abs(self._baseline_us) >= 1000.0:
-                logger.info("playout: error baseline after the underrun is %.1f ms", self._baseline_us / 1000.0)
-        d = self._controller.update(t_s, e_w - self._baseline_us)
+        e_rel = e_w - self._baseline_us
+        d = self._controller.update(t_s, e_rel)
         if d.rejected:
             self._stats.rejected()
-        if d.refused_us is not None:
-            self._degraded = True
-            self._warn.warning(
-                "steady_jump_bound",
-                "playout: error %.1f ms persists but a steady jump is refused (over the %.0f ms bound)",
-                d.refused_us / 1000.0,
-                MAX_STEADY_JUMP_US / 1000.0,
-            )
-        elif d.degraded:
+        if d.degraded:
             self._degraded = True
             self._warn.warning(
                 "steady_jumps",
                 "playout: error %.1f ms persists but a steady jump is refused (one per 10 s)",
-                e_w / 1000.0,
+                e_rel / 1000.0,
             )
         if d.jump_us is not None:
+            wanted = d.jump_us if d.clamped_from_us is None else d.clamped_from_us
+            if self._baseline_us and abs(wanted + self._baseline_us) < abs(wanted):
+                # The error went back toward the reading's own zero: the offset the baseline
+                # held has cleared, so measure it again instead of moving the audio.
+                logger.info(
+                    "playout: error moved %.1f ms back toward the reading; re-measuring the baseline",
+                    wanted / 1000.0,
+                )
+                self._baseline_samples = []
+                self._baseline_medians = []
+                return
+            if d.clamped_from_us is not None:
+                logger.info(
+                    "playout: steady correction of %.1f ms clamped to %.1f ms",
+                    d.clamped_from_us / 1000.0,
+                    d.jump_us / 1000.0,
+                )
             self._pending_jump_us = d.jump_us
         self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
+
+    def _measure_baseline(self, e_w: float) -> bool:
+        """Add a post-event reading to the baseline; True once the baseline is accepted."""
+        samples = self._baseline_samples
+        assert samples is not None
+        samples.append(e_w)
+        if len(samples) % BASELINE_MEDIAN_READINGS:
+            return False
+        medians = self._baseline_medians
+        medians.append(statistics.median(samples[-BASELINE_MEDIAN_READINGS:]))
+        stable = len(medians) >= 2 and abs(medians[-1] - medians[-2]) <= BASELINE_STABLE_US
+        if not stable and len(samples) < BASELINE_TIMEOUT_READINGS:
+            return False
+        self._baseline_us = medians[-1]
+        self._baseline_samples = None
+        self._baseline_medians = []
+        if abs(self._baseline_us) >= 1000.0:
+            logger.info(
+                "playout: error baseline after the %s is %.1f ms%s",
+                self._baseline_reason,
+                self._baseline_us / 1000.0,
+                "" if stable else " (not stable after 6 s)",
+            )
+        if abs(self._baseline_us) > BASELINE_WARN_US:
+            self._baseline_degraded = True
+            self._warn.warning(
+                "baseline",
+                "playout: error baseline after the %s is %.1f ms; reported, not corrected",
+                self._baseline_reason,
+                self._baseline_us / 1000.0,
+            )
+        return True
 
     def _check_warnings(self, t_s: float) -> None:
         """Rate-limited WARNINGs (once per 10 min per kind) and the periodic DEBUG summary."""
@@ -400,7 +446,7 @@ class PlayoutEngine:
             return "idle"
         if self._suspended:
             return "suspended"
-        if self._degraded:
+        if self._degraded or self._baseline_degraded:
             return "degraded"
         return "playing"
 
@@ -434,11 +480,15 @@ class PlayoutEngine:
         self._controller.placed(t_s)
         self._record_event(size_us, reason)
         # A placement aligns to the port as read now, so the error restarts at 0; after an
-        # underrun the reading may still settle, so a fresh baseline is measured first (and
+        # underrun or a stall the reading may still settle, so a fresh baseline is measured first (and
         # measured again if another placement lands while it is being measured).
         self._baseline_us = 0.0
-        collecting = reason == "underrun" or self._baseline_samples is not None
+        self._baseline_degraded = False
+        collecting = reason in _BASELINE_REASONS or self._baseline_samples is not None
+        if reason in _BASELINE_REASONS:
+            self._baseline_reason = reason
         self._baseline_samples = [] if collecting else None
+        self._baseline_medians = []
 
     def _record_event(self, size_us: float, reason: str) -> None:
         """Count a placement or steady jump; the stats window restarts and in-flight audio settles."""

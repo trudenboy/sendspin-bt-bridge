@@ -6,6 +6,7 @@ Sign convention: positive error = late, ``jump_us`` > 0 drops audio (catch up),
 
 from __future__ import annotations
 
+import math
 import statistics
 from collections import deque
 from dataclasses import dataclass
@@ -23,11 +24,12 @@ JUMP_CONFIRM = 5  # the jump size is the median of the last 5 raw samples
 # error in that direction exceeds the threshold). The pulsesink clock under PipeWire is a
 # sawtooth of up to ~30 ms that resets every few seconds (E1, #556): it crosses the
 # threshold but falls back inside it within the window, so it is never corrected. A real
-# drift stays beyond it: at 3.5 ms/s (#546) the jump comes at ~36 ms, inside the bound.
+# drift stays beyond it: at 3.5 ms/s (#546) the jump comes at ~36 ms, inside the clamp.
 JUMP_PERSIST_S = 5.0
 JUMP_PERSIST_FRACTION = 0.9
-# Steady jumps remove a small residual error. A larger one is not trusted to be the audio's
-# (a 459 ms jump followed two underruns in #556); it is refused and reported instead.
+# Steady jumps remove a small residual error: one jump moves the audio by at most this much
+# (a 459 ms jump followed two underruns in #556). A larger persistent error is corrected in
+# clamped steps, each after the usual persistence and interval.
 MAX_STEADY_JUMP_US = 50_000.0
 JUMP_MIN_INTERVAL_S = 10.0
 HOLDOFF_S = 1.0
@@ -43,8 +45,8 @@ class Decision:
     error_us: float | None  # filtered error (EMA), None before the first accepted sample
     rejected: bool
     saturated: bool
-    degraded: bool  # a steady jump was refused (10 s interval or MAX_STEADY_JUMP_US)
-    refused_us: float | None = None  # the steady jump refused for exceeding MAX_STEADY_JUMP_US
+    degraded: bool  # a steady jump was refused by the 10 s interval
+    clamped_from_us: float | None = None  # the error a jump clamped to MAX_STEADY_JUMP_US was for
 
 
 class LoopController:
@@ -76,7 +78,7 @@ class LoopController:
         self._last_event_s = t_s
         self._holdoff_until_s = t_s + HOLDOFF_S
 
-    def _check_jump(self, t_s: float, e_w_us: float) -> tuple[float | None, bool, float | None]:
+    def _check_jump(self, t_s: float, e_w_us: float) -> tuple[float | None, bool]:
         threshold = JUMP_US[self._mode]
         run = self._run
         run.append((t_s, e_w_us))
@@ -84,18 +86,16 @@ class LoopController:
             run.popleft()
         # The window (cleared by every event) must span JUMP_PERSIST_S of readings.
         if t_s - run[0][0] < JUMP_PERSIST_S - T_S * 1.5:
-            return None, False, None
+            return None, False
         last = statistics.median(e for _, e in list(run)[-JUMP_CONFIRM:])
         if abs(last) <= threshold:
-            return None, False, None
+            return None, False
         beyond = sum(1 for _, e in run if (e > threshold if last > 0 else e < -threshold))
         if beyond < JUMP_PERSIST_FRACTION * len(run):
-            return None, False, None
+            return None, False
         if self._last_event_s is not None and t_s - self._last_event_s < JUMP_MIN_INTERVAL_S:
-            return None, True, None
-        if abs(last) > MAX_STEADY_JUMP_US:
-            return None, True, last
-        return last, False, None
+            return None, True
+        return last, False
 
     def _gate(self, e_w_us: float) -> bool:
         """Return True when the sample is accepted."""
@@ -118,11 +118,13 @@ class LoopController:
         return False
 
     def update(self, t_s: float, e_w_us: float) -> Decision:
-        jump, degraded, refused = self._check_jump(t_s, e_w_us)
+        jump, degraded = self._check_jump(t_s, e_w_us)
         if jump is not None:
             self.placed(t_s)
+            if abs(jump) > MAX_STEADY_JUMP_US:
+                return Decision(0.0, math.copysign(MAX_STEADY_JUMP_US, jump), self._ema, False, False, False, jump)
             return Decision(0.0, jump, self._ema, False, False, False)
         accepted = self._gate(e_w_us)
         if accepted:
             self._ema = e_w_us if self._ema is None else self._ema + self._alpha * (e_w_us - self._ema)
-        return Decision(0.0, None, self._ema, not accepted, False, degraded, refused)
+        return Decision(0.0, None, self._ema, not accepted, False, degraded)

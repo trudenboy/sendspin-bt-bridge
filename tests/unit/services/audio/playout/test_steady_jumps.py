@@ -29,14 +29,17 @@ def steady_jumps(caplog):
 
 def drive_until_underruns(eng, port, raw, n, *, then=None):
     """Drive until the engine has placed ``n`` underruns in total; call ``then`` right after."""
+    drive_until(eng, port, raw, lambda s: s["underruns"] >= n and s["last_jump_reason"] == "underrun", then)
+
+
+def drive_until(eng, port, raw, done, then=None):
     for _ in range(100):
         drive(eng, port, raw, 0.1)
-        snap = eng.snapshot()
-        if snap["underruns"] >= n and snap["last_jump_reason"] == "underrun":
+        if done(eng.snapshot()):
             if then is not None:
                 then()
             return
-    raise AssertionError("underrun was not placed")
+    raise AssertionError("the placement did not happen")
 
 
 # --- 1. a periodic sawtooth on the port clock is not an error to correct --------------------
@@ -64,30 +67,68 @@ def test_real_drift_is_still_corrected_by_steady_jumps(caplog, delta_ppm):
     assert abs(eng.snapshot()["error_ms"]) < 50.0
 
 
-# --- 2. a steady correction has an upper bound ----------------------------------------------
+# --- 2. a steady correction is clamped to a bound -------------------------------------------
 
 
-def test_steady_correction_over_the_bound_is_refused_and_logged(caplog):
+def errors_while(eng, port, raw, seconds):
+    seen = []
+    drive(eng, port, raw, seconds, on_sense=lambda: seen.append(eng.snapshot()["error_ms"]))
+    return [e for e in seen if e is not None]
+
+
+def test_steady_correction_over_the_bound_is_clamped_and_logged(caplog):
     eng, port, raw = playing(40.0)
     drive(eng, port, raw, 12.0)
-    before = eng.snapshot()
-    port.skip(-100.0)  # the port falls 100 ms behind: far beyond a residual
+    port.skip(-100.0)  # the port falls 100 ms behind: corrected in two clamped steps
     with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
-        drive(eng, port, raw, 20.0)
+        drive(eng, port, raw, 25.0)
     snap = eng.snapshot()
-    assert steady_jumps(caplog) == []
-    assert snap["jumps"] == before["jumps"]
-    refused = [r for r in caplog.records if r.levelno == logging.WARNING and "refused" in r.getMessage()]
-    assert len(refused) == 1 and "100." in refused[0].getMessage()
-    assert snap["state"] == "degraded"
+    assert steady_jumps(caplog) == [pytest.approx(50.0), pytest.approx(50.0, abs=1.0)]
+    clamped = [r for r in caplog.records if r.levelno == logging.INFO and "clamped" in r.getMessage()]
+    assert clamped and "100." in clamped[0].getMessage() and "50." in clamped[0].getMessage()
+    assert abs(snap["error_ms"]) < 1.0
+    assert snap["state"] == "playing"
+
+
+def test_persistent_100_ms_error_after_start_is_corrected_within_25_s(caplog):
+    eng, port, raw = playing(40.0)
+    drive(eng, port, raw, 1.5)  # the start placement is done
+    port.skip(-100.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        drive(eng, port, raw, 23.5)
+    assert abs(eng.snapshot()["error_ms"]) < 20.0
+    assert eng.snapshot()["state"] == "playing"
+    assert sum(steady_jumps(caplog)) == pytest.approx(100.0, abs=1.0)
+
+
+def test_60_ms_pa_skip_is_corrected(caplog):
+    eng, port, raw = playing(40.0)
+    drive(eng, port, raw, 12.0)
+    port.skip(60.0)  # PA dropped 60 ms: heard 60 ms early
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        drive(eng, port, raw, 25.0)
+    assert steady_jumps(caplog)[0] == pytest.approx(-50.0)
+    assert abs(eng.snapshot()["error_ms"]) < 20.0
+
+
+def test_drift_with_a_clock_sawtooth_does_not_run_away():
+    eng, port, raw = playing(130.0, delta_ppm=-3500.0)
+    drive(eng, port, raw, 2.0)
+    port.sawtooth(30.0, 15.0)
+    errors = errors_while(eng, port, raw, 120.0)
+    assert max(abs(e) for e in errors) < 60.0
+    assert eng.snapshot()["state"] == "playing"
 
 
 # --- 3. after an underrun the error restarts from a fresh baseline --------------------------
 
 
 def test_two_underruns_then_a_clock_settling_back_give_no_459_ms_jump(caplog):
-    # Live: underrun 201 ms, underrun 62 ms, then "steady, 459.0 ms". The reported clock ran
-    # ahead while the port was starved and converges back once data flows again.
+    """Live: underrun 201 ms, underrun 62 ms, then "steady, 459.0 ms", and the microphone found
+    the player early afterwards. Modelled here as the reported clock, ahead while the port was
+    starved, converging back once data flows again: a hypothesis consistent with the microphone
+    finding (the jump moved audio that was on time), not a measured mechanism.
+    """
     eng, port, raw = playing(60.0)
     drive(eng, port, raw, 12.0)
     with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
@@ -100,8 +141,11 @@ def test_two_underruns_then_a_clock_settling_back_give_no_459_ms_jump(caplog):
     snap = eng.snapshot()
     assert snap["underruns"] == 2
     assert steady_jumps(caplog) == []
-    # Not merely refused by the bound: the offset is the post-underrun baseline.
-    assert not [r for r in caplog.records if "refused" in r.getMessage()]
+    assert not [r for r in caplog.records if "clamped" in r.getMessage()]
+    # A baseline over 50 ms is reported (WARNING, degraded), not corrected (R3).
+    warned = [r for r in caplog.records if r.levelno == logging.WARNING and "baseline" in r.getMessage()]
+    assert len(warned) == 1 and "459." in warned[0].getMessage()
+    assert snap["state"] == "degraded"
 
 
 def test_offset_left_by_an_underrun_is_the_new_baseline_and_later_steps_are_corrected(caplog):
@@ -133,3 +177,40 @@ def test_a_placement_while_the_baseline_is_measured_does_not_cancel_it(caplog):
         drive_until_underruns(eng, port, raw, 1, then=delay_then_settle)
         drive(eng, port, raw, 15.0)
     assert steady_jumps(caplog) == []
+
+
+def test_slow_settle_after_an_underrun_gives_no_jump(caplog):
+    # The reading settles by 60 ms over 4 s: a baseline taken before it is stable would be
+    # ~22 ms and leave a false ~38 ms error to "correct".
+    eng, port, raw = playing(60.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(800.0)
+        drive_until_underruns(eng, port, raw, 1, then=lambda: port.slew(-60.0, 4000.0))
+        drive(eng, port, raw, 25.0)
+    assert steady_jumps(caplog) == []
+    assert eng.snapshot()["error_ms"] == pytest.approx(60.0, abs=3.0)
+
+
+def test_transient_offset_after_an_underrun_that_clears_later_gives_no_jump(caplog):
+    eng, port, raw = playing(70.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.starve(800.0)
+        drive_until_underruns(eng, port, raw, 1, then=lambda: port.slew(-30.0, 300.0))
+        drive(eng, port, raw, 10.0)  # baseline 30 ms
+        port.slew(30.0, 1000.0)  # the artefact clears: the reading is back on the audio
+        drive(eng, port, raw, 25.0)
+    assert steady_jumps(caplog) == []
+    assert abs(eng.snapshot()["error_ms"]) < 3.0
+
+
+def test_offset_left_by_a_stall_is_a_baseline_too(caplog):
+    eng, port, raw = playing(60.0)
+    drive(eng, port, raw, 12.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        port.stall(600.0)
+        drive_until(eng, port, raw, lambda s: s["last_jump_reason"] == "stall", lambda: port.slew(-30.0, 300.0))
+        drive(eng, port, raw, 20.0)
+    assert steady_jumps(caplog) == []
+    assert eng.snapshot()["error_ms"] == pytest.approx(30.0, abs=3.0)

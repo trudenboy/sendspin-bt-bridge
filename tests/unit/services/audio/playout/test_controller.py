@@ -58,12 +58,13 @@ def test_step_of_five_outliers_is_accepted_and_reseeds():
     assert d[-1].error_us > 5000.0
 
 
-def test_steady_jump_over_the_bound_is_refused_and_does_not_reset():
+def test_steady_jump_over_the_bound_is_clamped():
     assert MAX_STEADY_JUMP_US == 50_000.0
     ctrl = LoopController(mode="measure")
     ctrl.placed(0.0)
-    d = run(ctrl, [80_000.0] * 60, t0=10.0)
-    assert all(x.jump_us is None for x in d)
-    assert d[-1].refused_us == pytest.approx(80_000.0) and d[-1].degraded
+    d = run(ctrl, [-80_000.0] * 60, t0=10.0)
+    jumps = [x for x in d if x.jump_us is not None]
+    assert [x.jump_us for x in jumps] == [pytest.approx(-50_000.0)]
+    assert jumps[0].clamped_from_us == pytest.approx(-80_000.0) and not jumps[0].degraded
     ok = run(LoopController(mode="measure"), [0.0] * 20 + [45_000.0] * 60)
-    assert [x.jump_us for x in ok if x.jump_us is not None] == [pytest.approx(45_000.0)]
+    assert [(x.jump_us, x.clamped_from_us) for x in ok if x.jump_us is not None] == [(pytest.approx(45_000.0), None)]
