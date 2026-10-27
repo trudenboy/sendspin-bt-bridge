@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Group sync tuning now measures speakers reliably with ordinary
-  microphones in noisy rooms (a headset or laptop microphone), where it
-  reported "not heard" although the speakers were clearly audible. All
-  clicks of a recording are added up, so speakers are measured even when
-  each single click is lost in the room's noise
+- Group sync tuning now measures speakers with ordinary microphones in
+  noisy rooms (a headset or laptop microphone), where it reported "not
+  heard" although the speakers were clearly audible. All clicks of a
+  recording are added up, so speakers are measured even when each single
+  click is lost in the room's noise; the short 6-second measurement at a
+  speaker still needs its clicks a few dB above the room's noise
   ([#553](https://github.com/trudenboy/sendspin-bt-bridge/issues/553)).
 
 ## [3.1.0-beta.14] - 2026-10-27
