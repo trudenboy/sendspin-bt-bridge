@@ -738,14 +738,21 @@ phone; the commands are at the end of this note.
   target (40 ms): the first sample after `SIGCONT` still saw the pre-gap `written`. So `k`
   should be re-anchored from the post-recovery steady `F` (or `F` once data flows again), not from
   the raw `F_min`. Post-gap lateness heard = deficit ± … ms: PENDING-STAND (phone).
-- **Delay Report:** HAOS PA: PENDING-STAND (E4). PipeWire: PENDING-STAND (Docker VM 105 with a
-  delay-reporting speaker).
+- **Delay Report:** HAOS PA (measured 2026-10-27, BlueZ 5.82, PulseAudio 17): **no**. The
+  `MediaTransport1` objects of both active speakers (Lenco LS-500 on hci0, ENEBY20 on hci1,
+  SBC, `State=active`) carry `Device`, `UUID`, `Codec`, `Configuration`, `State`, `Endpoint`
+  and (ENEBY20) `Volume`, but no `Delay` property: neither speaker reports delay on this stack,
+  so the per-speaker offset has to come from the phone measurement here. PipeWire:
+  PENDING-STAND (Docker VM 105 with a delay-reporting speaker).
 - **group/update while a sync group is powered / off:** PENDING-STAND (E5). The local bridge log
   has only solo players: `Group update: id='64ae3ccc-…'` and `id='77efd219-…'`, each with
   `name` = the player's own name and `state=STOPPED`. So an ungrouped player does receive a
   per-player group id. That id is not its player id in `config.json`. The powered sync group case
   needs MA dev with a sync group.
-- **MONO vs RAW:** local −9.7 ppm over 60 s (NTP slewing). HAOS: PENDING-STAND (E6).
+- **MONO vs RAW:** local −9.7 ppm over 60 s (NTP slewing). HAOS (2026-10-27, 60 s in the SSH
+  add-on, same kernel clocks as the bridge container): **+3.1 ppm**, i.e. ~0.003 ms/s — two
+  orders of magnitude below the drift in #546, so it is not the cause, but the loop still runs
+  in RAW as designed.
   Legacy offset vs `PULSE_LATENCY_MSEC` (400→800): PENDING-STAND (H4).
 - **Changes to the plan (provisional, from the local result):**
   - E1 passes on pipewire-pulse for existence, monotonicity, rate and bracket, so Stage 1 keeps
