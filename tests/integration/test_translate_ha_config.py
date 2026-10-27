@@ -925,3 +925,16 @@ def test_playout_settings_have_defaults_and_a_web_ui_choice_survives_addon_resta
     cfg = _read_json(tmp_path / "config.json")
     assert cfg["COMPENSATE_OUTPUT_LATENCY"] is False
     assert cfg["PLAYOUT_DIAG"] is True
+
+
+def test_playout_sync_enabled_of_a_speaker_preserved_across_addon_restart(tmp_path):
+    """The per-speaker opt-out is a web UI setting, not an add-on option."""
+    existing = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "playout_sync_enabled": False}]}
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    devs = {d["mac"]: d for d in _read_json(tmp_path / "config.json")["BLUETOOTH_DEVICES"]}
+    assert devs["AA:BB:CC:DD:EE:FF"]["playout_sync_enabled"] is False

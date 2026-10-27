@@ -300,6 +300,10 @@ class Device(ResponseModel):
     )
     name: str | None = None
     enabled: bool = True
+    playout_sync_enabled: bool = Field(
+        default=True,
+        description="false: this speaker runs the way it did before playout sync (not held warm, no automatic offset).",
+    )
     state_changed_at: str | None = None
     uptime: str | None = None
     last_error: str | None = None
@@ -321,7 +325,7 @@ class Device(ResponseModel):
     recent_events: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
-    def from_status(cls, d: dict[str, Any], config_id: str | None = None) -> Device:
+    def from_status(cls, d: dict[str, Any], config_id: str | None = None, playout_sync_enabled: bool = True) -> Device:
         g = d.get
         pair_failure = None
         if g("pair_failure_kind"):
@@ -337,6 +341,7 @@ class Device(ResponseModel):
         return cls(
             id=str(g("player_id") or ""),
             config_id=config_id,
+            playout_sync_enabled=playout_sync_enabled,
             name=g("player_name"),
             enabled=bool(g("enabled", True)),
             state_changed_at=g("state_changed_at"),

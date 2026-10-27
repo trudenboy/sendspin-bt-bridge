@@ -1968,6 +1968,12 @@
           "playback": {
             "$ref": "#/components/schemas/DevicePlayback"
           },
+          "playout_sync_enabled": {
+            "default": true,
+            "description": "false: this speaker runs the way it did before playout sync (not held warm, no automatic offset).",
+            "title": "Playout Sync Enabled",
+            "type": "boolean"
+          },
           "recent_events": {
             "items": {
               "additionalProperties": true,
@@ -2033,6 +2039,7 @@
           "config_id",
           "name",
           "enabled",
+          "playout_sync_enabled",
           "state_changed_at",
           "uptime",
           "last_error",
@@ -2644,6 +2651,86 @@
           "now_playing"
         ],
         "title": "DeviceMusicAssistant",
+        "type": "object"
+      },
+      "DevicePatchIn": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enable or disable the speaker.",
+            "title": "Enabled"
+          },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "false runs this speaker the way it worked before playout sync; true follows the bridge setting.",
+            "title": "Playout Sync Enabled"
+          }
+        },
+        "title": "DevicePatchIn",
+        "type": "object"
+      },
+      "DevicePatchOut": {
+        "properties": {
+          "device": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Device"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The updated speaker, when it is running."
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playout Sync Enabled"
+          },
+          "restart_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restart Required"
+          }
+        },
+        "title": "DevicePatchOut",
         "type": "object"
       },
       "DevicePlayback": {
@@ -3362,37 +3449,6 @@
           "room_name"
         ],
         "title": "DisabledDevice",
-        "type": "object"
-      },
-      "EnabledIn": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "EnabledIn",
-        "type": "object"
-      },
-      "EnabledOut": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "restart_required": {
-            "title": "Restart Required",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled",
-          "restart_required"
-        ],
-        "title": "EnabledOut",
         "type": "object"
       },
       "Group": {
@@ -4722,6 +4778,17 @@
             "default": "",
             "title": "Name",
             "type": "string"
+          },
+          "playout_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playout Sync Enabled"
           },
           "power_save_delay_minutes": {
             "anyOf": [
@@ -9362,6 +9429,7 @@
         ]
       },
       "patch": {
+        "description": "Enable or disable the speaker, and/or opt it out of (or back into) playout sync.",
         "operationId": "patch_device_api_v1_devices__device_id__patch",
         "parameters": [
           {
@@ -9378,7 +9446,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EnabledIn"
+                "$ref": "#/components/schemas/DevicePatchIn"
               }
             }
           },
@@ -9389,7 +9457,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnabledOut"
+                  "$ref": "#/components/schemas/DevicePatchOut"
                 }
               }
             },
@@ -9418,7 +9486,7 @@
             "description": "Server error"
           }
         },
-        "summary": "Enable or disable a speaker",
+        "summary": "Change a speaker's settings",
         "tags": [
           "devices"
         ]

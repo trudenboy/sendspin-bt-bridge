@@ -628,6 +628,16 @@ def load_player_state_for_mac(mac: str) -> dict:
     return dict(state) if isinstance(state, dict) else {}
 
 
+def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> str:
+    """The playout mode one player runs: ``off`` when it opted out, else ``PLAYOUT_SYNC``.
+
+    ``playout_sync_enabled`` of ``None``, missing or ``True`` follows the global mode.
+    """
+    if player_cfg.get("playout_sync_enabled") is False:
+        return "off"
+    return str(cfg.get("PLAYOUT_SYNC", "off"))
+
+
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
     global _config_migration_error

@@ -50,6 +50,7 @@ from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_SCHEMA_VERSION,
     _player_id_from_mac,
+    effective_playout_mode,
     get_runtime_version,
     load_config,
     load_player_volume,
@@ -58,7 +59,7 @@ from sendspin_bridge.config import (
     save_player_static_delay,
     save_player_volume,
 )
-from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK
+from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, find_player_by_id, find_player_by_mac
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
 )
@@ -1767,6 +1768,14 @@ class SendspinClient:
                 self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 
+    def _config_entry(self, config: dict) -> dict:
+        """This player's entry in *config*'s ``players`` (empty when it has none)."""
+        entry = find_player_by_id(config, self.config_id) if self.config_id else None
+        mac = getattr(self.bt_manager, "mac_address", None)
+        if entry is None and isinstance(mac, str) and mac:
+            entry = find_player_by_mac(config, mac)
+        return entry or {}
+
     async def _resolve_own_server(self) -> OwnServer | None:
         """The Music Assistant this bridge belongs to, as far as its configuration says."""
         config = load_config()
@@ -1985,6 +1994,7 @@ class SendspinClient:
                 own_server = await self._resolve_own_server()
                 self._seen_server_delay_seq = 0
                 spawn_config = load_config()
+                player_cfg = self._config_entry(spawn_config)
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -2013,7 +2023,8 @@ class SendspinClient:
                             "compensate_output_latency": bool(spawn_config.get("COMPENSATE_OUTPUT_LATENCY", True)),
                             "playout_diag": bool(spawn_config.get("PLAYOUT_DIAG", False)),
                             # PLAYOUT_SYNC: off (legacy player) / measure / loop.
-                            "playout": {"mode": spawn_config.get("PLAYOUT_SYNC", "off")},
+                            # A speaker that opted out (playout_sync_enabled=false) always runs "off".
+                            "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
                         }
                     )
                 )

@@ -50,6 +50,9 @@ _DEVICE_WARM_FIELDS: frozenset[str] = frozenset(
         "preferred_format",
         "adapter",
         "volume_controller",
+        # Per-player opt-out of the playout sync engine: the daemon is spawned
+        # with another playout mode.
+        "playout_sync_enabled",
         # ``backend.sink`` of a non-Bluetooth player: the daemon is spawned
         # with ``PULSE_SINK`` set to it.
         "sink",

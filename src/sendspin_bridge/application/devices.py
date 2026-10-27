@@ -215,6 +215,64 @@ def _persist_enabled_and_apply(device_id: str, player_name: str, enabled: bool) 
     return started
 
 
+def set_playout_sync(device_id: str, enabled: bool) -> dict[str, Any]:
+    """Opt the speaker in or out of playout sync, and restart its player to apply it.
+
+    ``False`` is stored; ``True`` clears the key, so the speaker follows
+    ``PLAYOUT_SYNC`` again.  The warm restart is that one player's only.
+    """
+    import sendspin_bridge.config as config_mod
+    from sendspin_bridge.application import status
+    from sendspin_bridge.config.players import find_player_by_id, find_player_by_mac
+    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+    from sendspin_bridge.services.infrastructure.config_diff import diff_configs
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+    from sendspin_bridge.services.lifecycle import reconfig_orchestrator as ro
+
+    try:
+        client = find_client(device_id)
+    except UseCaseError:
+        client = None
+    config_id = getattr(client, "config_id", None)
+    wanted = config_id if isinstance(config_id, str) and config_id else device_id
+
+    def _find(cfg: dict) -> dict | None:
+        player = find_player_by_id(cfg, wanted)
+        mac = getattr(_bt_manager(client), "mac_address", None) if client is not None else None
+        if player is None and isinstance(mac, str):
+            player = find_player_by_mac(cfg, mac)
+        return player
+
+    if _find(config_mod.load_config()) is None:
+        raise UseCaseError(404, "unknown_device", f"Unknown device: {device_id}")
+
+    def _set(cfg: dict) -> None:
+        player = _find(cfg)
+        if player is None:
+            return
+        if enabled:
+            player.pop("playout_sync_enabled", None)
+        else:
+            player["playout_sync_enabled"] = False
+
+    from sendspin_bridge.config.store import ConfigStore
+
+    with config_mod.config_lock:
+        before = ConfigStore(config_mod.CONFIG_FILE).load()
+        config_mod.update_config(_set)
+        after = ConfigStore(config_mod.CONFIG_FILE).load()
+        actions = diff_configs(before, after)
+    if actions:
+        ro.ReconfigOrchestrator(
+            bridge_runtime_state.get_main_loop(),
+            get_device_registry_snapshot(),
+            activation_context=bridge_runtime_state.get_activation_context(),
+        ).apply(actions)
+    _sync_ha_options_later()
+    device = status._device(client, after) if client is not None else None
+    return {"playout_sync_enabled": enabled, "device": device}
+
+
 def _drop_from_disabled_list(device_id: str, also: Callable[[dict], bool] | None = None) -> None:
     """The disabled list is built at startup; a player started or removed since leaves it now.
 

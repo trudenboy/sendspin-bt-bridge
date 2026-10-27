@@ -545,6 +545,8 @@
       "autoAdapter": "Auto (default)",
       "autoPort": "Auto",
       "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
+      "playoutSync": "Playout sync",
+      "playoutSyncHelp": "Turn off to run this speaker the way it worked before playout sync; it is then not held warm and gets no automatic offset.",
       "notConfigured": "This speaker is not in the configuration."
     },
     "events": {

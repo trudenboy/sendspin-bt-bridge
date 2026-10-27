@@ -77,3 +77,41 @@ def test_the_daemon_playout_status_passes_the_ipc_allowlist():
 
     assert "playout" in _IPC_ALLOWED_KEYS
     assert "effective_required_lead_time_ms" in _IPC_ALLOWED_KEYS
+
+
+# -- per-player opt-out (playout_sync_enabled) ------------------------------------------------
+
+
+async def _spawn_mode(monkeypatch, config: dict, config_id: str) -> str:
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8930)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: json.loads(json.dumps(config)))
+    client = SendspinClient("Speaker", "localhost", 9000)
+    client.config_id = config_id
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bluetooth_sink_name = "bluez_sink.6C_5C_3D_35_17_99.a2dp_sink"
+    spawned: list[dict] = []
+
+    async def _fake_exec(*args, **_kw):
+        spawned.append(json.loads(args[3]))
+        raise RuntimeError("intentional short-circuit")
+
+    with (
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        await client.start_sendspin()
+    return spawned[0]["playout"]["mode"]
+
+
+@pytest.mark.asyncio
+async def test_an_opted_out_player_spawns_off_while_another_keeps_the_engine(monkeypatch):
+    config = {
+        "PLAYOUT_SYNC": "loop",
+        "players": [
+            {"id": "off-one", "name": "A", "playout_sync_enabled": False, "backend": {"type": "bluetooth_a2dp"}},
+            {"id": "on-one", "name": "B", "backend": {"type": "bluetooth_a2dp"}},
+        ],
+    }
+
+    assert await _spawn_mode(monkeypatch, config, "off-one") == "off"
+    assert await _spawn_mode(monkeypatch, config, "on-one") == "loop"

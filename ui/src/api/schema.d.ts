@@ -623,7 +623,10 @@ export interface paths {
         delete: operations["delete_device_api_v1_devices__device_id__delete"];
         options?: never;
         head?: never;
-        /** Enable or disable a speaker */
+        /**
+         * Change a speaker's settings
+         * @description Enable or disable the speaker, and/or opt it out of (or back into) playout sync.
+         */
         patch: operations["patch_device_api_v1_devices__device_id__patch"];
         trace?: never;
     };
@@ -3154,6 +3157,12 @@ export interface components {
             /** Name */
             name: string | null;
             playback: components["schemas"]["DevicePlayback"];
+            /**
+             * Playout Sync Enabled
+             * @description false: this speaker runs the way it did before playout sync (not held warm, no automatic offset).
+             * @default true
+             */
+            playout_sync_enabled: boolean;
             /** Recent Events */
             recent_events: {
                 [key: string]: unknown;
@@ -3396,6 +3405,30 @@ export interface components {
             /** Syncgroup Id */
             syncgroup_id: string | null;
         };
+        /** DevicePatchIn */
+        DevicePatchIn: {
+            /**
+             * Enabled
+             * @description Enable or disable the speaker.
+             */
+            enabled?: boolean | null;
+            /**
+             * Playout Sync Enabled
+             * @description false runs this speaker the way it worked before playout sync; true follows the bridge setting.
+             */
+            playout_sync_enabled?: boolean | null;
+        };
+        /** DevicePatchOut */
+        DevicePatchOut: {
+            /** @description The updated speaker, when it is running. */
+            device?: components["schemas"]["Device"] | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Playout Sync Enabled */
+            playout_sync_enabled?: boolean | null;
+            /** Restart Required */
+            restart_required?: boolean | null;
+        };
         /** DevicePlayback */
         DevicePlayback: {
             /**
@@ -3619,18 +3652,6 @@ export interface components {
             sink: string | null;
         } & {
             [key: string]: unknown;
-        };
-        /** EnabledIn */
-        EnabledIn: {
-            /** Enabled */
-            enabled: boolean;
-        };
-        /** EnabledOut */
-        EnabledOut: {
-            /** Enabled */
-            enabled: boolean;
-            /** Restart Required */
-            restart_required: boolean;
         };
         /**
          * Group
@@ -4203,6 +4224,8 @@ export interface components {
              * @default
              */
             name?: string;
+            /** Playout Sync Enabled */
+            playout_sync_enabled?: boolean | null;
             /**
              * Power Save Delay Minutes
              * @default 1
@@ -6855,7 +6878,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EnabledIn"];
+                "application/json": components["schemas"]["DevicePatchIn"];
             };
         };
         responses: {
@@ -6865,7 +6888,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EnabledOut"];
+                    "application/json": components["schemas"]["DevicePatchOut"];
                 };
             };
             /** @description Client error */

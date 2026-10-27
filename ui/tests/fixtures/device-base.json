@@ -2,6 +2,7 @@
   "id": "dev-1",
   "name": "Test Speaker",
   "enabled": true,
+  "playout_sync_enabled": true,
   "state_changed_at": null,
   "uptime": null,
   "last_error": null,

@@ -733,6 +733,18 @@
           "default": null,
           "description": "Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally)."
         },
+        "playout_sync_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": true,
+          "description": "false runs this speaker the way it worked before playout sync (legacy player, not held warm, no automatic offset); true or null follows PLAYOUT_SYNC."
+        },
         "room_id": {
           "anyOf": [
             {
