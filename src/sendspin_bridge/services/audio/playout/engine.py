@@ -1,0 +1,325 @@
+"""Playout engine: composes the scheduler, the port observer, the loop controller and the stats.
+
+Two ticks drive it, both on the feeder thread: ``next_block`` renders the block at the write
+head, ``sense`` (10 Hz) reads the port. With ``x_port = A − k`` (``PortObserver``):
+
+* ``e   = t − s(x_port)`` — the error heard now (positive = late), fed to the stats;
+* ``e_w = t + (x_w − x_port)·(1 + ρ̂) − s(x_w)`` — the error predicted at the write head, fed
+  to the controller. Corrections already written are inside ``s(x_w)``, so a jump that is
+  rendered but not yet at the port is counted once, never again by the engine.
+
+Placements (start, underrun, stall, delay, clear and the scheduler's own) and steady jumps
+reset the controller and the stats window. Measure mode passes ``rate = 0.0`` to the
+scheduler; only placements and steady jumps act on the audio.
+"""
+
+from __future__ import annotations
+
+import logging
+import statistics
+from collections import deque
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Literal
+
+from sendspin_bridge.services.audio.playout.controller import LoopController
+from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
+from sendspin_bridge.services.audio.playout.stats import PlayoutStats
+from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sendspin_bridge.services.audio.playout.scheduler import Block, InputFormat
+    from sendspin_bridge.services.audio.playout.sensor import PortClock
+    from sendspin_bridge.services.audio.playout.timeline import PortReading
+
+logger = logging.getLogger(__name__)
+
+# Ruling R5: a forward step of (a - t) larger than this between consecutive readings is a PA step.
+PA_STEP_US = 15_000.0
+WARN_EVERY_S = 600.0
+PREDICT_READINGS = 9  # readings whose median offset dates the port for a placement
+
+
+def _wall_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+@dataclass(frozen=True, slots=True)
+class PlayoutSettings:
+    mode: Literal["measure", "loop"]
+    warm_hold_s: float = 300.0
+    warm_in_group: bool = True
+    warm_group_max_s: float = 3600.0
+    warmup_s: float = 60.0
+    trim_us: int = 0
+    keep_alive_method: str = "silence"
+
+
+class PlayoutEngine:
+    def __init__(
+        self,
+        *,
+        settings: PlayoutSettings,
+        port: PortClock,
+        k0_ns: int = 0,
+        wall_iso: Callable[[], str] = _wall_iso,
+    ) -> None:
+        self._settings = settings
+        self._port = port
+        self._wall_iso = wall_iso
+        self._map = ScheduleMap()
+        self._sched = PlayoutScheduler(schedule=self._map)
+        self._observer = PortObserver(k0_ns=k0_ns)
+        self._controller = LoopController(mode=settings.mode)
+        self._stats = PlayoutStats()
+        self._reading: PortReading | None = None
+        self._reading_x_w_ns = 0  # write head at the last reading
+        self._fmt: InputFormat | None = None
+        self._placements_seen = 0
+        self._pending_place: str | None = None  # engine-requested placement not yet carried out
+        self._pending_jump_us: float | None = None  # steady jump decided, not yet rendered
+        self._insert_left = 0  # frames of a rendered negative jump still to be written
+        self._settle_x_ns: int | None = None  # the port reaches the last event's audio here
+        self._prev_a_minus_t: float | None = None
+        self._suspended = False
+        self._in_underrun = False
+        self._degraded = False
+        self._error_ema_us: float | None = None
+        self._opened_us: float | None = None
+        self._opened_x_ns = 0
+        # x_port/1000 - t of the recent readings since the last k change; their median dates
+        # the port for placements, so one glitched reading does not move one.
+        self._offsets: deque[float] = deque(maxlen=PREDICT_READINGS)
+        self._warm_from_us: float | None = None
+        self._now_us: float | None = None
+        self._late_start_us: float | None = None
+        self._started = False  # the start placement was requested
+        self._degraded_warned_s: float | None = None
+
+    # -- commands -------------------------------------------------------------------------
+
+    def set_format(self, fmt: InputFormat) -> None:
+        self._sched.set_format(fmt)
+        self._fmt = fmt
+
+    def submit(self, play_time_us: int, pcm: bytes) -> None:
+        self._sched.submit(play_time_us, pcm)
+
+    def clear(self) -> None:
+        self._sched.clear()
+        self._request_placement("clear")
+
+    def resync(self, shift_us: int) -> bool:
+        """Shift queued audio by ``shift_us`` and place the next frame exactly; True if audio was queued."""
+        playing = self._sched.shift(shift_us)
+        self._request_placement("delay")
+        return playing
+
+    # -- the two ticks --------------------------------------------------------------------
+
+    def next_block(self, now_us: float) -> Block:
+        self._tick(now_us)
+        if self._opened_us is None:
+            self._opened_us = self._warm_from_us = now_us
+            self._opened_x_ns = self._sched.x_w_ns
+        audible = self._audible(now_us)
+        x_w = self._sched.x_w_ns
+        s_old = self._map.at(x_w)
+        size_us = 0.0 if s_old is None else audible - s_old  # the error a placement removes
+        t_s = now_us / 1e6
+
+        if self._pending_place is not None and self._sched.reanchor(audible):
+            # Nothing queued: the placement moves the silence schedule to the write head.
+            self._record_placement(self._pending_place, size_us, t_s)
+
+        jump = self._pending_jump_us
+        self._pending_jump_us = None
+        if jump is not None and (self._sched.placement_pending or not self._sched.queued):
+            # A placement is due anyway: with program queued it re-aligns the next frame at
+            # this render, so the jump is dropped (passing it would drop audio the placement
+            # then re-aligns, and count it twice). With only silence the jump re-anchors it.
+            if not self._sched.queued and self._sched.reanchor(audible):
+                self._record_event(jump, "steady")
+            jump = None
+
+        block = self._sched.render(audible_us=audible, now_us=now_us, rate=0.0, jump_us=jump)
+        if jump is not None:
+            self._record_event(jump, "steady")  # the controller reset itself when it decided it
+            if jump < 0 and self._fmt is not None:
+                owed = round(-jump * self._fmt.sample_rate / 1e6)
+                self._insert_left = max(0, owed - block.inserted)
+        elif self._insert_left:
+            self._insert_left = max(0, self._insert_left - block.inserted)
+
+        count = self._sched.placement_count
+        if count != self._placements_seen:
+            self._placements_seen = count
+            reason = self._sched.last_placement_reason or "start"
+            if reason == "start" and block.late_drop_us:
+                self._late_start_us = block.late_drop_us
+            if self._reading is not None:  # before the first reading a placement is provisional
+                self._record_placement(reason, size_us, t_s)
+        self._stats.correction(t_s, block.inserted, block.dropped)
+        return block
+
+    def sense(self, now_us: float, delivered_ns: int) -> None:
+        self._tick(now_us)
+        sample = self._port.read()
+        if sample is None:
+            self._stats.rejected()
+            return
+        r = self._observer.observe(sample, delivered_ns)
+        self._reading = r
+        self._reading_x_w_ns = self._sched.x_w_ns
+        t_s = r.t_us / 1e6
+
+        a_minus_t = sample.a_ns / 1000.0 - sample.t_us
+        if r.stalled:
+            self._suspended = True
+            self._prev_a_minus_t = None
+        else:
+            self._stats.port(t_s, a_minus_t)
+            if self._prev_a_minus_t is not None and not r.recovered and a_minus_t - self._prev_a_minus_t > PA_STEP_US:
+                self._stats.pa_step()
+            self._prev_a_minus_t = a_minus_t
+        if r.underrun:
+            self._stats.underrun()
+            self._in_underrun = True
+        if r.stalled or self._in_underrun or r.recovered:
+            self._offsets.clear()  # k is moving or the port is not on our data
+        if not (r.stalled or self._in_underrun):
+            self._offsets.append(r.x_port_ns / 1000.0 - r.t_us)
+        if r.stalled or self._in_underrun:
+            self._warm_from_us = r.t_us
+        if r.recovered:
+            # Place once the port runs on our data again, with k final (not at the underrun
+            # reading itself: data that resumes later than it would be placed off by the gap).
+            reason = "stall" if self._suspended else "underrun"
+            self._suspended = self._in_underrun = False
+            self._warm_from_us = r.t_us
+            self._started = True
+            self._request_placement(reason)
+            return
+        if r.stalled or self._in_underrun:
+            return  # controller frozen
+        if not self._started:
+            # The first usable reading re-places what the open-time guess scheduled.
+            self._started = True
+            self._request_placement("start")
+            return
+
+        self._map.prune_before(r.x_port_ns)
+        s_port = self._map.at(r.x_port_ns)
+        if s_port is not None and (self._settle_x_ns is None or r.x_port_ns >= self._settle_x_ns):
+            self._stats.error(t_s, r.t_us - s_port)
+
+        if self._pending_place is not None or self._pending_jump_us is not None or self._insert_left:
+            return  # an event is on its way into s(x_w); the controller waits for it
+        if self._sched.placement_pending and self._sched.queued:
+            return
+        s_w = self._map.at(self._reading_x_w_ns)
+        if s_w is None:
+            return
+        rho = self._controller.rate_estimate
+        e_w = r.t_us + (self._reading_x_w_ns - r.x_port_ns) / 1000.0 * (1.0 + rho) - s_w
+        d = self._controller.update(t_s, e_w)
+        if d.rejected:
+            self._stats.rejected()
+        if d.degraded:
+            self._degraded = True
+            if self._degraded_warned_s is None or t_s - self._degraded_warned_s >= WARN_EVERY_S:
+                self._degraded_warned_s = t_s
+                logger.warning(
+                    "playout: error %.1f ms persists but a steady jump is refused (one per 10 s)", e_w / 1000.0
+                )
+        if d.jump_us is not None:
+            self._pending_jump_us = d.jump_us
+        self._error_ema_us = d.error_us
+
+    def snapshot(self) -> dict[str, object]:
+        """The status ``playout`` dict (spec "Status")."""
+        stats = self._stats.snapshot()
+        warm_s = None
+        if self._warm_from_us is not None and self._now_us is not None:
+            warm_s = round(max(0.0, self._now_us - self._warm_from_us) / 1e6, 1)
+        host_latency_ms = None
+        if self._reading is not None:
+            host_latency_ms = round((self._reading_x_w_ns - self._reading.x_port_ns) / 1e6, 3)
+        error_ms = stats.pop("error_ms")
+        if self._error_ema_us is not None:
+            error_ms = round(self._error_ema_us / 1000.0, 3)
+        return {
+            "mode": self._settings.mode,
+            "state": self._state(),
+            "error_ms": error_ms,
+            **stats,
+            "correction_ppm": round(self._controller.rate_estimate * 1e6, 1),
+            "host_latency_ms": host_latency_ms,
+            "pa_latency_ms": None,
+            "clock_slew_ppm": None,
+            "k_ns": self._observer.k_ns,
+            "warm": warm_s is not None and warm_s >= self._settings.warmup_s,
+            "warm_s": warm_s,
+            "warmup_s": self._settings.warmup_s,
+            "hold_reason": None,
+            "hold_left_s": None,
+            "late_start_ms": None if self._late_start_us is None else round(self._late_start_us / 1000.0, 3),
+            "trim_us": self._settings.trim_us,
+            "fallback_reason": None,
+        }
+
+    # -- internals ------------------------------------------------------------------------
+
+    def _tick(self, now_us: float) -> None:
+        if self._now_us is None or now_us > self._now_us:
+            self._now_us = now_us
+
+    def _state(self) -> str:
+        if self._opened_us is None:
+            return "idle"
+        if self._suspended:
+            return "suspended"
+        if self._degraded:
+            return "degraded"
+        return "playing"
+
+    def _audible(self, now_us: float) -> float:
+        """Predicted RAW time at which the write head leaves the port.
+
+        ``t + (x_w − x_port(t))·(1 + ρ̂)`` at the last reading, with ``x_port(t)`` from the
+        median offset of the recent readings. Before the first reading the port is taken to
+        start at the open: the ring is empty then and fills at once, so the first frames
+        leave right away (a buffer-time guess would put the first ring of audio early by
+        that much, and the first reading only re-places what is written after it).
+        """
+        x_w = self._sched.x_w_ns
+        r = self._reading
+        if r is None or not self._offsets:
+            opened = now_us if self._opened_us is None else self._opened_us
+            if r is not None:  # no usable reading (stall/underrun): continue from the last one
+                return max(now_us, r.t_us + (x_w - r.x_port_ns) / 1000.0)
+            return max(now_us, opened + (x_w - self._opened_x_ns) / 1000.0)
+        x_port_us = r.t_us + statistics.median(self._offsets)
+        rho = self._controller.rate_estimate
+        return r.t_us + (x_w / 1000.0 - x_port_us) * (1.0 + rho)
+
+    def _request_placement(self, reason: str) -> None:
+        self._sched.request_placement(reason)
+        self._pending_place = reason
+        self._pending_jump_us = None  # the placement re-aligns; a decided jump is moot
+
+    def _record_placement(self, reason: str, size_us: float, t_s: float) -> None:
+        self._pending_place = None
+        self._controller.placed(t_s)
+        self._record_event(size_us, reason)
+
+    def _record_event(self, size_us: float, reason: str) -> None:
+        """Count a placement or steady jump; the stats window restarts and in-flight audio settles."""
+        logger.info("playout jump: %s, %.1f ms", reason, size_us / 1000.0)
+        self._stats.jump(self._wall_iso(), size_us, reason)
+        self._stats.reset_window()
+        self._error_ema_us = 0.0
+        self._degraded = False
+        self._settle_x_ns = self._sched.x_w_ns

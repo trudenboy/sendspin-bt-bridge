@@ -142,6 +142,18 @@ class PlayoutScheduler:
         self._pending_silence = None
         self._decided = False
 
+    def reanchor(self, audible_us: float) -> bool:
+        """Re-schedule the silence at the write head to leave the port at ``audible_us``.
+
+        Only while nothing is queued and no placement silence or jump insert is owed (the
+        engine places silence this way; program is placed by ``request_placement``). It is
+        not a counted placement. Returns whether the schedule was moved.
+        """
+        if self._fmt is None or self._queue or self._owed_insert or self._pending_silence is not None:
+            return False
+        self._append(self.x_w_ns, audible_us, "silence")
+        return True
+
     # -- output -------------------------------------------------------------------------
 
     def render(
@@ -259,6 +271,11 @@ class PlayoutScheduler:
         return self._last_reason
 
     @property
+    def placement_pending(self) -> bool:
+        """A placement is requested and not yet decided (the next program frame will be placed)."""
+        return self._placement is not None
+
+    @property
     def placement_count(self) -> int:
         """Number of placements decided so far (lets the engine see a placement jump)."""
         return self._placements
@@ -324,6 +341,9 @@ class PlayoutScheduler:
         self._placed = chunk
         if n > 0:
             self._pending_silence = n
+            # The owed silence leads into the placed frame: schedule it with that frame now,
+            # so s(x_w) is right while the silence is still being written.
+            self._append(self._x_at(i), audible_i, "silence")
             return 0
         chunk.pos += drop
         self._start_program(i, chunk)

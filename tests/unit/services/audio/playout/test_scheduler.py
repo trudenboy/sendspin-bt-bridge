@@ -353,3 +353,47 @@ def test_zero_jump_is_no_jump():
     s.render(audible_us=1_000_000.0, now_us=0.0)
     b = s.render(audible_us=1_010_000.0, now_us=10_000.0, jump_us=0.0)
     assert (b.dropped, b.inserted) == (0, 0) and first_value(b) == 481
+
+
+# --- engine support (Task 1.11) ---------------------------------------------------------
+
+
+def test_placement_silence_is_scheduled_with_the_placed_frame():
+    # The silence a placement owes leads straight into the placed frame, so s(x_w) is
+    # already right while the silence is still being written (the engine's e_w uses it).
+    s, m = sched()
+    s.submit(1_000_000, tone(480))
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    s.submit(1_200_000, tone(480))  # gap: the placement owes silence
+    s.render(audible_us=1_050_000.0, now_us=10_000.0)  # the port prediction moved by +40 ms
+    assert m.kind_at(s.x_w_ns - 1) == "silence"
+    assert m.at(s.x_w_ns) == pytest.approx(1_060_000.0)
+
+
+def test_placement_pending_is_visible():
+    s, _ = sched()
+    assert s.placement_pending  # the start placement
+    s.submit(1_000_000, tone(4800))
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    assert not s.placement_pending
+    s.request_placement("stall")
+    assert s.placement_pending
+
+
+def test_reanchor_moves_the_silence_schedule_to_the_write_head():
+    s, m = sched()
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    assert s.reanchor(2_000_000.0)
+    assert m.at(s.x_w_ns) == pytest.approx(2_000_000.0)
+    b = s.render(audible_us=0.0, now_us=10_000.0)
+    assert m.at(b.x0_ns + 5_000_000) == pytest.approx(2_005_000.0)
+    assert s.placement_count == 0  # program placements are counted, a silence re-anchor is not
+
+
+def test_reanchor_refuses_while_program_is_queued():
+    s, m = sched()
+    s.submit(1_000_000, tone(4800))
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    before = m.at(s.x_w_ns)
+    assert not s.reanchor(2_000_000.0)
+    assert m.at(s.x_w_ns) == before
