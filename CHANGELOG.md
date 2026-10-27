@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- With "Recover a missing audio sink" turned on, a speaker that is also an
+  audio source, such as an Amazon Echo, is asked to stop sending audio to the
+  bridge and to accept it instead, before the disconnect/reconnect. Echo
+  devices could connect but never got an audio output.
+- The log now lists the profiles a speaker offers when it connects, and the
+  profiles its sound card has when the bridge switches it to audio output,
+  so a report about a missing audio sink shows what the speaker can do.
+
 ## [3.1.0-beta.11] - 2026-10-26
 
 ### Changed

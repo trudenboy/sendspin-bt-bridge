@@ -398,3 +398,21 @@ async def test_watching_twice_with_the_same_handler_counts_once():
     device.watch(_handler)
 
     assert device.watcher_count == 1
+
+
+@pytest.mark.asyncio
+async def test_disconnecting_a_profile_reaches_the_speaker():
+    bluez = _bluez(connected=True)
+
+    assert await _device(bluez).disconnect_profile("0000110a-0000-1000-8000-00805f9b34fb") is True
+    assert bluez.calls == [(PATH, "DisconnectProfile", ("0000110a-0000-1000-8000-00805f9b34fb",))]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_profile_disconnect_reports_false_and_keeps_the_reason():
+    bluez = _bluez(connected=True)
+    bluez.fail["DisconnectProfile"] = RuntimeError("org.bluez.Error.NotConnected")
+    device = _device(bluez)
+
+    assert await device.disconnect_profile("0000110a-0000-1000-8000-00805f9b34fb") is False
+    assert "NotConnected" in (device.last_error or "")

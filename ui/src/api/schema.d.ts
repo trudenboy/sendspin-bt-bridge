@@ -2710,7 +2710,7 @@ export interface components {
             DUPLICATE_DEVICE_CHECK?: boolean | null;
             /**
              * Experimental A2Dp Sink Recovery Dance
-             * @description Experimental: last-resort A2DP sink recovery via disconnect→reconnect when sink is missing after connect. Workaround for bluez/bluez#1922. May cause extra churn on some devices.
+             * @description Experimental: last-resort A2DP sink recovery when the sink is missing after connect. A speaker that is also an audio source (e.g. an Amazon Echo) is first asked to drop its source profile and connect its sink profile; then disconnect→reconnect. Workaround for bluez/bluez#1922. May cause extra churn on some devices.
              * @default false
              */
             EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE?: boolean | null;

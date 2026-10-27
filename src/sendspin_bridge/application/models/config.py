@@ -370,7 +370,7 @@ class BridgeConfig(BaseModel):
     """
     EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE: bool | None = False
     """
-    Experimental: last-resort A2DP sink recovery via disconnect→reconnect when sink is missing after connect. Workaround for bluez/bluez#1922. May cause extra churn on some devices.
+    Experimental: last-resort A2DP sink recovery when the sink is missing after connect. A speaker that is also an audio source (e.g. an Amazon Echo) is first asked to drop its source profile and connect its sink profile; then disconnect→reconnect. Workaround for bluez/bluez#1922. May cause extra churn on some devices.
     """
     EXPERIMENTAL_PA_MODULE_RELOAD: bool | None = False
     """

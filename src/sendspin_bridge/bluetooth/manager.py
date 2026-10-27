@@ -32,7 +32,7 @@ from sendspin_bridge.bluetooth.reconnect_policy import (
     ReleaseManagement,
     TryAdapterRecovery,
 )
-from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID, AUDIO_SINK_UUIDS
+from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID, A2DP_SOURCE_UUID, AUDIO_SINK_UUIDS, describe_uuids
 from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS, bt_rssi_mgmt
 
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
@@ -851,6 +851,13 @@ class BluetoothManager:
                     )
                 if self._abort_connect_if_cancelled():
                     return False
+                # Which roles the speaker offers — an Echo lists Audio Source
+                # next to Audio Sink — so a "missing sink" report shows it.
+                logger.info(
+                    "[%s] Speaker offers: %s",
+                    self.device_name,
+                    describe_uuids(self.device.uuids_blocking()),
+                )
                 # Workaround for bluez/bluez#1922 (5.86 dual-role A2DP regression):
                 # after the generic Connect() succeeds, also ask BlueZ explicitly
                 # for A2DP Sink. On an unaffected stack this is a cheap no-op
@@ -872,7 +879,11 @@ class BluetoothManager:
                     and not self._abort_connect_if_cancelled()
                 ):
                     self._a2dp_dance_remaining -= 1
-                    if self._a2dp_recovery_dance():
+                    # A speaker that streams to the host instead (#476) gets
+                    # its roles swapped first; the dance is the fallback.
+                    if self._a2dp_role_flip():
+                        sink_ok = self.configure_bluetooth_audio()
+                    if not sink_ok and not self._abort_connect_if_cancelled() and self._a2dp_recovery_dance():
                         sink_ok = self.configure_bluetooth_audio()
                 # Last resort: reload module-bluez5-discover to force PA to
                 # re-publish the bluez_card/bluez_sink hierarchy. Gated on its
@@ -1082,6 +1093,42 @@ class BluetoothManager:
                 direction,
                 exc,
             )
+
+    def _a2dp_role_flip(self) -> bool:
+        """Ask a dual-role speaker to stop sending audio and to accept it instead.
+
+        An Echo is an audio sink and an audio source. Connected to the bridge
+        it can open the A2DP stream towards the host and never connect its own
+        sink profile, so PulseAudio refuses ``a2dp_sink`` with "Not connected"
+        (#476). Dropping the speaker's source profile and connecting its sink
+        profile may turn the stream round. Returns ``True`` when the sink
+        profile request was accepted; ``False`` when skipped or refused.
+        """
+        uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
+        if A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids:
+            return False
+        logger.warning(
+            "[%s] No A2DP sink and the speaker is also an audio source — "
+            "asking it to stop sending and to accept audio instead",
+            self.device_name,
+        )
+        if not self.device.disconnect_profile_blocking(A2DP_SOURCE_UUID):
+            logger.info(
+                "[%s] Audio Source DisconnectProfile refused: %s",
+                self.device_name,
+                self.device.last_error or "no reason given",
+            )
+        if not self._wait_with_cancel(1):
+            return False
+        connected = self.device.connect_profile_blocking(A2DP_SINK_UUID)
+        logger.warning(
+            "[%s] Audio Sink ConnectProfile after the role flip: %s",
+            self.device_name,
+            "accepted" if connected else (self.device.last_error or "refused"),
+        )
+        if not self._wait_with_cancel(2):
+            return False
+        return connected
 
     def _a2dp_recovery_dance(self) -> bool:
         """Disconnect → wait → reconnect to nudge BlueZ into registering A2DP Sink.

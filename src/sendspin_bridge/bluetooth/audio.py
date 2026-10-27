@@ -93,9 +93,10 @@ def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
             )
             return False
         logger.warning(
-            "BlueZ card %s is in profile %s — switching to %s to expose audio sink",
+            "BlueZ card %s is in profile %s (has: %s) — switching to %s to expose audio sink",
             name,
             active or "—",
+            ", ".join(profiles) or "—",
             target,
         )
         try:

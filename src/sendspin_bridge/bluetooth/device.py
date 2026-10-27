@@ -281,6 +281,20 @@ class BluetoothDevice:
         self._remember(None)
         return True
 
+    async def disconnect_profile(self, uuid: str) -> bool:
+        """Ask BlueZ to stop one profile, leaving the rest of the link up."""
+        interface = await self._device_interface()
+        if interface is None:
+            self._remember("device not on the bus")
+            return False
+        try:
+            await interface.call_disconnect_profile(uuid)
+        except Exception as exc:
+            self._remember(str(exc))
+            return False
+        self._remember(None)
+        return True
+
     # -- the same questions, for callers with no loop of their own --------
     #
     # Thirty-six of the call sites this module replaces are plain synchronous
@@ -345,6 +359,9 @@ class BluetoothDevice:
 
     def connect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
         return bool(self._blocking(self.connect_profile(uuid), timeout=timeout, default=False))
+
+    def disconnect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
+        return bool(self._blocking(self.disconnect_profile(uuid), timeout=timeout, default=False))
 
     def identity_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> DeviceIdentity:
         return self._blocking(self.identity(), timeout=timeout, default=DeviceIdentity(name="", modalias=None))

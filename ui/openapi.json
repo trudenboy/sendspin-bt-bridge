@@ -991,7 +991,7 @@
               }
             ],
             "default": false,
-            "description": "Experimental: last-resort A2DP sink recovery via disconnect→reconnect when sink is missing after connect. Workaround for bluez/bluez#1922. May cause extra churn on some devices.",
+            "description": "Experimental: last-resort A2DP sink recovery when the sink is missing after connect. A speaker that is also an audio source (e.g. an Amazon Echo) is first asked to drop its source profile and connect its sink profile; then disconnect→reconnect. Workaround for bluez/bluez#1922. May cause extra churn on some devices.",
             "title": "Experimental A2Dp Sink Recovery Dance"
           },
           "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
