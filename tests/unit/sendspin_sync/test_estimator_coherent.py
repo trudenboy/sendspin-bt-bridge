@@ -173,3 +173,24 @@ def test_a_speaker_whose_timing_wanders_during_the_window_is_unstable():
     m = est.estimate_coherent(Recording(member="a", start_time_s=start_time_s, sample_rate=SR, pcm=pcm))
     assert m.status == "unstable" and m.reason == "spread", m
     assert m.spread_ms is not None and m.spread_ms > est.MAX_SPREAD_MS
+
+
+@pytest.mark.parametrize("clock", [3e17, 1e18, -1e18, 1e300])
+def test_an_absurd_capture_clock_is_invalid_and_returns_at_once(clock):
+    # the clock comes from the upload; at 1e18 adding a 10 s cycle no longer changes a float, so a loop stepping
+    # through the window's cycles on that clock would never end (security review)
+    rec = _window(lag_s=0.2, duration_s=20.0)
+    rec.start_time_s = clock
+    t = time.perf_counter()
+    for estimate in (est.estimate, est.estimate_coherent, est.estimate_per_click):
+        assert estimate(rec).reason == "invalid_recording"
+        assert estimate(_window(lag_s=0.2, duration_s=6.0), epoch_s=clock).reason == "invalid_recording"
+    assert time.perf_counter() - t < 2.0
+
+
+def test_a_wall_clock_capture_clock_still_measures():
+    # a capture clock in Unix seconds (~1.8e9) is large but sane: the phase is the same as on a small clock
+    rec = _window(lag_s=0.2, start_time_s=23.0, snr_db=10.0, duration_s=12.0)
+    rec.start_time_s += 1_793_110_560.0  # a multiple of the 10 s cycle
+    m = est.estimate_coherent(rec, epoch_s=0.0)
+    assert m.status == "ok" and _err_ms(m.phase_ms, 200.0) <= 1.0

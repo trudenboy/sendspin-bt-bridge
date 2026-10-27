@@ -17,6 +17,7 @@ MIN_SAMPLE_RATE = 12000
 MAX_SAMPLE_RATE = 48000
 MIN_DURATION_S = 2.0
 MAX_DURATION_S = 20.0
+MAX_CLOCK_S = 1e10  # |capture clock| and |epoch| beyond this are refused: a float there cannot hold milliseconds
 _CANDIDATE_RATIO = 3.0  # band energy over the median floor that opens a candidate event (4.8 dB)
 _ABS_FLOOR_LSB = 4.0  # floor never drops below the band energy of ±4 LSB white noise (digital silence, dither)
 _REFINE_MS = 3.0  # matched-filter search around an event's centre
@@ -188,6 +189,8 @@ def _valid(recording: Recording, epoch_s: float) -> bool:
         return False
     if not (math.isfinite(recording.start_time_s) and math.isfinite(epoch_s)):  # a phase of nan poisons planning
         return False
+    if abs(recording.start_time_s) > MAX_CLOCK_S or abs(epoch_s) > MAX_CLOCK_S:  # the clock comes from the upload
+        return False
     return MIN_DURATION_S * sr <= len(recording.pcm) // 2 <= MAX_DURATION_S * sr
 
 
@@ -350,21 +353,21 @@ def _earliest_peak(profile: list[float]) -> int:
 
 
 def _coherent(x: list[float], env: list[float], sr: int, clock_s: float) -> _Coherent | None:
+    clock_s %= ct.CYCLE_S  # only the clock's place in the cycle matters; the rest works relative to the window
     coarse_ms, quality = _coarse_phase(env, sr, clock_s)
     c, q = _quadrature(sr)
     n_t, n_x = len(c), len(x)
     half = round(sr * _COHERENT_REFINE_MS / 1000)
-    # every expected chirp of the window: (sample where it starts at the coarse phase, click id)
-    first = coarse_ms / 1000 + ct.CYCLE_S * math.floor((clock_s - coarse_ms / 1000) / ct.CYCLE_S)
+    # every expected chirp of the window: (sample where it starts at the coarse phase, click id); a bounded count
+    # of cycles, from the one starting before the window to the one after it
+    first = coarse_ms / 1000 - clock_s  # a cycle's start relative to the window, within one cycle of it
     chirps: list[tuple[int, int]] = []
-    cycle = first - ct.CYCLE_S
-    while cycle < clock_s + n_x / sr:
+    for j in range(-1, math.ceil(n_x / sr / ct.CYCLE_S) + 2):
         for k in range(ct.CYCLE_CLICKS):
             for g in (0.0, ct.gap_ms(k) / 1000):
-                s = round((cycle + k * ct.PERIOD_S + g - clock_s) * sr)
+                s = round((first + j * ct.CYCLE_S + k * ct.PERIOD_S + g) * sr)
                 if s - half >= 0 and s + half + n_t <= n_x:
-                    chirps.append((s, round((cycle - first) / ct.CYCLE_S) * ct.CYCLE_CLICKS + k))
-        cycle += ct.CYCLE_S
+                    chirps.append((s, j * ct.CYCLE_CLICKS + k))
     if len(chirps) < 2:
         return None
     # refine: the matched-filter energy summed over every chirp, on a grid, then to the sample around its peak
