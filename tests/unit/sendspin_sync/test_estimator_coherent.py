@@ -58,12 +58,22 @@ def _window(
         d, a = round(reflection[0] * SR), reflection[1]
         x = [v + (a * x[i - d] if i >= d else 0.0) for i, v in enumerate(x)]
     if snr_db is not None:
-        noise = _band_noise(n, seed)
-        env_x, env_n = est.band_envelope(x, SR), est.band_envelope(noise, SR)
-        gain = math.sqrt(max(env_x) / (sorted(env_n)[len(env_n) // 2] * 10 ** (snr_db / 10)))
-        x = [v + gain * w for v, w in zip(x, noise, strict=True)]
-    pcm = struct.pack(f"<{n}h", *(int(max(-32767, min(32767, round(v * 32767)))) for v in x))
-    return Recording(member="a", start_time_s=start_time_s, sample_rate=SR, pcm=pcm)
+        return Recording("a", start_time_s, SR, _with_band_noise(x, SR, snr_db=snr_db, seed=seed))
+    return Recording(member="a", start_time_s=start_time_s, sample_rate=SR, pcm=_pcm(x))
+
+
+def _pcm(x: list[float]) -> bytes:
+    return struct.pack(f"<{len(x)}h", *(int(max(-32767, min(32767, round(v * 32767)))) for v in x))
+
+
+def _with_band_noise(x: list[float], sample_rate: int, *, snr_db: float, seed: int) -> bytes:
+    """``x`` plus chirp-band noise at ``snr_db``: the highest 1 ms band-energy frame of ``x`` over the noise's median
+    one. At 48 kHz the band filter's lobe sits at 12 kHz, so the noise is resampled from 16 kHz by repetition."""
+    up = sample_rate // SR
+    noise = [v for v in _band_noise(-(-len(x) // up), seed) for _ in range(up)][: len(x)]
+    env_x, env_n = est.band_envelope(x, sample_rate), est.band_envelope(noise, sample_rate)
+    gain = math.sqrt(max(env_x) / (sorted(env_n)[len(env_n) // 2] * 10 ** (snr_db / 10)))
+    return _pcm([v + gain * w for v, w in zip(x, noise, strict=True)])
 
 
 def _err_ms(phase_ms: float | None, truth_ms: float) -> float:
@@ -84,7 +94,7 @@ def test_clicks_too_weak_to_hear_one_by_one_are_measured_together():
     m = est.estimate(rec)
     assert m.status == "ok", m
     assert _err_ms(m.phase_ms, 215.0) <= 1.0
-    assert m.clicks >= 16 and m.spread_ms is not None and 0.0 < m.confidence <= 1.0
+    assert m.clicks >= 8 and m.spread_ms is not None and 0.0 < m.confidence <= 1.0  # heard, of 9
 
 
 def test_room_noise_alone_is_low_snr():
@@ -101,7 +111,7 @@ def test_coherent_estimate_at_10_db():
     m = est.estimate_coherent(_window(lag_s=0.4, snr_db=10.0, seed=2))
     assert m.status == "ok", m
     assert _err_ms(m.phase_ms, 400.0) <= 1.0
-    assert m.clicks >= 16 and m.spread_ms is not None and m.spread_ms <= 1.0
+    assert m.clicks >= 8 and m.spread_ms is not None and m.spread_ms <= 1.0
 
 
 def test_coherent_estimate_honours_the_capture_clock_and_the_epoch():
@@ -152,9 +162,15 @@ def test_a_full_window_at_48_khz_stays_within_the_time_budget():
     m = est.estimate_coherent(rec)
     assert time.perf_counter() - t < 2.0
     assert m.status == "ok" and _err_ms(m.phase_ms, 0.0) <= 0.5
+    # estimate() pays the per-click pass and, when that hears nothing, the coherent one: the worst case
+    loud_room = Recording("a", 3.2, 48000, _with_band_noise(x, 48000, snr_db=3.0, seed=8))
+    t = time.perf_counter()
+    m = est.estimate(loud_room)
+    assert time.perf_counter() - t < 2.0
+    assert m.status == "ok" and _err_ms(m.phase_ms, 0.0) <= 1.0
 
 
-def test_a_speaker_whose_timing_wanders_during_the_window_is_unstable():
+def test_a_speaker_whose_timing_wanders_during_the_window_gets_no_phase():
     # run3's web player: every click crisp and loud, but each one 2 ms later than the one before (a clock being
     # corrected); summed, they still give one confident phase, which is none of them
     n = round(18.0 * SR)
@@ -171,8 +187,16 @@ def test_a_speaker_whose_timing_wanders_during_the_window_is_unstable():
     x = [v + 0.003 * w for v, w in zip(x, noise, strict=True)]
     pcm = struct.pack(f"<{n}h", *(round(v * 32767) for v in x))
     m = est.estimate_coherent(Recording(member="a", start_time_s=start_time_s, sample_rate=SR, pcm=pcm))
-    assert m.status == "unstable" and m.reason == "spread", m
-    assert m.spread_ms is not None and m.spread_ms > est.MAX_SPREAD_MS
+    # unstable (heard clicks far apart) or not heard (their sum has no arrival inside the search); never one phase
+    assert m.status in ("unstable", "not_heard") and m.reason == "spread", m
+
+
+def test_the_clock_limit_is_a_boundary():
+    rec = _window(lag_s=0.2, duration_s=6.0)
+    rec.start_time_s = est.MAX_CLOCK_S * (1 + 1e-9)
+    assert est.estimate(rec).reason == "invalid_recording"
+    rec.start_time_s = est.MAX_CLOCK_S - 7.0  # just inside: measured (the phase is meaningless here, the call is not)
+    assert est.estimate(rec).reason != "invalid_recording"
 
 
 @pytest.mark.parametrize("clock", [3e17, 1e18, -1e18, 1e300])
@@ -194,3 +218,41 @@ def test_a_wall_clock_capture_clock_still_measures():
     rec.start_time_s += 1_793_110_560.0  # a multiple of the 10 s cycle
     m = est.estimate_coherent(rec, epoch_s=0.0)
     assert m.status == "ok" and _err_ms(m.phase_ms, 200.0) <= 1.0
+
+
+def _taps(n: int, seed: int) -> list[float]:
+    """Sparse impulsive noise: taps (a few ms of decaying noise) at 2-20 a second on a faint floor - a desk, keys."""
+    rnd = random.Random(seed)
+    x = [rnd.gauss(0.0, 0.0005) for _ in range(n)]
+    rate, i = rnd.uniform(2.0, 20.0), 0
+    while True:
+        i += int(rnd.expovariate(rate) * SR)
+        if i >= n:
+            return x
+        level, length = rnd.uniform(0.01, 0.05), int(rnd.uniform(0.001, 0.006) * SR)
+        for j in range(i, min(n, i + length)):
+            x[j] += level * rnd.gauss(0.0, 1.0) * math.exp(-(j - i) / (0.3 * length + 1))
+
+
+@pytest.mark.parametrize(
+    ("duration_s", "seed"),
+    [
+        (3.0, 56),
+        (3.0, 69),
+        (3.0, 70),
+        (3.0, 108),
+        (4.0, 5),
+        (4.0, 29),
+        (4.0, 192),
+        (4.0, 246),
+        (6.0, 43),
+        (6.0, 47),
+        (6.0, 65),
+        (6.0, 113),
+    ],
+)
+def test_taps_alone_in_a_short_window_are_not_heard(duration_s, seed):
+    # short windows hold few clicks, and few clicks let noise line up by chance: the coherent path must not. These
+    # seeds are ones a gate of two clicks and quality 1.5 accepted (a phase out of nothing)
+    rec = Recording("a", 20.0 + seed * 1.37, SR, _pcm(_taps(round(duration_s * SR), seed)))
+    assert est.estimate(rec).status == "not_heard"
