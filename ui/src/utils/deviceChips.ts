@@ -16,11 +16,13 @@ export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 /* ---------------------------------------------------------------- sync -- */
 
 export interface SyncBadge {
-  kind: 'sync' | 'reanchoring'
+  kind: 'sync' | 'reanchoring' | 'playout' | 'warming'
   tone: Tone
   pulse: boolean
   /** |sync error| (or the last correction while re-anchoring), rounded ms. */
   errorMs: number | null
+  /** warming: seconds until the stream counts as warm. */
+  warmInS?: number | null
   count: number
   countTone: Tone
   count5m: number | null
@@ -37,6 +39,20 @@ export function syncBadge(d: Device, held = false): SyncBadge | null {
   const count = timing.reanchor_count ?? 0
   const countTone: Tone = count > 100 ? 'error' : count > 10 ? 'warning' : count > 0 ? 'success' : 'neutral'
   const round = (v: number | null | undefined) => (v == null ? null : Math.round(Math.abs(v)))
+  const playout = timing.playout
+  if (playout && playout.mode !== 'off' && playout.state !== 'fallback') {
+    const jumps = playout.jumps ?? 0
+    const jc = { count: jumps, countTone: (jumps > 10 ? 'warning' : jumps > 0 ? 'success' : 'neutral') as Tone, count5m: null, count30m: null }
+    if (!playout.warm && playout.warm_s != null && playout.warmup_s != null) {
+      return {
+        kind: 'warming', tone: 'neutral', pulse: true, errorMs: null,
+        warmInS: Math.max(0, Math.ceil(playout.warmup_s - playout.warm_s)), ...jc,
+      }
+    }
+    const err = playout.error_ms == null ? null : Math.round(Math.abs(playout.error_ms) * 10) / 10
+    const tone: Tone = err == null ? 'neutral' : err <= 1 ? 'success' : err <= 5 ? 'warning' : 'error'
+    return { kind: 'playout', tone, pulse: false, errorMs: err, ...jc }
+  }
   const common = { count, countTone, count5m: timing.reanchor_count_5m, count30m: timing.reanchor_count_30m }
   if (timing.reanchoring || held) {
     return {

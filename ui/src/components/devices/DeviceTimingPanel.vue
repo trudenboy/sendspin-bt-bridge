@@ -131,6 +131,25 @@ function path(key: keyof TimingSample) {
     .map((v, i) => `${((i / (values.length - 1)) * 300).toFixed(1)},${(30 - (v / max) * 26).toFixed(1)}`)
     .join(' ')
 }
+const playout = computed(() => props.device.timing.playout ?? null)
+const fmt = (v: number | null | undefined, unit: string, digits = 1) => (v == null ? '—' : `${v.toFixed(digits)} ${unit}`)
+const playoutRows = computed(() => {
+  const p = playout.value
+  if (!p) return []
+  return [
+    ['error', fmt(p.error_ms, 'ms')],
+    ['p95', fmt(p.error_p95_ms, 'ms')],
+    ['slope', fmt(p.error_slope_ms_per_s, 'ms/s', 2)],
+    ['corrections', fmt(p.corrections_per_s, '/s', 2)],
+    ['jumps', String(p.jumps ?? 0)],
+    ['underruns', String(p.underruns ?? 0)],
+    ['paLatency', fmt(props.device.timing.pa_latency_ms ?? p.pa_latency_ms, 'ms', 0)],
+    ['hostLatency', fmt(p.host_latency_ms, 'ms')],
+    ['sinkRate', fmt(p.sink_rate_ppm, 'ppm', 0)],
+    ['clockSlew', fmt(props.device.timing.clock_slew_ppm ?? p.clock_slew_ppm, 'ppm', 1)],
+    ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.warming', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
+  ] as [string, string][]
+})
 const syncError = computed(() => props.device.timing.sync_error_ms)
 </script>
 
@@ -183,6 +202,19 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
         </RouterLink>
       </SettingsRow>
     </div>
+
+    <section v-if="playout" class="mt-4" data-testid="playout-block">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.playout.title') }}</h3>
+      <p v-if="playout.state === 'fallback'" class="mt-1 text-sm text-warning" data-testid="playout-fallback">
+        {{ t('timing.playout.fallback', { reason: playout.fallback_reason ?? t('timing.playout.unknownReason') }) }}
+      </p>
+      <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+        <template v-for="[key, value] in playoutRows" :key="key">
+          <dt class="text-text-secondary">{{ t(`timing.playout.rows.${key}`) }}</dt>
+          <dd class="tabular-nums text-text-primary">{{ value }}</dd>
+        </template>
+      </dl>
+    </section>
 
     <section class="mt-4">
       <div class="flex items-center justify-between">
