@@ -182,18 +182,28 @@ def _click_sequence(clusters: list[list[_Chirp]], sr: int) -> list[tuple[_Chirp,
     return best
 
 
-def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
-    sr, member = recording.sample_rate, recording.member
+def _valid(recording: Recording, epoch_s: float) -> bool:
+    sr = recording.sample_rate
     if not MIN_SAMPLE_RATE <= sr <= MAX_SAMPLE_RATE or len(recording.pcm) % 2:
-        return _invalid(member)
+        return False
     if not (math.isfinite(recording.start_time_s) and math.isfinite(epoch_s)):  # a phase of nan poisons planning
-        return _invalid(member)
-    n = len(recording.pcm) // 2
-    if not MIN_DURATION_S * sr <= n <= MAX_DURATION_S * sr:
-        return _invalid(member)
+        return False
+    return MIN_DURATION_S * sr <= len(recording.pcm) // 2 <= MAX_DURATION_S * sr
+
+
+def estimate_per_click(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
+    """Each chirp pair detected on its own, the click sequence decoded from their gaps: the most precise
+    phase when every click stands well above the room's noise."""
+    if not _valid(recording, epoch_s):
+        return _invalid(recording.member)
     x = pcm_to_floats(recording.pcm)
+    return _per_click(recording, epoch_s, x, band_envelope(x, recording.sample_rate))
+
+
+def _per_click(recording: Recording, epoch_s: float, x: list[float], env: list[float]) -> Measurement:
+    sr, member = recording.sample_rate, recording.member
+    n = len(x)
     frame = max(1, round(sr / 1000))
-    env = band_envelope(x, sr)
     abs_floor = 2.0 * (_ABS_FLOOR_LSB / 32768.0) ** 2 * frame
     floor = max(sorted(env)[len(env) // 2], abs_floor)
     # A phone's band envelope crackles (AAC artefacts, desk and room noise): far more weak events than a click
@@ -243,3 +253,7 @@ def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
         spread_ms=round(spread, 2),
         confidence=confidence,
     )
+
+
+def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
+    return estimate_per_click(recording, epoch_s=epoch_s)
