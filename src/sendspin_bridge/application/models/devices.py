@@ -84,7 +84,13 @@ class DeviceBluetooth(ResponseModel):
     codec_id: int | None = None
     codec_name: str | None = None
     transport_state: str | None = None
-    reported_delay_ms: float | None = None
+    reported_delay_ms: float | None = Field(
+        default=None,
+        description=(
+            "Delay the speaker reports over AVDTP Delay Reporting, in ms. Advisory: reported by the "
+            "speaker, not measured. Null when the speaker sends no Delay Report."
+        ),
+    )
     delay_reporting_supported: bool = False
     never_paired: bool = False
     never_paired_since: str | None = None
