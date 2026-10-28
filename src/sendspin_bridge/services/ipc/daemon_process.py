@@ -621,15 +621,24 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
+    # An over-long line is discarded up to its newline, however many reads it
+    # spans: dropped and counted once, its tail never parsed as a command.
+    discarding = False
     while not stop_event.is_set():
         try:
-            line = await asyncio.wait_for(reader.readline(), timeout=1.0)
+            line = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=1.0)
         except TimeoutError:
             continue
-        except ValueError:
-            # A line over the StreamReader limit (64 KiB): the reader has already
-            # discarded it; drop it and keep reading rather than end the loop.
-            _note_stdin_drop("overlong", "Dropped an IPC command line over the 64 KiB limit")
+        except asyncio.LimitOverrunError as exc:
+            if not discarding:
+                discarding = True
+                _note_stdin_drop("overlong", "Dropped an IPC command line over the 64 KiB limit")
+            await reader.readexactly(exc.consumed)
+            continue
+        except asyncio.IncompleteReadError as exc:
+            line = exc.partial  # end of input: whatever is left, b"" when nothing
+        if discarding and line:
+            discarding = False  # the newline (or end of input) that closes the long line
             continue
         if not line:
             break

@@ -653,3 +653,35 @@ async def test_air_commands_before_the_daemon_exists_are_counted():
     before = daemon_process.stdin_drop_counters["air_no_daemon"]
     await _feed_raw((json.dumps(GOOD) + "\n").encode() * 3, [])
     assert daemon_process.stdin_drop_counters["air_no_daemon"] == before + 3
+
+
+async def _feed_chunks(chunks: list[bytes], daemon_ref: list) -> None:
+    """Deliver ``chunks`` one event-loop turn apart, as a pipe delivers a long write."""
+
+    async def _fake_connect_read_pipe(protocol_factory, pipe):
+        protocol = protocol_factory()
+        protocol.connection_made(MagicMock())
+
+        async def _deliver() -> None:
+            for chunk in chunks:
+                protocol.data_received(chunk)
+                await asyncio.sleep(0.01)
+            protocol.eof_received()
+
+        asyncio.ensure_future(_deliver())
+
+    loop = asyncio.get_running_loop()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(loop, "connect_read_pipe", _fake_connect_read_pipe)
+        await asyncio.wait_for(daemon_process._read_commands(daemon_ref, asyncio.Event()), timeout=5.0)
+
+
+async def test_an_overlong_line_split_across_reads_is_dropped_whole_and_counted_once(tmp_path):
+    daemon = _volume_daemon(tmp_path)
+    before = daemon_process.stdin_drop_counters["overlong"]
+    # The tail of the long line is itself a valid command: it must not be executed.
+    tail = (json.dumps({"cmd": "set_volume", "value": 99, "protocol_version": 2}) + "\n").encode()
+    head = b'{"pad": "' + b"P" * 200_000
+    await _feed_chunks([head[:70_000], head[70_000:140_000], head[140_000:], b'", "x": 1}' + tail, SET_VOLUME], [daemon])
+    assert [c.kwargs["volume"] for c in daemon.apply_bridge_volume.call_args_list] == [30]
+    assert daemon_process.stdin_drop_counters["overlong"] == before + 1
