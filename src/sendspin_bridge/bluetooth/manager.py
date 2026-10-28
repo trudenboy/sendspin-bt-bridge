@@ -833,6 +833,12 @@ class BluetoothManager:
                 self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
                     return False
+                # A dual-role speaker (an Echo, #476) picks its role as the
+                # link comes up: ask for its sink before it opens its own
+                # source stream towards the host.
+                self._early_a2dp_role_flip()
+                if self._abort_connect_if_cancelled():
+                    return False
                 # Wait (up to 10s) for BlueZ to finish SDP resolution before
                 # poking audio. Prevents all downstream profile/sink work from
                 # racing an uninitialized Device1. Non-blocking: we proceed
@@ -881,10 +887,23 @@ class BluetoothManager:
                     self._a2dp_dance_remaining -= 1
                     # A speaker that streams to the host instead (#476) gets
                     # its roles swapped first; the dance is the fallback.
-                    if self._a2dp_role_flip():
+                    dual_role = self._is_dual_role_speaker()
+                    flipped = self._a2dp_role_flip()
+                    if flipped:
                         sink_ok = self.configure_bluetooth_audio()
-                    if not sink_ok and not self._abort_connect_if_cancelled() and self._a2dp_recovery_dance():
-                        sink_ok = self.configure_bluetooth_audio()
+                    if not sink_ok and not self._abort_connect_if_cancelled():
+                        if dual_role and not flipped:
+                            # An Echo that refused the flip drops every
+                            # reconnect within a second and then ignores
+                            # pages until it is re-paired (#476).
+                            logger.warning(
+                                "[%s] Skipping the disconnect/reconnect dance: the speaker refused the role "
+                                "flip and is also an audio source — the dance only locks such speakers out "
+                                "until they are re-paired",
+                                self.device_name,
+                            )
+                        elif self._a2dp_recovery_dance():
+                            sink_ok = self.configure_bluetooth_audio()
                 # Last resort: reload module-bluez5-discover to force PA to
                 # re-publish the bluez_card/bluez_sink hierarchy. Gated on its
                 # own experimental flag because it briefly drops every other
@@ -1094,38 +1113,65 @@ class BluetoothManager:
                 exc,
             )
 
+    def _is_dual_role_speaker(self) -> bool:
+        """Does the speaker list both Audio Source and Audio Sink (an Echo, #476)?"""
+        uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
+        return A2DP_SOURCE_UUID in uuids and A2DP_SINK_UUID in uuids
+
+    def _connect_sink_profile_logged(self, label: str) -> bool:
+        """``ConnectProfile(Audio Sink)``, with its outcome logged under *label*."""
+        connected = self.device.connect_profile_blocking(A2DP_SINK_UUID)
+        logger.warning(
+            "[%s] %s: %s",
+            self.device_name,
+            label,
+            "accepted" if connected else f"refused ({self.device.last_error or 'no reason given'})",
+        )
+        return connected
+
+    def _early_a2dp_role_flip(self) -> bool:
+        """Ask a dual-role speaker for its sink as soon as the link is up.
+
+        An Echo picks its role per connection; once it has opened its own
+        source stream towards the host it refuses the sink (#476). Asking
+        right after ``Connected`` — before SDP resolution and the sink lookup
+        — gives it the chance to pick the speaker role. The source profile is
+        left alone. Only with the experimental sink recovery on.
+        """
+        if not self._enable_a2dp_dance or not self._is_dual_role_speaker():
+            return False
+        return self._connect_sink_profile_logged("Early Audio Sink ConnectProfile (source kept)")
+
     def _a2dp_role_flip(self) -> bool:
-        """Ask a dual-role speaker to stop sending audio and to accept it instead.
+        """Ask a dual-role speaker to accept audio instead of sending it.
 
         An Echo is an audio sink and an audio source. Connected to the bridge
         it can open the A2DP stream towards the host and never connect its own
         sink profile, so PulseAudio refuses ``a2dp_sink`` with "Not connected"
-        (#476). Dropping the speaker's source profile and connecting its sink
-        profile may turn the stream round. Returns ``True`` when the sink
-        profile request was accepted; ``False`` when skipped or refused.
+        (#476). First the sink profile is requested with the source profile
+        still up; only when that is refused is the source profile dropped and
+        the sink requested again. Returns ``True`` when a sink profile request
+        was accepted; ``False`` when skipped or refused.
         """
-        uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
-        if A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids:
+        if not self._is_dual_role_speaker():
             return False
         logger.warning(
-            "[%s] No A2DP sink and the speaker is also an audio source — "
-            "asking it to stop sending and to accept audio instead",
+            "[%s] No A2DP sink and the speaker is also an audio source — asking it to accept audio instead",
             self.device_name,
         )
+        if self._connect_sink_profile_logged("Audio Sink ConnectProfile (source kept)"):
+            return self._wait_with_cancel(2)
         if not self.device.disconnect_profile_blocking(A2DP_SOURCE_UUID):
-            logger.info(
-                "[%s] Audio Source DisconnectProfile refused: %s",
+            logger.warning(
+                "[%s] Audio Source DisconnectProfile: refused (%s)",
                 self.device_name,
                 self.device.last_error or "no reason given",
             )
+        else:
+            logger.warning("[%s] Audio Source DisconnectProfile: accepted", self.device_name)
         if not self._wait_with_cancel(1):
             return False
-        connected = self.device.connect_profile_blocking(A2DP_SINK_UUID)
-        logger.warning(
-            "[%s] Audio Sink ConnectProfile after the role flip: %s",
-            self.device_name,
-            "accepted" if connected else (self.device.last_error or "refused"),
-        )
+        connected = self._connect_sink_profile_logged("Audio Sink ConnectProfile (after dropping the source)")
         if not self._wait_with_cancel(2):
             return False
         return connected
