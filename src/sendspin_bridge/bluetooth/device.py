@@ -18,6 +18,7 @@ the controller's verbs and they live behind the bluetoothctl transport.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import threading
 import time
@@ -358,10 +359,36 @@ class BluetoothDevice:
                 return False
 
     def connect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
-        return bool(self._blocking(self.connect_profile(uuid), timeout=timeout, default=False))
+        return self._profile_call_blocking(self.connect_profile(uuid), timeout=timeout)
 
     def disconnect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
-        return bool(self._blocking(self.disconnect_profile(uuid), timeout=timeout, default=False))
+        return self._profile_call_blocking(self.disconnect_profile(uuid), timeout=timeout)
+
+    def _profile_call_blocking(self, call: Any, *, timeout: float) -> bool:
+        """Run a profile call on the loop and keep its reason for *this* thread.
+
+        The call remembers why it failed on the loop's thread; the caller
+        reads ``last_error`` from its own, so the reason is carried back here.
+        No answer at all (no loop, or none within *timeout*) is a reason too.
+        """
+
+        async def _with_reason() -> tuple[bool, str | None]:
+            ok = await call
+            return bool(ok), self.last_error
+
+        try:
+            result = self._blocking(_with_reason(), timeout=timeout, default=None)
+        finally:
+            # ``_blocking`` closes the wrapper when it cannot run it; the call
+            # inside was then never started and must not warn as un-awaited.
+            if inspect.getcoroutinestate(call) == inspect.CORO_CREATED:
+                call.close()
+        if result is None:
+            self._remember(f"no reply from BlueZ within {timeout:.0f}s")
+            return False
+        ok, reason = result
+        self._remember(None if ok else reason)
+        return ok
 
     def identity_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> DeviceIdentity:
         return self._blocking(self.identity(), timeout=timeout, default=DeviceIdentity(name="", modalias=None))
