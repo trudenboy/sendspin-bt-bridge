@@ -606,6 +606,14 @@ async def test_snapshot_carries_the_status_fields(air_world):
         assert key in s
 
 
+async def test_snapshot_reports_the_sbc_rate_of_the_air_frames(air_world):
+    """The parent picks the calibration by the SBC rate the daemon sees (R-12)."""
+    w = air_world(H_true_ms=10.0)
+    assert w.sensor.snapshot()["rate"] is None
+    await w.run(seconds=2)
+    assert w.sensor.snapshot()["rate"] == 44100
+
+
 async def test_a_lock_regained_after_no_lock_reports_only_fresh_windows(air_world):
     w = air_world(H_true_ms=10.0)
     await w.run(seconds=10)

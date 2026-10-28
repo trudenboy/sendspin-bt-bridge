@@ -338,6 +338,7 @@ class AirSensor:
         self._skipped_n = 0
         self._timestamp: str | None = None
         self._complete_lag_us: float | None = None
+        self._rate: int | None = None  # SBC sampling rate of the newest air batch
         # Lock state.
         self._lag: float | None = None
         self._candidate: AirWindow | None = None
@@ -387,6 +388,7 @@ class AirSensor:
             self._missing += sum(1 for e in env.e if e == MISSING)
             self._timestamp = env.timestamp
             self._complete_lag_us = env.complete_lag_us
+            self._rate = env.rate
         except Exception:
             self._fail()
 
@@ -765,6 +767,7 @@ class AirSensor:
             "state": state,
             "reason": reason,
             "codec": src.codec if src else None,
+            "rate": self._rate,
             "adapter": src.adapter if src else None,
             "host_placement_ms": _ms(h),
             "air_error_ms": _ms(e),
