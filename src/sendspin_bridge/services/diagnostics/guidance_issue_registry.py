@@ -83,6 +83,15 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("pa_socket_missing",),
     ),
+    # Read-only check: the host suspends the speaker's sink between songs, which
+    # can shift the speaker's buffer by tens of ms.  The bridge never changes it.
+    "bt_sink_suspend_in_gaps": GuidanceIssueDefinition(
+        key="bt_sink_suspend_in_gaps",
+        layer="audio",
+        priority=34,
+        severity="warning",
+        default_reason_codes=("observed_suspend", "module_suspend_on_idle", "wireplumber_suspend_timeout"),
+    ),
     "missing_sink": GuidanceIssueDefinition(
         key="missing_sink",
         layer="sink_verification",

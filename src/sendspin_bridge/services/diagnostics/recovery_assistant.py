@@ -336,7 +336,59 @@ def build_recovery_issue_actions(
     return primary_action, _merge_secondary_actions(primary_action, secondary_actions)
 
 
+_SINK_SUSPEND_DOCS = "https://trudenboy.github.io/sendspin-bt-bridge/bluetooth-speakers/#bluetooth-sink-suspend"
+_SINK_SUSPEND_CAUSES = {
+    "observed_suspend": "The host suspended this speaker's audio sink while the speaker was connected and idle.",
+    "module_suspend_on_idle": "PulseAudio's module-suspend-on-idle is loaded and suspends idle sinks.",
+    "wireplumber_suspend_timeout": "WirePlumber suspends idle Bluetooth nodes (session.suspend-timeout-seconds).",
+}
+
+
+def _host_sink_suspends(device: Any) -> dict[str, Any]:
+    """The device's ``host_sink_suspends`` dict, from a status object or a normalized state model."""
+    direct = getattr(device, "host_sink_suspends", None)
+    if isinstance(direct, dict):
+        return direct
+    audio = _device_state_model(device).get("audio")
+    nested = audio.get("host_sink_suspends") if isinstance(audio, dict) else None
+    return nested if isinstance(nested, dict) else {}
+
+
+def _build_sink_suspend_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    """One warning per connected speaker whose sink the host suspends in gaps (read-only check)."""
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        facts = _host_sink_suspends(device)
+        if not facts.get("warn"):
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        cause = _SINK_SUSPEND_CAUSES.get(str(facts.get("reason") or ""), "")
+        primary_action, secondary_actions = build_recovery_issue_actions("bt_sink_suspend_in_gaps", [name])
+        issues.append(
+            RecoveryIssue(
+                key="bt_sink_suspend_in_gaps",
+                severity="warning",
+                title=f"{name}: the host suspends the Bluetooth sink between songs",
+                summary=(
+                    f"{cause} After such a pause the speaker restarts its stream and may shift by tens of "
+                    "milliseconds. The bridge never changes host audio settings; to stop it, disable the "
+                    f"sink suspend on the host: {_SINK_SUSPEND_DOCS}"
+                ).strip(),
+                primary_action=primary_action,
+                secondary_actions=secondary_actions,
+                device_name=name,
+            )
+        )
+    return issues
+
+
 def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    issues = _build_device_connection_issues(devices)
+    issues.extend(_build_sink_suspend_issues(devices))
+    return issues
+
+
+def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
     issues: list[RecoveryIssue] = []
     for device in devices:
         name = str(getattr(device, "player_name", None) or "Unknown")

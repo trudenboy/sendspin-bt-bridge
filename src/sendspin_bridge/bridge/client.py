@@ -66,6 +66,7 @@ from sendspin_bridge.services.audio.latency_calibration import (
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.audio.player.settings import output_latency_compensated
+from sendspin_bridge.services.audio.sink_suspend_policy import SuspendObserver, SuspendPolicy
 from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line, transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -500,6 +501,9 @@ class DeviceStatus:
     bt_standby_since: str | None = None
     bt_waking: bool = False
     bt_power_save: bool = False
+    # Host-initiated sink suspends in gaps (read-only check; see
+    # ``services.audio.sink_suspend_policy``).  ``None`` until observed or probed.
+    host_sink_suspends: dict | None = None
     # v2.63.0-rc.2 — last observed BT signal strength (dBm) + capture
     # timestamp.  Currently populated only via the user-triggered scan
     # path (``bluetooth.bluez.DeviceInfo.rssi`` /
@@ -785,6 +789,12 @@ class SendspinClient:
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
+        # Monotonic time of the last time *we* suspended our own sink (power save, output
+        # reset); a host suspend observed right after it is ours, not the host's.
+        self._suspend_requested_at: float | None = None
+        self._suspend_observer = SuspendObserver()
+        self._suspend_policy: SuspendPolicy | None = None
+        self._suspend_listener_attached = False
         self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
         # Ring of recent daemon spawns/exits.  Populated on spawn (entry created)
         # and on death (exit fields filled).  Used for the diagnostics report
@@ -1081,7 +1091,9 @@ class SendspinClient:
             return
         from sendspin_bridge.services.audio.pulse import asuspend_sink
 
+        self._mark_suspend_requested()
         ok = await asuspend_sink(sink, True)
+        self._mark_suspend_requested()
         if ok:
             self._update_status({"bt_power_save": True})
             logger.info("[%s] Entered power-save (PA sink suspended)", self.player_name)
@@ -1104,6 +1116,50 @@ class SendspinClient:
             logger.info("[%s] Exited power-save (PA sink resumed)", self.player_name)
         else:
             logger.warning("[%s] Failed to resume PA sink from power-save", self.player_name)
+
+    # ---- Host sink-suspend check (read-only) ----
+
+    _OWN_SUSPEND_WINDOW_S = 2.0
+
+    def _mark_suspend_requested(self, now: float | None = None) -> None:
+        """Remember that the bridge itself is suspending (or just suspended) its sink."""
+        self._suspend_requested_at = time.monotonic() if now is None else now
+
+    def _bridge_requested_suspend(self, now: float | None = None) -> bool:
+        at = self._suspend_requested_at
+        if at is None:
+            return False
+        return ((time.monotonic() if now is None else now) - at) <= self._OWN_SUSPEND_WINDOW_S
+
+    def _on_sink_state_change(self, mac: str, old: str | None, new: str, sink_name: str) -> None:
+        """SinkMonitor listener: record a host-initiated suspend of this speaker's sink."""
+        own = self.bt_manager.mac_address if self.bt_manager else None
+        if not own or str(own).upper() != str(mac).upper():
+            return
+        bridge_requested = bool(
+            self.status.get("bt_power_save") or self.status.get("bt_standby") or self._bridge_requested_suspend()
+        )
+        self._suspend_observer.on_state(
+            old, new, bridge_requested=bridge_requested, connected=bool(self.status.get("bluetooth_connected"))
+        )
+        self._publish_host_sink_suspends()
+
+    def set_suspend_policy(self, policy: SuspendPolicy | None) -> None:
+        """The orchestrator's latest static probe of the host's suspend policy."""
+        self._suspend_policy = policy
+        self._publish_host_sink_suspends()
+
+    def _publish_host_sink_suspends(self) -> None:
+        snapshot = self._suspend_observer.snapshot(self._suspend_policy)
+        if snapshot != self.status.get("host_sink_suspends"):
+            self._update_status({"host_sink_suspends": snapshot})
+
+    def _attach_suspend_listener(self, monitor: object | None) -> None:
+        add = getattr(monitor, "add_state_listener", None)
+        if add is None or self._suspend_listener_attached or self.backend_type != BLUETOOTH:
+            return
+        self._suspend_listener_attached = True
+        add(self._on_sink_state_change)
 
     # ---- Sink mute watchdog (safety net) ----
 
@@ -1810,7 +1866,9 @@ class SendspinClient:
             self.reset_output_on_start = False
             from sendspin_bridge.services.audio import pulse
 
+            self._mark_suspend_requested()
             await pulse.asuspend_sink(self.bluetooth_sink_name, True)
+            self._mark_suspend_requested()
             await pulse.asuspend_sink(self.bluetooth_sink_name, False)
         try:
             # Pre-flight gate (#291): refuse to spawn when SENDSPIN_SERVER is
@@ -2967,6 +3025,10 @@ class SendspinClient:
             monitor = self._sink_monitor or get_sink_monitor()
             if monitor is not None and hasattr(monitor, "register_presence"):
                 self.follow_output(monitor)
+        else:
+            from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_sink_monitor
+
+            self._attach_suspend_listener(self._sink_monitor or get_sink_monitor())
 
         # Start Sendspin player: immediately if no BT device, deferred if BT configured
         if not self.bt_management_enabled:

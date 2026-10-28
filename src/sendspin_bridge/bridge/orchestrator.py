@@ -297,6 +297,7 @@ class BridgeOrchestrator:
         breadcrumbs: BreadcrumbStore | None = None,
     ):
         self.startup_steps = startup_steps
+        self._suspend_probe_task: asyncio.Task[None] | None = None
         self.breadcrumbs = breadcrumbs or BreadcrumbStore(_resolve_config_dir())
         self.lifecycle_state = lifecycle_state or BridgeLifecycleState(
             startup_steps=startup_steps,
@@ -473,6 +474,15 @@ class BridgeOrchestrator:
                 logger.warning("Sync capture HTTPS server could not start", exc_info=True)
         return server
 
+    async def _stop_suspend_probe(self) -> None:
+        task = getattr(self, "_suspend_probe_task", None)
+        self._suspend_probe_task = None
+        if task is None:
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
     async def graceful_shutdown(
         self,
         *,
@@ -529,6 +539,7 @@ class BridgeOrchestrator:
 
         await self._shutdown_sync_tuning()
 
+        await self._stop_suspend_probe()
         if sink_monitor is not None:
             await sink_monitor.stop()
         if hci_monitor is not None:
@@ -1104,6 +1115,9 @@ class BridgeOrchestrator:
         sink_monitor = SinkMonitor()
         for client in clients:
             client._sink_monitor = sink_monitor
+            attach = getattr(client, "_attach_suspend_listener", None)
+            if attach is not None:
+                attach(sink_monitor)
         # Players added later (live reconfig) follow their output through it too.
         set_sink_monitor(sink_monitor)
 
@@ -1113,6 +1127,12 @@ class BridgeOrchestrator:
 
         try:
             await sink_monitor.start()
+            # Read-only check of the host's sink-suspend policy (never changes it).
+            from sendspin_bridge.services.audio.sink_suspend_policy import run_suspend_probe_loop
+
+            self._suspend_probe_task = asyncio.create_task(
+                run_suspend_probe_loop(lambda: get_device_registry_snapshot().active_clients)
+            )
             # Without sink events (no pulsectl, PA unreachable) local outputs are polled.
             sink_monitor.start_presence_polling(float(getattr(bootstrap, "bt_check_interval", 15) or 15))
             await hci_monitor.start()
@@ -1142,6 +1162,7 @@ class BridgeOrchestrator:
                 details={"error_type": type(exc).__name__},
             )
             set_sink_monitor(None)
+            await self._stop_suspend_probe()
             await sink_monitor.stop()
             await hci_monitor.stop()
             raise
@@ -1154,5 +1175,6 @@ class BridgeOrchestrator:
             )
         finally:
             set_sink_monitor(None)
+            await self._stop_suspend_probe()
             await sink_monitor.stop()
             await hci_monitor.stop()
