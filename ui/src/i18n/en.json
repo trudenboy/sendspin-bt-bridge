@@ -796,7 +796,8 @@
       },
       "LOG_LEVEL": {
         "label": "Log level",
-        "help": "DEBUG writes much more detail; use it while investigating a problem."
+        "help": "DEBUG writes much more detail; use it while investigating a problem.",
+        "addonHelp": "In the Home Assistant add-on, the add-on's own log_level option (Configuration tab) sets this on every restart. Change it there to keep it."
       },
       "SENDSPIN_SERVER": {
         "label": "Music Assistant server",
@@ -901,7 +902,7 @@
       },
       "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
         "label": "Recover a missing audio sink",
-        "help": "Experimental. When a speaker's audio output never appears, ask a speaker that is also an audio source (such as an Amazon Echo) to accept audio instead, then disconnect and reconnect it."
+        "help": "Experimental. Asks a speaker that is also an audio source (such as an Amazon Echo) to accept audio as soon as it connects, and again if its audio output never appears. Speakers without an audio output are then disconnected and reconnected once, except a speaker that is also an audio source and refused and dropped the link."
       },
       "EXPERIMENTAL_PA_MODULE_RELOAD": {
         "label": "Reload the PulseAudio Bluetooth module",

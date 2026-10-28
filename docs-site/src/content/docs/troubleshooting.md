@@ -318,6 +318,32 @@ Then restart the BlueZ daemon (`systemctl restart bluetooth` on a regular host).
 
 **Proper fix.** Update the host OS to a release that ships `bluez ≥ 5.87` or a patched `5.86-4.1`. On HAOS this happens automatically as part of a Supervisor/host update. Once the patched version is running, no bridge-side intervention is needed.
 
+## Amazon Echo connects but no audio sink appears
+
+**Symptom.** An Echo (seen with an Echo 2nd gen, [#476](https://github.com/trudenboy/sendspin-bt-bridge/issues/476)) pairs and connects, the connect log lists `Speaker offers: Audio Source, Audio Sink, …`, but the card is in profile `a2dp_source` and switching it to `a2dp_sink` fails with `Input/Output error` (PulseAudio: `Refused to switch profile to a2dp_sink: Not connected`).
+
+**Why.** An Echo can be a speaker (A2DP sink) or a source ("Alexa, connect to my speaker"), and it picks its role per connection. When the host also offers to be a speaker — PulseAudio and PipeWire register both A2DP endpoints by default — the Echo may open its stream *towards* the host and never connect its own sink profile on that connection. Changing the adapter's Class of Device does not change that choice.
+
+**What the bridge can do.** Turn on **Recover a missing audio sink** (advanced Bluetooth recovery settings, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`). For a speaker that lists both Audio Source and Audio Sink it then:
+
+1. asks for the Audio Sink profile right after the link comes up — also when the Echo reconnects on its own — leaving the source profile alone (log: `Early Audio Sink ConnectProfile (source kept): …`);
+2. when the bridge itself made the connection and no sink appears, asks again with the source profile kept, and only if that is refused drops the source profile and asks once more (log: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);
+3. in that same case, does **not** run the disconnect/reconnect dance when such a speaker (one that is also an audio source) refused and dropped the link (log: `Skipping the disconnect/reconnect dance: …`): an Echo then drops every reconnect within a second and stops answering until it is re-paired. A refusal on a link that stays up still gets the dance.
+
+Whether an Echo can be turned round from the host side at all is still open; please attach those log lines to #476 if you try it.
+
+**PipeWire / WirePlumber hosts (untested suggestion).** Removing the host's own speaker role leaves the Echo no option but acting as a speaker. Restrict WirePlumber's Bluetooth roles so `a2dp_sink` is not among them, for example in `~/.config/wireplumber/wireplumber.conf.d/52-bluez-roles.conf` (WirePlumber 0.5 syntax):
+
+```
+monitor.bluez.properties = {
+  bluez5.roles = [ a2dp_source hfp_ag hsp_ag ]
+}
+```
+
+then restart WirePlumber, remove the Echo and pair it again. We have not tested this ourselves; note that the host then cannot receive audio from any Bluetooth phone.
+
+**Home Assistant OS.** The PulseAudio of the HAOS audio plugin registers both roles and cannot be changed from the add-on, so the experimental switch above is the only option there.
+
 ## Reconnect loop on Sony WH-1000XM4 / other A2DP sinks (AVDTP collision on old BlueZ)
 
 **Symptom.** After a disconnect — power cycle, container restart, or simply walking out of range — the speaker enters a connect/disconnect storm: it pairs, the bridge announces `Using cached sink`, Music Assistant starts streaming, and ~1–2 seconds later the link drops. The cycle repeats until `BT_MAX_RECONNECT_FAILS` is exhausted. Manual reclaim from the bridge web UI always works on the first attempt — only automatic reconnect fails. The bluetoothd journal shows AVDTP-collision messages on every attempt: `cancel_request() Start: Operation canceled`, `SEP in bad state for suspend`, `Transaction label doesn't match`.

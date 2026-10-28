@@ -454,3 +454,39 @@ async def test_a_refused_profile_disconnect_reports_false_and_keeps_the_reason()
 
     assert await device.disconnect_profile("0000110a-0000-1000-8000-00805f9b34fb") is False
     assert "NotConnected" in (device.last_error or "")
+
+
+# ── the reason, for callers on another thread (#476) ─────────────────────
+#
+# The profile calls run on the bridge loop, where the reason is remembered;
+# a caller waiting from a worker thread used to read its own, empty slot, so
+# every refusal logged as "refused" with no reason.
+
+
+def test_a_blocking_profile_connect_brings_the_reason_back_to_the_caller():
+    bluez = _bluez(connected=True)
+    bluez.fail["ConnectProfile"] = RuntimeError("org.bluez.Error.InProgress")
+    device = _device(bluez)
+
+    assert device.connect_profile_blocking("0000110b-0000-1000-8000-00805f9b34fb") is False
+    assert "InProgress" in (device.last_error or "")
+
+
+def test_a_blocking_profile_disconnect_brings_the_reason_back_to_the_caller():
+    bluez = _bluez(connected=True)
+    bluez.fail["DisconnectProfile"] = RuntimeError("org.bluez.Error.NotConnected")
+    device = _device(bluez)
+
+    assert device.disconnect_profile_blocking("0000110a-0000-1000-8000-00805f9b34fb") is False
+    assert "NotConnected" in (device.last_error or "")
+
+
+def test_an_accepted_blocking_profile_connect_clears_the_reason():
+    bluez = _bluez(connected=True)
+    bluez.fail["ConnectProfile"] = RuntimeError("org.bluez.Error.InProgress")
+    device = _device(bluez)
+    device.connect_profile_blocking("0000110b-0000-1000-8000-00805f9b34fb")
+    bluez.fail.pop("ConnectProfile")
+
+    assert device.connect_profile_blocking("0000110b-0000-1000-8000-00805f9b34fb") is True
+    assert device.last_error is None
