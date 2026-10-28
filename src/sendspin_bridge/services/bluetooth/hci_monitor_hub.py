@@ -149,26 +149,10 @@ def _wants(c: HubConsumer, opcode: int, event_code: int) -> bool:
     return not (opcode == MONITOR_EVENT_PKT and event_codes is not None and event_code not in event_codes)
 
 
-class _Pending:
-    __slots__ = ("drops", "index", "opcode", "payload", "real_ns", "route", "t_recv_us")
-
-    def __init__(
-        self,
-        real_ns: int | None,
-        opcode: int,
-        index: int,
-        payload: bytes,
-        drops: int | None,
-        t_recv_us: float,
-        route: tuple[int, int],
-    ) -> None:
-        self.real_ns = real_ns
-        self.opcode = opcode
-        self.index = index
-        self.payload = payload
-        self.drops = drops
-        self.t_recv_us = t_recv_us
-        self.route = route  # (opcode, event code): who gets it is decided at delivery
+# A record waiting for a clock pair: (realtime ns or None, opcode, index, payload, drops, RAW µs at
+# recvmsg, route = (opcode, event code)); who gets it is decided at delivery. A plain tuple: one is
+# built per record (R-19).
+_Pending = tuple[int | None, int, int, bytes, int | None, float, tuple[int, int]]
 
 
 class HciMonitorHub:
@@ -458,14 +442,17 @@ class HciMonitorHub:
             self._call_state(c, "open", None)
 
         while True:
-            self._greet_new_consumers()
+            # Once per datagram: the checks are inlined so a quiet loop pass costs no calls (R-19).
+            if self._greet:
+                self._greet_new_consumers()
             now = self._monotonic()
             if now >= self._next_tick:
                 self._tick(now)
-            if self._stopping_past_deadline(now):
+            if self._stop_deadline is not None and self._stopping_past_deadline(now):
                 self._finish_pending()
                 return
-            self._bound_timeout(sock, now)
+            if self._pending or self._timeout != _SOCKET_TIMEOUT_S:
+                self._bound_timeout(sock, now)
             try:
                 data, ancdata, _flags, _addr = sock.recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
             except TimeoutError:
@@ -541,7 +528,7 @@ class HciMonitorHub:
             return
         if not timed:
             return  # no kernel-time consumer reads it: it never waits for a pair
-        entry = _Pending(real_ns, opcode, index, payload, drops, t_recv_us, key)
+        entry: _Pending = (real_ns, opcode, index, payload, drops, t_recv_us, key)
         if not self._pending and real_ns is None:
             self._deliver(entry, None)
             return
@@ -557,10 +544,11 @@ class HciMonitorHub:
         now_us = self._raw_ns() / 1000.0
         while pending:
             entry = pending[0]
+            real_ns = entry[0]
             t_raw: float | None = None
-            if entry.real_ns is not None:
-                t_raw = self._clock_map.to_raw_us(entry.real_ns)
-                if t_raw is None and not force and now_us - entry.t_recv_us < _PENDING_MAX_AGE_US:
+            if real_ns is not None:
+                t_raw = self._clock_map.to_raw_us(real_ns)
+                if t_raw is None and not force and now_us - entry[5] < _PENDING_MAX_AGE_US:
                     return
             pending.popleft()
             self._deliver(entry, t_raw)
@@ -609,15 +597,16 @@ class HciMonitorHub:
 
     def _deliver(self, entry: _Pending, t_raw_us: float | None) -> None:
         """Deliver one queued record to the kernel-time consumers that want it now."""
-        consumers = self._route(entry.route)[1]
+        _real_ns, opcode, index, payload, drops, t_recv_us, route = entry
+        consumers = self._route(route)[1]
         if not consumers:
             return
         epoch = self._clock_map.epoch
         if t_raw_us is None:
             self._recv_stamped += 1
-            rec = HubRecord(entry.t_recv_us, entry.index, entry.opcode, entry.payload, entry.drops, "recv", epoch)
+            rec = HubRecord(t_recv_us, index, opcode, payload, drops, "recv", epoch)
         else:
-            rec = HubRecord(t_raw_us, entry.index, entry.opcode, entry.payload, entry.drops, "kernel", epoch)
+            rec = HubRecord(t_raw_us, index, opcode, payload, drops, "kernel", epoch)
         self._fan_out(consumers, rec)
 
     def _fan_out(self, consumers: tuple[HubConsumer, ...], rec: HubRecord) -> None:
