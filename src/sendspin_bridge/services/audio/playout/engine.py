@@ -8,9 +8,14 @@ head, ``sense`` (10 Hz) reads the port. With ``x_port = A − k`` (``PortObserve
   to the controller. Corrections already written are inside ``s(x_w)``, so a jump that is
   rendered but not yet at the port is counted once, never again by the engine.
 
-Placements (start, underrun, stall, delay, clear and the scheduler's own) and steady jumps
-reset the controller and the stats window. Measure mode passes ``rate = 0.0`` to the
-scheduler; only placements and steady jumps act on the audio.
+Placements (start, underrun, stall, clear, ``resync(0)`` and the scheduler's own) align the
+next frame to ``audible − o``: ``o`` is the residual the engine reads now (``EMA + β``, 0
+before the first reading), so a placement keeps the audio where it is relative to its old
+schedule and only the event itself (a gap, a clear) moves it (Q6). A delay change
+(``resync(shift ≠ 0)``) shifts the queue and is executed as a frame-exact jump of
+``ΔD = −shift`` at the write head, keeping the residual (Ruling S-23). Placements, steady and
+delay jumps reset the controller and the stats window. Measure mode passes ``rate = 0.0`` to
+the scheduler; only placements and jumps act on the audio.
 """
 
 from __future__ import annotations
@@ -107,7 +112,8 @@ class PlayoutEngine:
         self._fmt: InputFormat | None = None
         self._placements_seen = 0
         self._pending_place: str | None = None  # engine-requested placement not yet carried out
-        self._pending_jump_us: float | None = None  # steady jump decided, not yet rendered
+        self._pending_jump_us: float | None = None  # steady or delay jump decided, not yet rendered
+        self._pending_jump_reason = "steady"
         self._insert_left = 0  # frames of a rendered negative jump still to be written
         self._settle_x_ns: int | None = None  # the port reaches the last event's audio here
         self._prev_a_minus_t: float | None = None
@@ -147,9 +153,26 @@ class PlayoutEngine:
         return x_end
 
     def resync(self, shift_us: int) -> bool:
-        """Shift queued audio by ``shift_us`` and place the next frame exactly; True if audio was queued."""
-        playing = self._sched.shift(shift_us)
-        self._request_placement("delay")
+        """Apply an output-delay change of ``ΔD = −shift_us``; True if audio was queued.
+
+        ``shift_us != 0`` (Ruling S-23): the queued play times move by ``shift_us`` without a
+        placement; unless a placement is pending, a jump of ``−shift_us`` (reason ``delay``, not
+        clamped) is executed at the write head when program is queued. It replaces a decided
+        steady jump that is not yet rendered. The schedule stays continuous, so the residual
+        is kept and every later frame is heard exactly ``ΔD`` earlier. ``shift_us == 0``: an
+        engine-requested ``delay`` placement.
+        """
+        if shift_us == 0:
+            playing = self._sched.shift(0)
+            self._request_placement("delay")
+            return playing
+        playing = self._sched.shift_queue(shift_us)
+        if playing and self._pending_place is None and not self._sched.placement_pending:
+            # Two changes before a render add up; a decided steady jump is replaced.
+            owed = self._pending_jump_us if self._pending_jump_reason == "delay" else None
+            total = (owed or 0.0) - shift_us
+            self._pending_jump_us = total or None
+            self._pending_jump_reason = "delay" if total else "steady"
         return playing
 
     def fall_back(self, reason: str) -> None:
@@ -187,34 +210,46 @@ class PlayoutEngine:
         if self._opened_us is None:
             self._opened_us = self._warm_from_us = now_us
             self._opened_x_ns = self._sched.x_w_ns
-        audible = self._audible(now_us)
+        # Q6: a placement keeps the residual o, so it aligns the next frame to audible - o.
+        o = self._placement_offset_us()
+        target = self._audible(now_us) - o
         x_w = self._sched.x_w_ns
         s_old = self._map.at(x_w)
-        size_us = 0.0 if s_old is None else audible - s_old  # the error a placement removes
+        size_us = 0.0 if s_old is None else target - s_old  # how far a placement moves the audio
         t_s = now_us / 1e6
 
-        if self._pending_place is not None and self._sched.reanchor(audible):
+        if self._pending_place is not None and self._sched.reanchor(target):
             # Nothing queued: the placement moves the silence schedule to the write head.
-            self._record_placement(self._pending_place, size_us, t_s)
+            self._record_placement(self._pending_place, size_us, t_s, o)
 
         jump = self._pending_jump_us
+        jump_reason = self._pending_jump_reason
         self._pending_jump_us = None
+        self._pending_jump_reason = "steady"
         if jump is not None and (self._sched.placement_pending or not self._sched.queued):
             # A placement is due anyway: with program queued it re-aligns the next frame at
             # this render, so the jump is dropped (passing it would drop audio the placement
-            # then re-aligns, and count it twice). With only silence the jump re-anchors it.
-            if not self._sched.queued:
-                if self._sched.reanchor(audible):
+            # then re-aligns, and count it twice). With only silence a steady jump re-anchors
+            # it; a delay jump has nothing to move (the next chunk is placed with o).
+            if not self._sched.queued and jump_reason == "steady":
+                if self._sched.reanchor(target):
                     self._record_event(jump, "steady")
                 else:  # an insert is still being written; the next readings decide again
                     logger.debug("playout: steady jump of %.1f ms dropped (insert owed)", jump / 1000.0)
+            else:
+                logger.debug("playout: %s jump of %.1f ms dropped (placement due)", jump_reason, jump / 1000.0)
             jump = None
 
-        block = self._sched.render(audible_us=audible, now_us=now_us, rate=0.0, jump_us=jump)
+        block = self._sched.render(audible_us=target, now_us=now_us, rate=0.0, jump_us=jump)
         # R10: frames that belong to a jump are not loop corrections; separate them.
         jump_dropped = jump_inserted = 0
         if jump is not None:
-            self._record_event(jump, "steady")  # the controller reset itself when it decided it
+            if jump_reason == "delay":
+                # The schedule stays continuous across a delay jump: the residual is kept.
+                self._controller.placed(t_s, o - self._baseline_us, quiet_wait=True)
+                self._record_event(jump, "delay", residual_us=o)
+            else:
+                self._record_event(jump, "steady")  # the controller reset itself when it decided it
             frames = round(abs(jump) * self._fmt.sample_rate / 1e6) if self._fmt is not None else 0
             if jump > 0:
                 jump_dropped = min(block.dropped, frames)
@@ -231,7 +266,7 @@ class PlayoutEngine:
             if reason == "start" and block.late_drop_us:
                 self._late_start_us = block.late_drop_us
             if self._reading is not None:  # before the first reading a placement is provisional
-                self._record_placement(reason, size_us, t_s)
+                self._record_placement(reason, size_us, t_s, o)
         self._stats.correction(t_s, block.inserted - jump_inserted, block.dropped - jump_dropped)
         return block
 
@@ -344,6 +379,7 @@ class PlayoutEngine:
                     d.jump_us / 1000.0,
                 )
             self._pending_jump_us = d.jump_us
+            self._pending_jump_reason = "steady"
         self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
 
     def _measure_baseline(self, e_w: float) -> bool:
@@ -489,27 +525,36 @@ class PlayoutEngine:
         self._sched.request_placement(reason)
         self._pending_place = reason
         self._pending_jump_us = None  # the placement re-aligns; a decided jump is moot
+        self._pending_jump_reason = "steady"
 
-    def _record_placement(self, reason: str, size_us: float, t_s: float) -> None:
+    def _placement_offset_us(self) -> float:
+        """``o``: the raw residual a placement keeps (``EMA + β``), 0 before the first reading."""
+        return 0.0 if self._error_ema_us is None else self._error_ema_us
+
+    def _record_placement(self, reason: str, size_us: float, t_s: float, o: float) -> None:
+        """Record a placement that aligned the next frame to ``audible − o`` (spec "Residual domains")."""
         self._pending_place = None
-        self._controller.placed(t_s, quiet_wait=True)  # an error right after it waits quietly
-        self._record_event(size_us, reason)
-        # A placement aligns to the port as read now, so the error restarts at 0; after an
-        # underrun or a stall the reading may still settle, so a fresh baseline is measured first (and
-        # measured again if another placement lands while it is being measured).
-        self._baseline_us = 0.0
-        self._baseline_degraded = False
-        collecting = reason in _BASELINE_REASONS or self._baseline_samples is not None
+        # The placement kept the residual o, so the error continues from it. After an underrun or
+        # a stall the reading may still settle, so the baseline restarts at 0 and a fresh one is
+        # measured (and measured again if another placement lands while it is being measured);
+        # any other placement keeps the baseline and its degraded state.
         if reason in _BASELINE_REASONS:
+            self._baseline_us = 0.0
+            self._baseline_degraded = False
             self._baseline_reason = reason
+        collecting = reason in _BASELINE_REASONS or self._baseline_samples is not None
         self._baseline_samples = [] if collecting else None
         self._baseline_medians = []
+        # An error right after it waits quietly.
+        self._controller.placed(t_s, o - self._baseline_us, quiet_wait=True)
+        self._record_event(size_us, reason, residual_us=o)
 
-    def _record_event(self, size_us: float, reason: str) -> None:
-        """Count a placement or steady jump; the stats window restarts and in-flight audio settles."""
+    def _record_event(self, size_us: float, reason: str, residual_us: float = 0.0) -> None:
+        """Count a placement or jump; the stats window restarts, the published error restarts at
+        ``residual_us`` and in-flight audio settles."""
         logger.info("playout jump: %s, %.1f ms", reason, size_us / 1000.0)
         self._stats.jump(self._wall_iso(), size_us, reason)
         self._stats.reset_window()
-        self._error_ema_us = 0.0
+        self._error_ema_us = residual_us
         self._degraded = False
         self._settle_x_ns = self._sched.x_w_ns

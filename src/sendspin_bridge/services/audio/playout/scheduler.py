@@ -9,7 +9,8 @@ so the engine can compute the playout error ``e = t - s(x_port)``.
 Placement aligns the next program frame to the write head exactly: it either inserts
 silence before the frame or drops the frames of its head that are already due, never
 both. It happens for the first chunk, after a gap of more than 2 ms between chunks,
-after the input ran dry, after ``clear`` and ``shift``, and on ``request_placement``.
+after the input ran dry, after ``clear`` and ``shift``, and on ``request_placement``
+(``shift_queue`` moves the queue without one).
 Smaller gaps are written contiguously and left to the loop (the schedule still records
 each chunk's own play time).
 """
@@ -129,11 +130,20 @@ class PlayoutScheduler:
         Audio whose new time has already passed is dropped at the next render.
         Returns whether anything was queued.
         """
+        playing = self.shift_queue(shift_us)
+        self.request_placement("delay")
+        return playing
+
+    def shift_queue(self, shift_us: int) -> bool:
+        """Move every queued chunk and the expected next play time by ``shift_us``, without a placement.
+
+        The engine executes a delay change as a frame-exact jump against the shifted queue
+        (Ruling S-23). Returns whether program is queued.
+        """
         for chunk in self._queue:
             chunk.play_us += shift_us
         if self._expect_us is not None:
             self._expect_us += shift_us
-        self.request_placement("delay")
         return bool(self._queue)
 
     def request_placement(self, reason: str) -> None:
