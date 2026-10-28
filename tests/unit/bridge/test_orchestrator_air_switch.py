@@ -125,6 +125,7 @@ def orchestrator_with_fakes(monkeypatch):
             )
 
         env.start = start
+        env.orchestrator = orchestrator
         return env
 
     return build
@@ -228,3 +229,41 @@ def test_switch_on_runs_the_air_sensor_service_on_the_hub_and_stops_it_before_th
     assert service.ran and service.stopped
     assert service.hub_stopped_at_stop is False
     assert service.resolve_client("FC:58:FA:EB:08:6C") is None  # no clients registered
+
+
+def test_a_failing_air_sensor_start_does_not_stop_the_bridge(orchestrator_with_fakes, monkeypatch, caplog):
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    def broken(**_kwargs):
+        raise RuntimeError("no air today")
+
+    monkeypatch.setattr(air_sensor_service, "AirSensorService", broken)
+    env = orchestrator_with_fakes(EXPERIMENTAL_AIR_SENSOR=True)
+    with caplog.at_level("WARNING"):
+        assert env.start() == "done"
+    assert env.hub.stopped
+    assert air_sensor_service.get_air_sensor_service() is None
+    assert len([r for r in caplog.records if "air sensor" in r.getMessage().lower()]) == 1
+
+
+def test_the_running_service_is_published_and_withdrawn(orchestrator_with_fakes, fake_air_service, monkeypatch):
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    seen = []
+    env = orchestrator_with_fakes(EXPERIMENTAL_AIR_SENSOR=True)
+    real_stop = FakeAirService.stop
+
+    async def stop(self):
+        seen.append(air_sensor_service.get_air_sensor_service())
+        await real_stop(self)
+
+    async def run_runtime(clients, **_kwargs):
+        seen.append(air_sensor_service.get_air_sensor_service())
+        return "done"
+
+    monkeypatch.setattr(FakeAirService, "stop", stop)
+    monkeypatch.setattr(env.orchestrator, "run_runtime", run_runtime)
+    env.start()
+    (service,) = fake_air_service.instances
+    assert seen == [service, None]  # withdrawn before it stops: no client subscribes to a stopping service
+    assert air_sensor_service.get_air_sensor_service() is None

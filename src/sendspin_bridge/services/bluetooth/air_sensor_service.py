@@ -17,6 +17,12 @@ streaming speaker): every ``cpu_window_s`` the hub's ``cpu_fraction`` is compare
 ``cpu_per_speaker × max(1, streaming_links)``; two consecutive windows over budget remove the
 consumer and every device reports ``unavailable: cpu_budget`` until the next restart.
 
+Subscriptions follow the clients (``SendspinClient`` subscribes its speaker while its daemon
+advertises ``accepts``, the speaker is connected, managed and not in standby). ``subscribe`` and
+``unsubscribe`` may be called from any thread; sender tasks are only created and cancelled on the
+bridge loop. A hub reopen after an error starts a new epoch on every tracker and sends a fresh
+``air_source`` to every subscribed device at once.
+
 Monitor records are never logged.
 """
 
@@ -52,6 +58,19 @@ SOURCE_REPEAT_S = 5.0
 CPU_WINDOW_S = 30.0
 CPU_OVER_WINDOWS = 2
 _LOG_INTERVAL_S = 600.0
+
+
+_current: AirSensorService | None = None
+
+
+def get_air_sensor_service() -> AirSensorService | None:
+    """The running service (switch on and started), else ``None``."""
+    return _current
+
+
+def set_air_sensor_service(service: AirSensorService | None) -> None:
+    global _current
+    _current = service
 
 
 def _default_clock() -> float:
@@ -119,6 +138,7 @@ class AirSensorService:
         self._last_clock_epoch: int | None = None
         self._hub_state: str | None = None
         self._hub_reason: str | None = None
+        self._resend_sources = False
 
         self._tripped = False
         self._over = 0
@@ -128,23 +148,39 @@ class AirSensorService:
 
     # ------------------------------------------------------------------ subscriptions
 
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        return self._loop
+
     def subscribe(self, mac: str) -> None:
+        """Any thread. The device's sender task is created by the next ``tick`` on the loop."""
         key = mac.upper()
         with self._lock:
             if key not in self._devices:
                 self._devices[key] = _Device(
                     mac=key,
+                    # codec_hint is called by the tracker on the hub thread: it only reads the
+                    # client's status (no writes, no locks of the client).
                     tracker=AirLinkTracker(codec_hint=lambda: self._codec_hint(key)),
                     queue=deque(maxlen=self._queue_len),
                 )
         self._sync_registration()
 
     def unsubscribe(self, mac: str) -> None:
+        """Any thread. The device leaves the map and its sender task is cancelled on the loop."""
         with self._lock:
             dev = self._devices.pop(mac.upper(), None)
-        if dev is not None and dev.task is not None:
-            self._loop.call_soon_threadsafe(dev.task.cancel)
+            # Read under the lock: tick() creates a task only for a device still in the map.
+            task = dev.task if dev is not None else None
+            if dev is not None:
+                dev.task = None
+        if task is not None:
+            self._call_on_loop(task.cancel)
         self._sync_registration()
+
+    def is_subscribed(self, mac: str) -> bool:
+        with self._lock:
+            return mac.upper() in self._devices
 
     def queued(self, mac: str) -> int:
         dev = self._devices.get(mac.upper())
@@ -203,15 +239,24 @@ class AirSensorService:
                 )
 
     def on_hub_state(self, state: str, reason: str | None) -> None:
+        reopened = False
         with self._lock:
             if state == "open":
+                reopened = self._hub_state not in (None, "open")
                 self._hub_reason = None
                 self._discontinuity()  # a reopen restarts every epoch (no-op before any traffic)
+                if reopened:
+                    self._resend_sources = True
             elif state == "error":
                 self._hub_reason = reason or "monitor_error"
             else:
                 self._hub_reason = self._hub_reason or reason or "monitor_error"
             self._hub_state = state
+        if reopened:
+            # A fresh air_source to every subscribed device now, not at the next tick. Always
+            # scheduled (never inline): a hub may report "open" from inside add_consumer.
+            with contextlib.suppress(RuntimeError):  # loop closed at shutdown
+                self._loop.call_soon_threadsafe(self._tick_safely)
 
     def _discontinuity(self) -> None:
         # Caller holds self._lock.
@@ -237,22 +282,34 @@ class AirSensorService:
         self._sync_registration()
         await self._cancel_senders()
 
+    def _tick_safely(self) -> None:
+        try:
+            self.tick()
+        except Exception:
+            self._log_once("tick", "AirSensorService: tick failed", exc_info=True)
+
     def tick(self) -> None:
-        """Move batches into the per-device queues, refresh sources, wake the senders."""
+        """Move batches into the per-device queues, refresh sources, wake the senders (loop only)."""
         now = self._clock()
         self._cpu_guard(now)
         with self._lock:
             devices = list(self._devices.values())
             work = [(dev, dev.tracker.take_batches(now), dev.tracker.state(now)) for dev in devices]
             hub_state, hub_reason = self._hub_state, self._hub_reason
+            resend, self._resend_sources = self._resend_sources, False
         if not work:
             return
         counters = self._safe(self._hub.counters, {})
         peers = self._safe(self._hub.peers, {})
         adapters = self._safe(self._hub.adapters, {})
         for dev, batches, tstate in work:
-            if dev.task is None and not self._stopped:
-                dev.task = self._loop.create_task(self._sender(dev), name=f"air-sender-{dev.mac}")
+            with self._lock:
+                # Re-checked under the lock: an unsubscribe (any thread) since the snapshot above
+                # must not leave an orphan sender behind.
+                if dev.task is None and not self._stopped and self._devices.get(dev.mac) is dev:
+                    dev.task = self._loop.create_task(self._sender(dev), name=f"air-sender-{dev.mac}")
+            if resend:
+                dev.source_at = None
             client = self._resolve_client(dev.mac)
             if not air_accepts(client):
                 # Nothing for a daemon that has not built its sensor; a fresh source goes out
@@ -287,6 +344,17 @@ class AirSensorService:
                 if not self._send(client, dev.queue[0]):
                     break
                 dev.queue.popleft()
+
+    def _call_on_loop(self, fn: Callable[[], Any]) -> None:
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is self._loop:
+            fn()
+            return
+        with contextlib.suppress(RuntimeError):  # loop closed at shutdown
+            self._loop.call_soon_threadsafe(fn)
 
     def _send(self, client: Any, cmd: Any) -> bool:
         try:

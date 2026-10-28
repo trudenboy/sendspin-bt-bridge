@@ -71,6 +71,7 @@ from sendspin_bridge.services.audio.sink_suspend_policy import (
     SuspendPolicy,
     last_suspend_policy,
 )
+from sendspin_bridge.services.bluetooth.air_sensor_service import get_air_sensor_service
 from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line, transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -83,6 +84,7 @@ from sendspin_bridge.services.ipc.commands import (
     AirCommand,
     Command,
     Reconnect,
+    SetAirCalibration,
     SetMinBufferMs,
     SetRequiredLeadTimeMs,
     SetStandby,
@@ -436,6 +438,9 @@ class DeviceStatus:
     pa_latency_ms: float | None = None
     # Playout engine snapshot (dict) and the lead it needs; None while playout is off.
     playout: dict | None = None
+    # The daemon's air sensor snapshot; None while no daemon publishes one (always with the
+    # switch off). Cleared when the daemon goes, so ``accepts`` never outlives its daemon.
+    air_sensor: dict | None = None
     effective_required_lead_time_ms: int | None = None
     timing_sampled_at: str | None = None
     required_lead_time_ms: int = 250
@@ -654,6 +659,16 @@ class SendspinClient:
     D-Bus callbacks all read/write status through this single gate.
     """
 
+    # Air sensor (switch on only): the current air-to-sound calibration (ms, None = none),
+    # resent to every daemon that advertises ``accepts``; the service this speaker is
+    # subscribed to; the daemon process that already has the calibration. Class defaults so a
+    # client built without ``__init__`` (tests) behaves as "never subscribed".
+    air_calibration_ms: float | None = None
+    _air_subscribed_to: Any | None = None
+    _air_subscribed_mac: str | None = None
+    _air_calibrated_proc: object | None = None
+    _air_retired: bool = False
+
     def __init__(
         self,
         player_name: str,
@@ -813,6 +828,7 @@ class SendspinClient:
         # ``unexpected=False`` and suppress the user-facing "daemon exited"
         # banner.  Cleared after the death is processed.
         self._explicit_stop_pending: bool = False
+        self._air_lock = threading.Lock()
 
     @property
     def _playing_since(self) -> float | None:
@@ -916,6 +932,66 @@ class SendspinClient:
         # ── Sink mute watchdog ────────────────────────────────────────
         if "sink_muted" in updates:
             self._apply_idle_actions(self._idle_machine.on_sink_mute_change(IdlePlaybackState.from_status(self.status)))
+        self.sync_air_subscription()
+
+    # ── Air sensor subscription ──────────────────────────────────────────
+
+    def _air_wanted(self) -> bool:
+        """Subscribed while the daemon advertises v1, the speaker is connected, managed, awake."""
+        mac = getattr(self.bt_manager, "mac_address", None) if self.bt_manager is not None else None
+        return bool(
+            not self._air_retired
+            and mac
+            and self.bt_management_enabled
+            and self.status.get("bluetooth_connected")
+            and not self.status.get("bt_standby")
+            and self.is_running()
+            and AIR_ENVELOPE_VERSION in self.air_accepts
+        )
+
+    def sync_air_subscription(self) -> None:
+        """Follow the edges of the subscription conditions (any thread; cheap with the switch off)."""
+        service = get_air_sensor_service()
+        if service is None and self._air_subscribed_to is None:
+            return
+        with self._air_lock:
+            want = service is not None and self._air_wanted()
+            current = self._air_subscribed_to
+            if current is not None and (not want or current is not service):
+                current.unsubscribe(self._air_subscribed_mac or "")
+                self._air_subscribed_to = self._air_subscribed_mac = None
+            if want and self._air_subscribed_to is None and service is not None:
+                mac = str(self.bt_manager.mac_address).upper()  # type: ignore[union-attr]
+                service.subscribe(mac)
+                self._air_subscribed_to, self._air_subscribed_mac = service, mac
+        if service is None:
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is service.loop:
+            self._send_air_calibration_once()
+        else:
+            # Writes to the daemon's stdin happen on the loop only.
+            with contextlib.suppress(RuntimeError):
+                service.loop.call_soon_threadsafe(self._send_air_calibration_once)
+
+    def _send_air_calibration_once(self) -> None:
+        """Loop only: the current calibration, once per daemon that advertises ``accepts``."""
+        proc = self._daemon_proc
+        if not self.is_running() or AIR_ENVELOPE_VERSION not in self.air_accepts or self._air_retired:
+            self._air_calibrated_proc = None
+            return
+        if proc is self._air_calibrated_proc:
+            return
+        if self.send_air_command(SetAirCalibration(latency_ms=self.air_calibration_ms)):
+            self._air_calibrated_proc = proc
+
+    def retire_air_subscription(self) -> None:
+        """The player was removed: unsubscribe now and never again (late daemon status included)."""
+        self._air_retired = True
+        self.sync_air_subscription()
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
@@ -1723,6 +1799,8 @@ class SendspinClient:
                         status_updates: dict[str, Any] = {
                             "server_connected": False,
                             "connected": False,
+                            # The sensor belonged to the daemon that exited.
+                            "air_sensor": None,
                             "group_name": None,
                             "group_id": None,
                             "pairing_pin": None,
@@ -3020,6 +3098,7 @@ class SendspinClient:
                 # The engine's snapshot belongs to the daemon that is gone; a restart
                 # in another mode must not inherit it.
                 "playout": None,
+                "air_sensor": None,
                 "effective_required_lead_time_ms": None,
                 "playback_sync_error_ms": None,
             }

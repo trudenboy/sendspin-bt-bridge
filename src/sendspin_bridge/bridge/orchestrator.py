@@ -295,7 +295,10 @@ def _hci_monitor_for(config: dict[str, Any]) -> Any:
 
 
 def _start_air_sensor_service(config: dict[str, Any], hci_monitor: Any) -> tuple[Any, asyncio.Task[None]] | None:
-    """Switch on only: the air sensor service on the hub, running on the bridge loop."""
+    """Switch on only: the air sensor service on the hub, running on the bridge loop.
+
+    Fails soft: an error is logged once and the bridge starts without the sensor.
+    """
     if not bool(config.get("EXPERIMENTAL_AIR_SENSOR", False)):
         return None
     hub = getattr(hci_monitor, "hub", None)
@@ -303,19 +306,35 @@ def _start_air_sensor_service(config: dict[str, Any], hci_monitor: Any) -> tuple
         return None
     from sendspin_bridge.services.bluetooth import air_sensor_service
 
-    service = air_sensor_service.AirSensorService(
-        hub=hub,
-        loop=asyncio.get_running_loop(),
-        resolve_client=lambda mac: get_device_registry_snapshot().find_client_by_mac(mac),
-    )
-    task = asyncio.create_task(service.run(), name="air-sensor-service")
+    try:
+        service = air_sensor_service.AirSensorService(
+            hub=hub,
+            loop=asyncio.get_running_loop(),
+            resolve_client=lambda mac: get_device_registry_snapshot().find_client_by_mac(mac),
+        )
+        task = asyncio.create_task(service.run(), name="air-sensor-service")
+    except Exception:
+        logger.warning("Air sensor service failed to start — continuing without the air sensor", exc_info=True)
+        return None
+    air_sensor_service.set_air_sensor_service(service)
+    # Clients already running subscribe now; later ones follow their own status edges.
+    for client in list(get_device_registry_snapshot().active_clients):
+        sync = getattr(client, "sync_air_subscription", None)
+        if callable(sync):
+            with contextlib.suppress(Exception):
+                sync()
     return service, task
 
 
 async def _stop_air_sensor_service(started: tuple[Any, asyncio.Task[None]] | None) -> None:
     if started is None:
         return
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
     service, task = started
+    # Withdrawn first: no client subscribes to a stopping service.
+    if air_sensor_service.get_air_sensor_service() is service:
+        air_sensor_service.set_air_sensor_service(None)
     with contextlib.suppress(Exception):
         await service.stop()
     task.cancel()
