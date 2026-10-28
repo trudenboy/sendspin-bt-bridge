@@ -168,7 +168,7 @@ def test_batch_fields_describe_the_stream():
     assert (x.epoch, x.seq, x.u0_us) == (0, 0, 0.0)
     assert (x.rate, x.subbands, x.blocks, x.bands, x.timestamp) == (RATE, 8, 16, (1, 2), "kernel")
     assert x.frame_us == pytest.approx(frame_us())
-    assert x.t0_us == pytest.approx(10.0 * 1e6, abs=1.0)  # u + alpha: the first frame left at its send time
+    assert x.t0_us == pytest.approx(10.0 * 1e6, abs=1.0)  # count·frame_us + β: the first frame left at its send time
     assert x.complete_lag_us is None and x.anchor_reset is False
     assert x.e[:2] == (frame_envelope(sbc([0, 3, 2, 0, 0, 0, 0, 0]), (1, 2)),) * 2
 
@@ -187,7 +187,7 @@ def test_partial_batch_waits_for_250ms_unless_forced():
     b = tr.take_batches(last_send_us)
     assert [len(x.e) for x in b] == [128, 128]
     assert tr.take_batches(last_send_us) == []
-    first_pending_us = (10.0 + 256 * 128 / RATE) * 1e6  # air time of frame 256 (u + alpha)
+    first_pending_us = (10.0 + 256 * 128 / RATE) * 1e6  # air time of frame 256 (count·frame_us + β)
     assert tr.take_batches(first_pending_us + 200_000.0) == []
     late = tr.take_batches(first_pending_us + 260_000.0)
     assert [(x.seq, len(x.e)) for x in late] == [(256, 24)]
@@ -405,7 +405,7 @@ def test_whole_packet_skip_after_a_frames_per_packet_decrease_is_an_anchor_reset
     assert reset.seq == 300 and reset.u0_us == pytest.approx((300 * 128 + skip) / RATE * 1e6)
 
 
-def test_sub_frame_step_reseeds_the_anchor_without_a_reset_flag():
+def test_sub_frame_step_keeps_the_count_anchor_without_a_reset_flag():
     tr = AirLinkTracker()
     step = 100  # samples, less than one frame
     feed(tr, packets(40) + packets(40, seq0=40, ts0=40 * 896 + step, t0=10.0 + 40 * PKT_S))
