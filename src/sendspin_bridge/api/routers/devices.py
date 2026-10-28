@@ -142,6 +142,28 @@ def delete_device(device_id: str) -> RemovedOut:
     return RemovedOut(**dev.remove(device_id))
 
 
+@router.delete(
+    "/devices/{device_id}/air-calibrations",
+    status_code=204,
+    summary="Forget every air calibration of the speaker",
+)
+def delete_air_calibrations(device_id: str) -> Response:
+    """The air sensor reports the speaker uncalibrated until the sync wizard measures it again."""
+    dev.forget_air_calibrations(device_id)
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/devices/{device_id}/air-calibrations/{codec}/{rate}/{adapter}",
+    status_code=204,
+    summary="Forget one air calibration of the speaker",
+)
+def delete_air_calibration(device_id: str, codec: str, rate: int, adapter: str) -> Response:
+    """The calibration for this codec, SBC rate and adapter MAC; applied live to the running player."""
+    dev.forget_air_calibrations(device_id, codec, rate, adapter)
+    return Response(status_code=204)
+
+
 @router.put(
     "/devices/{device_id}/volume", response_model=VolumeOut, summary="Set volume", dependencies=[supports("volume")]
 )

@@ -630,6 +630,46 @@ export interface paths {
         patch: operations["patch_device_api_v1_devices__device_id__patch"];
         trace?: never;
     };
+    "/api/v1/devices/{device_id}/air-calibrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget every air calibration of the speaker
+         * @description The air sensor reports the speaker uncalibrated until the sync wizard measures it again.
+         */
+        delete: operations["delete_air_calibrations_api_v1_devices__device_id__air_calibrations_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/air-calibrations/{codec}/{rate}/{adapter}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget one air calibration of the speaker
+         * @description The calibration for this codec, SBC rate and adapter MAC; applied live to the running player.
+         */
+        delete: operations["delete_air_calibration_api_v1_devices__device_id__air_calibrations__codec___rate___adapter__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/{device_id}/claim": {
         parameters: {
             query?: never;
@@ -2371,6 +2411,69 @@ export interface components {
             name: string | null;
         };
         /**
+         * AirLatencyEntry
+         * @description One air-to-sound calibration of a speaker (the sync wizard's ``L_as``). Strict: no string numbers.
+         */
+        AirLatencyEntry: {
+            /** Adapter */
+            adapter: string;
+            /**
+             * Codec
+             * @constant
+             */
+            codec: "sbc";
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /**
+             * Rate
+             * @enum {integer}
+             */
+            rate: 16000 | 32000 | 44100 | 48000;
+            /**
+             * Reference
+             * @default
+             */
+            reference?: string;
+            /**
+             * Source
+             * @default sync_wizard
+             * @enum {string}
+             */
+            source?: "sync_wizard" | "manual";
+            /** Spread Ms */
+            spread_ms?: number | null;
+        };
+        /**
+         * AirLatencyEntryOut
+         * @description One stored air-to-sound calibration (R-12): keyed by codec, SBC rate and adapter MAC.
+         */
+        AirLatencyEntryOut: {
+            /** Adapter */
+            adapter: string;
+            /** Codec */
+            codec: string;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /** Rate */
+            rate: number;
+            /**
+             * Reference
+             * @default
+             */
+            reference: string;
+            /**
+             * Source
+             * @default sync_wizard
+             */
+            source: string;
+            /** Spread Ms */
+            spread_ms: number | null;
+        };
+        /**
          * AirSensorFold
          * @description The air side of a calibration fold (calibration only).
          */
@@ -3311,6 +3414,11 @@ export interface components {
         };
         /** DeviceAudio */
         DeviceAudio: {
+            /**
+             * Air To Sound Latency
+             * @description The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); the one for the current codec, rate and adapter is applied.
+             */
+            air_to_sound_latency: components["schemas"]["AirLatencyEntryOut"][];
             /**
              * Buffering
              * @default false
@@ -4331,6 +4439,8 @@ export interface components {
         };
         /** Player */
         Player: {
+            /** Air To Sound Latency */
+            air_to_sound_latency?: components["schemas"]["AirLatencyEntry"][] | null;
             /** Backend */
             backend: components["schemas"]["BluetoothBackend"] | components["schemas"]["PulseSinkBackend"];
             /**
@@ -7031,6 +7141,89 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DevicePatchOut"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    delete_air_calibrations_api_v1_devices__device_id__air_calibrations_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    delete_air_calibration_api_v1_devices__device_id__air_calibrations__codec___rate___adapter__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+                codec: string;
+                rate: number;
+                adapter: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {

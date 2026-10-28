@@ -215,15 +215,16 @@ def _persist_enabled_and_apply(device_id: str, player_name: str, enabled: bool) 
     return started
 
 
-def set_playout_sync(device_id: str, enabled: bool) -> dict[str, Any]:
-    """Opt the speaker in or out of playout sync, and restart its player to apply it.
+def _change_player(device_id: str, change: Callable[[dict], None]) -> tuple[Any, dict]:
+    """Change one player's config entry and apply the change live; (its running client or None, new config).
 
-    ``False`` is stored; ``True`` clears the key, so the speaker follows
-    ``PLAYOUT_SYNC`` again.  The warm restart is that one player's only.
+    *change* gets the player dict inside the config being written; a ``UseCaseError`` it raises
+    leaves the file untouched. 404 when no player has *device_id* (a running speaker's id or its
+    config id).
     """
     import sendspin_bridge.config as config_mod
-    from sendspin_bridge.application import status
     from sendspin_bridge.config.players import find_player_by_id, find_player_by_mac
+    from sendspin_bridge.config.store import ConfigStore
     from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
     from sendspin_bridge.services.infrastructure.config_diff import diff_configs
     from sendspin_bridge.services.lifecycle import bridge_runtime_state
@@ -248,14 +249,8 @@ def set_playout_sync(device_id: str, enabled: bool) -> dict[str, Any]:
 
     def _set(cfg: dict) -> None:
         player = _find(cfg)
-        if player is None:
-            return
-        if enabled:
-            player.pop("playout_sync_enabled", None)
-        else:
-            player["playout_sync_enabled"] = False
-
-    from sendspin_bridge.config.store import ConfigStore
+        if player is not None:
+            change(player)
 
     with config_mod.config_lock:
         before = ConfigStore(config_mod.CONFIG_FILE).load()
@@ -269,8 +264,50 @@ def set_playout_sync(device_id: str, enabled: bool) -> dict[str, Any]:
             activation_context=bridge_runtime_state.get_activation_context(),
         ).apply(actions)
     _sync_ha_options_later()
+    return client, after
+
+
+def set_playout_sync(device_id: str, enabled: bool) -> dict[str, Any]:
+    """Opt the speaker in or out of playout sync, and restart its player to apply it.
+
+    ``False`` is stored; ``True`` clears the key, so the speaker follows
+    ``PLAYOUT_SYNC`` again.  The warm restart is that one player's only.
+    """
+    from sendspin_bridge.application import status
+
+    def _set(player: dict) -> None:
+        if enabled:
+            player.pop("playout_sync_enabled", None)
+        else:
+            player["playout_sync_enabled"] = False
+
+    client, after = _change_player(device_id, _set)
     device = status._device(client, after) if client is not None else None
     return {"playout_sync_enabled": enabled, "device": device}
+
+
+def forget_air_calibrations(
+    device_id: str, codec: str | None = None, rate: int | None = None, adapter: str | None = None
+) -> None:
+    """Forget the speaker's air calibration for (codec, rate, adapter), or all of them without *codec*.
+
+    Applied live: the running daemon gets the entry that still matches (or null). 404 when the
+    speaker or (for one) the calibration is unknown.
+    """
+    from sendspin_bridge.config.players import forget_air_latency
+
+    def _forget(player: dict) -> None:
+        remaining, removed = forget_air_latency(player.get("air_to_sound_latency"), codec, rate, adapter)
+        if codec is not None and not removed:
+            raise UseCaseError(
+                404, "unknown_calibration", f"No air calibration for {codec} {rate} Hz on adapter {adapter}"
+            )
+        if remaining:
+            player["air_to_sound_latency"] = remaining
+        else:
+            player.pop("air_to_sound_latency", None)
+
+    _change_player(device_id, _forget)
 
 
 def _drop_from_disabled_list(device_id: str, also: Callable[[dict], bool] | None = None) -> None:

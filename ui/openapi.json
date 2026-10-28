@@ -255,6 +255,137 @@
         "title": "AdapterRef",
         "type": "object"
       },
+      "AirLatencyEntry": {
+        "additionalProperties": false,
+        "description": "One air-to-sound calibration of a speaker (the sync wizard's ``L_as``). Strict: no string numbers.",
+        "properties": {
+          "adapter": {
+            "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$",
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "const": "sbc",
+            "title": "Codec",
+            "type": "string"
+          },
+          "latency_ms": {
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "enum": [
+              16000,
+              32000,
+              44100,
+              48000
+            ],
+            "title": "Rate",
+            "type": "integer"
+          },
+          "reference": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "default": "sync_wizard",
+            "enum": [
+              "sync_wizard",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "spread_ms": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Ms"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "latency_ms",
+          "measured_at"
+        ],
+        "title": "AirLatencyEntry",
+        "type": "object"
+      },
+      "AirLatencyEntryOut": {
+        "description": "One stored air-to-sound calibration (R-12): keyed by codec, SBC rate and adapter MAC.",
+        "properties": {
+          "adapter": {
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "title": "Codec",
+            "type": "string"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "integer"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "default": "sync_wizard",
+            "title": "Source",
+            "type": "string"
+          },
+          "spread_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Ms"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "latency_ms",
+          "spread_ms",
+          "measured_at",
+          "reference",
+          "source"
+        ],
+        "title": "AirLatencyEntryOut",
+        "type": "object"
+      },
       "AirSensorFold": {
         "description": "The air side of a calibration fold (calibration only).",
         "properties": {
@@ -2397,6 +2528,14 @@
       },
       "DeviceAudio": {
         "properties": {
+          "air_to_sound_latency": {
+            "description": "The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); the one for the current codec, rate and adapter is applied.",
+            "items": {
+              "$ref": "#/components/schemas/AirLatencyEntryOut"
+            },
+            "title": "Air To Sound Latency",
+            "type": "array"
+          },
           "buffering": {
             "default": false,
             "title": "Buffering",
@@ -2533,7 +2672,8 @@
           "static_delay_ms",
           "static_delay_source",
           "static_delay_calibrated_at",
-          "static_delay_codec"
+          "static_delay_codec",
+          "air_to_sound_latency"
         ],
         "title": "DeviceAudio",
         "type": "object"
@@ -5000,6 +5140,21 @@
       "Player": {
         "additionalProperties": true,
         "properties": {
+          "air_to_sound_latency": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AirLatencyEntry"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air To Sound Latency"
+          },
           "backend": {
             "discriminator": {
               "mapping": {
@@ -9837,6 +9992,129 @@
           }
         },
         "summary": "Change a speaker's settings",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/air-calibrations": {
+      "delete": {
+        "description": "The air sensor reports the speaker uncalibrated until the sync wizard measures it again.",
+        "operationId": "delete_air_calibrations_api_v1_devices__device_id__air_calibrations_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Forget every air calibration of the speaker",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/air-calibrations/{codec}/{rate}/{adapter}": {
+      "delete": {
+        "description": "The calibration for this codec, SBC rate and adapter MAC; applied live to the running player.",
+        "operationId": "delete_air_calibration_api_v1_devices__device_id__air_calibrations__codec___rate___adapter__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "codec",
+            "required": true,
+            "schema": {
+              "title": "Codec",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "rate",
+            "required": true,
+            "schema": {
+              "title": "Rate",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "adapter",
+            "required": true,
+            "schema": {
+              "title": "Adapter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Forget one air calibration of the speaker",
         "tags": [
           "devices"
         ]

@@ -346,3 +346,196 @@ async def test_switch_off_spawn_has_no_air_param_even_with_a_calibration(monkeyp
     previous = {"state": "locked", "accepts": [1], "codec": "sbc", "rate": 44100, "adapter": "C0:FB:F9:62:D7:D6"}
     _client, params = await _spawn_params(monkeypatch, cfg, preset=previous)
     assert "air_sensor" not in params
+
+
+# -- calibration storage and the Forget endpoints (A15) ------------------------------------------
+#
+# A real SendspinClient with a fake daemon process (its stdin records each line), the real
+# DELETE use case, config diff and reconfiguration orchestrator, and the bridge loop on a thread.
+
+AIR_ADAPTER = "C0:FB:F9:62:D7:D6"
+
+
+class _RecordingStdin:
+    class _Transport:
+        def get_write_buffer_size(self):
+            return 0
+
+        def is_closing(self):
+            return False
+
+    def __init__(self, sink):
+        self.transport = self._Transport()
+        self._sink = sink
+
+    def write(self, data):
+        self._sink.append(data)
+
+    async def drain(self):
+        return None
+
+
+class _FakeDaemon:
+    def __init__(self, sink):
+        self.returncode = None
+        self.pid = 4242
+        self.stdin = _RecordingStdin(sink)
+
+
+@pytest.fixture
+def calibrated_bridge(monkeypatch, tmp_config):
+    """Build a running calibrated speaker; ``switch`` False leaves the air sensor off."""
+    from sendspin_bridge.application import devices as devices_uc
+    from sendspin_bridge.config.players import player_id_for_mac
+    from sendspin_bridge.services.bluetooth import air_sensor_service as air_mod
+    from sendspin_bridge.services.bluetooth import device_registry
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+
+    def build(*, switch: bool = True, entries: list | None = None):
+        entries = [AIR_ENTRY, {**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0}] if entries is None else entries
+        pid = player_id_for_mac(MAC)
+        tmp_config.write_text(
+            json.dumps(
+                {
+                    "CONFIG_SCHEMA_VERSION": 6,
+                    "EXPERIMENTAL_AIR_SENSOR": switch,
+                    "PLAYOUT_SYNC": "measure",
+                    "players": [
+                        {
+                            "id": pid,
+                            "name": "Kitchen",
+                            "backend": {"type": "bluetooth_a2dp", "mac": MAC},
+                            "air_to_sound_latency": entries,
+                        }
+                    ],
+                    "PLAYER_STATE": {},
+                }
+            )
+        )
+        writes: list[bytes] = []
+        bt = SimpleNamespace(
+            mac_address=MAC,
+            connected=False,
+            check_bluetooth_available=lambda: True,
+            effective_adapter_mac=AIR_ADAPTER,
+        )
+        client = SendspinClient("Kitchen", "localhost", 9000, bt_manager=bt)
+        client.config_id = pid
+        client.air_to_sound_latency = list(entries)
+        snapshot = DeviceRegistrySnapshot(active_clients=[client])
+        monkeypatch.setattr(status_uc, "get_device_registry_snapshot", lambda: snapshot)
+        monkeypatch.setattr(device_registry, "get_device_registry_snapshot", lambda: snapshot)
+        monkeypatch.setattr(bridge_runtime_state, "get_main_loop", lambda: loop)
+        monkeypatch.setattr(devices_uc, "_sync_ha_options_later", lambda: None)
+        if switch:
+            service = SimpleNamespace(loop=loop, subscribe=lambda mac: None, unsubscribe=lambda mac: None)
+            air_mod.set_air_sensor_service(service)
+
+        async def _start():
+            client._daemon_proc = _FakeDaemon(writes)
+            client._update_status(
+                {
+                    "air_sensor": {
+                        "state": "locked",
+                        "accepts": [1],
+                        "codec": "sbc",
+                        "rate": 44100,
+                        "adapter": AIR_ADAPTER,
+                    }
+                }
+            )
+            await asyncio.sleep(0)
+
+        asyncio.run_coroutine_threadsafe(_start(), loop).result(timeout=5)
+        dev = SimpleNamespace(
+            id=client.player_id,
+            client=client,
+            sent=lambda: [json.loads(line) for line in writes],
+            stored=lambda: json.loads(tmp_config.read_text())["players"][0].get("air_to_sound_latency"),
+        )
+        return dev
+
+    yield build
+    air_mod.set_air_sensor_service(None)
+    loop.call_soon_threadsafe(loop.stop)
+    thread.join(timeout=5)
+    loop.close()
+
+
+def _cal(latency):
+    return {"cmd": "set_air_calibration", "v": 1, "latency_ms": latency, "protocol_version": 2}
+
+
+def test_device_audio_lists_the_stored_calibrations(api_client, calibrated_bridge):
+    dev = calibrated_bridge()
+    audio = api_client.get(f"/api/v1/devices/{dev.id}").json()["audio"]
+    assert audio["air_to_sound_latency"] == [
+        {**AIR_ENTRY, "spread_ms": None, "reference": "", "source": "sync_wizard"},
+        {**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0, "spread_ms": None, "reference": "", "source": "sync_wizard"},
+    ]
+
+
+def test_forget_one_calibration(api_client, calibrated_bridge):
+    dev = calibrated_bridge()
+    assert dev.sent()[-1] == _cal(203.4)
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/44100/{AIR_ADAPTER}")
+    assert r.status_code == 204, r.text
+    entries = api_client.get(f"/api/v1/devices/{dev.id}").json()["audio"]["air_to_sound_latency"]
+    assert [(e["rate"], e["latency_ms"]) for e in entries] == [(48000, 150.0)]
+    assert [(e["rate"], e["latency_ms"]) for e in dev.stored()] == [(48000, 150.0)]
+    # The running daemon plays 44.1 kHz: no entry matches any more, applied live.
+    assert dev.sent()[-1] == _cal(None)
+
+
+def test_forgetting_another_rate_keeps_the_live_value(api_client, calibrated_bridge):
+    dev = calibrated_bridge()
+    count = len(dev.sent())
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/48000/{AIR_ADAPTER.lower()}")
+    assert r.status_code == 204, r.text
+    assert [e["rate"] for e in dev.stored()] == [44100]
+    assert len(dev.sent()) == count  # the daemon already has 203.4
+
+
+def test_forget_all_calibrations(api_client, calibrated_bridge):
+    dev = calibrated_bridge()
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations")
+    assert r.status_code == 204, r.text
+    assert api_client.get(f"/api/v1/devices/{dev.id}").json()["audio"]["air_to_sound_latency"] == []
+    assert not dev.stored()
+    assert dev.sent()[-1] == _cal(None)
+
+
+def test_forget_unknown_is_404(api_client, calibrated_bridge):
+    dev = calibrated_bridge()
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/44100/00:00:00:00:00:00")
+    assert r.status_code == 404
+    assert r.json()["code"] == "unknown_calibration"
+    assert api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/32000/{AIR_ADAPTER}").status_code == 404
+    assert api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/aac/44100/{AIR_ADAPTER}").status_code == 404
+    assert len(dev.stored()) == 2
+
+
+def test_forget_on_an_unknown_device_is_404(api_client, calibrated_bridge):
+    calibrated_bridge()
+    r = api_client.delete(f"/api/v1/devices/nope/air-calibrations/sbc/44100/{AIR_ADAPTER}")
+    assert r.status_code == 404 and r.json()["code"] == "unknown_device"
+    assert api_client.delete("/api/v1/devices/nope/air-calibrations").status_code == 404
+
+
+def test_the_rate_in_the_path_is_a_number(api_client, calibrated_bridge):
+    dev = calibrated_bridge()
+    assert api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/fast/{AIR_ADAPTER}").status_code == 422
+
+
+def test_switch_off_forgets_in_the_config_and_sends_nothing(api_client, calibrated_bridge):
+    dev = calibrated_bridge(switch=False)
+    assert dev.sent() == []
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/44100/{AIR_ADAPTER}")
+    assert r.status_code == 204, r.text
+    assert [e["rate"] for e in dev.stored()] == [48000]
+    assert dev.client.air_to_sound_latency == [{**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0}]
+    assert dev.sent() == []

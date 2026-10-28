@@ -98,6 +98,19 @@ class DeviceBluetooth(ResponseModel):
     adapter_recovery: AdapterRecovery
 
 
+class AirLatencyEntryOut(ResponseModel):
+    """One stored air-to-sound calibration (R-12): keyed by codec, SBC rate and adapter MAC."""
+
+    codec: str
+    rate: int
+    adapter: str
+    latency_ms: float
+    spread_ms: float | None = None
+    measured_at: str
+    reference: str = ""
+    source: str = "sync_wizard"
+
+
 class DeviceAudio(ResponseModel):
     sink_name: str | None = None
     has_sink: bool = False
@@ -119,6 +132,11 @@ class DeviceAudio(ResponseModel):
     static_delay_source: str = "default"
     static_delay_calibrated_at: str | None = None
     static_delay_codec: str | None = None
+    air_to_sound_latency: list[AirLatencyEntryOut] = Field(
+        default_factory=list,
+        description="The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); "
+        "the one for the current codec, rate and adapter is applied.",
+    )
 
 
 class LatencySuggestion(ResponseModel):
@@ -407,7 +425,13 @@ class Device(ResponseModel):
     recent_events: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
-    def from_status(cls, d: dict[str, Any], config_id: str | None = None, playout_sync_enabled: bool = True) -> Device:
+    def from_status(
+        cls,
+        d: dict[str, Any],
+        config_id: str | None = None,
+        playout_sync_enabled: bool = True,
+        air_to_sound_latency: list[dict[str, Any]] | None = None,
+    ) -> Device:
         g = d.get
         pair_failure = None
         if g("pair_failure_kind"):
@@ -491,6 +515,7 @@ class Device(ResponseModel):
                 static_delay_source=g("static_delay_source") or "default",
                 static_delay_calibrated_at=g("static_delay_calibrated_at"),
                 static_delay_codec=g("static_delay_codec"),
+                air_to_sound_latency=[AirLatencyEntryOut.model_validate(e) for e in air_to_sound_latency or []],
             ),
             timing=DeviceTiming(
                 available=bool(g("timing_metrics_available")),
