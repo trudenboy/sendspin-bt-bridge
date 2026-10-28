@@ -487,6 +487,7 @@ class MediaPacket:
     codec: str
     frames: tuple[SbcFrame, ...]
     sbc_fragmented: bool = False  # one SBC frame split over several packets (frames not decoded)
+    sbc_frame_count: int | None = None  # frame count of the SBC media payload header (None unless unfragmented SBC)
 
 
 def _media_packet(
@@ -509,6 +510,7 @@ def _media_packet(
         return None
     codec, fragmented = "unknown", False
     frames: tuple[SbcFrame, ...] = ()
+    frame_count: int | None = None
     # SBC media payload header: F S L RFA frame-count(4)
     starts_frame = len(body) > SBC_HEADER_LEN and body[1] == SBC_SYNCWORD
     if starts_frame or (body[0] & 0x80 and not body[0] & 0x40 and sdu.cid in sbc_streams):
@@ -516,6 +518,7 @@ def _media_packet(
         sbc_streams.add(sdu.cid)
         fragmented = bool(body[0] & 0x80)
         if not fragmented:
+            frame_count = body[0] & 0x0F
             frames, complete = parse_sbc_frames(body[1:], check_crc=check_crc)
             if not complete or len(frames) != body[0] & 0x0F:
                 stats.sbc_errors += 1
@@ -532,6 +535,7 @@ def _media_packet(
         codec=codec,
         frames=frames,
         sbc_fragmented=fragmented,
+        sbc_frame_count=frame_count,
     )
 
 

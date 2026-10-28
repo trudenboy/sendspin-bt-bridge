@@ -137,6 +137,7 @@ def packets(n, *, seq0=0, ts0=0, t0=10.0, ssrc=1, frames=7):
                 payload_type=96,
                 codec="sbc",
                 frames=fr,
+                sbc_frame_count=frames,
             )
         )
     return out
@@ -361,6 +362,70 @@ def test_unparsable_frames_inside_a_contiguous_run_are_missing():
     assert len(e) == 280 and {x.epoch for x in b} == {0} and not any(x.anchor_reset for x in b)
     assert e[74:77] == [MISSING] * 3 and e[140:147] == [MISSING] * 7
     assert e[73] != MISSING and e[147] != MISSING
+
+
+def test_media_packet_carries_the_sbc_header_frame_count():
+    recs = list(read_btsnoop(FIX / "eneby_clicks.btsnoop.gz"))
+    pk = [p for p in parse_records(recs, A2dpAirParser()) if p.codec == "sbc" and not p.sbc_fragmented]
+    assert pk and all(p.sbc_frame_count == len(p.frames) for p in pk)
+
+
+def test_header_count_above_parsed_frames_is_missing_not_a_skip():
+    tr = AirLinkTracker()
+    pk = packets(40)
+    pk[10] = replace(pk[10], frames=pk[10].frames[:6])  # header says 7, one frame failed
+    feed(tr, pk)
+    b = tr.take_batches(1e12, force=True)
+    e = [v for x in b for v in x.e]
+    assert len(e) == 280 and e[76] == MISSING and e[75] != MISSING
+    assert not any(x.anchor_reset for x in b)
+
+
+def test_whole_packet_skip_after_full_packets_is_an_anchor_reset():
+    tr = AirLinkTracker()
+    feed(tr, packets(40) + packets(40, seq0=40, ts0=41 * 896, t0=10.0 + 40 * PKT_S))  # one packet of samples skipped
+    b = tr.take_batches(1e12, force=True)
+    assert MISSING not in [v for x in b for v in x.e]
+    reset = [x for x in b if x.anchor_reset]
+    assert len(reset) == 1 and reset[0].seq == 280
+    assert reset[0].t0_us == pytest.approx((10.0 + 40 * PKT_S) * 1e6, abs=200.0)
+
+
+def test_whole_packet_skip_after_a_frames_per_packet_decrease_is_an_anchor_reset():
+    """Bitpool changes shrink packets without a new epoch; a later skip must not read as missing frames."""
+    tr = AirLinkTracker()
+    eight = packets(20, frames=8)
+    seven = packets(20, seq0=20, ts0=20 * 8 * 128, t0=10.0 + 20 * PKT_S, frames=7)
+    skip = 896
+    after = packets(20, seq0=40, ts0=20 * 8 * 128 + 20 * 896 + skip, t0=10.0 + 40 * PKT_S, frames=7)
+    feed(tr, eight + seven + after)
+    b = tr.take_batches(1e12, force=True)
+    assert MISSING not in [v for x in b for v in x.e]
+    assert [x.anchor_reset for x in b].count(True) == 1
+    reset = next(x for x in b if x.anchor_reset)
+    assert reset.seq == 300 and reset.u0_us == pytest.approx((300 * 128 + skip) / RATE * 1e6)
+
+
+def test_sub_frame_step_reseeds_the_anchor_without_a_reset_flag():
+    tr = AirLinkTracker()
+    step = 100  # samples, less than one frame
+    feed(tr, packets(40) + packets(40, seq0=40, ts0=40 * 896 + step, t0=10.0 + 40 * PKT_S))
+    b = tr.take_batches(1e12, force=True)
+    assert not any(x.anchor_reset for x in b) and {x.epoch for x in b} == {0}
+    assert tr.state(1e12).anchor_segments == 1
+    after = next(x for x in b if x.seq == 280)
+    assert after.u0_us == pytest.approx((280 * 128 + step) / RATE * 1e6)
+    assert after.t0_us == pytest.approx((10.0 + 40 * PKT_S) * 1e6, abs=50.0)
+
+
+def test_fragmented_sbc_explains_the_silence():
+    tr = AirLinkTracker()
+    for k in range(10):
+        p = replace(packets(1)[0], frames=(), sbc_fragmented=True, sbc_frame_count=None, t_send=10.0 + k * 0.02, seq=k)
+        tr.on_packet(p, timestamp="kernel", in_step=False)
+    s = tr.state((10.0 + 9 * 0.02) * 1e6)
+    assert (s.state, s.reason) == ("unsupported_codec", "sbc_fragmented")
+    assert tr.take_batches(1e12, force=True) == []
 
 
 def test_completion_lag_is_a_2s_median_telemetry():

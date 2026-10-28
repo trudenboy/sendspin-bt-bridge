@@ -16,7 +16,8 @@ so ``t_send``/``t_complete`` are RAW seconds and the tracker does no clock conve
   is PulseAudio's bluez5 "Skipping": the same epoch continues, the frame counter ``seq`` continues,
   the media time ``u0_us`` includes the skipped samples, and the median is reseeded with
   ``α_old − Δu_step`` (sends continued while media time jumped). The first batch after it carries
-  ``anchor_reset``.
+  ``anchor_reset``. A forward step of at most one frame only carries the anchor the same way.
+  Frames the SBC media header counts but that did not parse are :data:`MISSING`, not a skip.
 * **Epoch.** A sequence gap, more than :data:`SEND_GAP_S` between sends, an SSRC change, a backward
   (or implausibly large) timestamp step, a change of SBC parameters or of the timestamp source
   (``kernel``/``recv``) or of the hub's clock epoch, a non-SBC or fragmented packet,
@@ -66,7 +67,6 @@ COMPLETE_LAG_WINDOW_S = 2.0
 NON_SBC_S = 2.0  # non-SBC media for this long = unsupported codec
 NO_TRAFFIC_S = 2.0
 MAX_PENDING_FRAMES = 4096  # cells kept while nobody takes batches (oldest dropped in batch-sized chunks)
-MAX_PACKET_FRAMES = 15  # the SBC media payload header counts frames in 4 bits
 MAX_LAGS = 1024
 _RTP_MOD = 1 << 32
 
@@ -205,7 +205,6 @@ class AirLinkTracker:
         self._epoch_packets = 0
         self._segments = 1
         self._sent = 0
-        self._max_frames = 0
         self._pending_reset = False
         self._prev: _Prev | None = None
         self._params: _Params | None = None
@@ -245,8 +244,11 @@ class AirLinkTracker:
         if self._unsupported is not None and self._unsupported.startswith("codec:"):
             self._unsupported = None
         if p.sbc_fragmented:
+            self._unsupported = "sbc_fragmented"  # explains the silence until frames decode again
             self._end_epoch()  # frames not decoded: their count is unknown
             return
+        if self._unsupported == "sbc_fragmented":
+            self._unsupported = None
         params = self._params_of(p)
         if params is None:
             self._end_epoch()  # nothing parsed and no parameters to count by
@@ -281,18 +283,22 @@ class AirLinkTracker:
                 prev = None
                 u = 0
             elif diff > 0:
-                self._step(prev, diff, spf, rate)
+                self._step(diff, spf, rate)
         if prev is None:
             self._params = params
             self._bands = envelope_subbands(rate, subbands)
         frame_us = spf * 1e6 / rate
         u_us = u * 1e6 / rate
         self._anchor.add(t * 1e6, u_us)
-        if p.frames:
-            self._append(u_us, [frame_envelope(f, self._bands) for f in p.frames], frame_us)
-        self._max_frames = max(self._max_frames, len(p.frames))
+        cells = [frame_envelope(f, self._bands) for f in p.frames]
+        # frames the media header counts but that did not parse (they follow the parsed prefix)
+        unparsed = (p.sbc_frame_count or 0) - len(cells)
+        if unparsed > 0:
+            cells += [MISSING] * unparsed
+        if cells:
+            self._append(u_us, cells, frame_us)
         self._epoch_packets += 1
-        self._prev = _Prev(p.seq, p.ssrc, t, p.rtp_ts, u, len(p.frames), timestamp, clock_epoch)
+        self._prev = _Prev(p.seq, p.ssrc, t, p.rtp_ts, u, len(cells), timestamp, clock_epoch)
         if p.t_complete is not None:
             self._lags.append((t, (p.t_complete - t) * 1e6))
             if len(self._lags) > MAX_LAGS:
@@ -306,19 +312,18 @@ class AirLinkTracker:
         f = p.frames[0]
         return (f.sampling_rate, f.blocks, f.subbands, f.channel_mode)
 
-    def _step(self, prev: _Prev, diff: int, spf: int, rate: int) -> None:
-        """Timestamp ahead of the frames before it on a contiguous sequence."""
-        frame_us = spf * 1e6 / rate
-        missing, rest = divmod(diff, spf)
-        if not rest and missing <= MAX_PACKET_FRAMES and prev.frames < self._max_frames:
-            # frames of the previous packet that did not parse
-            self._append((prev.u + prev.frames * spf) * 1e6 / rate, [MISSING] * missing, frame_us)
-            return
+    def _step(self, diff: int, spf: int, rate: int) -> None:
+        """Timestamp ahead of the frames before it on a contiguous sequence: samples never sent.
+
+        Unparsed frames were already filled from the media header count, so any positive step is a
+        skip. The anchor is always carried forward (sends continued while media time jumped); only a
+        step of more than one frame is a new anchor segment the daemon is told about.
+        """
         self._close_run()
+        alpha = self._anchor.value()
+        if alpha is not None:
+            self._anchor.reseed(alpha - diff * 1e6 / rate)
         if diff > spf:  # PA "Skipping": anchor reset in the same epoch
-            alpha = self._anchor.value()
-            if alpha is not None:
-                self._anchor.reseed(alpha - diff * 1e6 / rate)
             self._segments += 1
             self._pending_reset = True
 
@@ -356,6 +361,8 @@ class AirLinkTracker:
             self._runs.popleft()
 
     def _advance(self, run: _Run, n: int) -> None:
+        # Clearing anchor_reset is fine also when _drop_oldest drops a reset batch: the daemon then
+        # sees a forward seq jump and re-acquires, which covers the anchor reset.
         del run.e[:n]
         run.seq0 += n
         run.u0_us += n * run.frame_us
@@ -379,7 +386,6 @@ class AirLinkTracker:
         self._epoch_packets = 0
         self._segments = 1
         self._sent = 0
-        self._max_frames = 0
         self._pending_reset = False
         self._prev = None
         self._params = None
