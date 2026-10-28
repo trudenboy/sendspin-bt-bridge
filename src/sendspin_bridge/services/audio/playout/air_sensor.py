@@ -22,14 +22,16 @@ plays audio that is not ours (an underrun the port ran through). Engine jumps mo
 **Search policy (R-15).** Acquisition (no lag, or no lock for :data:`NO_LOCK_S`): the prior puts
 the window's middle air cell on the written cell whose ``s`` is nearest ``t_mid − δ₀ − d_enc``,
 range ±:data:`ACQUIRE_US`. Tracking: ±:data:`TRACK_CELLS` around the last lag. After an
-``underrun``/``pa_step``/``stall`` event ±:data:`WIDE_CELLS` until a window lies wholly after the
-event (and while a lag candidate is pending, so the candidate can be confirmed or refuted). After
-an anchor reset the next window searches ±:data:`RESET_CELLS`. Every search passes the
+``underrun``/``pa_step``/``stall`` event ±:data:`WIDE_CELLS` until a window lying wholly after
+the event is confirmed (and while a lag candidate is pending, so the candidate can be confirmed or
+refuted). After an anchor reset the windows search ±:data:`RESET_CELLS` until one is confirmed.
+Skipped and rejected windows never end either. Every search passes the
 correlator ``SIDE_SCAN`` extra lags each side (range-independent PSR).
 
 **Continuity.** A confirmed lag more than :data:`JUMP_CONFIRM_CELLS` from the current one (or the
-first lag of an epoch or output) is held as a candidate and accepted only when the next confirmed
-window agrees within :data:`AGREE_CELLS`; a lone wrong peak never moves the lag.
+first lag of an epoch, an output or after ``no_lock``) is held as a candidate and accepted only
+when the next confirmed window agrees within :data:`AGREE_CELLS`; a lone wrong peak never moves
+the lag.
 
 **Lock (R-10).** The age of the lock is the air time since the middle of the newest accepted
 window: ``locked`` ≤ :data:`LOCK_HOLD_S`, ``holding`` up to :data:`NO_LOCK_S`, then ``no_lock``
@@ -243,6 +245,7 @@ class _Plan:
     d_comb: float
     mode: str
     t_first: float
+    gen: int  # tap generation of the written slice
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,10 +356,16 @@ class AirSensor:
             self._fail()
 
     def on_source(self, src: AirSource) -> None:
-        self._source = src
+        try:
+            self._source = src
+        except Exception:
+            self._fail()
 
     def set_calibration(self, latency_ms: float | None) -> None:
-        self._latency_ms = None if latency_ms is None else float(latency_ms)
+        try:
+            self._latency_ms = None if latency_ms is None else float(latency_ms)
+        except Exception:
+            self._fail()
 
     def on_engine_event(self, kind: EngineEvent) -> None:
         try:
@@ -393,6 +402,10 @@ class AirSensor:
             return
         if self._last_window_now is not None and now - self._last_window_now < HOP_S * 1e6:
             return
+        if self._lag is not None and self._last_at is not None and now - self._last_at > NO_LOCK_S * 1e6:
+            # no_lock: search as in acquisition, and the first lag found again needs two windows.
+            self._lag = None
+            self._candidate = None
         plan = self._plan(now)
         if plan is None:
             return
@@ -476,6 +489,7 @@ class AirSensor:
             d_comb=d_comb,
             mode=mode,
             t_first=t_first,
+            gen=sl.gen,
         )
 
     def _search(self, now: float, cell: float) -> tuple[str, int]:
@@ -499,10 +513,15 @@ class AirSensor:
         return idx - u_mid / cell
 
     def _apply(self, plan: _Plan, res: WindowResult) -> None:
-        if plan.mode == "reset":
-            self._reset_pending = False
-        if self._wide_after is not None and plan.mode == "wide" and plan.t_first > self._wide_after:
-            self._wide_after = None
+        if plan.gen != self._tap.gen:
+            self._check_tap()  # the cells were renumbered while the window ran: its lag means nothing
+            return
+        if res.status == "confirmed" and res.lag is not None:
+            # The widened/narrowed search ends only with a confirmed window (wholly after the event).
+            if plan.mode == "reset":
+                self._reset_pending = False
+            if self._wide_after is not None and plan.mode == "wide" and plan.t_first > self._wide_after:
+                self._wide_after = None
         if res.status in ("invalid", "flat"):
             self._skipped_n += 1
             return
@@ -673,6 +692,8 @@ class AirSensor:
         return 1.4826 * statistics.median(abs(h - med) for h in hs) / 1000.0
 
     def snapshot(self) -> dict[str, object]:
+        """The status dict (``DeviceStatus.air_sensor``). Call it on the daemon loop, like every
+        other method: the sensor's state is not locked."""
         try:
             return self._snapshot()
         except Exception:

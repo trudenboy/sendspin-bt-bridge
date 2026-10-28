@@ -107,6 +107,9 @@ class World:
         self.injected = 0
         self.in_runner = False
         self._inject: float | None = None
+        self.flat_next = 0  # the next n window results are replaced by "flat"
+        self.flat_after_inject = 0  # ... and this many after the injected one
+        self.during_window = None  # called inside the runner, after the window was computed
         self.sensor = AirSensor(
             tap=self.tap,
             now_us=lambda: self.now,
@@ -135,10 +138,16 @@ class World:
             result = fn()
         finally:
             self.in_runner = False
+        if self.during_window is not None:
+            self.during_window()
+        if self.flat_next > 0:
+            self.flat_next -= 1
+            return WindowResult("flat", None, None, None)
         if self._inject is not None and result.status == "confirmed":
             result = WindowResult("confirmed", result.lag + self._inject, result.rho, result.psr)
             self._inject = None
             self.injected += 1
+            self.flat_next = self.flat_after_inject
         return result
 
     # -- world ----------------------------------------------------------------------------
@@ -594,6 +603,59 @@ async def test_a_lock_regained_after_no_lock_reports_only_fresh_windows(air_worl
     await w.run(seconds=4.5)  # one or two windows since the lock came back
     s = w.sensor.snapshot()
     assert s["state"] == "locked" and s["host_placement_ms"] == pytest.approx(51.5, abs=0.5)
+
+
+async def test_a_skipped_window_after_an_underrun_keeps_the_wide_search(air_world):
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=10)
+    lag = w.sensor.snapshot()["lag_cells"]
+    w.underrun_ms(30 * FRAME_US / 1000.0)
+    w.flat_next = 4  # every window up to the first one wholly after the event is flat
+    await w.run(seconds=10)
+    s = w.sensor.snapshot()
+    assert s["state"] == "locked" and s["lag_cells"] == pytest.approx(lag - 30, abs=0.3)
+
+
+async def test_the_anchor_reset_reverification_waits_for_a_confirmed_window(air_world, monkeypatch, caplog):
+    monkeypatch.setenv("SENDSPIN_AIR_DEBUG", "1")
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=10)
+    w.pa_skip_ms(20.0)
+    w.flat_next = 1
+    caplog.clear()
+    with caplog.at_level("DEBUG", logger=air_sensor_module.__name__):
+        await w.run(seconds=3)
+    modes = [r.getMessage().split("mode=")[1].split()[0] for r in caplog.records if "Air window:" in r.getMessage()]
+    assert modes and modes[0] == "reset"
+
+
+async def test_after_no_lock_the_first_lag_needs_two_windows(air_world):
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=10)
+    w.silence()
+    await w.run(seconds=NO_LOCK_S + 3)
+    w.resume()
+    w.inject_one_window_with_lag_offset(2)  # close to the old lag, but alone
+    w.flat_after_inject = 100
+    await w.run(seconds=6)
+    s = w.sensor.snapshot()
+    assert w.injected == 1 and s["state"] == "no_lock" and s["lag_cells"] is None
+
+
+async def test_a_window_computed_across_a_tap_generation_change_is_dropped(air_world):
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=10)
+    before = w.sensor.snapshot()["windows_confirmed"]
+    w.during_window = w.tap.reset
+    await w.run(seconds=1.1)
+    s = w.sensor.snapshot()
+    assert s["windows_confirmed"] == before and s["state"] == "acquiring"
+
+
+async def test_bad_inputs_never_raise_into_the_daemon(air_world):
+    w = air_world(H_true_ms=10.0)
+    w.sensor.set_calibration("not a number")  # type: ignore[arg-type]
+    assert (w.sensor.snapshot()["state"], w.sensor.snapshot()["reason"]) == ("unavailable", "internal_error")
 
 
 async def test_no_source_and_no_air_is_no_signal():
