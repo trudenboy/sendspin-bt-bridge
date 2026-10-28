@@ -283,3 +283,66 @@ async def test_a_spawn_drops_a_stale_daemon_snapshot(monkeypatch):
     dev = await _spawn(monkeypatch, _player_config(EXPERIMENTAL_AIR_SENSOR=True, PLAYOUT_SYNC="off"), preset=stale)
     assert dev.status["air_sensor"] == {"state": "off", "reason": "needs_measure"}
     assert dev.air_accepts == ()
+
+
+# -- calibration at spawn (A15) ----------------------------------------------------------------
+
+AIR_ENTRY = {
+    "codec": "sbc",
+    "rate": 44100,
+    "adapter": "C0:FB:F9:62:D7:D6",
+    "latency_ms": 203.4,
+    "measured_at": "2026-10-28T09:00:00+00:00",
+}
+
+
+async def _spawn_params(monkeypatch, config: dict, *, preset: dict | None = None) -> tuple[SendspinClient, dict]:
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8930)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: json.loads(json.dumps(config)))
+    client = SendspinClient("Kitchen", "localhost", 9000)
+    client.config_id = PLAYER_ID
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bluetooth_sink_name = "bluez_sink.AA_BB_CC_DD_EE_01.a2dp_sink"
+    if preset is not None:
+        client._update_status({"air_sensor": preset})
+    seen: dict = {}
+
+    async def _fake_exec(*args, **_kw):
+        seen.update(json.loads(args[3]))
+        raise RuntimeError("intentional short-circuit")
+
+    with (
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        await client.start_sendspin()
+    return client, seen
+
+
+def _calibrated_config(**extra) -> dict:
+    cfg = _player_config(EXPERIMENTAL_AIR_SENSOR=True, PLAYOUT_SYNC="measure", **extra)
+    cfg["players"][0]["air_to_sound_latency"] = [AIR_ENTRY]
+    return cfg
+
+
+@pytest.mark.asyncio
+async def test_spawn_carries_the_calibration_for_the_last_seen_codec_rate_and_adapter(monkeypatch):
+    previous = {"state": "locked", "accepts": [1], "codec": "sbc", "rate": 44100, "adapter": "C0:FB:F9:62:D7:D6"}
+    client, params = await _spawn_params(monkeypatch, _calibrated_config(), preset=previous)
+    assert params["air_sensor"] == {"enabled": True, "latency_ms": 203.4}
+    assert client.air_to_sound_latency == [AIR_ENTRY]
+
+
+@pytest.mark.asyncio
+async def test_spawn_without_a_known_rate_is_uncalibrated(monkeypatch):
+    _client, params = await _spawn_params(monkeypatch, _calibrated_config())
+    assert params["air_sensor"] == {"enabled": True, "latency_ms": None}
+
+
+@pytest.mark.asyncio
+async def test_switch_off_spawn_has_no_air_param_even_with_a_calibration(monkeypatch):
+    cfg = _calibrated_config()
+    cfg["EXPERIMENTAL_AIR_SENSOR"] = False
+    previous = {"state": "locked", "accepts": [1], "codec": "sbc", "rate": 44100, "adapter": "C0:FB:F9:62:D7:D6"}
+    _client, params = await _spawn_params(monkeypatch, cfg, preset=previous)
+    assert "air_sensor" not in params

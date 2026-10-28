@@ -60,7 +60,15 @@ from sendspin_bridge.config import (
     save_player_static_delay,
     save_player_volume,
 )
-from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, find_player_by_id, find_player_by_mac
+from sendspin_bridge.config.players import (
+    BLUETOOTH,
+    PULSE_SINK,
+    find_player_by_id,
+    find_player_by_mac,
+    normalize_mac,
+    resolve_air_latency,
+    valid_air_latency_entries,
+)
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
 )
@@ -665,10 +673,18 @@ class SendspinClient:
     # resent to every daemon that advertises ``accepts``; the service this speaker is
     # subscribed to; the daemon process that already has the calibration. Class defaults so a
     # client built without ``__init__`` (tests) behaves as "never subscribed".
+    #
+    # ``air_to_sound_latency`` holds the player's stored entries (from the config at spawn and
+    # from live reconfiguration); ``air_calibration_ms`` is then the entry matching the current
+    # codec, SBC rate and adapter (None when none matches). While the entries were never loaded
+    # (None), ``air_calibration_ms`` is used as set.
     air_calibration_ms: float | None = None
+    air_to_sound_latency: list[dict[str, Any]] | None = None
     _air_subscribed_to: Any | None = None
     _air_subscribed_mac: str | None = None
     _air_calibrated_proc: object | None = None
+    _air_calibrated_value: float | None = None
+    _air_last_seen: dict[str, Any] | None = None  # codec/rate/adapter of the last daemon snapshot
     _air_retired: bool = False
 
     def __init__(
@@ -953,6 +969,7 @@ class SendspinClient:
 
     def sync_air_subscription(self) -> None:
         """Follow the edges of the subscription conditions (any thread; cheap with the switch off)."""
+        self._remember_air_source()
         service = get_air_sensor_service()
         if service is None and self._air_subscribed_to is None:
             return
@@ -968,6 +985,8 @@ class SendspinClient:
                 self._air_subscribed_to, self._air_subscribed_mac = service, mac
         if service is None:
             return
+        if self._air_calibration_current():
+            return
         try:
             running = asyncio.get_running_loop()
         except RuntimeError:
@@ -979,16 +998,85 @@ class SendspinClient:
             with contextlib.suppress(RuntimeError):
                 service.loop.call_soon_threadsafe(self._send_air_calibration_once)
 
+    def _remember_air_source(self) -> None:
+        """Keep the codec, SBC rate and adapter of the daemon's snapshot past a respawn."""
+        info = self.status.get("air_sensor")
+        if not isinstance(info, dict):
+            return
+        seen = dict(self._air_last_seen or {})
+        for key in ("codec", "rate", "adapter"):
+            if info.get(key) is not None:
+                seen[key] = info[key]
+        self._air_last_seen = seen
+
+    def _air_calibration_key(self) -> tuple[str | None, int | None, str | None]:
+        """(codec, SBC rate, adapter MAC) the speaker plays with now, as far as known.
+
+        The daemon's snapshot first, then the last one seen (a respawn), then the connection
+        (``bt_codec_name``, the adapter the speaker is connected through); the rate only
+        comes from a daemon.
+        """
+        info = self.status.get("air_sensor")
+        current: dict[str, Any] = info if isinstance(info, dict) else {}
+        seen = self._air_last_seen or {}
+
+        def pick(key: str) -> Any:
+            value = current.get(key)
+            return value if value is not None else seen.get(key)
+
+        codec = pick("codec")
+        if not isinstance(codec, str) or not codec:
+            name = self.status.get("bt_codec_name")
+            codec = name if isinstance(name, str) and name else None
+        rate = pick("rate")
+        adapter = normalize_mac(pick("adapter"))
+        if not adapter and self.bt_manager is not None:
+            adapter = normalize_mac(getattr(self.bt_manager, "effective_adapter_mac", None))
+        return (
+            codec.lower() if codec else None,
+            rate if isinstance(rate, int) and not isinstance(rate, bool) else None,
+            adapter or None,
+        )
+
+    def _resolve_air_calibration(self) -> float | None:
+        """The calibration the daemon should have now; updates ``air_calibration_ms``."""
+        entries = self.air_to_sound_latency
+        if entries is None:
+            return self.air_calibration_ms
+        codec, rate, adapter = self._air_calibration_key()
+        value = resolve_air_latency({"air_to_sound_latency": entries}, codec, rate, adapter)
+        self.air_calibration_ms = value
+        return value
+
+    def _air_calibration_current(self) -> bool:
+        """Whether the running daemon already has the current calibration (nothing to schedule)."""
+        proc = self._daemon_proc
+        return (
+            proc is not None
+            and proc is self._air_calibrated_proc
+            and self._resolve_air_calibration() == self._air_calibrated_value
+        )
+
     def _send_air_calibration_once(self) -> None:
-        """Loop only: the current calibration, once per daemon that advertises ``accepts``."""
+        """Loop only: the current calibration, to every daemon that advertises ``accepts`` and lacks it."""
         proc = self._daemon_proc
         if not self.is_running() or AIR_ENVELOPE_VERSION not in self.air_accepts or self._air_retired:
             self._air_calibrated_proc = None
             return
-        if proc is self._air_calibrated_proc:
+        value = self._resolve_air_calibration()
+        if proc is self._air_calibrated_proc and value == self._air_calibrated_value:
             return
-        if self.send_air_command(SetAirCalibration(latency_ms=self.air_calibration_ms)):
-            self._air_calibrated_proc = proc
+        changed = value != self._air_calibrated_value
+        if self.send_air_command(SetAirCalibration(latency_ms=value)):
+            self._air_calibrated_proc, self._air_calibrated_value = proc, value
+            if changed:
+                key = self._air_calibration_key()
+                logger.info(
+                    "[%s] Air calibration applied: %s (codec %s, rate %s, adapter %s)",
+                    self.player_name,
+                    "none" if value is None else f"{value:g} ms",
+                    *key,
+                )
 
     def retire_air_subscription(self) -> None:
         """The player was removed: unsubscribe now and never again (late daemon status included)."""
@@ -2157,6 +2245,7 @@ class SendspinClient:
                 spawn_config = load_config()
                 player_cfg = self._config_entry(spawn_config)
                 air_effective, air_reason = air_sensor_effective(player_cfg, spawn_config)
+                self.air_to_sound_latency = valid_air_latency_entries(player_cfg.get("air_to_sound_latency"))
                 if air_reason != "switch_off":
                     # Switch on: a speaker the sensor is not effective for reports why (its daemon
                     # never builds the sensor); an effective one leaves the value to its daemon.
@@ -2164,6 +2253,9 @@ class SendspinClient:
                     self._update_status(
                         {"air_sensor": None if air_effective else {"state": "off", "reason": air_reason}}
                     )
+                # The calibration for the codec, rate and adapter last seen; the daemon reports
+                # what it actually plays and the parent resends when that picks another entry.
+                spawn_air_latency = self._resolve_air_calibration() if air_effective else None
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -2196,7 +2288,11 @@ class SendspinClient:
                             "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
                             # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for
                             # gets the key; without it the daemon builds nothing (switch off).
-                            **({"air_sensor": {"enabled": True, "latency_ms": None}} if air_effective else {}),
+                            **(
+                                {"air_sensor": {"enabled": True, "latency_ms": spawn_air_latency}}
+                                if air_effective
+                                else {}
+                            ),
                         }
                     )
                 )
@@ -2225,6 +2321,9 @@ class SendspinClient:
                     # next start.
                     **spawn_kwargs(),
                 )
+                if air_effective:
+                    # The spawn param already carries it: no command until the value changes.
+                    self._air_calibrated_proc, self._air_calibrated_value = self._daemon_proc, spawn_air_latency
                 self._update_status({"playing": False})
                 self._clear_ma_reconnecting()
                 self._pending_reconnect_unmute_sync = True
@@ -2677,10 +2776,18 @@ class SendspinClient:
             elif key in {"static_delay_source", "static_delay_calibrated_at", "static_delay_codec"}:
                 self._update_status({key: value})
                 applied.append(key)
+            elif key == "air_to_sound_latency":
+                # Resent below to the running daemon (switch on only), the entry for the current
+                # codec, rate and adapter or null.
+                self.air_to_sound_latency = valid_air_latency_entries(value)
+                applied.append(key)
             elif key in self._RECONFIG_PARENT_ONLY_FIELDS:
                 if hasattr(self, key):
                     setattr(self, key, value)
                     applied.append(key)
+
+        if "air_to_sound_latency" in applied:
+            self.sync_air_subscription()
 
         if restart_metronome and "static_delay_ms" in applied:
             await self.stop_calibration_metronome()

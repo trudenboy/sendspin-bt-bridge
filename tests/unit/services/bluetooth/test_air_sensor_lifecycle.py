@@ -425,3 +425,133 @@ async def test_an_unsubscribe_off_the_loop_cancels_the_sender_on_the_loop():
     await _settle()
     assert task.cancelled()
     await service.stop()
+
+
+# ── Calibration: the stored entry for the current codec, SBC rate and adapter, applied live (A15) ──
+
+ADAPTER = "C0:FB:F9:62:D7:D6"
+
+
+def _entry(rate=44100, latency=203.4, adapter=ADAPTER):
+    return {
+        "codec": "sbc",
+        "rate": rate,
+        "adapter": adapter,
+        "latency_ms": latency,
+        "measured_at": "2026-10-28T09:00:00+00:00",
+    }
+
+
+def _cal(latency):
+    return {"cmd": "set_air_calibration", "v": 1, "latency_ms": latency, "protocol_version": 2}
+
+
+def _cals(env):
+    return [d for d in env.sent_dicts() if d["cmd"] == "set_air_calibration"]
+
+
+def _air_status(**extra):
+    return {"air_sensor": {"state": "locked", "accepts": [1], "codec": "sbc", "adapter": ADAPTER, **extra}}
+
+
+async def test_the_entry_for_the_current_codec_rate_and_adapter_is_sent(lifecycle_env):
+    env = await lifecycle_env()
+    env.client.air_to_sound_latency = [_entry(44100, 203.4), _entry(48000, 150.0)]
+    env.client._update_status(_air_status(rate=44100))
+    await _settle()
+    assert _cals(env)[-1] == _cal(203.4)
+    env.client._update_status(_air_status(rate=48000))
+    await _settle()
+    assert _cals(env)[-1] == _cal(150.0)
+    # No entry for this rate: the daemon is told it is uncalibrated.
+    env.client._update_status(_air_status(rate=32000))
+    await _settle()
+    assert _cals(env)[-1] == _cal(None)
+    count = len(_cals(env))
+    env.client._update_status(_air_status(rate=32000, host_placement_ms=3.0))
+    await _settle()
+    assert len(_cals(env)) == count
+    assert env.client.air_calibration_ms is None
+
+
+async def test_another_adapter_does_not_match(lifecycle_env):
+    env = await lifecycle_env()
+    env.client.air_to_sound_latency = [_entry(adapter="C0:FB:F9:62:D6:9D")]
+    env.client._update_status(_air_status(rate=44100))
+    await _settle()
+    assert _cals(env)[-1] == _cal(None)
+
+
+async def test_a_live_change_is_resent_to_the_running_daemon(lifecycle_env):
+    env = await lifecycle_env()
+    env.client.air_to_sound_latency = []
+    env.client._update_status(_air_status(rate=44100))
+    await _settle()
+    assert _cals(env)[-1] == _cal(None)
+    applied = await env.client.apply_hot_config({"air_to_sound_latency": [_entry(latency=199.0)]})
+    assert applied == ["air_to_sound_latency"]
+    assert _cals(env)[-1] == _cal(199.0)
+    assert env.client.air_calibration_ms == 199.0
+    applied = await env.client.apply_hot_config({"air_to_sound_latency": None})
+    assert applied == ["air_to_sound_latency"]
+    assert _cals(env)[-1] == _cal(None)
+    assert env.client.air_to_sound_latency == []
+
+
+async def test_codec_and_adapter_fall_back_to_the_connection(lifecycle_env):
+    env = await lifecycle_env()
+    env.client.bt_manager.effective_adapter_mac = ADAPTER.lower()
+    env.client.air_to_sound_latency = [_entry()]
+    env.client._update_status(
+        {"bt_codec_name": "SBC", "air_sensor": {"state": "acquiring", "accepts": [1], "rate": 44100}}
+    )
+    await _settle()
+    assert _cals(env)[-1] == _cal(203.4)
+
+
+async def test_no_send_is_scheduled_while_the_daemon_has_the_value(lifecycle_env):
+    env = await lifecycle_env()
+    env.client.air_to_sound_latency = [_entry()]
+    env.client._update_status(_air_status(rate=44100))
+    await _settle()
+    assert _cals(env)[-1] == _cal(203.4)
+    loop = asyncio.get_running_loop()
+    scheduled = []
+    real = loop.call_soon_threadsafe
+
+    def counting(cb, *args, **kwargs):
+        if cb == env.client._send_air_calibration_once:
+            scheduled.append(cb)
+        return real(cb, *args, **kwargs)
+
+    loop.call_soon_threadsafe = counting
+    try:
+        # Status updates from other threads (D-Bus, API workers) with nothing new to send.
+        await asyncio.to_thread(env.client._update_status, _air_status(rate=44100, host_placement_ms=1.0))
+        await asyncio.to_thread(env.client._update_status, {"rssi_dbm": -60})
+        assert scheduled == []
+        await asyncio.to_thread(env.client._update_status, _air_status(rate=48000))
+        assert len(scheduled) == 1
+    finally:
+        del loop.call_soon_threadsafe
+    await _settle()
+    assert _cals(env)[-1] == _cal(None)
+
+
+async def test_switch_off_stores_the_calibration_but_sends_nothing(lifecycle_env):
+    env = await lifecycle_env(switch=False)
+    applied = await env.client.apply_hot_config({"air_to_sound_latency": [_entry()]})
+    assert applied == ["air_to_sound_latency"]
+    assert env.client.air_to_sound_latency == [_entry()]
+    assert env.client_sent_air_commands() == []
+
+
+async def test_a_respawn_keeps_the_last_seen_rate_for_the_spawn_value(lifecycle_env):
+    env = await lifecycle_env()
+    env.client.air_to_sound_latency = [_entry()]
+    env.client._update_status(_air_status(rate=44100))
+    await _settle()
+    await env.daemon_exits()
+    env.client._update_status({"air_sensor": None})
+    # Before the new daemon reports a rate the last one seen still picks the entry.
+    assert env.client._resolve_air_calibration() == 203.4
