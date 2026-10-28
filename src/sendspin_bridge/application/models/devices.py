@@ -8,9 +8,9 @@ the flat field names.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import AfterValidator, ConfigDict, Field, StrictBool, StrictInt, StrictStr, ValidationError
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, supported_actions_for
@@ -174,6 +174,79 @@ def _playout_or_none(raw: object) -> PlayoutTiming | None:
         return None
 
 
+# The air sensor's snapshot comes from a daemon subprocess: semi-trusted. Types are strict (a
+# number sent as a string, a bool as a count, NaN/inf drop the whole value), strings are cut to a
+# bounded length and counts/confidence clamped to their ranges.
+_AIR_STR_MAX = 64
+_AirStr = Annotated[StrictStr, AfterValidator(lambda s: s[:_AIR_STR_MAX])]
+_AirFloat = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+_AirCount = Annotated[StrictInt, AfterValidator(lambda n: max(0, n))]
+_AirUnit = Annotated[_AirFloat, AfterValidator(lambda x: min(1.0, max(0.0, x)))]
+
+
+class AirSensorFold(ResponseModel):
+    """The air side of a calibration fold (calibration only)."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
+
+    id: _AirStr | None = None
+    phase_ms: _AirFloat | None = None
+    ok: StrictBool = False
+    reason: _AirStr | None = None
+
+
+class AirSensorTiming(ResponseModel):
+    """The air sensor snapshot (``DeviceStatus.air_sensor``); unknown keys (``accepts``) are ignored."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
+
+    state: _AirStr = Field(
+        default="off",
+        description="off, unavailable, unsupported_codec, unsupported_input, no_signal, acquiring, locked, "
+        "holding or no_lock.",
+    )
+    reason: _AirStr | None = None
+    codec: _AirStr | None = None
+    rate: _AirCount | None = None
+    adapter: _AirStr | None = None
+    host_placement_ms: _AirFloat | None = Field(
+        default=None, description="H: the median host-side placement offset of the last 5 confirmed windows."
+    )
+    air_error_ms: _AirFloat | None = Field(
+        default=None, description="E (positive = late); null when uncalibrated or not locked/holding."
+    )
+    air_to_sound_ms: _AirFloat | None = None
+    calibrated: StrictBool = False
+    confidence: _AirUnit | None = None
+    jitter_ms: _AirFloat | None = None
+    psr: _AirFloat | None = None
+    lag_cells: _AirFloat | None = None
+    windows_confirmed: _AirCount = 0
+    windows_rejected: _AirCount = 0
+    windows_skipped: _AirCount = 0
+    last_confirmed_at: _AirStr | None = None
+    epochs: _AirCount = 0
+    frames: _AirCount = 0
+    missing_frames: _AirCount = 0
+    anchor: _AirStr = "send"
+    complete_lag_ms: _AirFloat | None = None
+    timestamp: _AirStr | None = Field(default=None, description="kernel, recv or null.")
+    monitor_drops: _AirCount | None = None
+    ipc_dropped: _AirCount = 0
+    dropped_messages: _AirCount = 0
+    fold: AirSensorFold | None = None
+
+
+def _air_or_none(raw: object) -> AirSensorTiming | None:
+    """The daemon's (or the parent's) air sensor dict, validated; None when absent or malformed."""
+    if not isinstance(raw, dict) or "state" not in raw:
+        return None
+    try:
+        return AirSensorTiming.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 class DeviceTiming(ResponseModel):
     available: bool = False
     sampled_at: str | None = None
@@ -195,6 +268,7 @@ class DeviceTiming(ResponseModel):
     cover the engine's buffer (PULSE_LATENCY_MSEC + 40 ms ring + 100 ms margin), in ``off`` the
     configured lead itself; null while the player is not running."""
     playout: PlayoutTiming | None = None
+    air_sensor: AirSensorTiming | None = None
     reanchoring: bool = False
     reanchor_count: int = 0
     reanchor_count_session: int = 0
@@ -435,6 +509,7 @@ class Device(ResponseModel):
                 declared_lead_time_ms=g("declared_lead_time_ms"),
                 effective_required_lead_time_ms=g("effective_required_lead_time_ms"),
                 playout=_playout_or_none(g("playout")),
+                air_sensor=_air_or_none(g("air_sensor")),
                 reanchoring=bool(g("reanchoring")),
                 reanchor_count=int(g("reanchor_count") or 0),
                 reanchor_count_session=int(g("reanchor_count_session") or 0),

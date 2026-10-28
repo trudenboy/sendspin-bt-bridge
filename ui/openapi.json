@@ -255,6 +255,327 @@
         "title": "AdapterRef",
         "type": "object"
       },
+      "AirSensorFold": {
+        "description": "The air side of a calibration fold (calibration only).",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "ok": {
+            "default": false,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "phase_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase Ms"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "id",
+          "phase_ms",
+          "ok",
+          "reason"
+        ],
+        "title": "AirSensorFold",
+        "type": "object"
+      },
+      "AirSensorTiming": {
+        "description": "The air sensor snapshot (``DeviceStatus.air_sensor``); unknown keys (``accepts``) are ignored.",
+        "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter"
+          },
+          "air_error_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "E (positive = late); null when uncalibrated or not locked/holding.",
+            "title": "Air Error Ms"
+          },
+          "air_to_sound_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air To Sound Ms"
+          },
+          "anchor": {
+            "default": "send",
+            "title": "Anchor",
+            "type": "string"
+          },
+          "calibrated": {
+            "default": false,
+            "title": "Calibrated",
+            "type": "boolean"
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec"
+          },
+          "complete_lag_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complete Lag Ms"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "dropped_messages": {
+            "default": 0,
+            "title": "Dropped Messages",
+            "type": "integer"
+          },
+          "epochs": {
+            "default": 0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "fold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AirSensorFold"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "host_placement_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "H: the median host-side placement offset of the last 5 confirmed windows.",
+            "title": "Host Placement Ms"
+          },
+          "ipc_dropped": {
+            "default": 0,
+            "title": "Ipc Dropped",
+            "type": "integer"
+          },
+          "jitter_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jitter Ms"
+          },
+          "lag_cells": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Cells"
+          },
+          "last_confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Confirmed At"
+          },
+          "missing_frames": {
+            "default": 0,
+            "title": "Missing Frames",
+            "type": "integer"
+          },
+          "monitor_drops": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monitor Drops"
+          },
+          "psr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Psr"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "default": "off",
+            "description": "off, unavailable, unsupported_codec, unsupported_input, no_signal, acquiring, locked, holding or no_lock.",
+            "title": "State",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "kernel, recv or null.",
+            "title": "Timestamp"
+          },
+          "windows_confirmed": {
+            "default": 0,
+            "title": "Windows Confirmed",
+            "type": "integer"
+          },
+          "windows_rejected": {
+            "default": 0,
+            "title": "Windows Rejected",
+            "type": "integer"
+          },
+          "windows_skipped": {
+            "default": 0,
+            "title": "Windows Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "codec",
+          "rate",
+          "adapter",
+          "host_placement_ms",
+          "air_error_ms",
+          "air_to_sound_ms",
+          "calibrated",
+          "confidence",
+          "jitter_ms",
+          "psr",
+          "lag_cells",
+          "windows_confirmed",
+          "windows_rejected",
+          "windows_skipped",
+          "last_confirmed_at",
+          "epochs",
+          "frames",
+          "missing_frames",
+          "anchor",
+          "complete_lag_ms",
+          "timestamp",
+          "monitor_drops",
+          "ipc_dropped",
+          "dropped_messages",
+          "fold"
+        ],
+        "title": "AirSensorTiming",
+        "type": "object"
+      },
       "ApplyIn": {
         "properties": {
           "rows": {
@@ -3129,6 +3450,16 @@
       },
       "DeviceTiming": {
         "properties": {
+          "air_sensor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AirSensorTiming"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "available": {
             "default": false,
             "title": "Available",
@@ -3365,6 +3696,7 @@
           "declared_lead_time_ms",
           "effective_required_lead_time_ms",
           "playout",
+          "air_sensor",
           "reanchoring",
           "reanchor_count",
           "reanchor_count_session",

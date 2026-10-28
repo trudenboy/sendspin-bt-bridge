@@ -2156,6 +2156,14 @@ class SendspinClient:
                 self._seen_server_delay_seq = 0
                 spawn_config = load_config()
                 player_cfg = self._config_entry(spawn_config)
+                air_effective, air_reason = air_sensor_effective(player_cfg, spawn_config)
+                if air_reason != "switch_off":
+                    # Switch on: a speaker the sensor is not effective for reports why (its daemon
+                    # never builds the sensor); an effective one leaves the value to its daemon.
+                    # Switch off: never set (stays None).
+                    self._update_status(
+                        {"air_sensor": None if air_effective else {"state": "off", "reason": air_reason}}
+                    )
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -2188,11 +2196,7 @@ class SendspinClient:
                             "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
                             # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for
                             # gets the key; without it the daemon builds nothing (switch off).
-                            **(
-                                {"air_sensor": {"enabled": True, "latency_ms": None}}
-                                if air_sensor_effective(player_cfg, spawn_config)[0]
-                                else {}
-                            ),
+                            **({"air_sensor": {"enabled": True, "latency_ms": None}} if air_effective else {}),
                         }
                     )
                 )

@@ -2370,6 +2370,125 @@ export interface components {
             /** Name */
             name: string | null;
         };
+        /**
+         * AirSensorFold
+         * @description The air side of a calibration fold (calibration only).
+         */
+        AirSensorFold: {
+            /** Id */
+            id: string | null;
+            /**
+             * Ok
+             * @default false
+             */
+            ok: boolean;
+            /** Phase Ms */
+            phase_ms: number | null;
+            /** Reason */
+            reason: string | null;
+        };
+        /**
+         * AirSensorTiming
+         * @description The air sensor snapshot (``DeviceStatus.air_sensor``); unknown keys (``accepts``) are ignored.
+         */
+        AirSensorTiming: {
+            /** Adapter */
+            adapter: string | null;
+            /**
+             * Air Error Ms
+             * @description E (positive = late); null when uncalibrated or not locked/holding.
+             */
+            air_error_ms: number | null;
+            /** Air To Sound Ms */
+            air_to_sound_ms: number | null;
+            /**
+             * Anchor
+             * @default send
+             */
+            anchor: string;
+            /**
+             * Calibrated
+             * @default false
+             */
+            calibrated: boolean;
+            /** Codec */
+            codec: string | null;
+            /** Complete Lag Ms */
+            complete_lag_ms: number | null;
+            /** Confidence */
+            confidence: number | null;
+            /**
+             * Dropped Messages
+             * @default 0
+             */
+            dropped_messages: number;
+            /**
+             * Epochs
+             * @default 0
+             */
+            epochs: number;
+            fold: components["schemas"]["AirSensorFold"] | null;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames: number;
+            /**
+             * Host Placement Ms
+             * @description H: the median host-side placement offset of the last 5 confirmed windows.
+             */
+            host_placement_ms: number | null;
+            /**
+             * Ipc Dropped
+             * @default 0
+             */
+            ipc_dropped: number;
+            /** Jitter Ms */
+            jitter_ms: number | null;
+            /** Lag Cells */
+            lag_cells: number | null;
+            /** Last Confirmed At */
+            last_confirmed_at: string | null;
+            /**
+             * Missing Frames
+             * @default 0
+             */
+            missing_frames: number;
+            /** Monitor Drops */
+            monitor_drops: number | null;
+            /** Psr */
+            psr: number | null;
+            /** Rate */
+            rate: number | null;
+            /** Reason */
+            reason: string | null;
+            /**
+             * State
+             * @description off, unavailable, unsupported_codec, unsupported_input, no_signal, acquiring, locked, holding or no_lock.
+             * @default off
+             */
+            state: string;
+            /**
+             * Timestamp
+             * @description kernel, recv or null.
+             */
+            timestamp: string | null;
+            /**
+             * Windows Confirmed
+             * @default 0
+             */
+            windows_confirmed: number;
+            /**
+             * Windows Rejected
+             * @default 0
+             */
+            windows_rejected: number;
+            /**
+             * Windows Skipped
+             * @default 0
+             */
+            windows_skipped: number;
+        };
         /** ApplyIn */
         ApplyIn: {
             /**
@@ -3567,6 +3686,7 @@ export interface components {
         };
         /** DeviceTiming */
         DeviceTiming: {
+            air_sensor: components["schemas"]["AirSensorTiming"] | null;
             /**
              * Available
              * @default false
