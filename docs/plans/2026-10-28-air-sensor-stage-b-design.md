@@ -1,6 +1,6 @@
 # Air sensor stage B1: the engine corrects placement from the air — design
 
-Status: draft for review, rev. 1 (2026-10-28). Target: the v3 line (beta channel), branch `feat/air-sensor`,
+Status: draft for review, rev. 2 (2026-10-28: the controller's round-2 rulings on rev. 1's open questions). Target: the v3 line (beta channel), branch `feat/air-sensor`,
 after stage A (validated 2026-10-28).
 Builds on [`2026-10-28-air-sensor-design.md`](2026-10-28-air-sensor-design.md) ("the stage A spec",
 in particular its "Stage A validation note" and "Stage B (outline)") and on
@@ -35,7 +35,7 @@ is **B2** and not part of this design.
 | Q4 | A slow bias filter `b = e_pulse − E_equiv` (`E_equiv = E` when calibrated, `H − H_target` when learned), seeded per output from the median of the first three confirmed windows. The controller input and every placement target use `e_pulse − b`. Thread-safe handoff sensor (daemon loop) → engine (feeder thread) through a lock-protected shared object; `e_pulse` is matched to the window's audio, not to the window's arrival time. |
 | Q5 | Lock lost: hold the last `b` for the rest of the output; reset only on reopen. |
 | Q6 | First task: the measure-mode implicit snap. Placements keep the current residual instead of zeroing it, so a delay change moves the audio by exactly its delta. Also covers the baseline that placements ignore. |
-| Q7 | Learned target: invariant `X = D_out − H`; per start `X_i` = median of the first three confirmed windows; `X_ref` = median of the last 8 starts; persisted per player keyed (codec, rate, adapter) next to the air latency entries, source `learned`; active from the 3rd start; a calibration (`X_ref := L_as`) wins; Forget clears both. |
+| Q7 | Learned target (estimator replaced by round-2 ruling 2): invariant `X = D_out − H`; per start `X_i` = median of the first three confirmed windows; `X_ref` = median of the last 8 starts; persisted per player keyed (codec, rate, adapter) next to the air latency entries, source `learned`; active from the 3rd start; a calibration (`X_ref := L_as`) wins; Forget clears both. |
 | Q8 | Seed: when the three windows agree within 2 ms, full correction, no 50 ms clamp. Dead band 2 ms. Then `b` tracks slowly (τ ≈ 30 s). |
 | Q9 | The pulsesink fast loop stays, in `loop`, on the corrected error `e_pulse − b`, `J = 10 ms`. |
 | Q10 | Telemetry/UI: the playout snapshot adds `air_bias_ms`, `air_target` (calibrated / learned / null), `air_corrections`; timing panel line "Air correction: calibrated / learned (N starts) / no data"; a guidance issue when a speaker is in `loop` but the air sensor is off, not effective or not locked (it works as `measure`). |
@@ -43,9 +43,21 @@ is **B2** and not part of this design.
 | Q12 | Acceptance on the stand: 8 cold starts of ENEBY20 in `loop` against a warm (not restarted) reference on the playout engine; `sd(M) ≤ 2 ms` (measure today 4.8); calibrated `|median M| ≤ 3 ms`; uncalibrated `sd(M) ≤ 2 ms` from the 4th start; CPU not noticeably higher. Only ENEBY20's stream is restarted (via MA), so the reference keeps running. |
 
 Controller rulings (binding): a format change resets `b` and reseeds (the sensor reopens anyway);
-`stream/clear` keeps `b`; a delay change `ΔD` offsets `b` by `+ΔD` (`b = D_out − true latency`),
-no reset; the sensor's `E` takes `d_out` as the median of 5 windows and lags 3 of 5 windows after a
-change, so `b` uses the **per-window** `d_out`, never the snapshot `E`.
+`stream/clear` keeps `b`; the sensor's `E` takes `d_out` as the median of 5 windows and lags 3 of 5
+windows after a change, so `b` never uses the snapshot `E`. (The first round also ruled "a delay
+change offsets `b` by `+ΔD`"; round 2 replaced it, below.)
+
+Controller rulings, round 2 (2026-10-28, on rev. 1's open questions; binding):
+
+1. **A delay change moves the sound by exactly `ΔD` in `loop` too**, as in `measure` after the Q6 fix
+   (the user's slider and the wizard's applied static delays alike). In `loop` the static delay acts as
+   a trim on the target and `b` is unchanged. The target is defined relative to the delay at which
+   `L_eff` was measured or learned: `E_target = −(D_out − D_ref)`, with `D_ref` saved alongside the
+   calibration or learned entry. Formalised in "Time bases under a delay change".
+2. **Learned estimator:** the mean of the samples within ±15 ms of their median (not the plain median).
+3. **No new per-player key;** the existing `playout_sync_enabled=false` opt-out applies.
+4. **After `held`,** tracking resumes on the next accepted window, without a jump or a reset.
+5. **Learning runs in `loop` only.**
 
 Stand facts used below (stage A note): σ(H) within a stream 0.2–0.9 ms; start-to-start offsets
 9–60 ms in `measure`; live `H` tracks engine jumps to the millisecond; windows lag real time by
@@ -59,8 +71,11 @@ Goals (B1):
 - In `loop` with the air sensor effective and locked: a cold start converges to the air target in
   one correction, within ≈ 10 s of the first audio on HAOS (800 ms PulseAudio latency); the
   start-to-start spread of the speaker against a warm reference drops to `sd ≤ 2 ms`.
-- A calibrated speaker plays on the schedule (`|E| ≤ 3 ms` by microphone); an uncalibrated one plays
-  where it played on average in its previous starts (the learned target).
+- A calibrated speaker plays on the schedule (`|E| ≤ 3 ms` by microphone) at the delay it was
+  calibrated with; an uncalibrated one plays where it played on average in its previous starts (the
+  learned target).
+- A delay change moves the sound by exactly `ΔD` in every mode (`measure`, `loop` with or without a
+  target), so the slider and the wizard keep their meaning.
 - In `measure` (and in `loop` without air data): a placement keeps the residual; a delay change moves
   the audio by exactly the delta (Q6).
 - No new privilege, no extra CPU worth measuring, no new failure mode for playback: anything the air
@@ -85,13 +100,14 @@ Times are `CLOCK_MONOTONIC_RAW` µs, signs as in the stage A spec (positive erro
 | `e_w` | The error predicted at the write head (engine.py:302-306); equal to `e` in steady state, minus corrections already written. |
 | `H` | Host placement of a confirmed air window: `t_air − s` at the window's middle (stage A). |
 | `L_eff` | The target latency: the calibrated `L_as` when one exists for the current key, else the learned `X_ref` once it is active, else none. |
-| `E_equiv` | The air error the bias is measured against: `E_equiv = H + L_eff − d_out_i`. With `L_eff = L_as` it is the stage A `E`; with `L_eff = X_ref` it is `H − H_target`, `H_target = d_out − X_ref` (Q4). |
-| `b` | The bias: `b = e − E_equiv` for the same audio. Physically `b = D_out − (true latency beyond the port)`. |
+| `D_ref` | The output delay `L_eff` refers to: the delay in force when the calibration was measured, or the reference delay of the learned samples (round-2 ruling 1). |
+| `E_equiv` | The error against the target: `E_equiv = H + L_eff − D_ref = E + (D_out − D_ref)`, i.e. the stage A air error `E` measured against `E_target = −(D_out − D_ref)`. Equal to `E` when `D_out = D_ref`; for the learned target it is `H − H_ref` (Q4's `H − H_target`). It does not contain `D_out`. |
+| `b` | The bias: `b = e − E_equiv` for the same audio. Physically `b = D_ref − (true latency beyond the port)`; it does not change with `D_out`. |
 | `c` | The corrected error: `c = e_w − b − β` (the controller input in `loop` with a bias). |
 | `β` | The engine's error baseline after an underrun or stall (R14), today's `_baseline_us`. |
 | `r` | The raw residual the engine currently reports: its error EMA plus `β` (`_error_ema_us`), plus `b` when a bias exists. |
 | `o` | The placement offset: a placement aligns the next frame to `audible − o`, so that `e = o` right after it. |
-| `X_i` | Learned sample of one output start: `median(d_out_i − h_i)` over the seed triple. |
+| `X_i`, `d_i` | Learned sample of one output start: `X_i = median(d_out_i − h_i)` and the delay `d_i = median(d_out_i)` over the seed triple; `X_i − d_i = −H_i`, the start's raw placement. |
 
 ## Why a bias and not the air error directly
 
@@ -101,8 +117,8 @@ second. A controller acting on `E` directly would act on what happened 2–4 s a
 to its own corrections for that long. The pulsesink reading comes every 100 ms and sees every
 placement and jump at once, but it is wrong by a per-start amount (the very variance stage A found).
 So the fast loop keeps `e` and the air sensor estimates how wrong `e` is: `b`. `b` changes only when
-the hidden part of the path changes (a new PulseAudio stream, an underrun, a delay change), so a slow
-filter with a fast seed is enough.
+the hidden part of the path changes (a new PulseAudio stream, an underrun), so a slow filter with a
+fast seed is enough. A delay change does not change it (next section).
 
 `b` does **not** change when the engine moves audio: a placement or a jump moves `e` and `E_equiv`
 by the same amount. That is what makes the windows that come in after a correction still usable for
@@ -220,11 +236,11 @@ States (Q10's `air_bias_state`): `none` (no target, or the correction cannot run
 | no agreement after 12 windows | — | `b` = median `b_i` of the last 5 → `active`, no jump (R14 corrects `c`) | — | — |
 | format change | — | triple restarts | → `seeding`, `b` provisional | `b` provisional, stays `held` |
 | `stream/clear` | — | — | `b` kept; the clear placement uses `o = b` | same |
-| delay change `ΔD` | — | candidates before the event dropped; provisional `b += ΔD` | `b += ΔD` (controller ruling) | `b += ΔD` |
+| delay change `ΔD` | — (the placement keeps `r`, Q6) | windows across the event dropped (S-3); `b` unchanged | `b` unchanged; the placement keeps `e = b`, the sound moves by `−ΔD` (S-14) | same |
 | underrun / stall / `pa_step` | today's baseline | triple restarts; controller frozen ≤ 15 s if `b` provisional | → `seeding`, `b` provisional, controller frozen ≤ 15 s, no baseline | stays `held`; today's baseline measured on `c` |
 | reseed timeout (15 s frozen) | — | → `active` with the provisional `b`; baseline measured on `c` | — | — |
 | lock lost (sensor not `locked`/`holding`) | — | initial: waits; provisional: → `held` | → `held` | — |
-| calibration set / changed (`L_eff` moves by `ΔL`) | → `seeding` | target updated | `b −= ΔL`; `air_target` jump `+ΔL` if `|ΔL| > 2 ms` | `b −= ΔL`; jump as in `active` |
+| calibration set / changed (`L_eff − D_ref` moves by `ΔL`) | → `seeding` | target updated | `b −= ΔL`; `air_target` jump `+ΔL` if `|ΔL| > 2 ms` | `b −= ΔL`; jump as in `active` |
 | calibration forgotten | — | falls back to learned (target updated) or → `none` | to learned: `ΔL` as above; no learned: → `none`, audio kept (`o = r`) | same |
 | learned value changes (parent resend) | ignored until reopen (S-11) | ignored | ignored | ignored |
 | 15 consecutive gated windows within 3 ms | — | — | `b` = their median, logged, no jump | — |
@@ -254,8 +270,8 @@ Notes on the rows:
   "hold" as "never reset or decay while the lock is lost": when the sensor locks again, the next
   accepted window resumes tracking through the gate (no jump, no reseed). An underrun in `held` uses
   today's baseline on `c`.
-- **Target changes (Ruling S-11).** `E_equiv = H + L_eff − d_out`, so a change of `L_eff` by `ΔL`
-  changes every `E_equiv` by `+ΔL` and `b` by `−ΔL`: the audio is now `ΔL` late against the new target
+- **Target changes (Ruling S-11).** `E_equiv = H + L_eff − D_ref`, so a change of `L_eff − D_ref` by
+  `ΔL` changes every `E_equiv` by `+ΔL` and `b` by `−ΔL`: the audio is now `ΔL` late against the new target
   and gets one `air_target` jump of `+ΔL` (no clamp, Q8) when beyond the dead band. A calibration saved
   in the wizard therefore takes effect at once. The learned value is latched when the output opens
   (the value the feed holds at the engine's first update); later learned values are ignored until the
@@ -268,7 +284,7 @@ Notes on the rows:
 For every accepted window in `active` (and the first one after `held`):
 
 ```
-b_i  = ê(x_lo, x_hi) − (h_i + L_eff − d_out_i)          ê = median e over the window's x span
+b_i  = ê(x_lo, x_hi) − (h_i + L_eff − D_ref)            ê = median e over the window's x span
 gate = max(10 ms, 4 · 1.4826 · MAD(last 20 b_i))
 |b_i − b| > gate  → not used (air_bias_gated += 1); 15 consecutive gated within 3 ms of each other → b = their median
 else              → b += (1 − exp(−Δt / 30 s)) · (b_i − b),  Δt = at_i − at_prev clamped to [0, 5 s]
@@ -284,16 +300,16 @@ congested link whose `H` swings for ≈ 10 s and comes back (#562) is not chased
 ### Learned target (Q7, Ruling S-12)
 
 - **Sample.** Once per output, from the first agreeing triple after the reopen (not after a reseed):
-  `X_i = median(d_out_i − h_i)`, i.e. `L_eff` that would have made that start's raw placement the
-  target. The triple precedes any seed jump, so `X_i` is the raw start placement whatever the target.
-  Learning runs in `loop` only, also while a calibration exists (so Forget of the calibration can fall
-  back to it).
-- **Publish.** The engine snapshot carries `air_learned = {"seq", "x_ms", "codec", "rate", "adapter"}`;
+  `X_i = median(d_out_i − h_i)` and `d_i = median(d_out_i)`, i.e. the `L_eff` that would have made that
+  start's raw placement the target, and the delay it refers to. The triple precedes any seed jump, so
+  `X_i − d_i = −H_i` is the raw start placement whatever the target. Learning runs in `loop` only
+  (round-2 ruling 5), also while a calibration exists (so Forget of the calibration can fall back to it).
+- **Publish.** The engine snapshot carries `air_learned = {"seq", "x_ms", "d_out_ms", "codec", "rate", "adapter"}`;
   `seq` is a per-daemon counter kept in the `AirFeed` (it survives engine rebuilds), the key is the
   feed's key at the seed (codec and adapter from the sensor's source, rate from the newest batch). No
   key → no sample.
-- **Persist.** The parent records a new `(daemon process, seq)` once: appends `x_ms` to the entry for
-  that key (≤ 8 samples, oldest dropped), recomputes `latency_ms = median(samples)` (Q7), counts
+- **Persist.** The parent records a new `(daemon process, seq)` once: appends `(x_ms, d_out_ms)` to the
+  entry for that key (≤ 8 samples, oldest dropped), recomputes `d_ref_ms` and `latency_ms` (below), counts
   `starts`, stamps `measured_at`, writes the config off the loop, and resends `set_air_calibration`
   with the learned value. Writes come at most once per output start (a seed needs ≈ 7 s of audio), so
   no further debounce.
@@ -301,28 +317,74 @@ congested link whose `H` swings for ≈ 10 s and comes back (#562) is not chased
   The daemon's target is `L_as` when a calibration exists for the key, else the learned value, else
   none (Q7: calibration wins).
 
-**Acceptance risk (open question 2).** On stage A's own cold-start numbers (`H` = −45.2, −32.4,
-−31.4, −44.5, −44.9, −36.3, −44.7, −36.4 ms) the learned target used at starts 4–8 (the median of the
-first 3–7 samples) moves by `sd = 5.0 ms` between starts, because the starts form two clusters 10 ms
-apart and the median flips between them. That alone would fail Q12's uncalibrated `sd(M) ≤ 2 ms`. The
-interquartile mean gives 3.4 ms, the plain mean 1.4 ms. The estimator is one function
-(`learned_latency_ms(samples)`); the closed-loop simulation runs this sequence so the choice is visible
-in the test output.
+- **Estimator (round-2 ruling 2, Ruling S-21).** With the raw placements `−H_i = X_i − d_i`:
+  `off_ref = mean{ o ∈ (X_i − d_i) : |o − median(X_j − d_j)| ≤ 15 ms }`, `d_ref_ms = median(d_i)`,
+  `latency_ms = d_ref_ms + off_ref`. Then `L_eff − D_ref = off_ref = −H_ref`: the target is the robust
+  mean raw placement, independent of the delays the samples were taken at (a delay change in a learning
+  start moves the sound and leaves `H` unchanged, next section). On stage A's own cold-start numbers
+  (`H` = −45.2, −32.4, −31.4, −44.5, −44.9, −36.3, −44.7, −36.4 ms) the target used at starts 4–8 moves
+  by `sd = 1.4 ms` between starts (all samples lie within ±15 ms of the median); the plain median of
+  Q7 would move by 5.0 ms (the starts form two clusters 10 ms apart and the median flips between them),
+  which alone would fail Q12's uncalibrated `sd(M) ≤ 2 ms`. The closed-loop simulation prints both.
 
-### Interaction with the delay slider and the wizard (Ruling S-14)
+### Time bases under a delay change (round-2 ruling 1, Ruling S-14)
 
-With a bias, the controller ruling `b += ΔD` keeps `E_equiv` on its definition, and the consequence is
-worth stating plainly: in `loop` with an active target **a delay change does not move the sound**. The
-queued audio shifts by `−ΔD` (as today), `b` by `+ΔD`, and the delay placement targets `e = b`, so the
-frame leaves the port where it would have left before. The sound stays on `T + (L_eff − L_true)`: on
-the schedule when calibrated, at the learned placement otherwise. That is the protocol's meaning of
-the delay (the latency beyond the sink, which the air sensor now measures), but it differs from
-today's slider. The bridge logs `Output delay change absorbed by the air correction (b … → … ms)` at
-INFO and the timing panel says the delay is not used while the correction is active. A learned target
-then follows a changed delay only over the next starts (`X_i = d_out − H`). See open question 1.
+What moves when `D_out` changes by `ΔD` (from the code):
 
-The sync wizard keeps working: it measures, calibrates `L_as` (the calibration then applies live,
-S-11) and may suggest static delays, which are absorbed for `loop` members with an active target.
+- **Play time.** aiosendspin's `compute_play_time` returns `client_time − D_out` (bridge_daemon.py:1265:
+  "a larger delay plays earlier (play time = client time − delay)"). The scheduler records a program
+  frame's play time as its schedule (`_start_program`/`_continue_program`, scheduler.py:390-398), so
+  `s(x) = t_client(x) − D_out`.
+- **The change.** The daemon applies `shift_us = old − new = −ΔD` to the queued chunks and to the
+  pending play times (bridge_daemon.py:1288-1300) and calls `player.resync(shift)`; the engine shifts
+  the queue and requests a `delay` placement (engine.py:149-153, scheduler.py:126-137). New chunks get
+  the new play time from `compute_play_time`. So for audio of the same client time: `s' = s − ΔD`.
+- **The tap** stores `T = s + D_out` per cell (`d_out = T − s`, air_tap.py): `T' = T = t_client`,
+  `d_out' = d_out + ΔD`.
+- **The air.** A frame leaves the port at `s + e` and the air at `t_air = s + e + P` (`P` the hidden
+  path), so `H = t_air − s = e + P`; the sound comes `L_true` later. Stage A's air error
+  `E = H + L_as − D_out = t_sound − t_client` (with `L_as = L_true`).
+
+What the ruling requires: after the change the sound of every frame is `ΔD` earlier than before,
+`t_sound' = t_sound − ΔD`, exactly as in `measure` after Q6 (the placement keeps `e`). Since
+`s' = s − ΔD`, that holds iff `e' = e`, i.e. iff `H' = H`. So the correction must hold `H` (not `E`)
+across a delay change, and its target must not contain `D_out`:
+
+```
+E_equiv = H + L_eff − D_ref = E + (D_out − D_ref)        target E_equiv = 0  ⇔  E = −(D_out − D_ref)
+b = e − E_equiv = (D_ref − L_eff) − P                    independent of D_out: unchanged by ΔD
+```
+
+The delay placement uses `o = b`, so `e' = b = e` (in `active`, `c ≈ 0` before and after): the frame
+written at `s'` leaves at `s' + b`, the sound moves by exactly `−ΔD`; `E_equiv` is unchanged, so no
+air jump follows and the windows after the change confirm `b`. Windows that straddle the `delay`
+placement are dropped (S-3), as for any event; per-window `d_out` no longer enters `b` (it is still
+recorded for the learned samples and the stage A telemetry `E`). With `D_out = D_ref` the target is
+`E = 0` (Q3).
+
+Where `D_ref` comes from and where the trim lives (Ruling S-22):
+
+- **The trim is the static delay itself.** Nothing else is stored per output or reset at a reopen:
+  `D_out` is already persisted (the player's `static_delay_ms`, MA's `sendspin_static_delay`), and at
+  every start the target is `E = −(D_out − D_ref)` again. Raising the slider by 30 ms after a calibration
+  makes the speaker play 30 ms earlier than the schedule, now and at every later start, until the
+  slider is moved back.
+- **Calibrated:** `D_ref` = the output delay the wizard's fold was measured with, `d_ref_ms` in the
+  calibration entry. The daemon's written fold already works on `T = s + D_out` per cell; its answer
+  gains `d_out_ms` (the median `T − s` of the folded cells), and the parent stores it with the entry.
+  `L_as = A − H_cal` itself is unchanged (stage A: the delay cancels in it).
+- **Learned:** `D_ref = d_ref_ms = median(d_i)` with `latency_ms = d_ref_ms + off_ref` (above), so
+  `L_eff − D_ref = −H_ref` whatever the delays during learning.
+- **Stage A entries without `d_ref_ms`** (calibrations saved before this stage; stage A is unreleased,
+  the stand has one): the config migration fills `d_ref_ms` from the player's `static_delay_ms` at the
+  time of the migration (logged at INFO once per entry); with no static delay stored, `0`. An entry the
+  daemon receives without `d_ref` (an older parent) latches `D_ref = D_out` at the output's first update.
+- **The wizard** keeps working unchanged: a static delay it applies to a `loop` member moves the sound
+  by exactly that delay, as for a `measure` member; a calibration it saves applies live (S-11) and from
+  then on the delay in force at the fold is the reference.
+
+The bridge logs `Output delay changed … ms; air target trim −(D_out − D_ref) = … ms` at INFO for a
+change in `loop` with a target.
 
 ## Constants
 
@@ -357,6 +419,8 @@ S-11) and may suggest static delays, which are absorbed for `loop` members with 
 | `air_bias_ms` | float or null | `b` (provisional values included); null without a value |
 | `air_target` | `calibrated`/`learned` or null | Q10 |
 | `air_target_ms` | float or null | `L_eff` in use |
+| `air_d_ref_ms` | float or null | `D_ref` in use |
+| `air_trim_ms` | float or null | `D_out − D_ref`: the delay trim; the target is `E = −air_trim_ms` |
 | `air_learned_starts` | int or null | samples behind the learned value in use |
 | `air_corrections` | int | `air_seed` + `air_target` jumps in this output |
 | `air_last_correction_ms` | float or null | the last one's size |
@@ -380,9 +444,8 @@ description says so.
 
 - Timing panel, air block, when `timing.playout.mode == "loop"` and `timing.air_sensor` is not null:
   "Air correction: calibrated (228.7 ms)" / "learned (6 starts)" / "no data (learning: 1 of 2
-  starts)" / "inactive: not locked"; then "Air bias +12.3 ms" and "Air corrections 1" when known, and
-  the note "The speaker's delay is measured by the air sensor while the correction is active" when
-  `air_bias_state` is `active` or `held`.
+  starts)" / "inactive: not locked"; then "Air bias +12.3 ms", "Air corrections 1" and, when `air_trim_ms` is
+  not 0, "Delay trim −30.0 ms (target 30.0 ms early)".
 - The calibrations list shows learned entries too: "Learned: 228.1 ms · SBC · hci1 · 6 starts" with
   the same Forget (which forgets both).
 - Settings: the `EXPERIMENTAL_AIR_SENSOR` help text says it runs in `measure` (observe) and `loop`
@@ -393,7 +456,7 @@ description says so.
 
 | Level | Message |
 |---|---|
-| INFO | `playout jump: air_seed, 37.2 ms` / `air_target`; `air bias seeded at 12.3 ms (E −37.2 ms, 3 windows within 0.6 ms)`; `air bias held (sensor no_lock)`; `air bias step: 12.3 → 25.1 ms`; `Output delay change absorbed by the air correction (b 12.3 → 42.3 ms)`; learned sample recorded (parent: value, key, samples) |
+| INFO | `playout jump: air_seed, 37.2 ms` / `air_target`; `air bias seeded at 12.3 ms (E −37.2 ms, 3 windows within 0.6 ms)`; `air bias held (sensor no_lock)`; `air bias step: 12.3 → 25.1 ms`; `Output delay changed 184→214 ms; air target trim −(D_out − D_ref) = −30.0 ms`; learned sample recorded (parent: value, key, samples) |
 | WARNING (once per 10 min) | `AirBias` internal error (first with traceback); learned sample not persisted (config write failed) |
 | DEBUG | per window with `SENDSPIN_AIR_DEBUG=1`: `b_i`, `ê`, coverage, gated; the engine's 10 s summary gains `b` and the state |
 
@@ -424,7 +487,7 @@ mode." Learning without a target is not an issue (the panel shows it).
   and the air sensor is effective; reasons `not_loop` (observe-only), `switch_off`, `needs_measure`,
   `not_bluetooth`. Q11's "per speaker, default off" is read as: the rule is evaluated per speaker and
   both inputs default off (`PLAYOUT_SYNC=off`, `EXPERIMENTAL_AIR_SENSOR=false`; a speaker opts out with
-  the existing `playout_sync_enabled=false`). No new per-player key (open question 3).
+  the existing `playout_sync_enabled=false`). No new per-player key (round-2 ruling 3).
 - The daemon builds the sensor in `measure` and `loop` (bridge_daemon.py:257 gate goes) and the
   `AirFeed` in `loop` only. Spawn params: unchanged `playout: {"mode"}`; `air_sensor` gains
   `learned_ms`/`learned_starts` **only when a learned value exists** (the existing spawn test keeps its
@@ -432,10 +495,12 @@ mode." Learning without a target is not an issue (the panel shows it).
 
 ### IPC (Ruling S-17)
 
-`set_air_calibration` (payload `v: 1`, no protocol bump) gains two optional fields, sent only when
-known: `learned_ms` (0…2000, clamped like `latency_ms`) and `learned_starts` (int ≥ 2). An older
-daemon ignores them (decoders read named fields only, commands.py:417-423). `SetAirCalibration`
-becomes `(latency_ms, learned_ms=None, learned_starts=None)`.
+`set_air_calibration` (payload `v: 1`, no protocol bump) gains optional fields, sent only when
+known: `d_ref_ms` (the calibration's reference delay, 0…5000), `learned_ms` (0…2000, clamped like
+`latency_ms`), `learned_d_ref_ms` (0…5000) and `learned_starts` (int ≥ 2; the three learned fields come
+together). An older daemon ignores them (decoders read named fields only, commands.py:417-423).
+`SetAirCalibration` becomes `(latency_ms, d_ref_ms=None, learned_ms=None, learned_d_ref_ms=None,
+learned_starts=None)`. The written fold's status answer gains `d_out_ms` (S-22).
 
 ### Learned entries (Ruling S-13)
 
@@ -444,26 +509,34 @@ A sibling per-player field `air_learned_latency`, not entries inside `air_to_sou
 ```json
 "air_learned_latency": [
   {"codec": "sbc", "rate": 44100, "adapter": "C0:FB:F9:62:D7:D6", "source": "learned",
-   "latency_ms": 228.1, "samples_ms": [229.0, 227.5, 228.1], "starts": 3,
+   "latency_ms": 219.4, "d_ref_ms": 184.0,
+   "samples_ms": [229.0, 216.4, 215.5], "d_out_ms": [184.0, 184.0, 184.0], "starts": 3,
    "measured_at": "2026-10-29T10:12:00+00:00"}
 ]
 ```
 
+The calibration entry (`air_to_sound_latency`, stage A) gains `d_ref_ms: float | null` (0…5000;
+filled by the migration for older entries, S-22).
+
 - Model `AirLearnedEntry` (strict, `extra="forbid"`): `codec: "sbc"`, `rate` (16000/32000/44100/48000),
-  `adapter` (MAC pattern), `source: "learned"`, `samples_ms` (1–8 floats, each 0…2000),
-  `latency_ms` (= `learned_latency_ms(samples_ms)` within 0.05 ms, validated), `starts` (int ≥
-  `len(samples_ms)`), `measured_at`. At most 8 entries per player, one per key.
+  `adapter` (MAC pattern), `source: "learned"`, `samples_ms` (1–8 floats, each 0…2000), `d_out_ms`
+  (the same length, each 0…5000), `d_ref_ms` and `latency_ms` (= `learned_reference(samples_ms,
+  d_out_ms)` within 0.05 ms, validated), `starts` (int ≥ `len(samples_ms)`), `measured_at`. At most 8
+  entries per player, one per key.
 - Why a sibling field: `Player` is `extra="allow"`, so an older v3 beta that does not know the field
   keeps it untouched on downgrade, whereas a `source: "learned"` entry inside `air_to_sound_latency`
   would fail that version's strict `AirLatencyEntry` (`source` is a closed `Literal`) and be dropped;
   and the two kinds would share one 8-entry cap and one uniqueness key, so frequent learned writes
   would evict calibrations. "Next to the air latency entries" (Q7) holds: same player, same key.
 - Helpers in `config/players.py`: `valid_air_learned_entries`, `resolve_air_learned(player_cfg, codec,
-  rate, adapter) -> tuple[float, int] | None` (None below 2 samples), `record_air_learned_sample(entries,
-  key, x_ms, now_iso)`, `forget_air_learned(entries, codec=None, rate=None, adapter=None)`,
-  `learned_latency_ms(samples)`.
+  rate, adapter) -> tuple[float, float, int] | None` (`(latency_ms, d_ref_ms, starts)`, None below 2
+  samples), `record_air_learned_sample(entries, key, x_ms, d_out_ms, now_iso)`, `forget_air_learned(entries,
+  codec=None, rate=None, adapter=None)`, `learned_reference(samples_ms, d_out_ms) -> (latency_ms, d_ref_ms)`
+  (S-21).
 - Migration: `config/migration.py` gains `_clean_air_learned` (invalid entries dropped one by one,
-  never the player, as `_clean_air_latency`). No schema version bump (additive optional field).
+  never the player, as `_clean_air_latency`), and `_clean_air_latency` fills a missing `d_ref_ms` from
+  the player's `static_delay_ms` (else 0), logged once per entry. No schema version bump (additive
+  optional fields).
 - `config/schema.json` player definition, `scripts/translate_ha_config.py` preserved per-device fields
   (next to `air_to_sound_latency`, line 375), `services/infrastructure/config_diff.py` hot-apply set
   (next to `air_to_sound_latency`, line 43) — a UI save that changes it resends the target, the
@@ -507,15 +580,18 @@ A sibling per-player field `air_learned_latency`, not entries inside `air_to_sou
     800 ms, pulsesink noise σ 4 ms; true heard error 20–30 s after the start: `|median| ≤ 1 ms` per
     start, `sd ≤ 0.5 ms` over starts, exactly one `air_seed` per start, seed within 10 s of the first
     audio. Repeated with host latency 200 ms.
-  - **Learned:** the same 8 starts and stage A's `H` sequence (above), uncalibrated: starts 1–2
-    uncorrected, from start 3 the speaker lands on the learned placement; the test prints the
-    start-to-start sd for the configured estimator and asserts the value the maintainer settles in
-    open question 2.
+  - **Learned:** stage A's `H` sequence (above), uncalibrated: starts 1–2 uncorrected, from start 3 the
+    speaker lands on the learned placement; the test prints the start-to-start sd of starts 4–8 for the
+    robust mean (S-21) and, for comparison, the plain median, and asserts `≤ 2.0 ms` for the robust mean
+    (expected ≈ 1.4–1.5 ms with the simulated σ(H)). A delay change between starts 4 and 5 shifts the
+    5th start's sound by exactly that change.
   - **PipeWire:** sawtooth 30 ms / 5 s and 27 ms / 15 s on the reported clock, σ 1 ms: after the
     seed, `|median E| ≤ 2 ms`, no steady jump in 60 s (the sawtooth never reaches R14's persistence on
     `c`).
-  - **Delay change `+30 ms`** in `active`: `b` moves by `+30.0`, true error unchanged within 1 ms, one
-    `delay` placement and no other jump. In `measure`: the audio moves by `−30 ± 0.1 ms`.
+  - **Delay change `+30 ms`** in `active` (calibrated and learned): the true heard time of the audio
+    moves by `−30 ± 0.5 ms`, `b` unchanged within 0.2 ms, `air_trim_ms` = 30.0, one `delay` placement and
+    no air jump in the next 20 s; the next start (same `D_out`) lands 30 ms early against the schedule
+    too. In `measure`: the audio moves by `−30 ± 0.1 ms`.
   - **Lock lost** (no windows for 60 s): `held`, `b` constant, no jump; windows return: tracking
     resumes, no jump.
   - **Format change:** reseed; at most one `air_seed` of `≤ 2 ms` when nothing hidden changed.
@@ -556,8 +632,9 @@ protocol for solos (MA mutes alternating).
   corrected. Pass: `sd(M_4…M_8) ≤ 2 ms`. Recorded: the learned value per start, `X_i`.
 - **Q6 check:** one run in `measure`: a delay change of `+30 ms` moves ENEBY20 by `−30 ± 1 ms` by
   microphone (stage A saw −43.6).
-- **Absorption check:** in series 1 after the 8th start, a delay change of `+30 ms`: the microphone
-  shows no move (`|ΔM| ≤ 1.5 ms`) and the log shows the absorbed line.
+- **Slider check in `loop`:** in series 1 after the 8th start, a delay change of `+30 ms`: ENEBY20
+  moves by `−30 ± 1.5 ms` by microphone, `air_bias_ms` unchanged, no `air_seed`/`air_target` jump; one
+  more restart at the new delay lands at the same place (`−30 ± 2 ms`); then the delay goes back.
 - **CPU:** `pidstat` of ENEBY20's daemon over 60 s of music, `loop` vs `measure` (switch on in both):
   not more than +0.3 % of one core.
 - **Recorded:** `b` per start, seed times, gated windows, any reseed; the guidance with the switch off
@@ -567,11 +644,12 @@ Results go into a "Stage B1 validation note" appended to this spec.
 
 ## Risks
 
-- **The learned median flips between start clusters** (open question 2): fails the uncalibrated
-  criterion on stage A's own data. Mitigation: the estimator is one function; the simulation prints
-  its effect; the maintainer picks before the parent task.
-- **The delay slider is absorbed** in `loop` with a target (S-14): users who trim by ear see no
-  effect. Mitigation: log line, UI note, open question 1.
+- **The learned estimator on few samples.** Even the robust mean moves by ≈ 1.4 ms between starts
+  4–8 on stage A's data, close to Q12's 2 ms. Mitigation: the simulation prints it; the stand series
+  measures it.
+- **A wrong `D_ref`.** A stage A calibration whose `d_ref_ms` the migration fills from today's static
+  delay is wrong by any delay change made since it was measured. Mitigation: logged; re-calibrating
+  replaces it; the stand's one entry is re-calibrated in B12.
 - **PipeWire's sawtooth** biases per-window `ê` by several ms and placements by the sawtooth phase.
   Mitigation: the MAD gate, R14 on `c`, simulation cases; the Q12 stand is PulseAudio 17, PipeWire is
   validated in simulation only in B1.
@@ -589,21 +667,13 @@ Results go into a "Stage B1 validation note" appended to this spec.
 
 ## Open questions
 
-1. **Delay slider in `loop` with an active target** (S-14). The binding ruling `b += ΔD` absorbs the
-   delay: the sound does not move. Alternative: treat `ΔD` as a trim of `L_eff` (and shift the stored
-   learned samples by `ΔD`), so the slider acts as today and `b` stays. Recommendation: keep the ruling
-   for B1 (it is the protocol's meaning, the sensor measures the latency) with the log line and UI note;
-   revisit with B2.
-2. **Learned estimator.** Q7 says median of the last 8; on stage A's cold starts it moves by 5 ms
-   between starts 4–8. Recommendation: the mean of the samples within ±15 ms of their median (robust
-   to an outlier start, 1.4 ms on that data), decided before Task B8a.
-3. **Q11 "per speaker, default off".** Read here as "evaluated per speaker, both inputs default off,
-   no new key". Alternative: a per-player opt-in `air_correction` (default off) so `PLAYOUT_SYNC=loop`
-   alone never corrects. Recommendation: no new key in B1 (opt-out exists).
-4. **Held and a regained lock** (S-10). Resume tracking without a jump (this design) vs freeze for the
-   rest of the output. Recommendation: resume.
-5. **Learning in `measure`.** Users who switch from `measure` to `loop` start learning from zero.
-   Recommendation: loop only in B1 (measure stays observe-only, Q2).
+None left from rev. 1: the controller settled all five in round 2 (above). New in rev. 2, with the
+design's answer:
+
+1. **`D_ref` of a fold that spans a delay change** (the wizard applies a delay during a recording):
+   the fold's `d_out_ms` is the median `T − s` of its cells; a fold whose cells carry two delays is not
+   offered (`air_delay_changed`, a new ineligibility reason), as stage A already refuses a fold across
+   an air epoch.
 
 ## Rulings
 
@@ -611,21 +681,23 @@ Results go into a "Stage B1 validation note" appended to this spec.
 |---|---|---|
 | S-1 | `AirBias` and its state live in the engine on the feeder thread; the daemon loop hands immutable samples, lock state, target and key through a lock-protected `AirFeed` | the engine is feeder-only today; no shared mutable state, no cross-thread callbacks (Q4) |
 | S-2 | `e` is matched to a window by written stream time `x` (tap stores `x` per cell, window carries its `x` span; median of usable readings in the span, ≥ 50 % coverage) | `x` is unique and monotonic within an output; `s` steps back, arrival time lags by 2–4 s |
-| S-3 | A window whose span contains an engine event's `x` (placement, steady or air jump) or precedes the last change of `b`'s definition (delay, target change, reseed) is not used for `b` | `e` and `E` of such a window refer to different audio states |
-| S-4 | One target formula `E_equiv = H + L_eff − d_out_i` for calibrated (`L_as`) and learned (`X_ref`) | Q4 and Q7 are the same quantity; per-window `d_out` (controller ruling) |
+| S-3 | A window whose span contains an engine event's `x` (placement, steady or air jump) or precedes the last change of `b`'s definition (target change, reseed; a delay change does not change it, S-14) is not used for `b` | `e` and `E` of such a window refer to different audio states |
+| S-4 | One target formula `E_equiv = H + L_eff − D_ref` for calibrated (`L_as`, `D_ref` of the fold) and learned (robust mean, `D_ref` of the samples); `D_out` does not enter `b` | Q4 and Q7 are the same quantity; round-2 ruling 1 |
 | S-5 | Placement offset `o = b + β` with a bias value, else the raw residual `r`, `0` for `start`; applied to every placement and silence re-anchor | Q4 (placements bias-aware) and Q6 (residual kept) in one rule |
 | S-6 | `β` survives placements other than underrun/stall; in `active` an underrun/stall/`pa_step` reseeds (controller frozen ≤ 15 s) instead of measuring `β`; in `held`/`none` today's baseline, on the controller's input | the baseline-ignored risk (Q6); the air sees reading and hidden offsets alike |
 | S-7 | Reseed = seeding with the old `b` as a provisional value (format, underrun, stall, `pa_step`); the new triple replaces it and applies its own seed jump | "reset + reseed" without a window of uncorrected placements |
 | S-8 | Seed: sliding triple, agreement within 2 ms → `b₀ = median b_i` and an `air_seed` jump of `+median E` beyond 2 ms; 12 windows without agreement → `b` from the last 5, no jump | Q8; never wait forever on a congested link |
 | S-9 | Tracking: EMA τ 30 s on window-middle time (Δt ≤ 5 s); gate `max(10 ms, 4·1.4826·MAD₂₀)`; 15 consecutive gated windows within 3 ms set `b` to their median | Q8; robust to a wrong window, follows a persistent hidden change, does not chase #562's swings |
-| S-10 | `held` freezes `b`; the next accepted window resumes tracking (no jump); reset only on reopen | Q5 read as "never reset or decay" |
+| S-10 | `held` freezes `b`; the next accepted window resumes tracking (no jump); reset only on reopen | Q5; round-2 ruling 4 |
 | S-11 | Calibration changes apply live (`b −= ΔL`, `air_target` jump `+ΔL` beyond 2 ms); learned values latch per output | a wizard save should act now; a learned value must not move under the output that produced it |
 | S-12 | One learned sample per output from the first agreeing triple after reopen, in `loop` only, published with a per-daemon `seq` and the key; the parent persists it | Q7; raw start placement regardless of the target |
 | S-13 | Learned entries in a sibling per-player field `air_learned_latency`, one per key, ≤ 8 samples | downgrade-safe (`Player` keeps unknown keys), no cap or uniqueness interplay with calibrations |
-| S-14 | In `loop` with a target, `b += ΔD` absorbs a delay change; logged and shown in the UI | controller ruling; the consequence made explicit |
-| S-15 | Air sensor effective in `measure` and `loop`; correction effective in `loop` with the sensor effective; no new per-player key; reason code `needs_measure` kept | Q2, Q11 (open question 3) |
+| S-14 | A delay change moves the sound by exactly `ΔD` in every mode; in `loop` with a target it is a trim: target `E = −(D_out − D_ref)`, `b` unchanged, the delay placement keeps `e = b` | round-2 ruling 1 (replaces the first-round `b += ΔD`) |
+| S-15 | Air sensor effective in `measure` and `loop`; correction effective in `loop` with the sensor effective; no new per-player key; reason code `needs_measure` kept | Q2, Q11, round-2 ruling 3 |
 | S-16 | Guidance `air_correction_inactive` (info) for `loop` speakers whose correction cannot run | Q10 |
 | S-17 | `set_air_calibration` and the spawn param gain optional `learned_ms`/`learned_starts`, sent only when known | additive, older daemons and existing tests unaffected |
 | S-18 | In `loop` with a bias `error_ms` is the EMA of `c`; raw = `error_ms + air_bias_ms` | the number the UI shows is the one the engine acts on |
 | S-19 | `air_seed`/`air_target` jumps bypass the 50 ms clamp and the 10 s interval and are dropped under a pending placement | Q8; the placement already targets `c = 0` |
 | S-20 | Any `AirBias` exception disables the bias for the output (`internal_error`), logged once, never reaches the feeder; the feed is bounded (32) | stage A's containment rule, extended to the engine |
+| S-21 | Learned reference: `off_ref` = mean of `X_i − d_i` within ±15 ms of their median, `d_ref_ms = median(d_i)`, `latency_ms = d_ref_ms + off_ref`; learning in `loop` only | round-2 rulings 2 and 5; sd 1.4 vs 5.0 ms on stage A's starts |
+| S-22 | The trim is the static delay itself; `D_ref` is stored with each calibration (`d_ref_ms`, from the fold's `d_out_ms`) and learned entry; older calibrations get it from the migration (`static_delay_ms`); an entry without one latches `D_out` per output | round-2 ruling 1: nothing per output to lose at a reopen |
