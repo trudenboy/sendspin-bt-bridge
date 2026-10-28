@@ -315,6 +315,17 @@ class World:
         self.m_next += round(ms * AIR_RATE / 1000.0)
         self.anchor_reset_next = True
 
+    def pa_skip_count_axis_ms(self, ms: float) -> None:
+        """PulseAudio "Skipping" with the air running on (R-18): media time steps over PCM that never
+        goes out while the next frame airs one frame after the last; the content mapping is kept."""
+        skip = round(ms * AIR_RATE / 1000.0)
+        m_g = self.m_next
+        m0, _t0, out, x0 = self._segment(m_g)
+        t_g = self._air_time(m_g)  # when the next frame airs anyway
+        self.segments.append((m_g + skip, t_g, out, x0 + m_g + skip - m0))
+        self.m_next = m_g + skip
+        self.anchor_reset_next = True
+
     def underrun_ms(self, ms: float) -> None:
         """The port ran through an underrun: PulseAudio played silence that is not ours (media advances)."""
         gap = round(ms * AIR_RATE / 1000.0)
@@ -714,6 +725,47 @@ async def test_air_stream_does_not_interpolate_across_a_skip():
     st.add(env(seq=4, u0=6 * FRAME_US, t0=START_US + 6 * FRAME_US, n=4, anchor_reset=True, e=[50, 60, 70, 80]))
     cells, _u, _t = st.window(9 * FRAME_US, 10, FRAME_US)
     assert cells == [10, 20, 30, 40, None, None, 50, 60, 70, 80]
+
+
+async def test_air_time_of_a_middle_inside_a_skip_follows_the_frame_count():
+    """R-18: across a PA skip the air time runs on the frame count, not on media time. A window
+    middle in the skipped media span lies between the last frame before it and the first one
+    after it on the air; extrapolating media time would put it up to the skip later."""
+    st = AirStream()
+    skip_us = 20_000.0
+    st.add(env(n=100, e=[40] * 100))
+    st.add(env(seq=100, u0=100 * FRAME_US + skip_us, t0=START_US + 100 * FRAME_US, n=100, anchor_reset=True))
+    u_mid = 100 * FRAME_US + skip_us / 2
+    _cells, _u, t_mid = st.window(u_mid + 50 * FRAME_US, 101, FRAME_US)
+    t_before, t_after = START_US + 99 * FRAME_US, START_US + 100 * FRAME_US
+    assert t_before <= t_mid <= t_after
+    expected = t_before + (u_mid - 99 * FRAME_US) / (FRAME_US + skip_us) * FRAME_US
+    assert t_mid == pytest.approx(expected, abs=1.0)
+    # off the gap, the frame-count air time is the frame's own (the frames after the skip)
+    _cells, _u, t_mid = st.window(u_mid + 50 * FRAME_US + 10_000.0, 101, FRAME_US)
+    u_mid2 = u_mid + 10_000.0
+    assert t_mid == pytest.approx(START_US + 100 * FRAME_US + (u_mid2 - 100 * FRAME_US - skip_us), abs=1.0)
+
+
+async def test_a_pa_skip_on_the_frame_count_axis_steps_h_once(air_world):
+    """R-18 end to end: PulseAudio skips media while the air runs on (the frames keep their count
+    cadence), so the content after the skip airs ``D`` earlier than scheduled: ``H`` steps by
+    ``−D`` once, with no window outside the two levels, and the lag stays."""
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=10)
+    lag = w.sensor.snapshot()["lag_cells"]
+    before = len(w.sensor.accepted_windows())
+    t_skip = w.now
+    w.pa_skip_count_axis_ms(20.0)
+    await w.run(seconds=8)
+    s = w.sensor.snapshot()
+    assert s["state"] == "locked" and s["epochs"] == 1
+    assert s["host_placement_ms"] == pytest.approx(-10.0, abs=1.0)
+    assert s["lag_cells"] == pytest.approx(lag, abs=0.3)
+    after = [win for win in w.sensor.accepted_windows() if win.at_us > t_skip]
+    assert len(after) >= 3 and len(w.sensor.accepted_windows()) > before
+    assert all(-11_000.0 <= win.h_us <= 11_000.0 for win in after)
+    assert after[-1].h_us == pytest.approx(-10_000.0, abs=1000.0)
 
 
 async def test_air_that_stopped_arriving_is_not_correlated_again(air_world):

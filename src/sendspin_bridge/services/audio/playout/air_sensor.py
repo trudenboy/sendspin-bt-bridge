@@ -18,7 +18,8 @@ comb's half lag on the written side.
 ``i = u / cell_us + L``. PulseAudio consumes ``x`` and the encoder stamps it with RTP media time
 at the same rate, so ``L`` is constant until the output reopens, the epoch changes or PulseAudio
 plays audio that is not ours (an underrun the port ran through). Engine jumps move ``s``, not
-``L``; a PA "Skipping" anchor reset keeps ``L`` (media time includes the skip).
+``L``; a PA "Skipping" anchor reset keeps ``L`` (media time includes the skip) and steps ``H`` by
+the skipped content (air time runs on the frame count, R-18).
 
 **Search policy (R-15).** Acquisition (no lag, or no lock for :data:`NO_LOCK_S`): the prior puts
 the window's middle air cell on the written cell whose ``s`` is nearest ``t_mid − δ₀ − d_enc``,
@@ -125,6 +126,10 @@ def lookback_delay_us(rate: int, frames: int = LOOKBACK_FRAMES) -> float:
 class AirStream:
     """Air cells of the current epoch on the media-time axis (20 s ring).
 
+    Each frame keeps its own air time ``t0_us + k·frame_us`` from its batch: batches never span a
+    skip, and the parent anchors ``t0_us`` on the frame count (R-18), so air time is linear in the
+    frame count while the content position (the correlation grid) follows media time ``u``.
+
     Not thread-safe: the daemon loop owns it.
     """
 
@@ -208,8 +213,22 @@ class AirStream:
             return None
         cells = [self._value_at(u_first + k * cell_us) for k in range(n)]
         u_mid = u_first + (n // 2) * cell_us
-        j = max(0, bisect_right(us, u_mid + _GRID_TOL_US) - 1)
-        return cells, u_first, u_mid + (self._t[j] - us[j])
+        return cells, u_first, self._air_time_at(u_mid)
+
+    def _air_time_at(self, u: float) -> float:
+        """Air time of media time ``u``. Air time runs on the frame count (R-18): along contiguous
+        frames it advances with ``u``; a skipped media span between two held frames airs no time of
+        its own, so a ``u`` inside it is placed proportionally between the frames either side."""
+        us, ts = self._u, self._t
+        j = max(0, bisect_right(us, u + _GRID_TOL_US) - 1)
+        if (
+            j + 1 < len(us)
+            and u > us[j]
+            and self._frame_us is not None
+            and us[j + 1] - us[j] > _CONTIGUOUS * self._frame_us
+        ):
+            return ts[j] + (u - us[j]) / (us[j + 1] - us[j]) * (ts[j + 1] - ts[j])
+        return ts[j] + (u - us[j])
 
     def _value_at(self, u: float) -> float | None:
         us, es = self._u, self._e
