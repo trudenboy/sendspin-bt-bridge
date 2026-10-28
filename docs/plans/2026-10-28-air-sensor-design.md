@@ -998,3 +998,33 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
 | R-15 | Search ranges: acquisition ±500 ms (controller), tracking ±20 cells, ±5 cells after an anchor reset; continuity: a > 3-cell move needs two agreeing windows | covers the largest observed spread and fallback latency guesses; robust to wrong peaks |
 | R-17 | `EXPERIMENTAL_AIR_SENSOR` needs a bridge restart (`RESTART_REQUIRED`) | the switch picks the monitor path that owns the socket at start |
 | R-16 | Window 3 s, hop 1 s; validity ≥ 90 % air present, ≥ 80 % written program and unmuted | faster lock at cold starts than the morning script's 5.8 s; A17 checks PSR at 3 s vs 5.8 s on real music |
+
+## Intermediate stand test (2026-10-28, HAOS, branch overlay, 3.1.0-beta.17 base)
+
+Branch code overlaid in the add-on container (bridge process restarted under s6, add-on restart
+restores the image), `EXPERIMENTAL_AIR_SENSOR=true`, `PLAYOUT_SYNC=measure`, Beta group (Lenco
+on hci0, ENEBY20 on hci1), 2-minute music file.
+
+- **Lenco: locked within seconds, H = −33.6 ± 0.3 ms over 100 consecutive windows, 0 rejected.**
+  The chain works end to end on real hardware.
+- **CPU guard tripped:** the hub thread used 5 % of a core for two streaming speakers on the VM
+  (budget 3 %) — about 8× the desktop bench per record. Parsing must get cheaper and the budget
+  re-derived from VM measurements.
+- **ENEBY20's Bluetooth link is congested:** sends lag the sample-count cadence by up to ~400 ms,
+  PulseAudio "Skipping" comes in bursts (RTP steps 130–1 700 samples with contiguous seq, send gaps
+  40–84 ms) and the bitpool changes (9–15 frames per packet). The live H spiked at every anchor
+  reset (to 145–320 ms) and decayed back to ≈ 12 ms over several windows; the lag stayed constant.
+  The RTP-media-time anchor with the α − Δu reseed assumes PulseAudio skips while sending on
+  schedule; real skips follow late sends, so the reseed is wrong in both size and timing.
+
+Rulings (controller, after the test):
+- **R-18 Count-axis anchor.** A speaker plays samples in arrival order at its own rate and follows
+  the arrival rate on average (rate matching; air-to-sound measured stable earlier). So a frame's
+  air time is anchored on the cumulative frame-count axis: `t_air(frame) = median(t_send −
+  count·frame_us) + count·frame_us` over the last 64 packets, segmented only at epochs (seq gap,
+  send gap > 1 s, clock step, AVDTP restart, codec parameter change). PulseAudio skips need no
+  reseed: the count is continuous across them and the content jump shows up in H as the real
+  placement change it is. RTP media time stays the content identity used for correlation.
+  Validation: the ENEBY capture of this test must give a stable H offline with the count anchor.
+- **R-19 CPU.** Optimise the live parse path (frame header/scale factors) and re-derive the
+  per-speaker budget from the HAOS VM, with the passive overlay bench before A17.
