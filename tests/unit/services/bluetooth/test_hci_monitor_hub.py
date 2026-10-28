@@ -480,6 +480,36 @@ def test_cpu_fraction_is_thread_time_over_wall_time_per_window(fake_hub_socket):
     assert isinstance(fraction, float) and 0.0 < fraction < 0.05
 
 
+def test_cpu_windows_counts_completed_windows(fake_hub_socket):
+    wall = iter(range(0, 10_000))
+    cpu = iter(range(0, 10_000))
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([]),
+        seed=lambda m: None,
+        monotonic=lambda: next(wall) * 10.0,
+        thread_time=lambda: next(cpu) * 0.1,
+    )
+    assert hub.counters()["cpu_windows"] == 0
+    hub.start()
+    hub.stop()
+    assert hub.counters()["cpu_windows"] >= 1
+
+
+def test_cpu_windows_is_zero_within_the_first_window(fake_hub_socket):
+    wall = iter(range(0, 100_000))
+    cpu = iter(range(0, 100_000))
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([]),
+        seed=lambda m: None,
+        monotonic=lambda: min(next(wall), 20) * 0.3,
+        thread_time=lambda: next(cpu) * 0.003,
+    )
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    assert hub.counters()["cpu_windows"] == 0
+
+
 def test_avrcp_consumer_routes_by_index_and_handle(fake_hub_socket, monkeypatch):
     from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
 

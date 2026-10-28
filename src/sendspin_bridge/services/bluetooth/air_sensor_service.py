@@ -13,8 +13,9 @@ its stdin buffer full) leaves the batch queued for the next round, so one stalle
 delays another. An ``air_source`` goes out on change and every 5 s, ahead of the batches.
 
 The service is a hub consumer only while at least one device is subscribed. CPU guard (per
-streaming speaker): every ``cpu_window_s`` the hub's ``cpu_fraction`` is compared with
-``cpu_per_speaker × max(1, streaming_links)``; two consecutive windows over budget remove the
+streaming speaker): each completed hub CPU window (``cpu_windows``, counted once) has its
+``cpu_fraction`` compared with ``cpu_per_speaker × max(1, streaming_links)``; two consecutive
+windows over budget remove the
 consumer and every device reports ``unavailable: cpu_budget`` until the next restart.
 
 Subscriptions follow the clients (``SendspinClient`` subscribes its speaker while its daemon
@@ -281,6 +282,7 @@ class AirSensorService:
         self._tripped = False
         self._over = 0
         self._cpu_checked_at: float | None = None
+        self._cpu_window_seen: int | None = None  # the hub's last counted window (cpu_windows)
         self._logged_at: dict[str, float] = {}
         self._stopped = False
         # Calibration folds (guarded by self._lock): id -> (mac, fold), and each mac's armed id.
@@ -587,12 +589,20 @@ class AirSensorService:
                 await task
 
     def _cpu_guard(self, now: float) -> None:
+        """Each completed hub window counts once: with the hub's ``cpu_windows`` the check runs
+        every tick and only a new completed window is judged (the partial first one never is);
+        a hub without it is sampled every ``cpu_window_s``."""
         if self._tripped or not self._registered:
             return
-        if self._cpu_checked_at is not None and now - self._cpu_checked_at < self._cpu_window_us:
+        counters = self._safe(self._hub.counters, {})
+        windows = counters.get("cpu_windows")
+        if isinstance(windows, int) and not isinstance(windows, bool):
+            seen, self._cpu_window_seen = self._cpu_window_seen, windows
+            if windows < 1 or (seen is not None and windows <= seen):
+                return
+        elif self._cpu_checked_at is not None and now - self._cpu_checked_at < self._cpu_window_us:
             return
         self._cpu_checked_at = now
-        counters = self._safe(self._hub.counters, {})
         cpu = counters.get("cpu_fraction")
         if not isinstance(cpu, (int, float)):
             self._over = 0

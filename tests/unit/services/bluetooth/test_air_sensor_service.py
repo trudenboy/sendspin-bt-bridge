@@ -257,6 +257,29 @@ async def test_one_window_over_budget_does_not_trip_the_guard(air_env):
     assert env.hub.consumers_wanting_acl_tx() == 1
 
 
+async def test_the_cpu_guard_counts_one_hub_window_once(air_env):
+    # The hub reports the same completed window (cpu_windows=1) at every check: one window over
+    # budget, however often the service looks, never trips the guard.
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.06, streaming_links=1)
+    env.hub.set_counters(cpu_windows=1)
+    env.service.subscribe(ENEBY)
+    await env.ticks(4)
+    assert env.hub.consumers_wanting_acl_tx() == 1
+    env.hub.set_counters(cpu_windows=2)  # a second completed window over budget
+    await env.ticks(1)
+    assert env.hub.consumers_wanting_acl_tx() == 0
+
+
+async def test_the_cpu_guard_ignores_the_partial_first_window(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.5, streaming_links=1)
+    env.hub.set_counters(cpu_windows=0)
+    env.service.subscribe(ENEBY)
+    await env.ticks(4)
+    env.hub.set_counters(cpu_windows=1)
+    await env.ticks(1)
+    assert env.hub.consumers_wanting_acl_tx() == 1  # one completed window over budget so far
+
+
 async def test_no_subscriber_means_no_acl_tx_consumer(air_env):
     env = await air_env(peers={}, accepts=[1])
     assert env.hub.consumers_wanting_acl_tx() == 0

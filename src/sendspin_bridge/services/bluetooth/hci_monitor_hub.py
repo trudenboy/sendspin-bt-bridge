@@ -222,6 +222,7 @@ class HciMonitorHub:
         self._clock_epoch0 = self._clock_map.epoch
         self._tx_links: dict[tuple[int, int], float] = {}
         self._cpu_fraction: float | None = None
+        self._cpu_windows = 0  # completed CPU windows (a consumer counts each window once)
         self._window_start: tuple[float, float] | None = None
         self._next_tick = 0.0
         self._consumer_errors: dict[int, float] = {}
@@ -341,6 +342,7 @@ class HciMonitorHub:
                 "drop_source": self._drop_source,
                 "clock_steps": self._clock_map.epoch - self._clock_epoch0,
                 "cpu_fraction": self._cpu_fraction_now(),
+                "cpu_windows": self._cpu_windows,
                 "streaming_links": streaming,
                 "recv_stamped": self._recv_stamped,
                 "generation": self._generation,
@@ -520,6 +522,7 @@ class HciMonitorHub:
             wall0, cpu0 = self._window_start
             self._cpu_fraction = max(0.0, cpu - cpu0) / (now - wall0)
             self._window_start = (now, cpu)
+            self._cpu_windows += 1
 
     def _on_datagram(self, data: bytes, ancdata: list[tuple[int, int, bytes]]) -> None:
         t_recv_us = self._raw_ns() / 1000.0
