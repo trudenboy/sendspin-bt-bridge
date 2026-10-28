@@ -988,17 +988,17 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
 | R-4 | Live path checks the SBC CRC on the first frame of each packet only (`A2dpAirParser(check_crc="first")`) | CPU |
 | R-5 | Canonical air time = send anchor; completion is telemetry | always available, survives the parser's blind spots, one anchor for calibration and runtime |
 | R-6 | No IPC protocol bump; additive commands gated on the daemon's "sensor was built" signal (`accepts`), with a payload version | older daemons and daemons without a sensor never see the verbs |
-| R-7 | PCM envelope = comb high-pass peak (switch to band-pass if PSR is ≥ 0.05 worse on real music) | CPU |
+| R-7 | PCM envelope = comb high-pass peak (switch to band-pass if PSR is ≥ 0.05 worse on real music) | CPU; A17: not re-measured (no band-pass comparison on the stand captures); comb kept |
 | R-8 | Written envelope taken before volume; a cell is muted when the RAW mute timeline is muted at its port time `s_i`; correlation windows > 20 % muted are skipped; the written fold ignores mute | pulsesink mute acts at the port; muted cells carry no air energy, but the written PCM does |
-| R-9 | PSR gate 1.17 (provisional until A17), ρ ≥ 0.25, a code constant; PSR definition shared by the repo tool and the daemon | today's numbers came from another definition |
-| R-10 | No lock after N = 20 s without a confirmed window | quiet passages vs stale values |
+| R-9 | PSR gate 1.17 (provisional until A17), ρ ≥ 0.25, a code constant; PSR definition shared by the repo tool and the daemon | today's numbers came from another definition; A17 live (8 cold starts, 212 windows): 211 confirmed, 1 rejected; confirmed PSR min 1.66, p10 1.93, median 4.0; no noise-window test, so 1.17 stays provisional |
+| R-10 | No lock after N = 20 s without a confirmed window | quiet passages vs stale values; A17: not re-measured (locked for 100 % of the measured spans, no quiet passage) |
 | R-11 | Confidence formula (PSR margin × confirmed share × hold decay) | one number for UI and stage B gating |
 | R-12 | Calibration keyed by codec × SBC rate × adapter MAC, ≤ 8 entries | the decoder buffer is counted in frames; the controller matters |
 | R-13 | Suspend guidance on an observed suspend or a static policy < 60 s; clears after 24 h clean | behaviour is authoritative, the probe explains |
 | R-14 | Calibration needs a reference member on the schedule | a phone recording has no clock link to the bridge |
 | R-15 | Search ranges: acquisition ±500 ms (controller), tracking ±20 cells, ±5 cells after an anchor reset; continuity: a > 3-cell move needs two agreeing windows | covers the largest observed spread and fallback latency guesses; robust to wrong peaks |
 | R-17 | `EXPERIMENTAL_AIR_SENSOR` needs a bridge restart (`RESTART_REQUIRED`) | the switch picks the monitor path that owns the socket at start |
-| R-16 | Window 3 s, hop 1 s; validity ≥ 90 % air present, ≥ 80 % written program and unmuted | faster lock at cold starts than the morning script's 5.8 s; A17 checks PSR at 3 s vs 5.8 s on real music |
+| R-16 | Window 3 s, hop 1 s; validity ≥ 90 % air present, ≥ 80 % written program and unmuted | faster lock at cold starts than the morning script's 5.8 s; A17 checks PSR at 3 s vs 5.8 s on real music; A17 live: σ(H) ≈ 0.1–0.2 ms window to window in step-free stretches at 3 s; 5.8 s not compared, 3 s kept |
 | R-20 | The hub reads in batches: poll for readability (≤ next tick), sleep 20 ms, drain non-blocking until `EAGAIN` (≤ 512 per drain) | the per-wakeup cost dominated the hub thread's CPU on the VM |
 
 ## Intermediate stand test (2026-10-28, HAOS, branch overlay, 3.1.0-beta.17 base)
@@ -1069,3 +1069,136 @@ Rulings (controller, after the test):
   the stop timeout. `scripts/air_sensor_bench.py --hub` models the batching: its fake socket answers
   `EAGAIN` after each 20 ms of capture time (the sleep itself is skipped, it costs no CPU). A17 checks
   the live hub CPU against the guard.
+
+## Stage A validation note (2026-10-28, HAOS stand, 3.1.0-beta.17 base + branch overlay)
+
+Stand: HAOS VM (2 vCPU QEMU, PulseAudio 17), ENEBY20 on hci1 (SBC 44.1 kHz), Lenco on keep-alive,
+`PLAYOUT_SYNC=measure`, `EXPERIMENTAL_AIR_SENSOR=true`, every window logged at INFO (overlay patch),
+`btmon -w` per cold start, a headset microphone. The PipeWire VM, an AAC speaker, a 96 kHz source,
+a Raspberry Pi, the seek/reconnect runs and the noise-window PSR runs were **not** done.
+
+- **Calibration:** `L_as = 228.7 ms` (ENEBY20, wizard, reference = the desktop bridge on the
+  playout engine in `measure`; `A = +7 ms`, static delay applied 184 ms). The same calibration
+  made against a legacy-pipeline reference gave 209 ms, about 20 ms off (see the warm series).
+  ENEBY20 sends no Delay Report.
+- **Live vs offline `H` (primary acceptance), n = 167 windows over 8 cold starts:** p95 `|ΔH|` =
+  **0.034 ms**, max 0.072 ms → **PASS** (≤ 2 ms, target ≤ 1 ms).
+- **Microphone acceptance (8 cold starts):** FAIL with the legacy reference (std(M − H) = 6.75 ms,
+  ratio 1.98); without start 2: 1.81 ms, ratio 0.264 (the ratio is just over 0.25). The warm
+  series with an on-schedule reference agrees with E to −1.7 ms on average.
+- **Absolute `H` (HAOS):** −31.4 … −45.2 ms per cold start, −31.7 … −32.4 ms warm; well inside
+  ±500 ms, so the acquisition range is unchanged. PipeWire: not measured.
+- **Lock and gate:** locked for 100 % of the measured spans; 211 of 212 logged windows confirmed
+  (1 rejected); confirmed PSR (implementation definition, 3 s) min 1.66, p10 1.93, median 4.0. No
+  noise windows were run, so the gate stays at 1.17 (provisional). Envelope: comb kept, band-pass
+  not compared. Window: 3 s kept, 5.8 s not compared.
+- **Seek / reconnect, suspend check on PipeWire, codec/input fallbacks:** not run.
+- **CPU (hub thread, live):** before R-20 7.3–7.5 % of a core (CPU guard tripped at 0.092 > 0.08 with
+  two speakers subscribed); after R-20 3.65 % with idle streams, 5.0–5.5 % with music on ENEBY20 →
+  **≈ 2.6 % of one core per streaming speaker** (budget 3 %). The daemon and the desktop were not
+  measured separately; Raspberry Pi unverified.
+- **For stage B:** dead band from σ(H) ≈ 0.2 ms window to window within a stream; the
+  start-to-start offset between members in `measure` mode is 9–60 ms (audible) and is stage B's
+  job.
+
+### CPU
+
+| Measurement (HAOS VM, 387 monitor records/s: ENEBY20 69 + Lenco keep-alive 148 ACL TX/s + NOCP) | Value |
+|---|---|
+| Hub thread before R-20 | 7.3–7.5 % (195 µs/record live vs 50 µs on the bench) |
+| Bare `recvmsg` loop: one read per wakeup / 20 ms batches / 50 ms batches | 64.8 / 26.5 / 14.8 µs per record |
+| Hub thread after R-20, idle streams | 3.65 % |
+| Hub thread after R-20, music on ENEBY20 (two links streaming) | 5.0–5.5 % (≈ 2.6 % per streaming speaker) |
+| Bench on the same VM | 52 µs/record through the hub (the hub's share 28) |
+
+### Live vs offline `H` (Step 3)
+
+`scripts/air_envelope_corr.py CAPTURE --offline-h LOG --player ENEBY20 --log-tz 3`, per cold
+start on `hci_a17d0..7`. The live windows are the daemon's `Air window:` lines (`t_mid` in RAW µs);
+the capture is stamped in REALTIME. The capture clock offset is fitted by putting every live
+`t_mid` on the air-time lattice of the real `AirLinkTracker` run on the capture: the live values land
+on it to 9–18 µs (median), and the offset is found to within a whole number of cells (offsets whole
+cells apart fit equally well; the one nearest the log's wall-clock estimate is used, and the worst
+p95 over all of them is reported). Fitted offset (REALTIME − RAW): 1 792 080 813.90–.99 s, the same
+within the coarse estimate's scatter on all eight starts. `H_offline` uses the local anchor (median
+`t_send − u` within ±1 s, segmented), the daemon's own `s_mid` and the same `d_enc − d_comb`.
+
+| Start | Windows compared / logged | Median ΔH (ms) | p95 \|ΔH\| (ms) | Max \|ΔH\| (ms) | Worst p95 over tied offsets (ms) |
+|---|---|---|---|---|---|
+| d0 | 21 / 21 | +0.006 | 0.029 | 0.072 | 0.070 |
+| d1 | 21 / 27 | −0.010 | 0.042 | 0.063 | 0.122 |
+| d2 | 21 / 27 | +0.002 | 0.034 | 0.037 | 0.058 |
+| d3 | 21 / 27 | +0.007 | 0.041 | 0.049 | 0.068 |
+| d4 | 21 / 28 | −0.008 | 0.033 | 0.034 | 0.081 |
+| d5 | 21 / 27 | +0.000 | 0.031 | 0.050 | 0.149 |
+| d6 | 21 / 27 | +0.002 | 0.030 | 0.034 | 0.099 |
+| d7 | 20 / 27 | +0.004 | 0.027 | 0.039 | 0.151 |
+| all | 167 / 211 | | **0.034** | 0.072 | |
+
+The windows not compared lie outside the capture (btmon started after the stream on d1–d7). What
+this does and does not show: the live air times agree with an independent local anchor to tens of
+µs on these steady streams. The window is matched to its air cell by time, not by content, so the
+comparison does not check which PCM a window matched. The other link on the capture (Lenco, index
+0) fits nearly as well (residual 23 µs, p95 0.054 ms): the link identity comes from the setup, not
+from the data. The microphone runs below test the content side.
+
+### Cold starts with the microphone
+
+Reference: the desktop bridge's "Local Headphones" (legacy pipeline, time sync off).
+
+| Series | Per start | Result |
+|---|---|---|
+| a17d, M (ms) | 4.2, 12.8, −3.5, 5.8, 3.5, 9.0, 3.2, 10.7 | |
+| a17d, H (ms) | −45.2, −32.4, −31.4, −44.5, −44.9, −36.3, −44.7, −36.4 | 14–15 confirmed windows per span, range ≤ 0.9 ms; locked 100 % |
+| a17d, all 8 | sd(M) 4.80, sd(M − H) 6.75, ratio 1.98, corr 0.16 | FAIL |
+| a17d, without start 2 | sd(M) 3.53, sd(M − H) 1.81, ratio 0.264, corr 0.97 | std passes, ratio just over 0.25 |
+| a17e (after calibration 209), M − E (ms) | 3.9, −17.4, −8.0, −0.4 | identical H in 3 starts, M spread 11.6 ms: the reference is unstable |
+
+The legacy reference's own start jitter (not measured) dominates; one of the two series supports
+the sensor strongly. A reference on the playout engine was unusable for cold starts (late start
+~155 ms, 50 ms steady steps for 20–30 s), so a warm series replaced it (one stream, 60 s warm-up,
+4 solo pairs):
+
+| Series | M − E (ms) | Note |
+|---|---|---|
+| a17g, calibration 209 (legacy reference) | 13.0, 13.6, 14.9, 15.9 | the calibration carries the legacy reference's error |
+| a17h, calibration 228.7 (playout reference) | −2.7, −2.4, −1.9, +0.1 (mean −1.7) | H −32.4 … −31.7; M drifts ~+1 ms / 45 s and E follows; the residual is phone vs headset microphone position |
+
+Other checks: live `H` follows the engine's playout jumps at the air to the millisecond (steady
+50.0 → H −50.2; gaps +4.8 / +2.8 / −3.4 → −4.7 / −3.0 / +2.8). Manual-mode A/B (Compare two, 48 s):
+ENEBY20 3.0 ms behind the reference by microphone; telemetry E(ENEBY20) +9.1 minus the reference's
+playout error +5.6 = +3.5 ms, within 0.5 ms. Wizard end to end (phone over HA ingress): the
+listening-position sequence, both members heard, the air block shown, the reference picker, save
+(source `sync_wizard`), live apply → calibrated, confidence 1.
+
+### Decision
+
+- Settled for stage B: the gate (PSR ≥ 1.17, ρ ≥ 0.25), the 3 s / 1 s window and the comb envelope
+  stay as they are; tonight's data gives no reason to change them (confirmed PSR p10 1.93, 1
+  rejected window in 212), though the noise-window false-confirm rate and the 5.8 s / band-pass
+  comparisons were not measured.
+- The air time itself is settled: live `H` equals the offline local-anchor `H` to 0.034 ms (p95).
+- Dead band input: σ(H) ≈ 0.2 ms window to window within a stream (0.09–0.18 ms in step-free
+  stretches); `H` steps are the engine's own playout jumps.
+- Start-to-start offsets between members in `measure` mode are 9–60 ms (a noise run: 60 ms, then
+  30 ms after a 31.6 ms steady correction): audible, and the target of stage B.
+- A calibration is only as good as its reference: a reference on the legacy pipeline (or with its
+  own delay) makes `L_as` wrong (209 vs 228.7 ms here). The user docs say so.
+- Findings outside the sensor, for the playout engine: the first delay change after a stream start
+  makes the ENEBY20 daemon add an extra "playout jump: delay, 13.4 ms" on top of MA's shift, and
+  ENEBY20 stays 13.3 ms early after the slider returns (later changes are exact); switching the
+  wizard's sound type restarts the stream (a new start with a new 9–60 ms offset).
+
+### Review notes
+
+- **M-4 (calibration air span vs mute timing).** The air span is `[start + SETTLE_S + h, end −
+  TAIL_S + h]` after MA's mute/unmute. If the mute takes effect earlier or later than assumed, the
+  span's edges hold muted air (no click energy) or a neighbour's solo tail; the folded phase is not
+  affected (the pattern score uses the clicks present, the written fold ignores mute), only the
+  amount of click data shrinks. In walk mode (7 s solos, 5.9 s air span, less than one 10 s click
+  cycle) that leaves less click data per member than in position mode; the stand's wizard run
+  (position mode) calibrated with confidence 1. Walk mode was not run on the stand.
+- **M-11 (timing-based tests).** Several hub tests bound wall-clock time (stop latency, batching
+  interval) and can flake on a loaded CI runner. The quiet-bus stop test now stretches the
+  readability wait to 10 s and asserts stop within 1 s, so it is CI-safe and still fails with the
+  wake write disabled (checked). Known flakes elsewhere in the suite are unrelated to the sensor.
