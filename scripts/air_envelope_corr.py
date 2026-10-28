@@ -28,13 +28,20 @@ or a send gap over 1 s) and independent of the live sensor's running median;
 span the cell and the 9·M frames before it, as the daemon's tap does; 0 for ``legacy``
 rows and the band-pass reference). ``src_mid`` is the source time of the matched cell.
 
+``--anchor media|count`` adds the live sensor's ``H`` per window (``anchor_h_s``): the packets
+go through the real ``AirLinkTracker`` with its batches taken every 250 ms, ``count`` with its
+frame-count anchor (R-18), ``media`` with the pre-R-18 anchor (median ``t_send − u`` reseeded by
+``−Δu`` at RTP steps) swapped in; the window middle's air time is placed like the daemon places it
+(proportionally across a skipped span). A summary gives the median, p10–p90 and the largest step
+between consecutive confirmed windows.
+
 Making a capture (the morning one is copyrighted music and stays private): on the speaker
 host run ``btmon -w capture.btsnoop`` (needs root), play a known local WAV through the bridge
 to one SBC speaker for a minute or two, stop btmon, then::
 
     uv run python scripts/air_envelope_corr.py capture.btsnoop source.wav [--index N] [--handle H]
         [--definition legacy|impl|both] [--window-frames 1034] [--hop-frames 344] [--search 20]
-        [--envelope comb|bandpass] [--offline-h] [--csv out.csv]
+        [--envelope comb|bandpass] [--offline-h] [--anchor media|count] [--csv out.csv]
 
 The WAV must be 16- or 24-bit PCM at the capture's SBC sampling rate and start where the
 playback started (a constant offset is found by a coarse search, ``--offset-frames`` overrides
@@ -45,7 +52,9 @@ minutes for a two-minute track.
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
+import itertools
 import math
 import random
 import statistics
@@ -71,7 +80,12 @@ from sendspin_bridge.services.audio.playout.air_tap import (  # noqa: E402
     to_s16,
 )
 from sendspin_bridge.services.bluetooth import a2dp_air  # noqa: E402
-from sendspin_bridge.services.bluetooth.a2dp_air_envelope import envelope_subbands, frame_envelope  # noqa: E402
+from sendspin_bridge.services.bluetooth.a2dp_air_envelope import (  # noqa: E402
+    ANCHOR_PACKETS,
+    AirLinkTracker,
+    envelope_subbands,
+    frame_envelope,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -82,6 +96,7 @@ CELL = 128  # samples per envelope cell (one SBC frame of 8 sub-bands x 16 block
 LEGACY_GATE = 1.15  # the morning script's "ambiguous" threshold
 SEND_GAP_S = 1.0
 ANCHOR_SPAN_S = 1.0
+BATCH_S = 0.25  # the parent takes the tracker's batches this often
 BANDPASS_LEAD = 2  # cells of filter lead-in before each band-pass cell
 RTP_MOD = 1 << 32
 
@@ -172,6 +187,100 @@ def local_anchor(packets: Sequence[PacketTime], at: int) -> float | None:
     centre = packets[at]
     vals = [q.t_send - q.u_s for q in packets if q.seg == centre.seg and abs(q.t_send - centre.t_send) <= ANCHOR_SPAN_S]
     return statistics.median(vals) if vals else None
+
+
+# -- live anchors (--anchor) ----------------------------------------------------------------------
+
+
+class _MediaAnchor:
+    """The pre-R-18 send anchor, for comparison: median of the last ANCHOR_PACKETS ``t_send − u``,
+    shifted by ``−Δu`` at every forward RTP step. Plugged into the real tracker in place of its
+    count-axis anchor; ``value()`` answers in the tracker's frame (``t0 = seq·frame_us + value``),
+    i.e. ``α + (u − count·frame_us)`` of the newest packet."""
+
+    def __init__(self) -> None:
+        self._window: list[float] = []
+        self._u_us: float | None = None  # media time of the packet about to be added (set by the caller)
+        self._skew: float | None = None  # u - count*frame_us of the newest packet added
+
+    def set_media(self, u_us: float) -> None:
+        self._u_us = u_us
+
+    def add(self, t_send_us: float, x_us: float) -> None:
+        assert self._u_us is not None
+        skew = self._u_us - x_us
+        if self._skew is not None and skew > self._skew:
+            step = skew - self._skew
+            self._window = [v - step for v in self._window]  # the reseed: alpha_old - du
+        self._skew = skew
+        self._window.append(t_send_us - self._u_us)
+        del self._window[:-ANCHOR_PACKETS]
+
+    def value(self) -> float | None:
+        if not self._window or self._skew is None:
+            return None
+        return statistics.median(self._window) + self._skew
+
+    def reset(self) -> None:
+        self._window, self._skew = [], None
+
+
+def live_air_times(packets: Sequence[MediaPacket], anchor: str) -> dict[int, float]:
+    """Air time (RAW s) the live parent gives each air cell, keyed by :func:`air_cells`' index.
+
+    The packets go through the real :class:`AirLinkTracker`, its batches taken every
+    :data:`BATCH_S` of send time as the hub's sender does. ``count`` is the tracker as it is (R-18:
+    frame-count anchor); ``media`` swaps in the pre-R-18 media-time anchor (:class:`_MediaAnchor`).
+    """
+    if anchor not in ("count", "media"):
+        raise ValueError(f"unknown anchor {anchor!r}")
+    tr = AirLinkTracker()
+    media = _MediaAnchor() if anchor == "media" else None
+    if media is not None:
+        tr._anchor = media  # type: ignore[assignment]  # analysis only: the tracker's one anchor seam
+    base: int | None = None
+    ticks = packets[0].rtp_ts if packets else 0
+    epoch_base: dict[int, int] = {}
+    batches: list = []
+    prev: MediaPacket | None = None
+    next_take = packets[0].t_send + BATCH_S if packets else 0.0
+    rate = packets[0].frames[0].sampling_rate if packets and packets[0].frames else 44100
+    for p in packets:
+        if prev is not None:
+            step = (p.rtp_ts - prev.rtp_ts) % RTP_MOD
+            ticks += step if step < RTP_MOD // 2 else step - RTP_MOD
+        if base is None:
+            base = ticks
+        if media is not None:
+            media.set_media((ticks - base) * 1e6 / rate)  # only u's steps matter to the anchor
+        tr.on_packet(p, timestamp="kernel", in_step=False)
+        epoch_base.setdefault(tr.state(p.t_send * 1e6).epoch, ticks)  # the packet an epoch starts at
+        prev = p
+        if p.t_send >= next_take:
+            batches += tr.take_batches(p.t_send * 1e6)
+            next_take += BATCH_S
+    batches += tr.take_batches(1e18, force=True)
+    out: dict[int, float] = {}
+    if base is None:
+        return out
+    for b in batches:
+        first = epoch_base[b.epoch] - base + round(b.u0_us * b.rate / 1e6)
+        spf = b.blocks * b.subbands
+        for k in range(len(b.e)):
+            out[(first + k * spf) // spf] = (b.t0_us + k * b.frame_us) / 1e6
+    return out
+
+
+def air_time_at(times: dict[int, float], keys: Sequence[int], cell: int) -> float | None:
+    """Air time of air cell ``cell``; inside a skipped span (no cell held) it is placed
+    proportionally between the held cells either side, as the daemon places a window middle."""
+    if cell in times:
+        return times[cell]
+    j = bisect.bisect_right(keys, cell)
+    if j == 0 or j == len(keys):
+        return None
+    lo, hi = keys[j - 1], keys[j]
+    return times[lo] + (cell - lo) / (hi - lo) * (times[hi] - times[lo])
 
 
 # -- source side ------------------------------------------------------------------------------
@@ -429,6 +538,45 @@ def annotate(
                 r["offline_h_s"] = alpha + u_mid - src_t - (d_enc - d_comb)
 
 
+def annotate_anchor_h(
+    rows: list[dict],
+    times: dict[int, float],
+    *,
+    offset: int,
+    rate: int,
+    subbands: int,
+    window: int,
+    comb: bool,
+) -> None:
+    """Add ``anchor_h_s``: the live sensor's ``H = t_mid − src_mid − (d_enc − d_comb)`` per window,
+    ``t_mid`` the air time :func:`live_air_times` gives the window's middle cell."""
+    keys = sorted(times)
+    d_enc = 4.5 * subbands / rate
+    d_comb = ((comb_lag(rate) + lookback_frames(subbands, rate, rate)) / 2.0) / rate if comb else 0.0
+    for r in rows:
+        r["anchor_h_s"] = None
+        if r["lag"] is None:
+            continue
+        mid = r["k"] + window // 2
+        t_mid = air_time_at(times, keys, mid)
+        if t_mid is not None:
+            r["anchor_h_s"] = t_mid - (offset + mid + r["lag"]) * CELL / rate - (d_enc - d_comb)
+
+
+def h_stability(rows: Sequence[dict]) -> dict[str, float]:
+    """Median, p10, p90 of ``anchor_h_s`` over the confirmed windows and the largest step between
+    consecutive confirmed windows, in ms."""
+    hs = [r["anchor_h_s"] * 1000.0 for r in rows if r["status"] == "confirmed" and r.get("anchor_h_s") is not None]
+    jumps = [abs(b - a) for a, b in itertools.pairwise(hs)]
+    return {
+        "n": len(hs),
+        "median_ms": percentile(hs, 50),
+        "p10_ms": percentile(hs, 10),
+        "p90_ms": percentile(hs, 90),
+        "max_jump_ms": max(jumps) if jumps else 0.0,
+    }
+
+
 def run_selftest() -> int:
     air, src = synthetic_pair(lag_frames=7, seed=3)
     legacy = [x for x in legacy_windows(air, src, window=600, hop=300, search=20) if x["psr"] >= LEGACY_GATE]
@@ -462,6 +610,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--offset-frames", type=int, default=None, help="source cell of air cell 0 (default: coarse search)"
     )
     ap.add_argument("--offline-h", action="store_true", help="add the local-anchor offline H per window")
+    ap.add_argument(
+        "--anchor",
+        choices=("media", "count"),
+        default=None,
+        help="add the live sensor's per-window H with the frame-count (R-18) or the pre-R-18 media-time anchor",
+    )
     ap.add_argument("--csv", type=Path, default=None)
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
@@ -506,6 +660,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     rows_by_def: dict[str, list[dict]] = {}
+    times = live_air_times(packets, args.anchor) if args.anchor else None
     for d in definitions:
         cells, meta, written = series[d]
         if d == "legacy":
@@ -533,6 +688,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             offline_h=args.offline_h,
             comb=args.envelope == "comb",
         )
+        if times is not None:
+            annotate_anchor_h(
+                rows,
+                times,
+                offset=offset,
+                rate=meta.rate,
+                subbands=meta.subbands,
+                window=window,
+                comb=args.envelope == "comb" and d == "impl",
+            )
         rows_by_def[d] = rows
         for r in rows:
             line = (
@@ -541,15 +706,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if args.offline_h:
                 line += f" | offline_h {_fmt(r['offline_h_s'] and r['offline_h_s'] * 1000, '.2f')} ms"
+            if times is not None:
+                line += f" | H({args.anchor}) {_fmt(r['anchor_h_s'] and r['anchor_h_s'] * 1000, '.2f')} ms"
             print(line)
     for d in definitions:
         print("\n".join(summarise(d, rows_by_def[d])))
+        if times is not None:
+            st = h_stability(rows_by_def[d])
+            print(
+                f"  anchor {args.anchor} H over {st['n']} confirmed windows: median {st['median_ms']:.2f} ms "
+                f"p10 {st['p10_ms']:.2f} p90 {st['p90_ms']:.2f} max jump {st['max_jump_ms']:.2f} ms"
+            )
 
     if args.csv:
         with open(args.csv, "w", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(
-                ["definition", "index", "k", "status", "rho", "psr", "lag_frames", "t_minus_src_s", "offline_h_s"]
+                [
+                    "definition",
+                    "index",
+                    "k",
+                    "status",
+                    "rho",
+                    "psr",
+                    "lag_frames",
+                    "t_minus_src_s",
+                    "offline_h_s",
+                    "anchor_h_s",
+                ]
             )
             for d in definitions:
                 for r in rows_by_def[d]:
@@ -564,6 +748,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                             r["lag"],
                             r["t_minus_src_s"],
                             r["offline_h_s"],
+                            r.get("anchor_h_s"),
                         ]
                     )
     return 0

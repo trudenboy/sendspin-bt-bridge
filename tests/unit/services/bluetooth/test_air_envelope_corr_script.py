@@ -236,3 +236,101 @@ def test_offline_look_back_follows_the_sub_bands(tool):
     data = [v for f in frames for v in (f, f)]
     assert tool.impl_source_cells(data, 2, rate, 2, "comb", lookback=36)[3] == 0.0
     assert tool.impl_source_cells(data, 2, rate, 2, "comb", lookback=72)[3] > 0.0
+
+
+# ── --anchor: the live sensor's air times, media vs count anchor (R-18) ─────────────────────
+
+
+def _late_skip_stream():
+    """On time, then sends falling 60 ms behind, a PA skip of that much media, sends staying late."""
+    from dataclasses import replace
+
+    from tests.unit.services.bluetooth.test_a2dp_air_envelope import PKT_S, packets
+
+    late = [
+        replace(p, t_send=10.0 + (80 + j) * PKT_S + 0.003 * (j + 1))
+        for j, p in enumerate(packets(20, seq0=80, ts0=80 * 896))
+    ]
+    after = packets(120, seq0=100, ts0=100 * 896 + 2646, t0=10.0 + 100 * PKT_S + 0.060)
+    return packets(80) + late + after
+
+
+def test_count_anchor_times_are_the_trackers_batches_on_the_media_grid(tool):
+    from sendspin_bridge.services.bluetooth.a2dp_air_envelope import AirLinkTracker
+
+    pk = _late_skip_stream()
+    times = tool.live_air_times(pk, "count")
+    tr = AirLinkTracker()
+    batches, next_take = [], pk[0].t_send + tool.BATCH_S
+    for p in pk:
+        tr.on_packet(p, timestamp="kernel", in_step=False)
+        if p.t_send >= next_take:
+            batches += tr.take_batches(p.t_send * 1e6)
+            next_take += tool.BATCH_S
+    batches += tr.take_batches(1e18, force=True)
+    want = {
+        (round(b.u0_us * 44100 / 1e6) + k * 128) // 128: (b.t0_us + k * b.frame_us) / 1e6
+        for b in batches
+        for k in range(len(b.e))
+    }  # the cell index of air_cells: media ticks // 128
+    assert times.keys() == want.keys() and all(times[i] == pytest.approx(want[i], abs=1e-9) for i in want)
+    assert 699 in times and 720 in times and not any(i in times for i in range(700, 720))  # the skip holds no cell
+
+
+def test_media_anchor_with_its_reseed_gives_the_count_anchor_times(tool):
+    """The pre-R-18 media anchor reseeded by −Δu at every RTP step is the count anchor in another
+    frame: median(t − u) shifted by the skips is median(t − count·frame_us) − skips. Pinned, so the
+    offline comparison of the two is known to be like for like."""
+    pk = _late_skip_stream()
+    media, count = tool.live_air_times(pk, "media"), tool.live_air_times(pk, "count")
+    assert media.keys() == count.keys()
+    assert all(media[i] == pytest.approx(count[i], abs=1e-9) for i in count)
+
+
+def test_anchor_h_series_and_its_stability(tool):
+    rate = 44100
+    f = 128 / rate
+    times = {i: 100.0 + i * f for i in range(400)}
+    rows = [
+        {"k": 0, "lag": 0.0, "status": "confirmed"},
+        {"k": 100, "lag": 0.0, "status": "confirmed"},
+        {"k": 200, "lag": 1.0, "status": "confirmed"},
+        {"k": 300, "lag": None, "status": "rejected"},
+    ]
+    tool.annotate_anchor_h(rows, times, offset=0, rate=rate, subbands=8, window=10, comb=True)
+    credit = (36 - (3 + 72) / 2) / rate
+    assert rows[0]["anchor_h_s"] == pytest.approx(100.0 - credit, abs=1e-9)
+    assert rows[2]["anchor_h_s"] == pytest.approx(100.0 - f - credit, abs=1e-9)
+    assert rows[3]["anchor_h_s"] is None
+    st = tool.h_stability(rows)
+    assert st["n"] == 3 and st["max_jump_ms"] == pytest.approx(f * 1000, abs=1e-6)
+    assert st["median_ms"] == pytest.approx((100.0 - credit) * 1000, abs=1e-6)
+
+
+def test_anchor_h_interpolates_air_time_across_a_skip_like_the_daemon(tool):
+    rate = 44100
+    f = 128 / rate
+    times = {i: 100.0 + i * f for i in range(10)} | {i: 100.0 + (i - 10) * f for i in range(20, 40)}
+    rows = [{"k": 10, "lag": 0.0, "status": "confirmed"}]  # middle at cell 15, in the gap 9 … 20
+    tool.annotate_anchor_h(rows, times, offset=0, rate=rate, subbands=8, window=10, comb=False)
+    t_mid = times[9] + (15 - 9) / (20 - 9) * (times[20] - times[9])
+    assert rows[0]["anchor_h_s"] == pytest.approx(t_mid - 15 * f - 36 / rate, abs=1e-9)
+
+
+def test_cli_anchor_prints_the_h_stability(capsys, tool, click_wav):
+    rc = tool.main(
+        [
+            str(CLICKS),
+            str(click_wav),
+            "--definition",
+            "impl",
+            "--window-frames",
+            "600",
+            "--hop-frames",
+            "300",
+            "--anchor",
+            "count",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0 and "anchor count" in out and "max jump" in out
