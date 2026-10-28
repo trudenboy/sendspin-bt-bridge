@@ -1,6 +1,6 @@
 # Air sensor: when our audio leaves over the air — design
 
-Status: draft, revised after the design review of 2026-10-28 (rev. 2). Target: the v3 line (beta channel), after 3.1.0-beta.16.
+Status: ready to execute, rev. 3 (after the design review and re-review of 2026-10-28). Target: the v3 line (beta channel), after 3.1.0-beta.16.
 Builds on [`2026-10-16-bt-playout-sync-design.md`](2026-10-16-bt-playout-sync-design.md) ("the
 playout spec"), in particular its sections "Stage 1 findings", R14, "Stage 2 gate experiment" and
 "Morning follow-up", and on the A2DP air parser shipped in #560
@@ -173,8 +173,10 @@ Process boundaries and why:
   writes are already thread-safe ("Thread-safe writes from BT monitor thread", CLAUDE.md).
 - **The hub is gated by `EXPERIMENTAL_AIR_SENSOR` (controller ruling).** Switch **off**: the
   existing `HciAvrcpMonitor` path runs exactly as today (asyncio reader, its tests unchanged), and
-  nothing of the air sensor exists — no hub, no tap, no air commands, no `air_sensor` key in status
-  or API. Switch **on**: the hub owns the one monitor socket and AVRCP becomes one of its consumers
+  nothing of the air sensor exists — no hub, no tap, no air commands; `DeviceStatus.air_sensor` and
+  the API's `timing.air_sensor` are `null` (**ruling: null, not an absent key** — the repo's response
+  models mark defaults required, so an omitted key would need a custom serializer; a daemon spawned
+  without the sensor simply never publishes the status key). Switch **on**: the hub owns the one monitor socket and AVRCP becomes one of its consumers
   (new code path with its own tests; `_process_packet` keeps its legacy contract for the old path,
   the hub consumer uses an index-aware variant).
 - **Ruling R-2: the handle map becomes `(index, handle)` → MAC.** Today's `handle_to_mac` ignores
@@ -273,7 +275,11 @@ Consumes the parser's `MediaPacket`s of one link in send order and produces air 
    parse inside a contiguous packet run.
 5. **Send anchor.** For each packet, `α_k = t_send,k − u_k` (`u_k` = unwrapped RTP / rate). The
    anchor used for a frame is the running median of the last 64 `α_k` of the anchor segment (≈ 1.3
-   s at 49 packets/s; the first packets of a segment use the median of what there is). A packet's own send time jitters with controller credits; the median removes it.
+   s at 49 packets/s). At an anchor reset the median is **seeded** with the old anchor carried
+   forward minus the RTP step (`α_new = α_old − Δu_step`, exact for a skip: sends continued while
+   media time jumped), so the first packets after a skip are not anchored on a handful of samples;
+   the window then refills with the new segment's own packets. At a new epoch there is nothing to
+   carry: no batch is sent until the epoch has 32 packets (≈ 0.65 s). A packet's own send time jitters with controller credits; the median removes it.
    The host's RTP pacing follows `CLOCK_MONOTONIC` (PulseAudio's bluez sink), so `α` drifts by the
    NTP slew (≤ 500 ppm): the median's half-window lag costs ≤ 0.33 ms. A frame's energy cell is
    sent with `t_j = u_j + α`; the PCM it describes left at `t_j − d_enc` (the daemon applies
@@ -321,10 +327,11 @@ switch anchors later together with a re-calibration.
 Additive commands on the daemon's stdin (JSON lines, `build_command_envelope`), decoded in
 `services/ipc/commands.py` like every other command.
 
-**Ruling R-6: no `IPC_PROTOCOL_VERSION` bump; capability-gated instead.** The commands are
-additive. A daemon spawned with the air sensor enabled advertises
-`air_sensor.accepts: [1]` in its status; the parent sends air commands only to a daemon that
-advertised the version it speaks. An older daemon therefore never receives the verbs (it would
+**Ruling R-6: no `IPC_PROTOCOL_VERSION` bump; gated on a "sensor was built" signal instead.** The
+commands are additive. Only a daemon that actually built its `AirSensor` (switch effective, measure
+mode, a `PlayoutPlayer`) publishes `air_sensor.accepts: [1]`; it withdraws it (`[]`) when the
+sensor is torn down (legacy fallback). The parent sends air commands only while that signal is
+present with the version it speaks; the spawn parameter alone is not the gate. An older daemon therefore never receives the verbs (it would
 emit `unknown_command` for each batch). The payload carries its own schema version `v`.
 
 ### `air_envelope` (parent → daemon, ≤ 4 Hz)
@@ -343,7 +350,7 @@ emit `unknown_command` for each batch). The payload carries its own schema versi
 | `v` | schema version | `== 1` |
 | `epoch` | per-device epoch counter | int ≥ 0; a new value resets the air ring and the lock to `acquiring` |
 | `seq` | index of the first frame within the epoch | int ≥ 0; must continue the previous batch of the epoch (a forward jump or a step back = the batch is dropped and the epoch is treated as broken: re-acquire) |
-| `u0_us` | RTP media time of the first frame since the epoch start, µs (includes samples PulseAudio skipped) | finite, ≥ 0, not decreasing within the epoch |
+| `u0_us` | RTP media time of the first frame since the epoch start, µs (includes samples PulseAudio skipped) | finite, `u0_us ≥ seq · frame_us − 1` (skips only add media time), not decreasing within the epoch |
 | `t0_us` | RAW time of the first frame's energy cell, `u + α` (send-anchored; the daemon applies `d_enc`) | finite, within ±10 s of the daemon's RAW now |
 | `frame_us` | frame duration | 500…20000 |
 | `timestamp` | `kernel` or `recv` (R-3) | one of the two |
@@ -382,7 +389,7 @@ clamped to 0…2000. The parent resolves the entry for the speaker's current cod
 ### `air_fold` (parent → daemon, calibration only)
 
 `{"cmd": "air_fold", "id": "c1f3…", "from_us": …, "to_us": …}` (the parent sends `from_us = to_us − 12 s`):
-fold the written envelope's program, unmuted cells over the click cycle on the heard-schedule axis
+fold the written envelope's program cells (mute ignored) over the click cycle on the heard-schedule axis
 `T = s + D_out` (stored per cell) whose `T` lies between the two RAW times and report
 `status.air_sensor.fold = {"id", "phase_ms", "ok", "reason"}` within 2 s (one pending fold per
 daemon; a new id replaces the old one). Bounded to 30 s of span.
@@ -425,15 +432,22 @@ packed in 3 bytes, or S32LE, at 44.1, 48, 88.2 or 96 kHz (the daemon advertises 
   stereo audio). Its group delay is `d_comb = d/2` samples.
 - **Per cell** the tap stores: `w_i`; `s_i = ScheduleMap.at(x_i)` at render time (the map always
   covers the write head); `T_i = s_i + D_out` with the output delay at write time; the kind from
-  `ScheduleMap.kind_at` (`program` / `silence`, the map's own `SegmentKind`); and a **muted** flag
-  (the feeder's user mute, a volume of 0 or the engine's tail mute at the time of the push).
-  Silence and muted cells get `w = 0` and are excluded from the correlation statistics; a window
-  containing more than 20 % of them is skipped.
+  `ScheduleMap.kind_at` (`program` / `silence`, the map's own `SegmentKind`). Silence cells get
+  `w = 0` and are excluded from the correlation statistics.
+- **Mute is resolved by port time, not push time.** pulsesink's mute and volume act at the port,
+  so audio pushed now is affected by a mute applied ~0.8 s later (the ring on HAOS) and not by one
+  that ends before it reaches the port. The player therefore keeps a **mute timeline**: a list of
+  RAW-timed transitions `(t, muted)` recorded whenever it applies the user's mute or volume (muted =
+  mute on or volume 0) or the engine's tail mute starts or ends (30 s kept). A cell counts as muted
+  when the timeline is muted at its scheduled port time `s_i`. The flag is computed when a slice is
+  read (the transition may come after the push), never stored at push time, and `w` is kept as
+  computed: the PCM carries the audio whatever the mute does after the tap.
 - **Lookup does not assume monotonic `s`.** Placements and inserts step `s` back; the tap finds a
   cell for a time by scanning the cells of the last 2 s around the expected index and returning
   the newest cell whose `s` is within half a cell, never by binary search.
 - **Ring:** 20 s (6 892 cells at 44.1 kHz) in `array('d')` (s, T) and `array('f')` (w) plus a
-  `bytearray` of kind/muted flags; a `threading.Lock` guards append (feeder) and slice copies.
+  `bytearray` of kinds; the mute timeline sits beside it; a `threading.Lock` guards append (feeder)
+  and slice copies.
   ≈ 150 KB.
 - The tap never blocks the feeder: it does no allocation beyond the slices it reads and takes the
   lock for a copy of at most one block's cells.
@@ -451,10 +465,11 @@ more than 0.05 below the band-pass's on the same windows, the band-pass replaces
 does not change). The synthetic fixture is not representative for this choice.
 
 **Ruling R-8: the written envelope is taken from the PCM the engine writes, before the user's
-volume; mute and volume 0 are recorded per cell.** Volume is applied in pulsesink, after the tap;
-the z-scored correlation is invariant to it. A muted cell (user mute, volume 0, tail mute) has no
-air energy behind it, so such cells are flagged and windows with more than 20 % of them are
-skipped instead of being correlated and rejected.
+volume; mute is a property of the port time.** Volume is applied in pulsesink, after the tap; the
+z-scored correlation is invariant to it. A cell whose scheduled port time falls in a muted interval
+of the mute timeline has no air energy behind it, so correlation windows with more than 20 % such
+cells are skipped instead of being correlated and rejected. The calibration's written fold ignores
+mute (the written PCM always carries the clicks; see "Calibration").
 
 ### Correlation
 
@@ -562,7 +577,7 @@ watcher never wait for it.
 
 | State | Entered when | Reported values |
 |---|---|---|
-| (absent) | switch off | no `air_sensor` key at all in status or API |
+| (null) | switch off | `air_sensor: null` in `DeviceStatus` and the API |
 | `off` | switch on, but this player is not effective (mode not `measure`, opted out, not Bluetooth) | `state` and `reason` only (set by the parent) |
 | `unavailable` | the parent says so (no `CAP_NET_RAW`, platform, monitor error, CPU budget) | reason |
 | `unsupported_codec` | the source is not SBC (or SBC with unsupported parameters) | reason, codec |
@@ -585,7 +600,7 @@ Jitter: the MAD (×1.4826) of `H` over the confirmed windows of the last 30 s.
 
 ```
 state: off|unavailable|unsupported_codec|unsupported_input|no_signal|acquiring|locked|holding|no_lock
-(the whole key is absent when EXPERIMENTAL_AIR_SENSOR is off)
+(the whole value is null when EXPERIMENTAL_AIR_SENSOR is off)
 reason: str|null                      codec: str|null          adapter: str|null
 host_placement_ms: float|null  (H, median of the last 5 confirmed windows)
 air_error_ms: float|null       (E; null when uncalibrated or not locked/holding)
@@ -634,7 +649,7 @@ correlator are wrapped so that an exception disables the air sensor for that str
 
 | Where | Per streaming speaker | Notes |
 |---|---|---|
-| Parent: monitor read + parse | ≈ 150 records/s (≈ 49 media packets of 7 frames, 1–3 ACL fragments, NOCP); target ≤ 1.5 % of one core of the HAOS VM (x86, 2 vCPU) | CRC on the first frame only (R-4); measured by `scripts/air_sensor_bench.py` on the HAOS VM and the desktop (Task A4); **a Raspberry Pi is not available: Pi numbers are unverified** |
+| Parent: monitor read + parse | ≈ 150 records/s (≈ 49 media packets of 7 frames, 1–3 ACL fragments, NOCP); target ≤ 1.5 % of one core of the HAOS VM (x86, 2 vCPU) | CRC on the first frame only (R-4); measured by `scripts/air_sensor_bench.py` on the desktop and the test VM 105 (Task A4); live on the HAOS stand in A17; **a Raspberry Pi is not available: Pi numbers are unverified** |
 | Parent: tracker + batching | ≈ 344 frames/s, 4 messages/s | negligible |
 | Parent memory | parser state (≤ 256 fragments per link), ≤ 16 queued batches, fold ring 30 s (armed only) | < 1 MB |
 | Daemon: tap | ≈ 0.4 % of a desktop core | comb on C-speed maps (R-7) |
@@ -681,7 +696,7 @@ Effective rule (`air_sensor_effective(player_cfg, cfg) -> (bool, reason)`): on w
 `EXPERIMENTAL_AIR_SENSOR` is true, the player's effective playout mode is `measure` and its backend
 is Bluetooth (`bluetooth_a2dp`); else off with reason `switch_off`, `needs_measure` (mode `off` or
 opted out), `loop_not_supported_yet` (mode `loop`, stage B) or `not_bluetooth`. With
-`switch_off` the parent publishes no `air_sensor` key at all.
+`switch_off` the value is `null`.
 
 Calibration entry (**Ruling R-12**: keyed by codec × SBC sampling rate × adapter MAC, because the
 air-to-sound latency depends on the decoder's buffer, which is counted in frames, and on the
@@ -699,14 +714,14 @@ and the schema's player definition.
 
 ### HTTP (API v1)
 
-- `GET /api/v1/devices/{id}`: `timing.air_sensor` (`AirSensorTiming`; the key is omitted when the
-  switch is off), `audio.air_to_sound_latency` (the entries) — the SPA client is regenerated.
+- `GET /api/v1/devices/{id}`: `timing.air_sensor` (`AirSensorTiming`, `null` when the switch is
+  off), `audio.air_to_sound_latency` (the entries) — the SPA client is regenerated.
 - `DELETE /api/v1/devices/{id}/air-calibrations/{codec}/{rate}/{adapter}` → 204 (forget one);
   `DELETE /api/v1/devices/{id}/air-calibrations` → 204 (forget all).
 - Sync sessions: `SyncSessionOut.air_calibrations[]`
   (`member, eligible, reason, latency_ms, acoustic_lag_ms, host_placement_ms, codec, rate, adapter`)
   after a recording; `POST /api/v1/sync/sessions/{id}/air-calibrations {members: [...]}` saves the
-  chosen ones. Reasons: `no_reference`, `no_air_clicks`, `not_sbc`, `not_measured`.
+  chosen ones. Ineligibility reasons (one list, used by the plan's A16c): `not_effective` (the air sensor was not on for this player: switch, mode, backend), `no_reference`, `not_measured` (the speaker's or the reference's acoustic measurement is not `ok`), `not_sbc`, `air_epoch_changed`, `no_air_clicks`, `no_written_clicks`.
 
 ### UI
 
@@ -716,8 +731,9 @@ and the schema's player definition.
 - **SyncChip tooltip:** one line "air: locked, H +12.4 ms" when the sensor is on.
 - **Settings → Audio (advanced):** `EXPERIMENTAL_AIR_SENSOR` with "Needs Playout sync = measure and
   SBC; measures when the audio leaves over the air. Does not change playback."
-- **Sync wizard:** on the result step, for bridge members whose air sensor was locked during their
-  solo: "Speaker latency (air → sound): 203 ms" and a checkbox "Save as this speaker's latency".
+- **Sync wizard:** on the result step, for every bridge member with an eligible calibration
+  candidate: "Speaker latency (air → sound): 203 ms" and a checkbox "Save as this speaker's
+  latency"; an ineligible member shows its reason in plain words.
 - en and ru.
 
 ### Logs
@@ -797,9 +813,12 @@ recording):
    `services/bluetooth/a2dp_air_fold.py`, and the script imports them). The phase is on the RAW
    axis (epoch 0, estimator convention), at the PCM instant (the encoder delay is removed).
 4. The parent asks the daemon for the scheduled click phase (`air_fold`): the daemon folds its
-   written cells on the heard-schedule axis `T_i = s_i + D_out` (stored per cell) over the last
-   ≥ 10 s of program cells before the request (the written side always carries every click, and the
-   phase is constant over the solo), with `click_phase_ms` and `d_comb` removed → `φ_T`. Then
+   program cells on the heard-schedule axis `T_i = s_i + D_out` (stored per cell) with `T` in
+   `[to − 12 s, to]`, **ignoring mute** (mute is applied after the tap, so the written PCM carries
+   every click even while MA mutes the speaker), with `click_phase_ms` and `d_comb` removed → `φ_T`.
+   The span is limited by what the tap holds since the last output reopen; the phase is constant, so
+   a partial cycle is enough (A16a tests 5–7 s), but fewer than 5 s of program cells give
+   `no_written_clicks`. Then
    `H_cal = unwrap(φ_air − φ_T)` (unwrapped into ±5 s; the click cycle is 10 s).
 5. After the upload, the estimator gives each member's acoustic phase on the recording's clock.
    With the reference `R`: `A = unwrap(φ_ac(speaker) − φ_ac(R))` (the planner's `unwrap_lag_ms`),
@@ -807,9 +826,12 @@ recording):
 6. `L_as = A − H_cal`. Both terms were measured over the same solo under the same `D_out`, so the
    delay cancels: `A = t_sound − T`, `H_cal = t_air − T`, `L_as = t_sound − t_air`.
    Eligibility (controller ruling: the live lock state is **not** required — the fold is its own
-   evidence): the air span holds SBC frames of one epoch, the air fold found clicks (its pattern
-   score stands above the fold's median score by the phase tool's own criterion), the written fold
-   found clicks, the acoustic measurement is `ok`, and the reference is `ok`. The session shows
+   evidence), checked in this order with the reason given for the first failure: the air sensor is
+   effective for the player (`not_effective`), the session has a reference (`no_reference`), the
+   speaker's and the reference's acoustic measurements are `ok` (`not_measured`), the air span holds
+   SBC frames (`not_sbc`) of one epoch (`air_epoch_changed`), the air fold found clicks
+   (`no_air_clicks`; pattern score ≥ 3× its median, `click_fold_found`), and the written fold found
+   clicks (`no_written_clicks`). The session shows
    `air_calibrations[]`; the user saves the ones they want; the entry is stored for the speaker's
    codec, rate and adapter and sent to the daemon.
 7. The AVDTP Delay Report, when a speaker has one, is shown beside the result as a hint, never
@@ -860,14 +882,17 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
   carries `air_sensor`; the API model serialises it; config keys round-trip and classify.
 - **Switch off:** explicit tests that with `EXPERIMENTAL_AIR_SENSOR=false` the existing AVRCP
   monitor path runs (its tests unchanged), no hub thread starts, no tap is attached, no air command
-  is sent, and neither the daemon status nor the API contains an `air_sensor` key.
+  is sent, the daemon never publishes the status key, and `DeviceStatus.air_sensor` and the API's
+  `timing.air_sensor` are `null`.
 - **Stand validation** (Task A17; HAOS stand, ENEBY20 on hci1, the local reference bridge in
   `off`, headset microphone, the coherent click estimator, the gate experiment's protocol;
   `PLAYOUT_SYNC=measure`, `EXPERIMENTAL_AIR_SENSOR=true`; a `btmon -w` capture runs alongside):
   - **Primary acceptance (controller ruling): live `H` vs offline `H` on the same capture.** With
     `SENDSPIN_AIR_DEBUG=1` the daemon logs every confirmed window's `(t_mid, s_mid, H)`. The offline
-    tool recomputes the air time of the same PCM from the `btmon` capture (independent parser run,
-    the phase tool's whole-capture anchor, the same `d_enc`) and `H_offline = t_air − s_mid`.
+    tool recomputes the air time of the same PCM from the `btmon` capture with an independent
+    parser run and a **local anchor**: the median of `t_send − u` over the packets within ±1 s of
+    the window, segmented at anchor resets (skips) and epochs so no median spans one — independent
+    of the live running median — and the same `d_enc`; `H_offline = t_air − s_mid`.
     Pass: p95 of `|H_live − H_offline|` ≤ 2 ms (target 1 ms) over all confirmed windows of ≥ 8 cold
     starts, music and clicks.
   - **Microphone acceptance:** for each of ≥ 8 cold starts `i`, the mic-derived ENEBY offset `M_i`
@@ -945,9 +970,9 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
 | R-3 | Fallback to RAW receive time when no kernel timestamp (noisier: GIL waits) | keeps the sensor usable; flagged |
 | R-4 | Live path checks the SBC CRC on the first frame of each packet only (`A2dpAirParser(check_crc="first")`) | CPU |
 | R-5 | Canonical air time = send anchor; completion is telemetry | always available, survives the parser's blind spots, one anchor for calibration and runtime |
-| R-6 | No IPC protocol bump; capability-gated additive commands with a payload version | older daemons never see the verbs |
+| R-6 | No IPC protocol bump; additive commands gated on the daemon's "sensor was built" signal (`accepts`), with a payload version | older daemons and daemons without a sensor never see the verbs |
 | R-7 | PCM envelope = comb high-pass peak (switch to band-pass if PSR is ≥ 0.05 worse on real music) | CPU |
-| R-8 | Written envelope taken before volume; mute/volume 0 flagged per cell, such windows skipped | correlation is volume-invariant; muted cells carry no air energy |
+| R-8 | Written envelope taken before volume; a cell is muted when the RAW mute timeline is muted at its port time `s_i`; correlation windows > 20 % muted are skipped; the written fold ignores mute | pulsesink mute acts at the port; muted cells carry no air energy, but the written PCM does |
 | R-9 | PSR gate 1.17 (provisional until A17), ρ ≥ 0.25, a code constant; PSR definition shared by the repo tool and the daemon | today's numbers came from another definition |
 | R-10 | No lock after N = 20 s without a confirmed window | quiet passages vs stale values |
 | R-11 | Confidence formula (PSR margin × confirmed share × hold decay) | one number for UI and stage B gating |

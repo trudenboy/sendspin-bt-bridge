@@ -16,13 +16,13 @@ Revision 2 (2026-10-28): revised after the code-checked design review. The contr
 
 Copied from the spec; every task's requirements include them.
 
-* **Switch off = nothing.** With `EXPERIMENTAL_AIR_SENSOR=false` the existing `HciAvrcpMonitor` path runs unchanged (its tests unchanged), no hub thread, no tap, no air command, and no `air_sensor` key in the daemon status, `DeviceStatus` or the API. Every task that adds a hook has a switch-off test. The switch needs a bridge restart (`RESTART_REQUIRED`, R-17).
+* **Switch off = nothing.** With `EXPERIMENTAL_AIR_SENSOR=false` the existing `HciAvrcpMonitor` path runs unchanged (its tests unchanged), no hub thread, no tap, no air command; the daemon never publishes an `air_sensor` status key, and `DeviceStatus.air_sensor` and the API's `timing.air_sensor` are `null` (null, not an absent key: simpler with the repo's response models). Every task that adds a hook has a switch-off test. The switch needs a bridge restart (`RESTART_REQUIRED`, R-17).
 * Times: `CLOCK_MONOTONIC_RAW` µs in the sensor. Kernel monitor stamps (`SO_TIMESTAMPNS`) are `CLOCK_REALTIME`; convert with a bracketed `real − raw` offset taken every 250 ms (bracket ≤ 50 µs, 3 tries), interpolated; an offset step > 5 ms = clock step = new epochs. Without kernel stamps use RAW at `recvmsg` return, flagged `recv` (R-3). The parser is fed RAW seconds (`t_raw_us / 1e6`); no unix → RAW conversion exists downstream; fixtures are shifted by one constant.
 * Drops: `SO_RXQ_OVFL` cmsg if delivered, else `getsockopt(SOL_SOCKET, SO_MEMINFO)[SK_MEMINFO_DROPS]` polled every 250 ms; an increase = new epoch on every link.
 * Definitions: `s(x)` = `ScheduleMap.at(x)` (port time, output delay already subtracted); `D_out` = the daemon's current output delay; `T = s + D_out` (stored per cell); `d_enc = 4.5·M/rate`; `d_comb = (comb lag / 2)/f_in`; **`H = t_j − s_i − (d_enc − d_comb)`** for matched energy cells (`t_j = u_j + α`); `E = H + L_as − D_out` (positive = late; null without calibration).
 * Air side: SBC only; band = sub-bands `b ≥ 1` with centre `(b+½)·rate/(2M)` in 2.5–8.5 kHz, else `{1}`; energy `round(8·log2(1 + Σ_ch Σ_b 2^sf))` clipped 0…254, 255 = unparsable frame; send anchor = running median of the last 64 `t_send − u` of the anchor segment (R-5: canonical; completion lag is telemetry). **Contiguous RTP sequence + timestamp step (PA "Skipping") = anchor reset in the same epoch** (media time `u0_us` includes the skip; the daemon keeps `L` in media time and re-verifies ±5 cells); **sequence gap, > 1 s between sends, SSRC change, link reset, clock step, drop increase, hub reopen = new epoch** (re-acquire). Batches ≤ 128 frames every 250 ms; ≤ 400 frames/s per device; one sender task + queue of 16 per device, drop-oldest, non-blocking writes (write buffer > 64 KiB = skip); `A2dpAirParser(check_crc="first")` on the live path (R-4); CPU guard per streaming speaker: `cpu_fraction` > 0.015 × streaming links for two 30 s windows → `unavailable: cpu_budget`.
-* IPC: additive commands `air_envelope`, `air_source`, `set_air_calibration`, `air_fold`, payload `v: 1`, the usual `protocol_version: 2` envelope; no `IPC_PROTOCOL_VERSION` bump; the parent sends air commands only to a daemon whose status advertised `air_sensor.accepts` containing 1 (R-6); `fall_back_to_legacy` withdraws `accepts`. Invalid messages are dropped and counted, one WARNING per 10 min.
-* Written side: the tap works on the **input** PCM of `_push` (S16, S24 3-byte, S32 at 44.1/48 kHz, reduced to 16 bits at C speed; 88.2/96 kHz and other formats → `unsupported_input`); cells of 128 input frames; envelope `log2(1 + max|x[n] − x[n−d]|)`, `d = 3` at 44.1/48 kHz (R-7); per cell `s`, `T`, kind (`program`/`silence`, the `ScheduleMap` kinds) and muted (user mute, volume 0, tail mute) (R-8); lookup never assumes monotonic `s`; ring 20 s; tap reset + `reopen` event in `adopt_output` (every stream start and seek).
+* IPC: additive commands `air_envelope`, `air_source`, `set_air_calibration`, `air_fold`, payload `v: 1`, the usual `protocol_version: 2` envelope; no `IPC_PROTOCOL_VERSION` bump; the gate is the daemon's "sensor was built" signal: the parent sends air commands only while the daemon's status carries `air_sensor.accepts` containing 1, published only by a daemon that built its `AirSensor` and withdrawn on `fall_back_to_legacy` (R-6). Invalid messages are dropped and counted, one WARNING per 10 min.
+* Written side: the tap works on the **input** PCM of `_push` (S16, S24 3-byte, S32 at 44.1/48 kHz, reduced to 16 bits at C speed; 88.2/96 kHz and other formats → `unsupported_input`); cells of 128 input frames; envelope `log2(1 + max|x[n] − x[n−d]|)`, `d = 3` at 44.1/48 kHz (R-7); per cell `s`, `T`, kind (`program`/`silence`, the `ScheduleMap` kinds); muted = the RAW mute timeline (user mute, volume 0, tail mute) at the cell's port time `s_i`, resolved at read time (R-8); the written fold ignores mute; lookup never assumes monotonic `s`; ring 20 s; tap reset + `reopen` event in `adopt_output` (every stream start and seek).
 * Correlation: window 3 s, hop 1 s, computed off the daemon loop (executor); valid when ≥ 90 % air cells present, ≥ 80 % written cells program and ≤ 20 % muted (R-16); flatness `σ_a ≥ 2`, `σ_w ≥ 0.25`; NCC per lag; acquisition **±500 ms** around the prior (`δ₀ = 10 ms`), tracking ±20 cells, ±86 after underrun/pa_step/stall, ±5 after an anchor reset (R-15); PSR = peak / max outside ±2 cells; reject edge peaks; confirm when `PSR ≥ 1.17` (**provisional until A17**, R-9) and `ρ ≥ 0.25`; parabolic `λ` clamped ±0.5; a move > 3 cells needs a second confirmed window within 1 cell.
 * Lock: `locked` ≤ 5 s since the last confirmed window, `holding` 5–20 s, `no_lock` after 20 s (R-10); `acquiring` on a new epoch or reopen; confidence `clip((PSR_med − 1.17)/0.23, 0, 1) · f_ok · decay` (R-11); jitter = 1.4826·MAD of `H` over 30 s; reported `H` = median of the last 5 confirmed windows.
 * Effective rule: on iff the switch, effective playout mode `measure` and backend `bluetooth_a2dp`; reasons `switch_off` (→ no key), `needs_measure`, `loop_not_supported_yet`, `not_bluetooth`.
@@ -32,9 +32,9 @@ Copied from the spec; every task's requirements include them.
 * The host's audio settings are never changed (the suspend check only reads).
 * Config keys go into `DEFAULT_CONFIG`, `config/schema.json`, `BridgeConfig` in `application/models/config.py`, `_ALLOWED_POST_CONFIG_KEYS` (+ POST normalisation) in `application/config.py`, the `web_ui_only_keys` tuple in `scripts/translate_ha_config.py` and `services/infrastructure/config_diff.py`; per-player fields in `config/players.py` and the player definition of the schema.
 * Logs: INFO on state changes (≤ 1 per minute per kind) and calibration applied; WARNING once per 10 min per kind; DEBUG 10 s summary (per window with `SENDSPIN_AIR_DEBUG=1`: `t_mid`, `s_mid`, `H`, PSR). Never log raw monitor records.
-* Hardware for measurements: the desktop and the HAOS VM (x86, 2 vCPU). No Raspberry Pi is available; Pi figures are unverified and say so.
+* Hardware for measurements: the desktop and the test VM 105 (x86, 2 vCPU) for benches; the HAOS stand only in A17. No Raspberry Pi is available; Pi figures are unverified and say so.
 * Gates before every commit that touches them: `uv run pytest -q -p no:cacheprovider`; `uv run mypy --config-file pyproject.toml src/sendspin_bridge/ src/sendspin_sync/`; `uv run ruff check . && uv run ruff format --check .`; `cd ui && npm test && npm run build`; after API model changes `uv run python scripts/export_openapi.py` then `cd ui && npm run gen:api`; `uv run python scripts/lint_changelog.py CHANGELOG.md` (R5–R9). TDD: red before green; never edit an existing test to make it pass (`CLAUDE.md`).
-* Do not touch the bridge on port 8080 or Music Assistant on 8095/8097 while developing; live work happens only in Task A3a Step 5 (passive monitor read on a dev machine), A4 Step 5 (bench script on the HAOS VM, read-only) and Task A17 (the stands).
+* Do not touch the bridge on port 8080 or Music Assistant on 8095/8097 while developing; live work happens only in Task A3a Step 5 (passive monitor read on a dev machine), A4 Step 5 (bench script on the desktop or the test VM 105) and Task A17 (the stands).
 
 ## Review Focus
 
@@ -641,7 +641,9 @@ class SendAnchor:
     """Running median of t_send - u over the last ANCHOR_PACKETS packets of an anchor segment (µs)."""
     def add(self, t_send_us: float, u_us: float) -> None: ...
     def value(self) -> float | None: ...
-    def reset(self) -> None: ...
+    def reseed(self, alpha_us: float) -> None: ...   # anchor reset: carry α_old − Δu_step forward
+    def reset(self) -> None: ...                      # new epoch: empty
+MIN_EPOCH_PACKETS = 32
 
 @dataclass(frozen=True, slots=True)
 class AirBatch:
@@ -762,19 +764,35 @@ def test_skip_is_an_anchor_reset_in_the_same_epoch():
     assert reset.seq == 140                                               # sent-frame counter continues
     assert reset.u0_us == pytest.approx((140 * 128 + skipped) / RATE * 1e6)   # media time includes the skip
 
+def test_anchor_is_carried_across_a_skip():
+    tr = AirLinkTracker()
+    skipped = 882
+    feed(tr, packets(80) + packets(3, seq0=80, ts0=80 * 7 * 128 + skipped, t0=10.0 + 80 * PKT_S))
+    b = tr.take_batches(1e12, force=True)
+    reset = next(x for x in b if x.anchor_reset)
+    # the frame right after the skip left at its send time, not 'send time + skip'
+    assert reset.t0_us == pytest.approx((10.0 + 80 * PKT_S) * 1e6, abs=200.0)
+
+def test_no_batch_before_32_packets_of_an_epoch():
+    tr = AirLinkTracker()
+    feed(tr, packets(31))
+    assert tr.take_batches(1e12, force=True) == []
+    feed(tr, packets(1, seq0=31, ts0=31 * 7 * 128, t0=10.0 + 31 * PKT_S))
+    assert tr.take_batches(1e12, force=True)
+
 def test_sequence_gap_is_a_new_epoch_without_any_time_gap():
     tr = AirLinkTracker()
-    feed(tr, packets(10) + packets(10, seq0=11, ts0=11 * 7 * 128, t0=10.0 + 11 * PKT_S))   # seq 10 lost
+    feed(tr, packets(40) + packets(40, seq0=41, ts0=41 * 7 * 128, t0=10.0 + 41 * PKT_S))   # seq 40 lost
     assert {x.epoch for x in tr.take_batches(1e12, force=True)} == {0, 1}
 
 def test_send_gap_over_1s_is_a_new_epoch_with_contiguous_rtp():
     tr = AirLinkTracker()
-    feed(tr, packets(10) + packets(10, seq0=10, ts0=10 * 7 * 128, t0=10.0 + 10 * PKT_S + 1.2))
+    feed(tr, packets(40) + packets(40, seq0=40, ts0=40 * 7 * 128, t0=10.0 + 40 * PKT_S + 1.2))
     assert {x.epoch for x in tr.take_batches(1e12, force=True)} == {0, 1}
 
 def test_discontinuity_from_the_hub_is_a_new_epoch():
     tr = AirLinkTracker()
-    feed(tr, packets(10)); tr.on_discontinuity(); feed(tr, packets(10, seq0=10, ts0=10 * 7 * 128, t0=10.0 + 10 * PKT_S))
+    feed(tr, packets(40)); tr.on_discontinuity(); feed(tr, packets(40, seq0=40, ts0=40 * 7 * 128, t0=10.0 + 40 * PKT_S))
     assert {x.epoch for x in tr.take_batches(1e12, force=True)} == {0, 1}
 
 def test_non_sbc_is_unsupported_after_2s():
@@ -797,9 +815,9 @@ def test_fixture_cells_fold_to_the_phase_tool_phase():
 ```
 
 - [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** the parser option (`"first"`: `parse_sbc_frame(..., check_crc=True)` for frame 0, `False` for the rest; the frame-count check stays), then the tracker per the spec "AirLinkTracker": RTP unwrap per link; sequence continuity decides between anchor reset (contiguous sequence, timestamp step of more than one frame) and new epoch (sequence gap, send gap > 1 s, SSRC change, `on_link_reset`, `on_discontinuity`); across an anchor reset `seq` (frames sent) continues while `u0_us` (media time) includes the skipped samples, so the daemon keeps its lag in media time (spec); `SendAnchor` restarts per segment; completion-lag median over 2 s; batch cutting (an epoch change or an anchor reset closes the batch); frames-per-second guard; 2 s non-SBC rule.
+- [ ] **Step 3: Implement** the parser option (`"first"`: `parse_sbc_frame(..., check_crc=True)` for frame 0, `False` for the rest; the frame-count check stays), then the tracker per the spec "AirLinkTracker": RTP unwrap per link; sequence continuity decides between anchor reset (contiguous sequence, timestamp step of more than one frame) and new epoch (sequence gap, send gap > 1 s, SSRC change, `on_link_reset`, `on_discontinuity`); across an anchor reset `seq` (frames sent) continues while `u0_us` (media time) includes the skipped samples, so the daemon keeps its lag in media time (spec); `SendAnchor` is seeded at an anchor reset with `α_old − Δu_step` and emptied at a new epoch (no batch before 32 packets of the epoch); completion-lag median over 2 s; batch cutting (an epoch change or an anchor reset closes the batch); frames-per-second guard; 2 s non-SBC rule.
 - [ ] **Step 4: Run** → PASS (`test_a2dp_air.py` unchanged and green).
-- [ ] **Step 5: Bench.** `scripts/air_sensor_bench.py` parses the fixture 50 times through parser (`check_crc="first"`) + tracker and prints µs per record and the projected fraction of one core at 150 records/s per speaker. Run it on the desktop and on the HAOS VM (x86, 2 vCPU; `ssh haos` add-on shell, read-only, the script needs only the repo and the fixture) and put both numbers in the commit body; a Raspberry Pi is not available, so Pi cost is stated as unverified.
+- [ ] **Step 5: Bench.** `scripts/air_sensor_bench.py` parses the fixture 50 times through parser (`check_crc="first"`) + tracker and prints µs per record and the projected fraction of one core at 150 records/s per speaker. Run it on the desktop and on the Docker test VM 105 (x86, 2 vCPU, like the HAOS VM; never in the production add-on shell) and put both numbers in the commit body; a Raspberry Pi is not available, so Pi cost is stated as unverified.
 - [ ] **Step 6: Commit** `feat(bluetooth): SBC air envelope with send-anchored air times, anchor segments and epochs`.
 
 ### Task A5: Air IPC commands (encode, decode, validate) and daemon intake
@@ -865,7 +883,7 @@ def test_envelope_round_trips_with_the_protocol_version():
     ("v", 2), ("epoch", -1), ("seq", "x"), ("t0_us", float("nan")), ("t0_us", NOW + 11e6), ("frame_us", 100.0),
     ("timestamp", "wall"), ("rate", 22050), ("subbands", 6), ("blocks", 5), ("bands", [8]),
     ("complete_lag_us", 500_000.0), ("e", []), ("e", [256]), ("e", [1] * 257), ("e", [True]),
-    ("u0_us", -1.0), ("u0_us", float("inf")), ("anchor_reset", "yes"),
+    ("u0_us", -1.0), ("u0_us", float("inf")), ("u0_us", 128 * 2902.494 - 10.0), ("anchor_reset", "yes"),
 ])
 def test_envelope_rejects_out_of_range(key, value):
     with pytest.raises(InvalidCommand):
@@ -1055,7 +1073,7 @@ async def test_switch_off_never_subscribes(lifecycle_env):
 
 **Files:**
 - Create: `src/sendspin_bridge/services/audio/playout/air_tap.py`
-- Modify: `src/sendspin_bridge/services/audio/playout/gst_output.py` (`PlayoutPlayer(..., air_tap: WrittenEnvelope | None = None, output_delay_us: Callable[[], float] | None = None)`; in `_push`, after a successful push, `self._air_tap.add_block(block, fmt, schedule_at, kind_at, muted, d_out_us)`; the hook is skipped entirely when `air_tap is None`), `src/sendspin_bridge/services/audio/playout/engine.py` (read-only accessors `schedule_at(x_ns) -> float | None` and `kind_at(x_ns) -> SegmentKind | None` over the existing `ScheduleMap`; no behaviour change)
+- Modify: `src/sendspin_bridge/services/audio/playout/gst_output.py` (`PlayoutPlayer(..., air_tap: WrittenEnvelope | None = None, output_delay_us: Callable[[], float] | None = None)`; in `_push`, after a successful push, `self._air_tap.add_block(block, fmt, schedule_at, kind_at, d_out_us)`; in `_apply_output_volume`, `self._air_tap.mute_transition(raw_now, effective_muted)` on every change; the hook is skipped entirely when `air_tap is None`), `src/sendspin_bridge/services/audio/playout/engine.py` (read-only accessors `schedule_at(x_ns) -> float | None` and `kind_at(x_ns) -> SegmentKind | None` over the existing `ScheduleMap`; no behaviour change)
 - Test: `tests/unit/services/audio/playout/test_air_tap.py`
 
 `_push` receives blocks in the **input** format (the decoder's PCM before `audioconvert`/`audioresample`): `InputFormat(sample_rate, channels, sample_bytes)` with `sample_bytes` 2 (S16LE), 3 (S24LE packed) or 4 (S32LE).
@@ -1074,16 +1092,17 @@ def comb_peak_log2(s16: memoryview, channels: int, start: int, stop: int, prev: 
 class WrittenSlice:
     i0: int                    # global index of the first cell since the output opened
     cell_us: float             # 128 / input rate
-    w: array                   # 'f', 0 for silence/muted cells
+    w: array                   # 'f', 0 for silence cells (muted cells keep their value)
     s: array                   # 'd' RAW µs (NaN when unknown)
     t: array                   # 'd' T = s + D_out at write time
     program: bytes             # 1 = ScheduleMap kind "program", 0 = "silence"
-    muted: bytes               # 1 = user mute, volume 0 or tail mute at the push
+    muted: bytes               # 1 = the mute timeline is muted at the cell's port time s_i (resolved at slice time)
 
 class WrittenEnvelope:
     def __init__(self, *, seconds: float = 20.0) -> None: ...
     def add_block(self, block: Block, fmt: InputFormat, schedule_at: Callable[[int], float | None],
-                  kind_at: Callable[[int], str | None], muted: bool, d_out_us: float) -> None: ...   # feeder thread
+                  kind_at: Callable[[int], str | None], d_out_us: float) -> None: ...   # feeder thread
+    def mute_transition(self, t_raw_us: float, muted: bool) -> None: ...   # player: user mute/volume 0/tail mute applied
     def reset(self) -> None: ...                                     # output reopened
     @property
     def unsupported(self) -> str | None: ...                         # e.g. "input:96000/24" for the current format
@@ -1143,7 +1162,7 @@ F16, F24 = InputFormat(44100, 2, 2), InputFormat(48000, 2, 3)
 
 def test_cells_carry_s_t_kind_and_mute():
     tap = WrittenEnvelope()
-    tap.add_block(block(F16, 0, 441), F16, lambda x: 1e6 + x / 1000.0, lambda x: "program", muted=False, d_out_us=180_000.0)
+    tap.add_block(block(F16, 0, 441), F16, lambda x: 1e6 + x / 1000.0, lambda x: "program", d_out_us=180_000.0)
     sl = tap.slice(0, 3)
     assert sl.cell_us == pytest.approx(128 / 44100 * 1e6)
     assert list(sl.s) == pytest.approx([1e6 + i * sl.cell_us for i in range(3)], abs=0.05)
@@ -1152,7 +1171,7 @@ def test_cells_carry_s_t_kind_and_mute():
 
 def test_24_bit_48k_input_is_supported():
     tap = WrittenEnvelope()
-    tap.add_block(block(F24, 0, 480), F24, lambda x: x / 1000.0, lambda x: "program", muted=False, d_out_us=0.0)
+    tap.add_block(block(F24, 0, 480), F24, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     assert tap.unsupported is None and tap.cell_us == pytest.approx(128 / 48000 * 1e6)
 
 @pytest.mark.parametrize("rate,nbytes,reason", [(96000, 3, "input:96000/24"), (88200, 2, "input:88200/16"), (44100, 1, "input:44100/8")])
@@ -1160,43 +1179,58 @@ def test_other_inputs_are_unsupported(rate, nbytes, reason):
     tap = WrittenEnvelope()
     fmt = InputFormat(rate, 2, nbytes)
     tap.add_block(Block(pcm=bytes(nbytes * 2 * 256), x0_ns=0, duration_ns=1, program=True, dropped=0, inserted=0, late_drop_us=0.0),
-                  fmt, lambda x: 0.0, lambda x: "program", muted=False, d_out_us=0.0)
+                  fmt, lambda x: 0.0, lambda x: "program", d_out_us=0.0)
     assert tap.unsupported == reason and tap.newest_cell() is None
 
-def test_muted_and_silence_cells_are_zero_and_flagged():
+def test_mute_is_resolved_by_port_time_not_push_time():
+    """Cells are pushed ~0.8 s before their port time; a mute applied after the push still covers them."""
     tap = WrittenEnvelope()
-    tap.add_block(block(F16, 0, 256), F16, lambda x: x / 1000.0, lambda x: "program", muted=True, d_out_us=0.0)
-    tap.add_block(block(F16, round(256e9 / 44100), 256, value=0, program=False), F16, lambda x: x / 1000.0,
-                  lambda x: "silence", muted=False, d_out_us=0.0)
+    port = lambda x: 800_000.0 + x / 1000.0                          # s = push origin + 0.8 s
+    tap.add_block(block(F16, 0, 4 * 128), F16, port, lambda x: "program", d_out_us=0.0)
+    cell = 128 / 44100 * 1e6
+    tap.mute_transition(800_000.0 + 2 * cell, True)                  # applied later, acts at the port
     sl = tap.slice(0, 4)
-    assert sl.muted == b"\x01\x01\x00\x00" and sl.program == b"\x01\x01\x00\x00" and list(sl.w) == [0.0] * 4
+    assert sl.muted == b"\x00\x00\x01\x01"
+    assert all(v > 0 for v in sl.w)                                  # the PCM is unchanged by mute
+
+def test_mute_that_ends_before_the_port_does_not_count():
+    tap = WrittenEnvelope()
+    tap.mute_transition(0.0, True); tap.mute_transition(100_000.0, False)
+    tap.add_block(block(F16, 0, 256), F16, lambda x: 800_000.0 + x / 1000.0, lambda x: "program", d_out_us=0.0)
+    assert tap.slice(0, 2).muted == b"\x00\x00"
+
+def test_silence_cells_are_zero():
+    tap = WrittenEnvelope()
+    tap.add_block(block(F16, 0, 256, value=0, program=False), F16, lambda x: x / 1000.0, lambda x: "silence", d_out_us=0.0)
+    sl = tap.slice(0, 2)
+    assert sl.program == b"\x00\x00" and list(sl.w) == [0.0, 0.0]
 
 def test_cells_split_across_blocks_are_whole():
     tap = WrittenEnvelope()
-    tap.add_block(block(F16, 0, 100), F16, lambda x: x / 1000.0, lambda x: "program", muted=False, d_out_us=0.0)
+    tap.add_block(block(F16, 0, 100), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     assert tap.newest_cell() is None
-    tap.add_block(block(F16, round(100e9 / 44100), 156), F16, lambda x: x / 1000.0, lambda x: "program", muted=False, d_out_us=0.0)
+    tap.add_block(block(F16, round(100e9 / 44100), 156), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     assert tap.newest_cell() == 1
 
 def test_lookup_handles_s_stepping_back():
     """A placement insert makes s go back: the newest matching cell wins, no binary search."""
     tap = WrittenEnvelope()
     sched = lambda x: x / 1000.0 if x < 500_000_000 else x / 1000.0 - 100_000.0   # s steps back 100 ms at 0.5 s
-    tap.add_block(block(F16, 0, 44100), F16, sched, lambda x: "program", muted=False, d_out_us=0.0)
+    tap.add_block(block(F16, 0, 44100), F16, sched, lambda x: "program", d_out_us=0.0)
     i = tap.cell_near(450_000.0, around=tap.newest_cell())
     assert tap.slice(i, i + 1).s[0] == pytest.approx(450_000.0, abs=tap.cell_us / 2)
     assert i * tap.cell_us > 500_000                                   # the later, re-scheduled cell
 
 def test_reset_clears_the_ring():
     tap = WrittenEnvelope()
-    tap.add_block(block(F16, 0, 4410), F16, lambda x: x / 1000.0, lambda x: "program", muted=False, d_out_us=0.0)
+    tap.add_block(block(F16, 0, 4410), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     tap.reset()
     assert tap.newest_cell() is None
 
 def test_ring_forgets_old_cells():
     tap = WrittenEnvelope(seconds=1.0)
     for k in range(30):
-        tap.add_block(block(F16, round(k * 4410e9 / 44100), 4410), F16, lambda x: x / 1000.0, lambda x: "program", muted=False, d_out_us=0.0)
+        tap.add_block(block(F16, round(k * 4410e9 / 44100), 4410), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     n = tap.newest_cell()
     assert tap.slice(0, 10) is None and tap.slice(n - 10, n) is not None
 
@@ -1208,7 +1242,7 @@ def test_player_without_tap_installs_no_hook(playout_player_factory):
 (`playout_player_factory` follows `tests/unit/services/audio/playout/test_gst_output.py`'s player construction with fakes.)
 
 - [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement**: `to_s16` (S16 `memoryview.cast("h")`; S24 `b = bytearray(2n); b[0::2] = pcm[1::3]; b[1::2] = pcm[2::3]`; S32 with `pcm[2::4]`, `pcm[3::4]`); per channel `ch = mv[c::channels]`, `max(map(abs, map(operator.sub, ch[lag:], ch[:-lag])))` with the `lag`-frame history; partial cells carried across blocks (≤ 127 frames per channel); per cell `s`, `t = s + d_out_us`, kind, muted; ring as fixed-size arrays with a global start index and a `threading.Lock`; `unsupported` set (and nothing recorded) for formats outside `SUPPORTED_RATES × SUPPORTED_SAMPLE_BYTES`. In `_push`, `muted` = the user mute, a user volume of 0, or an active tail mute (`self._tail_until_ns is not None`); the call is wrapped in `try/except Exception` that logs once and sets `self._air_tap = None` (it never reaches the feeder).
+- [ ] **Step 3: Implement**: `to_s16` (S16 `memoryview.cast("h")`; S24 `b = bytearray(2n); b[0::2] = pcm[1::3]; b[1::2] = pcm[2::3]`; S32 with `pcm[2::4]`, `pcm[3::4]`); per channel `ch = mv[c::channels]`, `max(map(abs, map(operator.sub, ch[lag:], ch[:-lag])))` with the `lag`-frame history; partial cells carried across blocks (≤ 127 frames per channel); per cell `s`, `t = s + d_out_us`, kind; a mute timeline (RAW transitions, 30 s kept) whose state at `s_i` gives each cell's `muted` flag when a slice is read; ring as fixed-size arrays with a global start index and a `threading.Lock`; `unsupported` set (and nothing recorded) for formats outside `SUPPORTED_RATES × SUPPORTED_SAMPLE_BYTES`. `PlayoutPlayer._apply_output_volume` calls `tap.mute_transition(raw_now, muted)` whenever the effective mute changes (user mute, user volume 0, tail mute start/end); the `_push` call is wrapped in `try/except Exception` that logs once and sets `self._air_tap = None` (it never reaches the feeder).
 - [ ] **Step 4: Run** → PASS, plus `tests/unit/services/audio/playout -q -p no:cacheprovider`.
 - [ ] **Step 5: Commit** `feat(playout): written-audio envelope on the input PCM with its schedule, for the air sensor`.
 
@@ -1734,7 +1768,7 @@ async def test_garbage_lines_are_counted_not_fatal(air_child):
 ### Task A12: Parent status, API model, OpenAPI
 
 **Files:**
-- Modify: `src/sendspin_bridge/bridge/client.py` (`DeviceStatus.air_sensor: dict | None = None`; `"air_sensor"` in `_ALLOWED_STATUS_KEYS`; switch **off**: the field stays `None` and is never set; switch on: parent-side dict when the daemon does not run the sensor, `{"state": "off", "reason": <effective reason>}` or `{"state": "unavailable", "reason": <hub reason>}`), `src/sendspin_bridge/application/models/devices.py` (`AirSensorTiming`, `DeviceTiming.air_sensor`, `_air_or_none`; the key is **omitted** from the serialised `timing` when it is `None` — a field serializer/`model_serializer` on `DeviceTiming` that drops it, with the OpenAPI schema marking it not required), `ui/openapi.json` + `ui/src/api/*` (regenerated)
+- Modify: `src/sendspin_bridge/bridge/client.py` (`DeviceStatus.air_sensor: dict | None = None`; `"air_sensor"` in `_ALLOWED_STATUS_KEYS`; switch **off**: the field stays `None` and is never set; switch on: parent-side dict when the daemon does not run the sensor, `{"state": "off", "reason": <effective reason>}` or `{"state": "unavailable", "reason": <hub reason>}`), `src/sendspin_bridge/application/models/devices.py` (`AirSensorTiming`, `DeviceTiming.air_sensor: AirSensorTiming | None = None`, `_air_or_none`; serialised as `null` when there is none, like `playout`), `ui/openapi.json` + `ui/src/api/*` (regenerated)
 - Test: `tests/unit/api/test_air_sensor_api.py`
 
 **Interfaces:**
@@ -1772,12 +1806,12 @@ def test_off_device_reports_the_reason(api_client, running_device):
 
 def test_malformed_air_sensor_is_dropped(api_client, running_device):
     running_device.status.update({"air_sensor": {"state": 5, "confidence": "high"}})
-    assert "air_sensor" not in api_client.get(f"/api/v1/devices/{running_device.id}").json()["timing"]
+    assert api_client.get(f"/api/v1/devices/{running_device.id}").json()["timing"]["air_sensor"] is None
 
 def test_switch_off_has_no_air_key_anywhere(api_client, running_device, config_with):
     config_with(EXPERIMENTAL_AIR_SENSOR=False)
     body = api_client.get(f"/api/v1/devices/{running_device.id}").json()
-    assert "air_sensor" not in body["timing"] and running_device.status.get("air_sensor") is None
+    assert body["timing"]["air_sensor"] is None and running_device.status.get("air_sensor") is None
 
 def test_switch_on_but_not_effective_reports_off_with_reason(running_device_factory):
     dev = running_device_factory(EXPERIMENTAL_AIR_SENSOR=True, PLAYOUT_SYNC="off")
@@ -1791,7 +1825,7 @@ def test_openapi_lists_the_model(api_client):
     assert "AirSensorTiming" in api_client.get("/api/v1/openapi.json").json()["components"]["schemas"]
 ```
 
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** the model (validated like `_playout_or_none`; `state` must be a string), the omission when `None`, the status field, the parent-side states (switch on only); regenerate `uv run python scripts/export_openapi.py && cd ui && npm run gen:api`.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** the model (validated like `_playout_or_none`; `state` must be a string), `null` when `None`, the status field, the parent-side states (switch on only); regenerate `uv run python scripts/export_openapi.py && cd ui && npm run gen:api`.
 - [ ] **Step 4: Run** → PASS; `cd ui && npm run build`.
 - [ ] **Step 5: Commit** `feat(api): air sensor status in device timing`.
 
@@ -1907,7 +1941,7 @@ def test_player_model_validates_entries():
     from pydantic import ValidationError
     from sendspin_bridge.config.players import Player
     with pytest.raises(ValidationError):
-        Player.model_validate({"id": "p", "backend": {"type": "bluetooth", "mac": "AA:BB:CC:DD:EE:FF"},
+        Player.model_validate({"id": "p", "backend": {"type": "bluetooth_a2dp", "mac": "AA:BB:CC:DD:EE:FF"},
                                "air_to_sound_latency": [{**E, "latency_ms": -1}]})
 
 def test_calibration_change_is_hot():
@@ -2002,7 +2036,8 @@ class AirClickFold:
 
 # AirSensor
 def fold(self, to_us: float, span_s: float = 12.0) -> tuple[float | None, str | None]: ...
-    # folds program, unmuted cells with T in [to_us - span_s, to_us] on the T axis; d_comb removed
+    # folds program cells (mute ignored) with T in [to_us - span_s, to_us] on the T axis; d_comb removed;
+    # fewer than 5 s of program cells since the last reopen -> (None, "no_written_clicks")
 ```
 
 - [ ] **Step 1: Failing tests**
@@ -2027,13 +2062,20 @@ def test_written_fold_on_the_heard_axis(click_world):
     assert reason is None
     assert phase == pytest.approx((5_000_123_000.0 / 1000.0 - 1000.0) % 10_000.0, abs=0.5)
 
-def test_written_fold_ignores_muted_cells(click_world):
+def test_written_fold_ignores_mute(click_world):
+    """MA mutes the speaker during other members' solos; mute acts after the tap, the PCM still has clicks."""
     w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0, muted=True)
     w.write_seconds(14)
-    assert w.sensor.fold(w.t(13.0)) == (None, "no_clicks")
+    phase, reason = w.sensor.fold(w.t(13.0))
+    assert reason is None and phase == pytest.approx((1_000_000.0 / 1000.0 - 1000.0) % 10_000.0, abs=0.5)
+
+def test_written_fold_needs_5s_since_the_last_reopen(click_world):
+    w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0)
+    w.write_seconds(14); w.reopen(); w.write_seconds(3)
+    assert w.sensor.fold(w.t(16.5)) == (None, "no_written_clicks")
 ```
 
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement**: `AirClickFold` rows `(t_cell/1e6, frame_energy(frame))` folded with `click_phase_ms(..., encoder_delay_s = d_enc)`; the service arms one per bridge member during its solo (frames from that link's packets, `t_cell` from the tracker's anchor); the daemon's `fold` uses the tap's `T` per cell, rows `(T/1e6, 2**w)`, `click_phase_ms(rows, cell_s, 0.0, d_comb)`, `click_fold_found` → `"no_clicks"`; `AirFold` replies in `air_sensor.fold = {id, phase_ms, ok, reason}`. **Step 4: Run** → PASS.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement**: `AirClickFold` rows `(t_cell/1e6, frame_energy(frame))` folded with `click_phase_ms(..., encoder_delay_s = d_enc)`; the service arms one per bridge member during its solo (frames from that link's packets, `t_cell` from the tracker's anchor); the daemon's `fold` uses the tap's `T` per cell, rows `(T/1e6, 2**w)`, `click_phase_ms(rows, cell_s, 0.0, d_comb)` over program cells regardless of mute, `click_fold_found` or < 5 s of cells → `"no_written_clicks"`; `AirFold` replies in `air_sensor.fold = {id, phase_ms, ok, reason}`. **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(sync): click folds on the air and on the written schedule`.
 
 ### Task A16c: Wizard calibration, API and UI
@@ -2079,7 +2121,9 @@ def test_live_lock_is_not_required(sync_air_env):
     assert next(c for c in env.record_and_get_session()["air_calibrations"] if c["member"] == "eneby")["eligible"]
 
 @pytest.mark.parametrize(("kw", "reason"), [
+    ({"effective": False}, "not_effective"),
     ({"reference": None}, "no_reference"),
+    ({"acoustic": {"kiosk": 1200.0, "eneby": None}}, "not_measured"),
     ({"air_phase": {"eneby": None}}, "no_air_clicks"),
     ({"sched_phase": {"eneby": None}}, "no_written_clicks"),
     ({"air_epochs": 2}, "air_epoch_changed"),
@@ -2111,7 +2155,7 @@ def test_save_stores_entry_and_applies_it(sync_air_env):
 The `sendspin_sync` core must not change: its existing tests (`tests/unit/sendspin_sync`) run unchanged in Step 4, and review checks `git diff --stat -- src/sendspin_sync` is empty.
 
 - [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement**: the watcher thread in `start_sequence`/`capture_start` (polls `session.sequence` every 100 ms; stamps RAW at each member's `solo` start and the following `gap` start; arms the air fold at `air_span` start, finishes it at its end, then sends `AirFold` to the daemon and waits ≤ 2 s for `air_sensor.fold`); after `record_sequence`, candidates (reference = the session's reference; `A = unwrap_lag_ms(φ_spk, φ_ref)`; `H_cal = unwrap(φ_air − φ_T)` into ±5000 ms; `L_as = A − H_cal`; eligibility per the spec — no lock requirement; `delay_report_ms` from `bt_reported_delay_ms` as a hint); save via `upsert_air_latency` under `config_lock` and hot-apply; router, contract, StepTune rows with the value, the hint and a "Save as this speaker's latency" checkbox (en/ru); docs section (requirements: a reference on a headset or wired output; why).
+- [ ] **Step 3: Implement**: the watcher thread in `start_sequence`/`capture_start` (polls `session.sequence` every 100 ms; stamps RAW at each member's `solo` start and the following `gap` start; arms the air fold at `air_span` start, finishes it at its end, then sends `AirFold` to the daemon and waits ≤ 2 s for `air_sensor.fold`); after `record_sequence`, candidates (reference = the session's reference; `A = unwrap_lag_ms(φ_spk, φ_ref)`; `H_cal = unwrap(φ_air − φ_T)` into ±5000 ms; `L_as = A − H_cal`; eligibility in the spec's order with its reason list (`not_effective`, `no_reference`, `not_measured`, `not_sbc`, `air_epoch_changed`, `no_air_clicks`, `no_written_clicks`) — no lock requirement; `delay_report_ms` from `bt_reported_delay_ms` as a hint); save via `upsert_air_latency` under `config_lock` and hot-apply; router, contract, StepTune rows for eligible members with the value, the hint and a "Save as this speaker's latency" checkbox, ineligible members with their reason in words (en/ru); docs section (requirements: a reference on a headset or wired output; why).
 - [ ] **Step 4: Run** the test file, `tests/unit/sendspin_sync`, `tests/unit/api/test_sync_api.py` → PASS; regenerate OpenAPI and the SPA client; `npm test && npm run build`.
 - [ ] **Step 5: Commit** `feat(sync): calibrate a speaker's air-to-sound latency in the tuning wizard`.
 
@@ -2127,7 +2171,7 @@ The `sendspin_sync` core must not change: its existing tests (`tests/unit/sendsp
 
 - [ ] **Step 1: Calibrate** ENEBY20 once in the wizard (reference: a Sendspin web player on a headset, or the desktop reference bridge's wired output); save; note `L_as`, `spread_ms` and the Delay Report hint (absent on ENEBY20).
 - [ ] **Step 2: ≥ 8 cold starts** with the gate experiment's protocol (stop, ~6.5 s gap, new stream; MA mutes alternating the solo; one continuous headset recording; music for 60 s, then the click track for 40 s per start), with `btmon -w` running for the whole series. Save the daemon's DEBUG window lines (`t_mid`, `s_mid`, `H`, PSR) and the 1 Hz status to CSV with RAW stamps.
-- [ ] **Step 3: Primary acceptance — live vs offline `H` on the same capture.** For every confirmed live window, recompute the air time of the same PCM offline from the `btmon` capture (independent parser run with the phase tool's whole-capture anchor and the same `d_enc`), `H_offline = t_air − s_mid`. Pass: p95 of `|H_live − H_offline|` ≤ 2 ms (target ≤ 1 ms), music and clicks.
+- [ ] **Step 3: Primary acceptance — live vs offline `H` on the same capture.** For every confirmed live window, recompute the air time of the same PCM offline from the `btmon` capture (independent parser run; a **local anchor** = the median of `t_send − u` over the packets within ±1 s of the window, segmented at skips and epochs, independent of the live running median; the same `d_enc`), `H_offline = t_air − s_mid`. Add this mode to `scripts/air_envelope_corr.py` (`--offline-h daemon_windows.csv`). Pass: p95 of `|H_live − H_offline|` ≤ 2 ms (target ≤ 1 ms), music and clicks.
 - [ ] **Step 4: Microphone acceptance.** Per start `i`: `M_i` = ENEBY − reference from the estimator on the click part; `H_i` = the median live `H` of the confirmed windows whose middle lies inside exactly the span `M_i` is estimated on (same RAW span, mapped through the recording alignment). Pass: `std(M − H) ≤ 4 ms` and `var(M − H) ≤ 0.25 · var(M)` over ≥ 8 starts, with the sensor locked for ≥ 80 % of those spans. Report `median(M − H)` vs the saved `L_as` (their difference is the reference's own error).
 - [ ] **Step 5: Absolute `H` on both stands.** Repeat 3 cold starts on the PipeWire VM with an SBC speaker; record absolute `H` on both stands and confirm it lies well inside the ±500 ms acquisition range (if not, widen it and record why).
 - [ ] **Step 6: Gate, window and envelope on real music.** With `scripts/air_envelope_corr.py` on the stand captures and the private morning capture: PSR distributions of confirmed and rejected windows with the implementation's definition at 3 s and at 5.8 s windows, comb vs band-pass envelope. Set `PSR_GATE` (target: < 1 % false confirms on noise windows — source WAV of another track — and ≥ 80 % of music windows confirmed), keep or switch the envelope (R-7: band-pass if the comb is > 0.05 worse), keep or change the window (R-16) and N (R-10). Re-run the unit and simulation tests after any constant change.
