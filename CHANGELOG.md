@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.17] - 2026-10-28
+
 ### Added
 
 - Device details show the delay a Bluetooth speaker reports for itself

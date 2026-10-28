@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.17] - 2026-10-28
+
+### Added
+
+- Device details show the delay a Bluetooth speaker reports for itself
+  (A2DP Delay Reporting) when the speaker supports it, and the log notes
+  when that reported delay appears or changes by 1 ms or more; speakers
+  that do not report a delay show nothing extra.
+
+### Changed
+
+- **Recover a missing audio sink** (experimental): a speaker that is
+  both an audio source and an audio sink, such as an Amazon Echo, is
+  asked for its audio sink as soon as it connects, including when it
+  reconnects on its own, before it can start sending audio to the
+  bridge. When no audio output appears, the bridge asks again while the
+  speaker's source stays connected, and only if that is refused drops
+  the source and asks once more; each step and BlueZ's reason for a
+  refusal is logged. Such a speaker that refuses and drops the link is
+  no longer disconnected and reconnected, which locked an Echo out
+  until it was paired again
+  ([#476](https://github.com/trudenboy/sendspin-bt-bridge/issues/476)).
+- Under the Home Assistant add-on, the Log level setting and the log
+  viewer note that the add-on's own `log_level` option sets the level
+  again on every restart
+  ([#476](https://github.com/trudenboy/sendspin-bt-bridge/issues/476)).
+
+### Fixed
+
+- Refused Bluetooth profile requests now log BlueZ's reason instead of
+  a bare "refused", and a failed A2DP sink request on connect is logged
+  with its reason ([#476](https://github.com/trudenboy/sendspin-bt-bridge/issues/476)).
+
 ## [3.1.0-beta.16] - 2026-10-27
 
 ### Fixed
