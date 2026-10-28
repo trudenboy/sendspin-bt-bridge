@@ -32,9 +32,19 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
-from sendspin_bridge.services.ipc.commands import InvalidCommand, UnknownCommand, decode_command
+from sendspin_bridge.services.ipc.commands import (
+    AIR_COMMAND_NAMES,
+    AirEnvelope,
+    AirFold,
+    AirSource,
+    InvalidCommand,
+    SetAirCalibration,
+    UnknownCommand,
+    decode_command,
+)
 from sendspin_bridge.services.ipc.ipc_protocol import (
     IPC_PROTOCOL_VERSION,
     IPC_PROTOCOL_VERSION_KEY,
@@ -485,6 +495,35 @@ async def _startup_sink_routing_watcher(
         was_streaming = is_streaming
 
 
+def _dispatch_air_command(daemon: Any, raw: dict) -> None:
+    """Decode one air command and hand it to the daemon; nothing raised, nothing raw logged.
+
+    Air traffic is high-rate and comes from a peer that may be ahead of or
+    behind this build, so an invalid message is dropped and counted (one
+    WARNING per 10 min) instead of becoming an ``invalid_command`` error.
+    A daemon without an air sensor ignores the verbs without decoding them.
+    """
+    if daemon is None:
+        return
+    if not daemon.air_accepts():
+        daemon.air_ignore()
+        return
+    try:
+        command = decode_command(raw)
+    except InvalidCommand as exc:
+        daemon.air_note_invalid(str(exc))
+        return
+    except Exception:
+        daemon.air_note_invalid("undecodable")
+        return
+    if not isinstance(command, (AirEnvelope, AirSource, SetAirCalibration, AirFold)):
+        return
+    try:
+        daemon.air_intake(command)
+    except Exception:
+        logger.debug("air intake failed", exc_info=True)
+
+
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink_name: str | None = None) -> None:
     """Read JSON commands from stdin and dispatch them."""
     loop = asyncio.get_running_loop()
@@ -504,6 +543,12 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
         except (json.JSONDecodeError, ValueError):
             continue
         if cmd is None:
+            continue
+
+        # Air verbs carry their own payload version and are validated, counted
+        # and rate-limited on their own path (never the per-message warning).
+        if cmd.cmd in AIR_COMMAND_NAMES:
+            _dispatch_air_command(daemon_ref[0] if daemon_ref else None, cmd.raw)
             continue
 
         protocol_version = cmd.protocol_version

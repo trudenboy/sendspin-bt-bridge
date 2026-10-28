@@ -13,11 +13,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from sendspin_bridge.services.ipc.commands import AirCommand
 
 from aiosendspin.models.core import (
     DeviceInfo,
@@ -33,6 +35,8 @@ from sendspin_bridge.services.audio.player.player import InPlaceShift, PcmFormat
 from sendspin_bridge.services.audio.playout.engine import PlayoutSettings
 from sendspin_bridge.services.audio.playout.gst_output import LEAD_MS as _PLAYOUT_LEAD_MS
 from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer
+from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
+from sendspin_bridge.services.ipc.commands import AIR_ENVELOPE_VERSION
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
 from sendspin_bridge.services.ipc.status_store import StatusStore
 
@@ -123,6 +127,16 @@ class DaemonArgs:
     playout_mode: str = "off"
     # The spawn's ``playout`` dict: PlayoutSettings fields beyond the mode.
     playout: dict | None = None
+
+
+class AirSink(Protocol):
+    """Where the daemon hands validated air commands (the AirSensor, wired in later).
+
+    ``submit`` runs on the daemon loop and must not block; whatever it raises is
+    counted and contained by :meth:`BridgeDaemon.air_intake`.
+    """
+
+    def submit(self, command: AirCommand) -> None: ...
 
 
 class BridgeDaemon:
@@ -216,6 +230,45 @@ class BridgeDaemon:
         self._warned_hung_open = False
         self._first_arrival_lead_us: int | None = None
         self._warned_min_latency = False
+        # Air commands from the parent: validated ones go to the sink; without
+        # one they are counted as ignored (R-6: the parent should not send them).
+        self._air_sink: AirSink | None = None
+        self.air_counters: dict[str, int] = {"accepted": 0, "ignored": 0, "invalid": 0, "errors": 0}
+        self.air_log = RateLimitedLog(logger, clock=time.monotonic)
+
+    def attach_air_sink(self, sink: AirSink) -> None:
+        self._air_sink = sink
+
+    def detach_air_sink(self) -> None:
+        self._air_sink = None
+
+    def air_accepts(self) -> list[int]:
+        """The air payload versions this daemon takes now (``air_sensor.accepts``)."""
+        return [AIR_ENVELOPE_VERSION] if self._air_sink is not None else []
+
+    def air_intake(self, command: AirCommand) -> None:
+        """Hand one validated air command to the sink; never raises."""
+        sink = self._air_sink
+        if sink is None:
+            self.air_ignore()
+            return
+        try:
+            sink.submit(command)
+        except Exception as exc:
+            self.air_counters["errors"] += 1
+            self.air_log.warning("errors", "Air sensor rejected a command: %s", type(exc).__name__)
+            return
+        self.air_counters["accepted"] += 1
+
+    def air_ignore(self) -> None:
+        """Count one air command that arrived while no sensor takes them."""
+        self.air_counters["ignored"] += 1
+        self.air_log.warning("ignored", "Ignoring air commands: this daemon has no air sensor")
+
+    def air_note_invalid(self, reason: str) -> None:
+        """Count one dropped air message; ``reason`` names the field, never its value."""
+        self.air_counters["invalid"] += 1
+        self.air_log.warning("invalid", "Dropping invalid air command (%s); one warning per 10 min", reason)
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
