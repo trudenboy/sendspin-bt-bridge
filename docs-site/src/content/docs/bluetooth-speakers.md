@@ -101,14 +101,16 @@ The air sensor measures when each speaker's audio actually leaves the host over 
 - The source is 44.1 or 48 kHz at 16 to 32 bit; anything else shows *Unsupported input*.
 - The bridge can open the kernel's HCI monitor, which needs `CAP_NET_RAW` (Linux only). The Home Assistant add-on already has it. Docker needs `NET_RAW` in `cap_add`, as in the documented compose file (see [Docker](/installation/docker/)). LXC and systemd installs run the bridge as root and have it unless the container drops that capability. Without it the panel shows *Unavailable* with "needs CAP_NET_RAW".
 
-**CPU.** On the Home Assistant OS test VM (x86, 2 vCPU) the monitor reader used about **2.6 % of one core per streaming speaker**. If the sensor ever uses too much processor time, a per-speaker guard stops it and the panel says so. The cost on a Raspberry Pi has not been measured yet.
+**CPU.** On the Home Assistant OS test VM (x86, 2 vCPU) the bridge's Bluetooth monitor reader used 5.0–5.5 % of one core with two streaming links (one speaker playing music, one on a keep-alive stream), about **2.6 % per streaming speaker**. The per-speaker correlation in the speaker's own process was not measured separately. If the sensor ever uses too much processor time, a per-speaker guard stops it and the panel says so. The cost on a Raspberry Pi has not been measured yet.
+
+**How far to trust it.** On the test stand the live air times matched an independent offline analysis of the same Bluetooth capture within 0.04 ms (p95). That check compares window against window, so it does not cover an offset common to a whole stream; the microphone measurements cover the absolute side (see Calibration below).
 
 **The Timing panel.** With the switch on, each speaker's **Timing** panel has an **Air sensor** block, and the device card shows a chip such as `air: Locked, H -32.1 ms`.
 
 | Row | Meaning |
 |---|---|
 | **State** | One of the states below; when the sensor is off for this speaker or unavailable, the reason is shown |
-| **Host placement** | `H`: how far before (negative) or after its schedule the audio left over the air, the median of the last five confirmed windows. It stops at the air: the speaker's own air-to-sound latency is not in it. On the test stand `H` was −31 to −45 ms per stream start and moved by 0.1–0.2 ms from window to window |
+| **Host placement** | `H`: how far before (negative) or after its schedule the audio left over the air, the median of the last five confirmed windows. It stops at the air: the speaker's own air-to-sound latency is not in it. On the test stand `H` was −31 to −45 ms per stream start, with σ ≈ 0.2 ms within a stream (range ≤ 0.9 ms per start) |
 | **Air error** | With a calibration: the speaker's lateness at the sound, `H` plus its calibrated air-to-sound latency minus the delay set for it. Without one the row says **Needs calibration** |
 | **Confidence** | 0 to 1, from the peak ratio and the share of confirmed windows; it falls while the sensor is holding |
 | **Peak ratio (PSR)** | How clearly the last confirmed window matched; a window needs at least 1.17, music usually gives 2 to 4 |
