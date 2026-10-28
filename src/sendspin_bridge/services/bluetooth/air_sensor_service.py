@@ -117,7 +117,7 @@ class AirSensorService:
         parser: A2dpAirParser | None = None,
         tick_s: float = 0.25,
         queue_len: int = 16,
-        cpu_per_speaker: float = 0.015,
+        cpu_per_speaker: float = 0.04,
         cpu_window_s: float = CPU_WINDOW_S,
         clock: Callable[[], float] = _default_clock,
     ) -> None:

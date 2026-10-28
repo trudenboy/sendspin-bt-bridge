@@ -227,19 +227,19 @@ async def test_hub_without_permission_reports_unavailable(air_env):
 
 
 async def test_cpu_guard_scales_with_streaming_speakers(air_env):
-    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.025, streaming_links=2)
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.06, streaming_links=2)
     env.service.subscribe(ENEBY)
     await env.ticks(2)
-    assert env.hub.consumers_wanting_acl_tx() == 1  # 2.5 % < 2 x 1.5 %: within budget
-    env.hub.set_counters(cpu_fraction=0.025, streaming_links=1)
-    await env.ticks(2)  # two windows over 1 x 1.5 %
+    assert env.hub.consumers_wanting_acl_tx() == 1  # 6 % < 2 x 4 %: within budget
+    env.hub.set_counters(cpu_fraction=0.06, streaming_links=1)
+    await env.ticks(2)  # two windows over 1 x 4 %
     assert env.hub.consumers_wanting_acl_tx() == 0
     src = [c for c in env.client(ENEBY).sent if isinstance(c, AirSource)][-1]
     assert src.reason == "cpu_budget"
 
 
 async def test_one_window_over_budget_does_not_trip_the_guard(air_env):
-    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.025, streaming_links=1)
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.06, streaming_links=1)
     env.service.subscribe(ENEBY)
     await env.ticks(1)
     env.hub.set_counters(cpu_fraction=0.001)

@@ -5,7 +5,7 @@ Runs the capture's records through the live path — ``A2dpAirParser(check_crc="
 decode_frames=False)`` and one
 ``AirLinkTracker`` per link, batches taken every 250 ms of capture time — ``--repeat`` times and
 prints the cost per monitor record and the projected fraction of one core per streaming speaker
-at 150 records/s (the budget is 0.015 per speaker). ``--crc all`` measures full CRC checking.
+at 150 records/s (the budget is 0.04 per speaker). ``--crc all`` measures full CRC checking.
 
 ``--hub`` also replays the capture through the monitor hub's reader (``HciMonitorHub`` serving a
 fake socket that returns the records as monitor datagrams with kernel timestamps, on the hub's own
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 DEFAULT_CAPTURE = ROOT / "tests" / "fixtures" / "a2dp_air" / "eneby_clicks.btsnoop.gz"
 RECORDS_PER_S = 150
-BUDGET_PER_SPEAKER = 0.015
+BUDGET_PER_SPEAKER = 0.04
 TAKE_EVERY_S = 0.25
 
 

@@ -316,7 +316,7 @@ switch anchors later together with a re-calibration.
   `get_write_buffer_size()` checked first (above 64 KiB it skips this round instead of awaiting
   `drain()`).
 - CPU guard **per streaming speaker** (controller ruling): the hub measures its own thread time
-  (`time.thread_time()`) per 30 s window and compares it with `budget = 0.015 × n_streaming`
+  (`time.thread_time()`) per 30 s window and compares it with `budget = 0.04 × n_streaming (R-19: raised from 0.015 after the HAOS VM bench)`
   (1.5 % of one core per speaker that sent media in the window, minimum one speaker). Above budget
   for two consecutive windows the air consumer is unsubscribed (AVRCP continues) and every device
   reports `unavailable: cpu_budget` until the next restart. The value is a fraction
@@ -1037,3 +1037,9 @@ Rulings (controller, after the test):
   late until PulseAudio's skip realigns it. A17 verifies this acoustically (microphone + HCI capture
   on ENEBY at the same time). The count-axis refactor and the daemon's skip-window placement fix
   stay (equivalent / correct). ENEBY's congested link on the shared adapter is tracked in #562.
+- **R-19 result (A4c).** Live parse path made 3–4× cheaper (frames walked without full decoding,
+  band scale factors read in place, hub routing by declared opcodes); results byte-identical on the
+  fixtures. HAOS VM bench: parser + tracker 60 → 20 µs/record; through the hub 57 µs/record (clicks)
+  / 80 µs (music), of which the hub's own share is 36–43 µs. At ENEBY's real rate that is ≈ 1.4 % of
+  a core per speaker. Budget set to 0.04 per streaming speaker (guard against runaway, not normal
+  load); A17 checks the live figure.
