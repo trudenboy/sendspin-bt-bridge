@@ -772,3 +772,56 @@ async def test_a_resubscribe_continues_the_speakers_epochs(air_env):
     await env.ticks(8)
     second = [c.epoch for c in env.client(ENEBY).sent if isinstance(c, AirEnvelope)]
     assert second and min(second) > max(first)
+
+
+# -- the service contains its own errors (a late death never leaves stale sources) -----------------
+
+
+async def test_a_dying_run_hands_over_to_an_unavailable_stand_in(air_env, monkeypatch, caplog):
+    from sendspin_bridge.services.bluetooth import air_sensor_service as air_mod
+
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    resubscribed: list[str] = []
+    service = env.service
+
+    def resync():
+        current = air_mod.get_air_sensor_service()
+        service.unsubscribe(ENEBY) if current is not service else None
+        current.subscribe(ENEBY)
+        resubscribed.append(type(current).__name__)
+
+    env.client(ENEBY).sync_air_subscription = resync
+    air_mod.set_air_sensor_service(service)
+    service.subscribe(ENEBY)
+    assert env.hub.consumers_wanting_acl_tx() == 1
+    monkeypatch.setattr(service, "_tick_s", None)  # the loop's own sleep fails: run() dies late
+    task = asyncio.create_task(service.run())
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert not task.done()  # it keeps running as the stand-in
+    stand_in = air_mod.get_air_sensor_service()
+    assert isinstance(stand_in, air_mod.UnavailableAirSensorService)
+    assert stand_in.status() == {"state": "failed", "reason": "internal_error"}
+    assert resubscribed == ["UnavailableAirSensorService"]
+    assert env.hub.consumers_wanting_acl_tx() == 0  # no longer a hub consumer
+    src = [c for c in env.client(ENEBY).sent if isinstance(c, AirSource)][-1]
+    assert (src.state, src.reason) == ("unavailable", "internal_error")
+    assert any("air sensor" in r.getMessage().lower() for r in caplog.records)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert air_mod.get_air_sensor_service() is None  # the stand-in leaves with the task
+    air_mod.set_air_sensor_service(None)
+
+
+async def test_a_dead_sender_is_restarted_by_the_next_tick(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    await env.ticks(1)
+    dev = env.service._devices[ENEBY]
+    dev.task.cancel()  # the sender died
+    await env.ticks(1)
+    env.client(ENEBY).sent.clear()
+    await env.replay_fixture()
+    await env.ticks(8)
+    assert [c for c in env.client(ENEBY).sent if isinstance(c, AirEnvelope)]

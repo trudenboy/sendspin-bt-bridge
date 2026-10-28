@@ -286,6 +286,7 @@ class AirSensorService:
         self._cpu_window_seen: int | None = None  # the hub's last counted window (cpu_windows)
         self._logged_at: dict[str, float] = {}
         self._stopped = False
+        self._failed: str | None = None  # the run loop died (internal_error): off for good
         # Calibration folds (guarded by self._lock): id -> (mac, fold), and each mac's armed id.
         self._folds: dict[str, tuple[str, AirClickFold]] = {}
         self._fold_of: dict[str, str] = {}
@@ -330,7 +331,9 @@ class AirSensorService:
         self._sync_registration()
 
     def status(self) -> dict[str, str | None]:
-        """For diagnostics: ``running``, or ``tripped`` (``cpu_budget``) until the next restart."""
+        """For diagnostics: ``running``, ``tripped`` (``cpu_budget``) or ``failed`` until the next restart."""
+        if self._failed is not None:
+            return {"state": "failed", "reason": self._failed}
         if self._tripped:
             return {"state": "tripped", "reason": "cpu_budget"}
         return {"state": "running", "reason": None}
@@ -356,7 +359,7 @@ class AirSensorService:
         # Hub calls happen outside self._lock: a hub may greet a consumer synchronously.
         with self._registration_lock:
             with self._lock:
-                want = bool(self._devices) and not self._tripped and not self._stopped
+                want = bool(self._devices) and not self._tripped and not self._stopped and self._failed is None
             if want and not self._registered:
                 self._hub.add_consumer(self)
                 self._registered = True
@@ -490,16 +493,50 @@ class AirSensorService:
     # ------------------------------------------------------------------ bridge loop
 
     async def run(self) -> None:
-        """Tick every ``tick_s`` until cancelled; the sender tasks stop with it."""
+        """Tick every ``tick_s`` until cancelled; the sender tasks stop with it.
+
+        Contains its own errors: a failing tick is logged (once per 10 min) and the loop goes on;
+        should the loop itself die, the service leaves the hub and hands over to an
+        :class:`UnavailableAirSensorService` (``internal_error``) that every subscribed speaker
+        resubscribes to, so no daemon keeps a stale source."""
         try:
             while True:
-                try:
-                    self.tick()
-                except Exception:
-                    self._log_once("tick", "AirSensorService: tick failed", exc_info=True)
+                self._tick_safely()
                 await asyncio.sleep(self._tick_s)
+        except Exception:
+            logger.warning(
+                "Air sensor: the service stopped unexpectedly — air sensor unavailable until the next restart "
+                "(internal_error)",
+                exc_info=True,
+            )
+            await self._hand_over("internal_error")
         finally:
             await self._cancel_senders()
+
+    async def _hand_over(self, reason: str) -> None:
+        """The loop died: leave the hub, drop every fold, and run a stand-in in this task."""
+        self._failed = reason
+        with self._lock:
+            macs = list(self._devices)
+            self._folds.clear()
+            self._fold_of.clear()
+        self._sync_registration()
+        await self._cancel_senders()
+        if get_air_sensor_service() is not self:  # withdrawn (shutdown) or replaced meanwhile
+            return
+        stand_in = UnavailableAirSensorService(loop=self._loop, resolve_client=self._resolve_client, reason=reason)
+        set_air_sensor_service(stand_in)
+        for mac in macs:
+            sync = getattr(self._resolve_client(mac), "sync_air_subscription", None)
+            if callable(sync):
+                with contextlib.suppress(Exception):
+                    sync()
+        try:
+            await stand_in.run()
+        finally:
+            if get_air_sensor_service() is stand_in:
+                set_air_sensor_service(None)
+            await stand_in.stop()
 
     async def stop(self) -> None:
         self._stopped = True
@@ -533,7 +570,9 @@ class AirSensorService:
             with self._lock:
                 # Re-checked under the lock: an unsubscribe (any thread) since the snapshot above
                 # must not leave an orphan sender behind.
-                if dev.task is None and not self._stopped and self._devices.get(dev.mac) is dev:
+                # A sender that died (it never should) is replaced.
+                alive = dev.task is not None and not dev.task.done()
+                if not alive and not self._stopped and self._failed is None and self._devices.get(dev.mac) is dev:
                     dev.task = self._loop.create_task(self._sender(dev), name=f"air-sender-{dev.mac}")
             if resend:
                 dev.source_at = None
@@ -560,17 +599,24 @@ class AirSensorService:
         while True:
             await dev.wake.wait()
             dev.wake.clear()
-            client = self._resolve_client(dev.mac)
-            if not air_accepts(client):
-                continue
-            if dev.source_pending is not None:
-                if not self._send(client, dev.source_pending):
-                    continue
-                dev.source_pending = None
-            while dev.queue:
-                if not self._send(client, dev.queue[0]):
-                    break
-                dev.queue.popleft()
+            try:
+                self._send_round(dev)
+            except Exception:
+                self._log_once("sender", "AirSensorService: air sender round failed", exc_info=True)
+
+    def _send_round(self, dev: _Device) -> None:
+        """One wake-up: the pending source first, then the queued batches (a refused write waits)."""
+        client = self._resolve_client(dev.mac)
+        if not air_accepts(client):
+            return
+        if dev.source_pending is not None:
+            if not self._send(client, dev.source_pending):
+                return
+            dev.source_pending = None
+        while dev.queue:
+            if not self._send(client, dev.queue[0]):
+                break
+            dev.queue.popleft()
 
     def _call_on_loop(self, fn: Callable[[], Any]) -> None:
         _call_on_loop(self._loop, fn)
