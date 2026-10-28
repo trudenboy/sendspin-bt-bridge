@@ -9,6 +9,7 @@ so any change in an energy cell, a time, a flag or a batch boundary changes them
 from __future__ import annotations
 
 import hashlib
+import struct
 from dataclasses import replace
 from pathlib import Path
 
@@ -16,7 +17,7 @@ import pytest
 
 from sendspin_bridge.services.bluetooth.a2dp_air import A2dpAirParser, MonitorRecord, read_btsnoop
 from sendspin_bridge.services.bluetooth.a2dp_air_envelope import AirLinkTracker
-from sendspin_bridge.services.bluetooth.hci_socket import MONITOR_ACL_TX_PKT
+from sendspin_bridge.services.bluetooth.hci_socket import MONITOR_ACL_RX_PKT, MONITOR_ACL_TX_PKT, MONITOR_EVENT_PKT
 
 FIX = Path(__file__).resolve().parents[3] / "fixtures" / "a2dp_air"
 TAKE_EVERY_S = 0.25
@@ -43,6 +44,25 @@ def _drop_at(records: list[MonitorRecord], k: int) -> list[MonitorRecord]:
     return [replace(r, drops=1 if i >= k else 0) for i, r in enumerate(records)]
 
 
+def _noise(records: list[MonitorRecord]) -> list[MonitorRecord]:
+    """Interleave traffic the air path does not use — ACL RX, LE advertising reports, Command
+    Complete, SCO — between the records (never first): the batches must not change."""
+    noise = [
+        (MONITOR_ACL_RX_PKT, struct.pack("<HH", 0x0046, 8) + b"\x04\x00\x41\x00abcd"),
+        (MONITOR_EVENT_PKT, bytes([0x3E, 12, 0x02, 0x01]) + bytes(10)),
+        (MONITOR_EVENT_PKT, bytes([0x0E, 4, 0x01, 0x03, 0x0C, 0x00])),
+        (6, b"\x01\x00\x03abc"),  # SCO TX
+    ]
+    out: list[MonitorRecord] = []
+    for i, rec in enumerate(records):
+        out.append(rec)
+        if i + 1 < len(records):
+            opcode, payload = noise[i % len(noise)]
+            # at the same time as the record before it: the harness's take cadence stays the same
+            out.append(MonitorRecord(rec.t, rec.index, opcode, payload, rec.drops))
+    return out
+
+
 def _variant(name: str) -> list[MonitorRecord]:
     fixture, _, kind = name.partition(":")
     records = list(read_btsnoop(FIX / f"{fixture}.btsnoop.gz"))
@@ -50,6 +70,8 @@ def _variant(name: str) -> list[MonitorRecord]:
         return _corrupt(records, 3, 37)
     if kind == "corrupt_b":
         return _corrupt(records, 5, 11)
+    if kind == "noise":
+        return _noise(records)
     if kind == "drop":
         return _drop_at(records, len(records) // 2)
     return records
@@ -88,10 +110,15 @@ GOLDEN: dict[str, tuple[int, str]] = {
     "eneby_clicks": (19, "5c4a8e5668ba7e679a32c78e09762793cb3b42e59e68b62a4a17eb96556464d2"),
     "eneby_clicks:corrupt_a": (19, "eaf9532e5c6c1cae779239cd0bf8b676ae2e338a695e9518c7b0f57dd6225872"),
     "eneby_clicks:corrupt_b": (17, "ef4e1daa68208752f865de6d3be4ecc1c091ce3126f3d1b6594e6dcae4d1c40c"),
+    "eneby_clicks:noise": (
+        19,
+        "5c4a8e5668ba7e679a32c78e09762793cb3b42e59e68b62a4a17eb96556464d2",
+    ),  # = clean: the air path ignores the noise
     "eneby_clicks:drop": (19, "2666afb3749f5fbb527679041bf237fabeced90391f5e0644f563894243df408"),
     "air_music": (58, "4dbff0ab79fab326c4c7d07bad47c777cce3cf67a7f976616f437c47dca51279"),
     "air_music:corrupt_a": (37, "5afa4c0e6bcb844a3b1a55bb38adff2e6cfb9b4903113a6fba0aa051c9cd3247"),
     "air_music:corrupt_b": (32, "b1ee57b36f6b82d4622807868379e3d6b28d28c5526bbb203caeb4eab04dca6b"),
+    "air_music:noise": (58, "4dbff0ab79fab326c4c7d07bad47c777cce3cf67a7f976616f437c47dca51279"),  # = clean
     "air_music:drop": (58, "2e67216840de27b0ac4c6dbf79c7e0bb5e8c70f35366e9f3c547bc8ea074da8d"),
 }
 
