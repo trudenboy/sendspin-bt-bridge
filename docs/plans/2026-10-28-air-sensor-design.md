@@ -120,7 +120,7 @@ Times are `CLOCK_MONOTONIC_RAW` µs (the Sendspin timeline of the playout spec) 
 | `u` | RTP media time of a frame's first sample, in seconds (unwrapped RTP timestamp / codec rate). |
 | `α` | The send anchor of the current anchor segment: `t_send − u` (running median, below). |
 | `d_enc` | Lag of the SBC scale-factor energy behind the PCM it encodes: `4.5·M / rate` (the encoder's analysis delay, `sbc_encoder_delay_samples`; 0.82 ms for M = 8 at 44.1 kHz). |
-| `d_comb` | Lag of the written envelope behind the PCM: 1.5 input samples (the comb `x[n] − x[n−3]` is centred 1.5 samples back). |
+| `d_comb` | Lag of the written envelope behind the PCM: `(d + 9·M)/2` input samples — the comb `x[n] − x[n−3]` is centred 1.5 samples back and the cell's span reaches `9·M` frames back (look-back, controller ruling after A10); 37.5 samples for M = 8. |
 | `t_air(p)` | Air time of the PCM sample `p` whose RTP media time is `u_p`: `t_air = u_p + α`. An air **energy** cell at media time `u_j` describes PCM at `u_j − d_enc`, so the air time of the PCM behind cell `j` is `t_j − d_enc`, with `t_j = u_j + α`. |
 | `L_as` | The speaker's air-to-sound latency (calibrated per speaker × codec × adapter). |
 | `H` | Host-side placement: `H = t_air(p) − s(p)` for the same PCM sample `p`; from matched energy cells `H = t_j − s_i − (d_enc − d_comb)` (see "Correlation", step 8). |
@@ -425,11 +425,18 @@ packed in 3 bytes, or S32LE, at 44.1, 48, 88.2 or 96 kHz (the daemon advertises 
   the written cells onto the air grid by linear interpolation in time before correlating.
 - **Envelope:** comb high-pass `y[n] = x[n] − x[n−d]` on each channel, `d = 3` at 44.1 and 48 kHz
   (the lag is chosen per input rate: `d = round(f_in / 14 700)`), cell value
-  `w_i = log2(1 + max |y|)` over the cell, both channels. `|H(f)| = 2|sin(dπf/f_s)|` peaks at
+  `w_i = log2(1 + max |y|)` over the cell **and the `9·M` input frames before it** (both channels;
+  the look-back, controller ruling after A10: an SBC frame's scale factors see its own `B·M`
+  samples and the `9·M` before them — libsbc 1.3.1 responds to an impulse at `128k − 72 … 128k +
+  126` — so with the same span both envelopes rise and fall on the same samples whatever the
+  attack and decay; without it onset-heavy music biased `H` by −0.76 ms on the A10 truth while
+  clicks stayed within the fold's error. `M` comes from the air side, 8 until known; at different
+  input/SBC rates the span is scaled to input frames). `|H(f)| = 2|sin(dπf/f_s)|` peaks at
   `f_s/2d` (7.35 kHz at 44.1 kHz, 8 kHz at 48 kHz), is ≥ 1.1 over 2.7–8.3 kHz and −27 dB at
   200 Hz: close to the sub-bands 1–2 the air side uses, and computable at C speed with
   `map(operator.sub, …)`/`map(abs, …)`/`max` on the 16-bit views (≈ 4 ms of CPU per second of
-  stereo audio). Its group delay is `d_comb = d/2` samples.
+  stereo audio). Its group delay is `d/2` samples; with the look-back the cell is centred
+  `(d + 9·M)/2` samples back, `d_comb`.
 - **Per cell** the tap stores: `w_i`; `s_i = ScheduleMap.at(x_i)` at render time (the map always
   covers the write head); `T_i = s_i + D_out` with the output delay at write time; the kind from
   `ScheduleMap.kind_at` (`program` / `silence`, the map's own `SegmentKind`). Silence cells get
@@ -463,6 +470,9 @@ differences lower the peak a little. The comparison must be made on **real music
 capture (offline, with the repo tool of Task A8b) and the A17 stand captures. If the comb's PSR is
 more than 0.05 below the band-pass's on the same windows, the band-pass replaces it (the interface
 does not change). The synthetic fixture is not representative for this choice.
+**Amended (controller ruling after A10):** the cell's peak spans the cell plus `9·M` input frames
+before it (the SBC frame's own span), and `d_comb` credits that centre shift; accepted pending
+real-music confirmation in A17. The offline tool (A8b) uses the same span.
 
 **Ruling R-8: the written envelope is taken from the PCM the engine writes, before the user's
 volume; mute is a property of the port time.** Volume is applied in pulsesink, after the tap; the
@@ -532,10 +542,11 @@ written partner is older than the ring's newest cell):
    cell (a real `c` step persists; a wrong peak does not).
 8. **Placement.** With `j_m` the window's middle cell and `i_m = j_m + L` (fractional; `s`
    interpolated linearly between cells, never across a segment boundary — a window whose matched span
-   crosses a schedule discontinuity reports the side that holds most of the window):
+   crosses a schedule discontinuity reports the segment that holds the window's middle, else the
+   longest one):
 
    ```
-   H = t_{j_m} − s(i_m) − (d_enc − d_comb)      d_enc = 4.5·M / rate,  d_comb = (d/2) / f_in
+   H = t_{j_m} − s(i_m) − (d_enc − d_comb)      d_enc = 4.5·M / rate,  d_comb = ((d + 9·M)/2) / f_in
    E = H + L_as − D_out                          (only with a calibration)
    ```
 
@@ -543,7 +554,8 @@ written partner is older than the ring's newest cell):
    `sbc_encoder_delay_samples` in the phase tool), so that PCM left over the air at
    `t_j − d_enc`; the written energy at cell `i` describes PCM `d_comb` earlier, scheduled at
    `s_i − d_comb`. The difference of the two PCM-instant times is `H`. For M = 8 at 44.1 kHz,
-   `d_enc − d_comb` = 0.816 − 0.034 = 0.78 ms. (Rev. 1 of this spec had the sign reversed; the
+   `d_enc − d_comb` = 0.816 − 0.850 = −0.034 ms (the look-back cancels `d_enc`; before the A10
+   ruling it was 0.816 − 0.034 = 0.78 ms). (Rev. 1 of this spec had the sign reversed; the
    review caught it.)
 
 Accuracy targets (to be measured in Tasks A10/A17, not assumed): per confirmed window σ(H) ≤ 1 ms
