@@ -58,7 +58,8 @@ describe('AirCalibrations', () => {
   })
 
   it('every reason has words in English and Russian', () => {
-    const reasons = ['not_effective', 'no_reference', 'not_measured', 'not_sbc', 'air_epoch_changed', 'no_air_clicks', 'no_written_clicks']
+    const reasons = ['not_effective', 'no_reference', 'not_measured', 'not_sbc', 'air_epoch_changed', 'no_air_clicks', 'no_written_clicks',
+      'fold_failed', 'no_air_frames']
     for (const locale of ['en', 'ru']) {
       const w = mountIt(session({ air_calibrations: reasons.map((r) => candidate({ eligible: false, reason: r, latency_ms: null, member: r })) }), locale)
       for (const r of reasons) {
@@ -110,5 +111,12 @@ describe('AirCalibrations', () => {
     await select.setValue('kiosk')
     await flushPromises()
     expect(api.sessionReference).toHaveBeenCalledWith('s1', 'kiosk')
+  })
+
+  it('the reference picker says what to pick and that it also sets the reference for proposals', () => {
+    const en_ = mountIt(session()).get('[data-air-reference-hint]').text().toLowerCase()
+    expect(en_).toContain('pick a headset, wired output or another reference that plays on schedule')
+    expect(en_).toContain('proposed delays')
+    expect(mountIt(session(), 'ru').get('[data-air-reference-hint]').text()).toContain('наушники')
   })
 })

@@ -136,6 +136,7 @@ def sync_air_env(monkeypatch, tmp_config, tmp_path, api_client):
         effective: bool = True,
         switch: bool = True,
         air_epochs: int = 1,
+        air_frames: int = 900,
         codec: str = "sbc",
         host_latency_ms: float | None = 800.0,
         delay_report_ms: float | None = 150.0,
@@ -207,10 +208,12 @@ def sync_air_env(monkeypatch, tmp_config, tmp_path, api_client):
             client._update_status({"air_sensor": {**client.status.get("air_sensor"), "fold": fold}})
 
         def air_result(mac):
-            if codec != "sbc":
+            if codec != "sbc" or air_frames == 0:  # no SBC frame in the span: what the real fold returns
                 return AirFoldResult(None, False, 0, None, None, None, reason="not_sbc")
             if air_epochs > 1:
-                return AirFoldResult(None, False, air_epochs, "sbc", 44100, ADAPTER, reason="air_epoch_changed")
+                return AirFoldResult(
+                    None, False, air_epochs, "sbc", 44100, ADAPTER, reason="air_epoch_changed", frames=900
+                )
             phase = air_phase.get("eneby")
             if phase is None:
                 return AirFoldResult(None, False, 1, "sbc", 44100, ADAPTER, reason="no_air_clicks", frames=900)
@@ -523,3 +526,65 @@ def test_a_latency_outside_the_stored_range_is_refused(sync_air_env):
     assert c["latency_ms"] == pytest.approx(-85.0)
     r = env.client.post(f"/api/v1/sync/sessions/{env.sid}/air-calibrations", json={"members": ["eneby"]})
     assert r.status_code == 409 and r.json()["code"] == "not_eligible"
+
+
+# -- follow-up: late folds, distinct fold failures, reference events -------------------------------
+
+
+def test_an_armed_fold_without_air_frames_on_an_sbc_stream_is_no_air_frames(sync_air_env):
+    c = _eneby(sync_air_env(**{**BASE, "air_frames": 0}).record_and_get_session())
+    assert not c["eligible"] and c["reason"] == "no_air_frames"
+
+
+def test_a_failed_fold_worker_is_fold_failed(sync_air_env, monkeypatch):
+    def boom(_us):
+        raise RuntimeError("wait failed")
+
+    env = sync_air_env(**BASE)
+    monkeypatch.setattr(uc, "_air_wait_until", boom)
+    c = _eneby(env.record_and_get_session())
+    assert not c["eligible"] and c["reason"] == "fold_failed"
+
+
+@pytest.mark.parametrize(
+    ("kw", "reason"),
+    [
+        ({"acoustic": {"kiosk": 1.0, "eneby": None}, "air_frames": 0}, "not_measured"),
+        ({"codec": "aac", "air_frames": 0}, "not_sbc"),
+        ({"air_frames": 0, "sched_phase": {"eneby": None}}, "no_air_frames"),
+    ],
+)
+def test_the_new_reasons_keep_the_order(sync_air_env, kw, reason):
+    assert _eneby(sync_air_env(**{**BASE, **kw}).record_and_get_session())["reason"] == reason
+
+
+def test_a_fold_finishing_after_the_upload_reaches_a_later_event(sync_air_env, monkeypatch):
+    release = threading.Event()
+    env = sync_air_env(**BASE)
+    monkeypatch.setattr(uc, "_air_wait_until", lambda _us: release.wait(5))
+    sid = env.ready()
+    r = env.client.post(f"/api/v1/sync/sessions/{sid}/sequence", json={"members": ["kiosk", "eneby"]})
+    assert r.status_code == 202
+    deadline = time.monotonic() + 5
+    while (env.store.get(sid).sequence or {}).get("phase") != "done" and time.monotonic() < deadline:
+        time.sleep(0.005)
+    link = env.client.post(f"/api/v1/sync/sessions/{sid}/capture-link", json={"lang": "en"}).json()
+    up = env.client.post(f"/api/v1/sync/capture/{link['token']}/recording", content=b"x" * 100, headers=OCTET)
+    assert up.status_code == 200, up.text
+    assert not _eneby(env.events[-1])["eligible"]  # the upload's event: the fold is still running
+    count = len(env.events)
+    release.set()
+    for t in list(session_store._background):
+        t.join(timeout=5)
+    assert len(env.events) > count
+    assert _eneby(env.events[-1])["latency_ms"] == pytest.approx(203.0)
+
+
+def test_picking_the_reference_publishes_an_event(sync_air_env):
+    env = sync_air_env(**{**BASE, "reference": None})
+    env.record_and_get_session()
+    count = len(env.events)
+    assert env.client.post(f"/api/v1/sync/sessions/{env.sid}/reference", json={"member": "kiosk"}).status_code == 200
+    assert len(env.events) > count
+    assert env.events[-1]["reference"] == "kiosk"
+    assert _eneby(env.events[-1])["latency_ms"] == pytest.approx(203.0)

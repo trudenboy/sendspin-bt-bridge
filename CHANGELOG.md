@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   between songs (PipeWire's suspend timeout, PulseAudio's suspend-on-idle);
   speakers can shift by tens of ms after such a pause. The bridge never
   changes the host setting.
+- Experimental air sensor (`EXPERIMENTAL_AIR_SENSOR`, off by default):
+  for SBC Bluetooth speakers in playout sync `measure` mode the bridge
+  measures when the audio it wrote actually leaves over the air, shows
+  this host placement in the device's timing panel, and the group sync
+  wizard can calibrate each speaker's air-to-sound latency. It does not
+  change playback and needs the `CAP_NET_RAW` capability.
 
 ## [3.1.0-beta.16] - 2026-10-27
 

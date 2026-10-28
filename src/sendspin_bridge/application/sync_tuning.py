@@ -329,7 +329,10 @@ def ab(sid: str, a: str, b: str) -> SyncSessionOut:
 
 
 def set_reference(sid: str, member: str) -> SyncSessionOut:
-    return _act(sid, lambda s: s.set_reference(member))
+    """Pick the reference (proposals and the air calibration); published, since the core does not."""
+    out = _act(sid, lambda s: s.set_reference(member))
+    _publish_session(sid)
+    return out
 
 
 def skip(sid: str, member: str) -> SyncSessionOut:
@@ -632,10 +635,11 @@ _AIR_SESSIONS_MAX = 8
 class AirMemberFold:
     """Both folds of one member's solo."""
 
-    air: AirFoldResult
+    air: AirFoldResult | None  # None when the fold worker failed (fold_failed)
     written_phase_ms: float | None  # φ_T, None when the written fold found no clicks
     written_reason: str | None
     delay_report_ms: float | None  # the speaker's A2DP delay report at the time (a hint)
+    stream_codec: str | None = None  # the codec the speaker played then (daemon snapshot, else connection)
 
 
 #: The running sequence watcher per session.
@@ -738,10 +742,31 @@ def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) ->
 
 
 def _store_air_fold(sid: str, token: object, member: str, fold: AirMemberFold) -> None:
+    """Keep a member's folds and publish the session, so a fold that finishes after the upload's
+    event still reaches the UI."""
     with _air_lock:
         entry = _air_records.get(sid)
-        if entry is not None and entry[0] is token:  # a newer sequence replaced this one: dropped
-            entry[1][member] = fold
+        if entry is None or entry[0] is not token:  # a newer sequence replaced this one: dropped
+            return
+        entry[1][member] = fold
+    _publish_session(sid)
+
+
+def _publish_session(sid: str) -> None:
+    """A ``sync`` event for the session now (best effort; a session that ended publishes nothing)."""
+    try:
+        store = get_store()
+        store.publish_change(store.get(sid))
+    except Exception:
+        logger.debug("Sync session %s: publishing after an air fold failed", sid, exc_info=True)
+
+
+def _stream_codec(client: Any) -> str | None:
+    info = client.status.get("air_sensor")
+    codec = info.get("codec") if isinstance(info, dict) else None
+    if not isinstance(codec, str) or not codec:
+        codec = client.status.get("bt_codec_name")
+    return codec.lower() if isinstance(codec, str) and codec else None
 
 
 def _air_folds(sid: str) -> dict[str, AirMemberFold]:
@@ -761,6 +786,7 @@ def _finish_member(
 ) -> None:
     """Worker thread: fold the air span once it is on air, then the written side; never the loop."""
     lo, hi = span
+    hint, codec = _status_number(client, "bt_reported_delay_ms"), _stream_codec(client)
     try:
         try:
             _air_wait_until(hi + _AIR_MARGIN_S * 1e6)
@@ -769,9 +795,9 @@ def _finish_member(
         phase, reason = _written_fold(service.loop, client, hi)
     except Exception:
         logger.warning("Sync session %s: the air fold of %s failed", sid, member, exc_info=True)
+        _store_air_fold(sid, token, member, AirMemberFold(None, None, "fold_failed", hint, codec))
         return
-    hint = _status_number(client, "bt_reported_delay_ms")
-    _store_air_fold(sid, token, member, AirMemberFold(air, phase, reason, hint))
+    _store_air_fold(sid, token, member, AirMemberFold(air, phase, reason, hint, codec))
 
 
 class _AirWatch:
@@ -900,15 +926,22 @@ def _air_candidate(
         )
 
     # The spec's order; the first failing check gives the reason. No live lock is required.
-    if fold is None or air is None:
+    # fold_failed (the worker failed) and no_air_frames (an SBC stream left no frame in the span)
+    # sit where the air checks begin, before not_sbc.
+    if fold is None:
         return out("not_effective")
     if reference is None:
         return out("no_reference")
     speaker, ref = _ok_phase(measurements.get(mid)), _ok_phase(measurements.get(reference))
     if speaker is None or ref is None:
         return out("not_measured")
-    if air.codec != "sbc":
+    if air is None:
+        return out("fold_failed")
+    stream = fold.stream_codec
+    if (stream is not None and stream != "sbc") or (air.frames > 0 and air.codec != "sbc"):
         return out("not_sbc")
+    if air.frames == 0:
+        return out("no_air_frames" if stream == "sbc" else "not_sbc")
     if air.epochs > 1 or air.reason == "air_epoch_changed":
         return out("air_epoch_changed")
     if air.phase_ms is None or not air.found:

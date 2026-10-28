@@ -80,6 +80,7 @@ async function pickReference(event: Event) {
         <option v-for="m in members" :key="m.ma_player_id" :value="m.ma_player_id">{{ speakerName(m.name, m.ma_player_id) }}</option>
       </select>
     </div>
+    <p data-air-reference-hint class="text-xs text-text-secondary">{{ t('sync.air.referenceHint') }}</p>
 
     <ul class="flex flex-col gap-2">
       <li

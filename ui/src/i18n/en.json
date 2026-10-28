@@ -1751,6 +1751,7 @@
       "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is measured against a reference: a member whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much.",
       "reference": "Reference",
       "referencePick": "Choose a reference…",
+      "referenceHint": "Pick a headset, wired output or another reference that plays on schedule. It also becomes the reference for the proposed delays.",
       "referenceFailed": "Could not set the reference ({code}).",
       "value": "{ms} ms",
       "hint": "the speaker reports {ms} ms",
@@ -1766,7 +1767,9 @@
         "not_sbc": "The speaker does not play SBC",
         "air_epoch_changed": "Its Bluetooth stream restarted during its turn",
         "no_air_clicks": "Its clicks were not found on the air",
-        "no_written_clicks": "Its clicks were not found in what the bridge wrote"
+        "no_written_clicks": "Its clicks were not found in what the bridge wrote",
+        "fold_failed": "The air measurement for this speaker could not be completed",
+        "no_air_frames": "No Bluetooth audio from this speaker was seen on the air during its turn"
       }
     },
     "cancel": {
