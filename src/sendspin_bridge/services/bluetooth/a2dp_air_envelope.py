@@ -9,15 +9,19 @@ so ``t_send``/``t_complete`` are RAW seconds and the tracker does no clock conve
   sub-bands ``B`` whose centre lies in 2.5–8.5 kHz (``{1}`` when none does); :data:`MISSING` (255)
   marks a frame whose payload did not parse inside a contiguous packet run.
 * **Media time.** ``u`` is the unwrapped RTP timestamp since the epoch start over the SBC rate.
-* **Send anchor (R-5, canonical).** ``α`` = running median of the last :data:`ANCHOR_PACKETS`
-  ``t_send − u`` of the anchor segment; a frame's cell time is ``t = u + α`` (``d_enc`` is applied
-  by the daemon). The completion lag is telemetry only.
+* **Send anchor on the frame-count axis (R-5 canonical, R-18).** ``count`` = SBC frames sent in
+  the epoch (:data:`MISSING`-filled ones included, the batches' ``seq``); ``β`` = running median of
+  the last :data:`ANCHOR_PACKETS` ``t_send − count·frame_us``; a frame's cell time is
+  ``t = count·frame_us + β`` (``d_enc`` is applied by the daemon). A speaker plays in arrival order
+  at its own rate, so air time is linear in the frame count, not in media time. The completion lag
+  is telemetry only.
 * **Anchor segment.** Contiguous RTP sequence with a forward timestamp step of more than one frame
-  is PulseAudio's bluez5 "Skipping": the same epoch continues, the frame counter ``seq`` continues,
-  the media time ``u0_us`` includes the skipped samples, and the median is reseeded with
-  ``α_old − Δu_step`` (sends continued while media time jumped). The first batch after it carries
-  ``anchor_reset``. A forward step of at most one frame only carries the anchor the same way.
-  Frames the SBC media header counts but that did not parse are :data:`MISSING`, not a skip.
+  is PulseAudio's bluez5 "Skipping": the same epoch continues, ``seq`` (the count) continues, the
+  media time ``u0_us`` includes the skipped samples (the content identity the daemon correlates
+  on), and the anchor is untouched — the count runs on across a skip, whatever the sends did
+  before it. The first batch after it carries ``anchor_reset`` (the daemon re-verifies its lag); a
+  forward step of at most one frame only starts a new batch. Frames the SBC media header counts
+  but that did not parse are :data:`MISSING`, not a skip.
 * **Epoch.** A sequence gap, more than :data:`SEND_GAP_S` between sends, an SSRC change, a backward
   (or implausibly large) timestamp step, a change of SBC parameters or of the timestamp source
   (``kernel``/``recv``) or of the hub's clock epoch, a non-SBC or fragmented packet,
@@ -89,7 +93,8 @@ def frame_envelope(frame: SbcFrame, bands: tuple[int, ...]) -> int:
 
 
 class SendAnchor:
-    """Running median of ``t_send − u`` over the last ANCHOR_PACKETS packets of an anchor segment (µs)."""
+    """Running median of ``t_send − x`` over the last ANCHOR_PACKETS packets of an epoch (µs); the
+    tracker's ``x`` is the frame count in µs (``count·frame_us``)."""
 
     __slots__ = ("_sorted", "_window")
 
@@ -97,13 +102,13 @@ class SendAnchor:
         self._window: deque[float] = deque()
         self._sorted: list[float] = []
 
-    def add(self, t_send_us: float, u_us: float) -> None:
-        alpha = t_send_us - u_us
+    def add(self, t_send_us: float, x_us: float) -> None:
+        v = t_send_us - x_us
         if len(self._window) >= ANCHOR_PACKETS:
             old = self._window.popleft()
             del self._sorted[bisect.bisect_left(self._sorted, old)]
-        self._window.append(alpha)
-        bisect.insort(self._sorted, alpha)
+        self._window.append(v)
+        bisect.insort(self._sorted, v)
 
     def value(self) -> float | None:
         n = len(self._sorted)
@@ -111,17 +116,6 @@ class SendAnchor:
             return None
         mid = n // 2
         return self._sorted[mid] if n % 2 else (self._sorted[mid - 1] + self._sorted[mid]) / 2.0
-
-    def reseed(self, alpha_us: float) -> None:
-        """Anchor reset: shift the window so its median is ``alpha_us`` (``α_old − Δu_step``)."""
-        current = self.value()
-        if current is None:
-            self._window.append(alpha_us)
-            self._sorted.append(alpha_us)
-            return
-        shift = alpha_us - current
-        self._window = deque(v + shift for v in self._window)
-        self._sorted = [v + shift for v in self._sorted]
 
     def reset(self) -> None:
         """New epoch: nothing to carry."""
@@ -134,7 +128,7 @@ class AirBatch:
     epoch: int
     seq: int  # first frame's index among the frames sent in the epoch (continuity check)
     u0_us: float  # RTP media time of the first frame since the epoch start (skips included)
-    t0_us: float  # RAW energy-cell time of the first frame: u + alpha (d_enc not applied)
+    t0_us: float  # RAW energy-cell time of the first frame: seq·frame_us + beta (d_enc not applied)
     frame_us: float
     rate: int
     subbands: int
@@ -172,7 +166,7 @@ class _Run:
     timestamp: str
     anchor_reset: bool
     e: list[int] = field(default_factory=list)
-    alpha: float | None = None  # frozen anchor once closed
+    beta: float | None = None  # frozen count-axis anchor once closed
     closed: bool = False
 
 
@@ -283,13 +277,13 @@ class AirLinkTracker:
                 prev = None
                 u = 0
             elif diff > 0:
-                self._step(diff, spf, rate)
+                self._step(diff, spf)
         if prev is None:
             self._params = params
             self._bands = envelope_subbands(rate, subbands)
         frame_us = spf * 1e6 / rate
         u_us = u * 1e6 / rate
-        self._anchor.add(t * 1e6, u_us)
+        self._anchor.add(t * 1e6, self._sent * frame_us)
         cells = [frame_envelope(f, self._bands) for f in p.frames]
         # frames the media header counts but that did not parse (they follow the parsed prefix)
         unparsed = (p.sbc_frame_count or 0) - len(cells)
@@ -312,17 +306,14 @@ class AirLinkTracker:
         f = p.frames[0]
         return (f.sampling_rate, f.blocks, f.subbands, f.channel_mode)
 
-    def _step(self, diff: int, spf: int, rate: int) -> None:
+    def _step(self, diff: int, spf: int) -> None:
         """Timestamp ahead of the frames before it on a contiguous sequence: samples never sent.
 
         Unparsed frames were already filled from the media header count, so any positive step is a
-        skip. The anchor is always carried forward (sends continued while media time jumped); only a
-        step of more than one frame is a new anchor segment the daemon is told about.
+        skip. The count-axis anchor needs nothing (R-18); the batch ends because its media grid
+        does, and only a step of more than one frame is an anchor segment the daemon is told about.
         """
         self._close_run()
-        alpha = self._anchor.value()
-        if alpha is not None:
-            self._anchor.reseed(alpha - diff * 1e6 / rate)
         if diff > spf:  # PA "Skipping": anchor reset in the same epoch
             self._segments += 1
             self._pending_reset = True
@@ -373,7 +364,7 @@ class AirLinkTracker:
         if self._runs and not self._runs[-1].closed:
             run = self._runs[-1]
             run.closed = True
-            run.alpha = self._anchor.value()
+            run.beta = self._anchor.value()
 
     def _end_epoch(self) -> None:
         if self._prev is None:
@@ -405,19 +396,20 @@ class AirLinkTracker:
             run = self._runs[0]
             if run.epoch == self._epoch and self._epoch_packets < MIN_EPOCH_PACKETS:
                 break
-            alpha = run.alpha if run.closed else self._anchor.value()
-            if alpha is None:
+            beta = run.beta if run.closed else self._anchor.value()
+            if beta is None:
                 break
             while run.e:
                 n = min(MAX_BATCH_FRAMES, len(run.e))
-                if n < MAX_BATCH_FRAMES and not (run.closed or force or now_us - (run.u0_us + alpha) >= BATCH_AGE_US):
+                t0_us = run.seq0 * run.frame_us + beta
+                if n < MAX_BATCH_FRAMES and not (run.closed or force or now_us - t0_us >= BATCH_AGE_US):
                     break
                 out.append(
                     AirBatch(
                         epoch=run.epoch,
                         seq=run.seq0,
                         u0_us=run.u0_us,
-                        t0_us=run.u0_us + alpha,
+                        t0_us=t0_us,
                         frame_us=run.frame_us,
                         rate=run.rate,
                         subbands=run.subbands,

@@ -104,15 +104,14 @@ def test_send_anchor_follows_slew_with_small_lag():
     assert a.value() == pytest.approx(399 * 20_000 * 0.0005, abs=330.0)
 
 
-def test_send_anchor_reseed_carries_the_window_and_reset_empties_it():
+def test_send_anchor_reset_empties_it():
     a = SendAnchor()
     assert a.value() is None
     for k in range(64):
         a.add(500.0 + k * 10 + (300.0 if k % 4 == 0 else 0.0), k * 10.0)
-    a.reseed(100.0)
-    assert a.value() == pytest.approx(100.0)
-    a.add(10_000.0 + 100.0 + 300.0, 10_000.0)  # one jittered sample does not move the carried median
-    assert a.value() == pytest.approx(100.0)
+    assert a.value() == pytest.approx(500.0)
+    a.add(10_000.0 + 500.0 + 300.0, 10_000.0)  # one jittered sample does not move the median
+    assert a.value() == pytest.approx(500.0)
     a.reset()
     assert a.value() is None
 
@@ -416,6 +415,68 @@ def test_sub_frame_step_reseeds_the_anchor_without_a_reset_flag():
     after = next(x for x in b if x.seq == 280)
     assert after.u0_us == pytest.approx((280 * 128 + step) / RATE * 1e6)
     assert after.t0_us == pytest.approx((10.0 + 40 * PKT_S) * 1e6, abs=50.0)
+
+
+def _stamp(pk, t_sends):
+    return [replace(p, t_send=t) for p, t in zip(pk, t_sends, strict=True)]
+
+
+def _take_every_250ms(tr, pk):
+    out, next_take = [], pk[0].t_send + 0.25
+    for p in pk:
+        tr.on_packet(p, timestamp="kernel", in_step=False)
+        if p.t_send >= next_take:
+            out += tr.take_batches(p.t_send * 1e6)
+            next_take += 0.25
+    return out + tr.take_batches(1e12, force=True)
+
+
+def test_late_send_stall_then_pa_skip_keeps_t0_on_the_frame_count_axis():
+    """R-18, the ENEBY20 pattern: sends fall behind by up to D over a few packets, PulseAudio then
+    skips about D of media (contiguous sequence) and sends go on at the frame cadence. Every batch's
+    air time stays ``t0 = count·frame_us + anchor`` — no spike at the stall or at the skip — while
+    ``u0_us`` carries the content jump that moves ``H``."""
+    tr = AirLinkTracker()
+    d_s, skip = 0.040, 1764  # 40 ms late at the worst, then 40 ms of media skipped
+    before = packets(80)
+    stall = _stamp(
+        packets(20, seq0=80, ts0=80 * 896, t0=10.0 + 80 * PKT_S),
+        [10.0 + (80 + j) * PKT_S + d_s * (j + 1) / 20 for j in range(20)],
+    )
+    after = packets(100, seq0=100, ts0=100 * 896 + skip, t0=10.0 + 100 * PKT_S)
+    b = _take_every_250ms(tr, before + stall + after)
+    assert {x.epoch for x in b} == {0} and [x.anchor_reset for x in b].count(True) == 1
+    assert sum(len(x.e) for x in b) == 1400
+    for x in b:
+        assert x.t0_us - x.seq * x.frame_us == pytest.approx(10.0e6, abs=1.0)
+        assert x.u0_us - x.seq * x.frame_us == pytest.approx(0.0 if x.seq < 700 else skip / RATE * 1e6, abs=1.0)
+
+
+def test_count_anchor_follows_the_arrival_cadence_across_bitpool_changes_and_skips():
+    """The anchor is the median of ``t_send − count·frame_us`` over the last 64 packets, ``count``
+    the frames sent in the epoch (9–15 per packet as the bitpool changes): sends that settle ``D``
+    behind the frame cadence after a skip move it by ``D`` once a majority of the window is late,
+    and RTP steps never move it by themselves."""
+    tr = AirLinkTracker()
+    sizes = [9, 12, 15, 10] * 50  # 200 packets
+    pk, ts, t, n = [], 0, 10.0, 0
+    late_s, skip = 0.030, 1323
+    for k, fr in enumerate(sizes):
+        if k == 100:
+            ts += skip  # PA skip after the 100th packet
+        p = packets(1, seq0=k, ts0=ts, frames=fr)[0]
+        pk.append(replace(p, t_send=t + n * 128 / RATE + (late_s if k >= 100 else 0.0)))
+        ts += fr * 128
+        n += fr
+    b = _take_every_250ms(tr, pk)
+    assert [x.anchor_reset for x in b].count(True) == 1
+    frames_before = sum(sizes[:100])
+    early = [x for x in b if x.seq + len(x.e) <= frames_before]
+    late = [x for x in b if x.seq >= sum(sizes[:170])]
+    assert early and late
+    assert all(x.t0_us - x.seq * x.frame_us == pytest.approx(10.0e6, abs=1.0) for x in early)
+    assert all(x.t0_us - x.seq * x.frame_us == pytest.approx(10.0e6 + late_s * 1e6, abs=1.0) for x in late)
+    assert all(x.u0_us - x.seq * x.frame_us == pytest.approx(skip / RATE * 1e6, abs=1.0) for x in late)
 
 
 def test_fragmented_sbc_explains_the_silence():
