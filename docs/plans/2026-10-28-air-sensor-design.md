@@ -951,6 +951,10 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
 
 1. Which drop path runs on the stand kernels (cmsg or `SO_MEMINFO`), and are kernel timestamps
    delivered as expected? (Task A3a confirms on a dev machine; both paths are built and tested.)
+   **Answered 2026-10-28** (HAOS add-on, kernel 6.18.52-haos, `scripts/hci_monitor_probe.py`, 6 s,
+   2331 records): `SO_TIMESTAMPNS` cmsgs on every record; no `SO_RXQ_OVFL` cmsg → the drop path is
+   `SO_MEMINFO` (`SK_MEMINFO_DROPS` 0→0); stamp→recv lag median 165 µs, max 2.1 ms; REALTIME−RAW
+   bracket median 1.2 µs, max 41 µs (none over 50 µs), offset step ≤ 21 µs over 6 s.
 2. Calibration without a reference member: is a relative calibration between two bridge speakers
    (both with air sensors) worth offering? (`L_as(A) − L_as(B) = (φ_A − φ_B) − (H_A − H_B)`.)
 3. Completion anchoring later (the parser is fed RAW seconds, so completion times are RAW too): the monitor runs from bridge start, so a speaker that connects
