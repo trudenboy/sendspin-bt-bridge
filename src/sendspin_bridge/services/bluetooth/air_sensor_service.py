@@ -183,8 +183,11 @@ class AirClickFold:
         rows = self._rows
         return (rows[-1][0] - rows[0][0]) / 1e6 if rows else 0.0
 
-    def result(self, to_us: float) -> AirFoldResult:
-        rows = [r for r in self._rows if r[0] <= to_us]
+    def result(self, to_us: float, from_us: float | None = None) -> AirFoldResult:
+        """The fold of the frames up to ``to_us`` (and from ``from_us`` when given: a span that is
+        known only once it ended, like the wizard's air span, narrows the armed one)."""
+        lo = self._from_us if from_us is None else from_us
+        rows = [r for r in self._rows if lo <= r[0] <= to_us]
         if not rows:
             return AirFoldResult(None, False, 0, None, None, None, reason="not_sbc")
         epochs = len({r[2] for r in rows})
@@ -437,9 +440,9 @@ class AirSensorService:
             self._fold_of[key] = fold_id
         return fold_id
 
-    def finish_fold(self, fold_id: str, to_us: float) -> AirFoldResult:
-        """Detach the fold and fold its frames up to RAW ``to_us`` on the caller's thread (call it
-        off the bridge loop; never from the hub thread)."""
+    def finish_fold(self, fold_id: str, to_us: float, *, from_us: float | None = None) -> AirFoldResult:
+        """Detach the fold and fold its frames up to RAW ``to_us`` (from ``from_us`` when given) on
+        the caller's thread (call it off the bridge loop; never from the hub thread)."""
         with self._lock:
             entry = self._folds.pop(fold_id, None)
             if entry is not None and self._fold_of.get(entry[0]) == fold_id:
@@ -449,7 +452,7 @@ class AirSensorService:
         if entry is None:
             return AirFoldResult(None, False, 0, None, None, None, reason="not_armed")
         adapters = self._safe(self._hub.adapters, {})
-        res = entry[1].result(to_us)
+        res = entry[1].result(to_us, from_us)
         return replace(res, adapter=adapters.get(link[0]) if link is not None else None)
 
     def on_hub_state(self, state: str, reason: str | None) -> None:

@@ -42,6 +42,8 @@ ErrorCode = Literal[
     # a click track or listening sound file that cannot be written
     "disk_full",
     "track_unavailable",
+    # a speaker's air-to-sound latency that cannot be saved (ineligible, unknown, out of range)
+    "not_eligible",
 ]
 
 
@@ -123,6 +125,46 @@ class SequenceOut(ResponseModel):
     uploaded: bool = Field(description="A recording of this sequence was measured.")
 
 
+AirCalibrationReason = Literal[
+    "not_effective",
+    "no_reference",
+    "not_measured",
+    "not_sbc",
+    "air_epoch_changed",
+    "no_air_clicks",
+    "no_written_clicks",
+]
+
+
+class AirCalibrationCandidate(ResponseModel):
+    """A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).
+
+    ``latency_ms = acoustic_lag_ms − host_placement_ms``: the speaker's acoustic lag against the
+    session's reference minus where its audio left over the air against the schedule.
+    """
+
+    member: str
+    eligible: bool
+    reason: AirCalibrationReason | None = Field(
+        description=(
+            "Why there is no value, the first that applies: not_effective (the air sensor was not on for this "
+            "speaker), no_reference (the session has no reference member), not_measured (the speaker's or the "
+            "reference's measurement is not ok), not_sbc, air_epoch_changed, no_air_clicks, no_written_clicks."
+        )
+    )
+    latency_ms: float | None = Field(description="The speaker's air-to-sound latency; null unless eligible.")
+    acoustic_lag_ms: float | None = Field(description="The speaker's acoustic lag against the reference.")
+    host_placement_ms: float | None = Field(description="Where its audio left over the air against the schedule.")
+    codec: str | None
+    rate: int | None = Field(description="The SBC sampling rate (Hz).")
+    adapter: str | None = Field(description="The Bluetooth adapter's MAC.")
+    delay_report_ms: float | None = Field(description="The speaker's A2DP delay report, a hint only.")
+
+
+class AirCalibrationSaveIn(BaseModel):
+    members: list[str] = Field(min_length=1, max_length=16, description="The members whose latency to save.")
+
+
 class SyncSessionOut(ResponseModel):
     """The session resource; also the payload of ``sync`` events."""
 
@@ -173,6 +215,10 @@ class SyncSessionOut(ResponseModel):
     soloed: str | None
     reference: str | None
     sequence: SequenceOut | None = Field(description="The phone capture's sequence, once one was started.")
+    air_calibrations: list[AirCalibrationCandidate] = Field(
+        default_factory=list,
+        description="Bridge speakers' air-to-sound latencies from the last measured sequence (air sensor).",
+    )
 
 
 class SessionCreate(BaseModel):
@@ -322,6 +368,8 @@ CONTRACT_MODELS: dict[str, type[BaseModel]] = {
         SessionCreate,
         SequenceOut,
         SequenceIn,
+        AirCalibrationCandidate,
+        AirCalibrationSaveIn,
         CaptureLinkIn,
         CaptureStartIn,
         CaptureLinkOut,

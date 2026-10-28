@@ -255,6 +255,156 @@
         "title": "AdapterRef",
         "type": "object"
       },
+      "AirCalibrationCandidate": {
+        "description": "A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).\n\n``latency_ms = acoustic_lag_ms − host_placement_ms``: the speaker's acoustic lag against the\nsession's reference minus where its audio left over the air against the schedule.",
+        "properties": {
+          "acoustic_lag_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker's acoustic lag against the reference.",
+            "title": "Acoustic Lag Ms"
+          },
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Bluetooth adapter's MAC.",
+            "title": "Adapter"
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec"
+          },
+          "delay_report_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker's A2DP delay report, a hint only.",
+            "title": "Delay Report Ms"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "host_placement_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where its audio left over the air against the schedule.",
+            "title": "Host Placement Ms"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker's air-to-sound latency; null unless eligible.",
+            "title": "Latency Ms"
+          },
+          "member": {
+            "title": "Member",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The SBC sampling rate (Hz).",
+            "title": "Rate"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_effective",
+                  "no_reference",
+                  "not_measured",
+                  "not_sbc",
+                  "air_epoch_changed",
+                  "no_air_clicks",
+                  "no_written_clicks"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why there is no value, the first that applies: not_effective (the air sensor was not on for this speaker), no_reference (the session has no reference member), not_measured (the speaker's or the reference's measurement is not ok), not_sbc, air_epoch_changed, no_air_clicks, no_written_clicks.",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "member",
+          "eligible",
+          "reason",
+          "latency_ms",
+          "acoustic_lag_ms",
+          "host_placement_ms",
+          "codec",
+          "rate",
+          "adapter",
+          "delay_report_ms"
+        ],
+        "title": "AirCalibrationCandidate",
+        "type": "object"
+      },
+      "AirCalibrationSaveIn": {
+        "properties": {
+          "members": {
+            "description": "The members whose latency to save.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "AirCalibrationSaveIn",
+        "type": "object"
+      },
       "AirLatencyEntry": {
         "additionalProperties": false,
         "description": "One air-to-sound calibration of a speaker (the sync wizard's ``L_as``). Strict: no string numbers.",
@@ -7246,6 +7396,14 @@
       "SyncSessionOut": {
         "description": "The session resource; also the payload of ``sync`` events.",
         "properties": {
+          "air_calibrations": {
+            "description": "Bridge speakers' air-to-sound latencies from the last measured sequence (air sensor).",
+            "items": {
+              "$ref": "#/components/schemas/AirCalibrationCandidate"
+            },
+            "title": "Air Calibrations",
+            "type": "array"
+          },
           "clicker_left_s": {
             "anyOf": [
               {
@@ -7487,7 +7645,8 @@
           "muted",
           "soloed",
           "reference",
-          "sequence"
+          "sequence",
+          "air_calibrations"
         ],
         "title": "SyncSessionOut",
         "type": "object"
@@ -14311,6 +14470,75 @@
           }
         },
         "summary": "A-B listening: solo A",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/air-calibrations": {
+      "post": {
+        "description": "Stores each chosen member's latency (``air_calibrations`` of the session) for its codec, SBC rate and adapter, replacing the entry there, and applies it live. 409 not_eligible when a member has no eligible value (nothing is written then).",
+        "operationId": "save_air_calibrations_api_v1_sync_sessions__session_id__air_calibrations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AirCalibrationSaveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AirCalibrationCandidate"
+                  },
+                  "title": "Response Save Air Calibrations Api V1 Sync Sessions  Session Id  Air Calibrations Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Save bridge speakers' air-to-sound latencies from the last measured sequence",
         "tags": [
           "sync"
         ]

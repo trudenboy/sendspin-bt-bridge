@@ -1980,6 +1980,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/sessions/{session_id}/air-calibrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save bridge speakers' air-to-sound latencies from the last measured sequence
+         * @description Stores each chosen member's latency (``air_calibrations`` of the session) for its codec, SBC rate and adapter, replacing the entry there, and applies it live. 409 not_eligible when a member has no eligible value (nothing is written then).
+         */
+        post: operations["save_air_calibrations_api_v1_sync_sessions__session_id__air_calibrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/sessions/{session_id}/apply": {
         parameters: {
             query?: never;
@@ -2409,6 +2429,64 @@ export interface components {
             mac: string | null;
             /** Name */
             name: string | null;
+        };
+        /**
+         * AirCalibrationCandidate
+         * @description A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).
+         *
+         *     ``latency_ms = acoustic_lag_ms − host_placement_ms``: the speaker's acoustic lag against the
+         *     session's reference minus where its audio left over the air against the schedule.
+         */
+        AirCalibrationCandidate: {
+            /**
+             * Acoustic Lag Ms
+             * @description The speaker's acoustic lag against the reference.
+             */
+            acoustic_lag_ms: number | null;
+            /**
+             * Adapter
+             * @description The Bluetooth adapter's MAC.
+             */
+            adapter: string | null;
+            /** Codec */
+            codec: string | null;
+            /**
+             * Delay Report Ms
+             * @description The speaker's A2DP delay report, a hint only.
+             */
+            delay_report_ms: number | null;
+            /** Eligible */
+            eligible: boolean;
+            /**
+             * Host Placement Ms
+             * @description Where its audio left over the air against the schedule.
+             */
+            host_placement_ms: number | null;
+            /**
+             * Latency Ms
+             * @description The speaker's air-to-sound latency; null unless eligible.
+             */
+            latency_ms: number | null;
+            /** Member */
+            member: string;
+            /**
+             * Rate
+             * @description The SBC sampling rate (Hz).
+             */
+            rate: number | null;
+            /**
+             * Reason
+             * @description Why there is no value, the first that applies: not_effective (the air sensor was not on for this speaker), no_reference (the session has no reference member), not_measured (the speaker's or the reference's measurement is not ok), not_sbc, air_epoch_changed, no_air_clicks, no_written_clicks.
+             */
+            reason: ("not_effective" | "no_reference" | "not_measured" | "not_sbc" | "air_epoch_changed" | "no_air_clicks" | "no_written_clicks") | null;
+        };
+        /** AirCalibrationSaveIn */
+        AirCalibrationSaveIn: {
+            /**
+             * Members
+             * @description The members whose latency to save.
+             */
+            members: string[];
         };
         /**
          * AirLatencyEntry
@@ -5214,6 +5292,11 @@ export interface components {
          * @description The session resource; also the payload of ``sync`` events.
          */
         SyncSessionOut: {
+            /**
+             * Air Calibrations
+             * @description Bridge speakers' air-to-sound latencies from the last measured sequence (air sensor).
+             */
+            air_calibrations: components["schemas"]["AirCalibrationCandidate"][];
             /**
              * Clicker Left S
              * @description Seconds of the click track left while it plays (from its last start); null otherwise.
@@ -10677,6 +10760,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    save_air_calibrations_api_v1_sync_sessions__session_id__air_calibrations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AirCalibrationSaveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AirCalibrationCandidate"][];
                 };
             };
             /** @description Client error */

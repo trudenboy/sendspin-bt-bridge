@@ -286,6 +286,25 @@ def set_playout_sync(device_id: str, enabled: bool) -> dict[str, Any]:
     return {"playout_sync_enabled": enabled, "device": device}
 
 
+def save_air_calibration(device_id: str, entry: dict[str, Any]) -> None:
+    """Store one air calibration of the speaker under its (codec, rate, adapter) key, replacing the one
+    there, and apply it live (the running daemon gets the entry for what it plays now).
+
+    400 ``invalid_calibration`` when *entry* is not a valid calibration; 404 for an unknown speaker.
+    """
+    from pydantic import ValidationError
+
+    from sendspin_bridge.config.players import upsert_air_latency
+
+    def _save(player: dict) -> None:
+        try:
+            player["air_to_sound_latency"] = upsert_air_latency(player.get("air_to_sound_latency") or [], entry)
+        except ValidationError as exc:
+            raise UseCaseError(400, "invalid_calibration", f"Not a valid air calibration: {exc}") from exc
+
+    _change_player(device_id, _save)
+
+
 def forget_air_calibrations(
     device_id: str, codec: str | None = None, rate: int | None = None, adapter: str | None = None
 ) -> None:
