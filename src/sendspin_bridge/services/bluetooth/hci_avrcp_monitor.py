@@ -28,7 +28,7 @@ import logging
 import socket
 import struct
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sendspin_bridge.services.bluetooth.hci_socket import (
     MONITOR_ACL_RX_PKT,
@@ -37,7 +37,21 @@ from sendspin_bridge.services.bluetooth.hci_socket import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
     from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+
+
+class _RecordLike(Protocol):
+    @property
+    def opcode(self) -> int: ...
+
+    @property
+    def index(self) -> int: ...
+
+    @property
+    def payload(self) -> bytes: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +275,112 @@ def _seed_handle_map_from_kernel(handle_to_mac: dict[int, str]) -> None:
                 logger.debug("HCI seed: hci%d handle=0x%04X mac=%s", dev_id, ci.handle, mac)
     finally:
         sock.close()
+
+
+def _seed_peer_map_from_kernel(peers: dict[tuple[int, int], str]) -> None:
+    """Populate ``peers`` with ``(dev_id, handle) → MAC`` for the kernel's existing ACL links.
+
+    The index-aware twin of :func:`_seed_handle_map_from_kernel`, used by the monitor hub
+    (``EXPERIMENTAL_AIR_SENSOR`` on): two controllers can hand out the same handle, so the key
+    keeps the controller index (R-2). Errors are swallowed like the legacy seed's.
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        sock = socket.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI)
+    except OSError as exc:
+        logger.debug("HCI seed: cannot open enumeration socket: %s", exc)
+        return
+    try:
+        dev_list = _HciDevListReq()
+        dev_list.dev_num = len(dev_list.dev_req)
+        if _hci_ioctl(sock.fileno(), _HCIGETDEVLIST, dev_list) < 0:
+            logger.debug("HCI seed: HCIGETDEVLIST failed (errno=%d)", ctypes.get_errno())
+            return
+        for i in range(dev_list.dev_num):
+            dev_id = dev_list.dev_req[i].dev_id
+            conn_list = _HciConnListReq()
+            conn_list.dev_id = dev_id
+            conn_list.conn_num = _MAX_CONNS_PER_DEV
+            if _hci_ioctl(sock.fileno(), _HCIGETCONNLIST, conn_list) < 0:
+                continue
+            for j in range(conn_list.conn_num):
+                ci = conn_list.conn_info[j]
+                if ci.type != _HCI_LINK_TYPE_ACL:
+                    continue
+                peers[(dev_id, ci.handle)] = ":".join(f"{b:02X}" for b in reversed(bytes(ci.bdaddr)))
+    finally:
+        sock.close()
+
+
+def _process_record(
+    rec: _RecordLike,
+    conn_map: dict[tuple[int, int], str],
+    tracker: AvrcpSourceTracker,
+) -> None:
+    """Index-aware twin of :func:`_process_packet` for hub records: links are ``(index, handle)``."""
+    opcode, index, payload = rec.opcode, rec.index, rec.payload
+    if opcode == _OPCODE_EVENT_PKT:
+        if len(payload) < 2:
+            return
+        event_code = payload[0]
+        params = payload[2:]
+        if event_code == _HCI_EVT_CONNECTION_COMPLETE:
+            result = _parse_connection_complete(params)
+            if result:
+                conn_map[(index, result[0])] = result[1]
+        elif event_code == _HCI_EVT_DISCONNECT_COMPLETE:
+            disc_handle = _parse_disconnect_complete(params)
+            if disc_handle is not None:
+                conn_map.pop((index, disc_handle), None)
+    elif opcode == _OPCODE_ACL_RX_PKT:
+        if len(payload) < 4:
+            return
+        (handle_flags,) = struct.unpack_from("<H", payload, 0)
+        handle = handle_flags & 0x0FFF
+        mac = conn_map.get((index, handle))
+        if mac is None:
+            return
+        # The legacy dispatcher does the AVRCP parse; it sees just this link.
+        _dispatch_acl_packet(payload, {handle: mac}, tracker)
+
+
+class AvrcpConsumer:
+    """AVRCP source correlation as a monitor-hub consumer (``EXPERIMENTAL_AIR_SENSOR`` on).
+
+    Same behaviour as :class:`HciAvrcpMonitor`, but the hub owns the socket and links are keyed by
+    ``(index, handle)``. ``peers`` (the hub's ``peers``) supplies the seeded links at every open.
+    Runs on the hub thread; ``AvrcpSourceTracker.note_activity`` is thread-safe.
+    """
+
+    wants_acl_tx = False
+
+    def __init__(
+        self,
+        *,
+        tracker: AvrcpSourceTracker | Any | None = None,
+        peers: Callable[[], Mapping[tuple[int, int], str]] | None = None,
+    ) -> None:
+        self._tracker = tracker
+        self._peers = peers
+        self._conn: dict[tuple[int, int], str] = {}
+
+    def _get_tracker(self) -> AvrcpSourceTracker:
+        if self._tracker is None:
+            from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker
+
+            self._tracker = get_tracker()
+        return self._tracker
+
+    def on_record(self, rec: _RecordLike) -> None:
+        if rec.opcode in (_OPCODE_EVENT_PKT, _OPCODE_ACL_RX_PKT):
+            _process_record(rec, self._conn, self._get_tracker())
+
+    def on_hub_state(self, state: str, reason: str | None) -> None:
+        self._conn.clear()
+        if state == "open" and self._peers is not None:
+            self._conn.update(self._peers())
+            logger.info("AvrcpConsumer: tracking AVRCP source MACs (seeded %d existing connections)", len(self._conn))
 
 
 def _open_hci_monitor_socket() -> socket.socket:

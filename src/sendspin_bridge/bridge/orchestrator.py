@@ -278,6 +278,24 @@ def _pulse_sink_players(config: dict[str, Any]) -> list[dict[str, Any]]:
     return players
 
 
+def _hci_monitor_for(config: dict[str, Any]) -> Any:
+    """Who owns the HCI monitor socket: the legacy AVRCP monitor, or the hub with the air sensor on.
+
+    Switch off (the default): ``HciAvrcpMonitor`` exactly as before. Switch on: the monitor hub's
+    reader thread owns the socket and AVRCP source correlation is one of its consumers; the legacy
+    monitor is not started. Both answer the async ``start()``/``stop()`` the lifecycle awaits.
+    """
+    if not bool(config.get("EXPERIMENTAL_AIR_SENSOR", False)):
+        from sendspin_bridge.services.bluetooth import hci_avrcp_monitor
+
+        return hci_avrcp_monitor.get_monitor()
+    from sendspin_bridge.services.bluetooth import hci_monitor_hub
+    from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import AvrcpConsumer
+
+    hub = hci_monitor_hub.get_hub()
+    return hci_monitor_hub.AsyncHubLifecycle(hub, [AvrcpConsumer(peers=hub.peers)])
+
+
 @dataclass
 class DeviceBootstrap:
     bt_devices: list[dict[str, Any]]
@@ -1121,9 +1139,7 @@ class BridgeOrchestrator:
         # Players added later (live reconfig) follow their output through it too.
         set_sink_monitor(sink_monitor)
 
-        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import get_monitor as _get_hci_monitor
-
-        hci_monitor = _get_hci_monitor()
+        hci_monitor = _hci_monitor_for(bootstrap.config)
 
         try:
             await sink_monitor.start()

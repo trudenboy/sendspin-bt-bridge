@@ -1,0 +1,552 @@
+"""HciMonitorHub: the reader thread that owns the HCI monitor socket when the air sensor is on.
+
+No real socket is opened: ``fake_hub_socket`` scripts ``recvmsg`` results, then answers
+``socket.timeout`` until closed, and records the socket options the hub sets.
+"""
+
+from __future__ import annotations
+
+import errno
+import socket
+import struct
+import threading
+
+import pytest
+
+from sendspin_bridge.services.bluetooth import hci_socket as hs
+from sendspin_bridge.services.bluetooth.hci_monitor_hub import HciMonitorHub
+
+
+class FakeMonitorSocket:
+    def __init__(self, records, *, meminfo_drops=None, fail_first_read=False):
+        self._records = list(records)
+        self._meminfo_drops = meminfo_drops
+        self._fail_first_read = fail_first_read
+        self.closed = False
+        self.setsockopt_calls: list[tuple[int, int, int]] = []
+        self.getsockopt_calls: list[tuple[int, int, int]] = []
+        self.timeouts: list[float | None] = []
+
+    def setsockopt(self, level, opt, value):
+        self.setsockopt_calls.append((level, opt, value))
+
+    def getsockopt(self, level, opt, buflen=0):
+        self.getsockopt_calls.append((level, opt, buflen))
+        if opt == hs.SO_MEMINFO and self._meminfo_drops is not None:
+            values = [0] * hs.SK_MEMINFO_VARS
+            values[hs.SK_MEMINFO_DROPS] = self._meminfo_drops
+            return struct.pack(f"{hs.SK_MEMINFO_VARS}I", *values)
+        raise OSError(errno.ENOPROTOOPT, "not supported")
+
+    def settimeout(self, value):
+        self.timeouts.append(value)
+
+    def recvmsg(self, bufsize, ancbufsize=0):
+        if self.closed:
+            raise OSError(errno.EBADF, "closed")
+        if self._fail_first_read:
+            self._fail_first_read = False
+            raise OSError(errno.ENETDOWN, "monitor went away")
+        if self._records:
+            item = self._records.pop(0)
+            if len(item) == 2:
+                data, anc = item
+                return data, anc, 0, None
+            return item
+        raise TimeoutError("timed out")
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def fake_hub_socket():
+    made: list[FakeMonitorSocket] = []
+
+    def build(records, *, meminfo_drops=None):
+        def open_socket():
+            sock = FakeMonitorSocket(records, meminfo_drops=meminfo_drops)
+            made.append(sock)
+            return sock
+
+        open_socket.made = made  # type: ignore[attr-defined]
+        return open_socket
+
+    return build
+
+
+@pytest.fixture
+def fake_hub_socket_failing_once():
+    calls = {"n": 0}
+
+    def open_socket():
+        calls["n"] += 1
+        return FakeMonitorSocket([], fail_first_read=calls["n"] == 1)
+
+    return open_socket
+
+
+def frame(opcode, index, payload):
+    return struct.pack("<HHH", opcode, index, len(payload)) + payload
+
+
+def consumer(wants=False):
+    class C:
+        wants_acl_tx = wants
+
+        def __init__(self):
+            self.seen, self.states = [], []
+
+        def on_record(self, rec):
+            self.seen.append(rec)
+
+        def on_hub_state(self, state, reason):
+            self.states.append((state, reason))
+
+    return C()
+
+
+def timestamp_cmsg(real_ns):
+    sec, nsec = divmod(real_ns, 1_000_000_000)
+    return (socket.SOL_SOCKET, hs.SCM_TIMESTAMPNS, struct.pack("qq", sec, nsec))
+
+
+def test_records_reach_consumers_with_a_raw_time(fake_hub_socket):
+    c = consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_ACL_RX_PKT, 1, b"\x46\x00\x04\x00abcd"), [])]),
+        seed=lambda m: None,
+    )
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert [(r.opcode, r.index, r.timestamp) for r in c.seen] == [(hs.MONITOR_ACL_RX_PKT, 1, "recv")]
+    assert c.seen[0].payload == b"\x46\x00\x04\x00abcd"
+    assert c.seen[0].t_raw_us > 0
+
+
+def test_acl_tx_only_to_consumers_that_want_it(fake_hub_socket):
+    a, b = consumer(False), consumer(True)
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_ACL_TX_PKT, 0, b"\x46\x20\x00\x00"), [])]),
+        seed=lambda m: None,
+    )
+    hub.add_consumer(a)
+    hub.add_consumer(b)
+    hub.start()
+    hub.stop()
+    assert (len(a.seen), len(b.seen)) == (0, 1)
+
+
+def test_handles_are_per_controller(fake_hub_socket):
+    def cc(handle, mac):
+        params = bytes([0]) + struct.pack("<H", handle) + mac + bytes([1, 0])
+        return bytes([0x03, len(params)]) + params
+
+    recs = [
+        (frame(hs.MONITOR_EVENT_PKT, 0, cc(70, bytes([1, 2, 3, 4, 5, 6]))), []),
+        (frame(hs.MONITOR_EVENT_PKT, 1, cc(70, bytes([6, 5, 4, 3, 2, 1]))), []),
+    ]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None)
+    hub.start()
+    hub.stop()
+    assert hub.peer(0, 70) == "06:05:04:03:02:01" and hub.peer(1, 70) == "01:02:03:04:05:06"
+
+
+def test_disconnection_complete_forgets_only_that_controllers_handle(fake_hub_socket):
+    def dc(handle):
+        params = bytes([0]) + struct.pack("<H", handle) + bytes([0x13])
+        return bytes([0x05, len(params)]) + params
+
+    def seed(peers):
+        peers[(0, 70)] = "AA:AA:AA:AA:AA:AA"
+        peers[(1, 70)] = "BB:BB:BB:BB:BB:BB"
+
+    hub = HciMonitorHub(open_socket=fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 1, dc(70)), [])]), seed=seed)
+    hub.start()
+    hub.stop()
+    assert hub.peer(0, 70) == "AA:AA:AA:AA:AA:AA" and hub.peer(1, 70) is None
+
+
+def test_new_index_gives_the_adapter_address(fake_hub_socket):
+    payload = bytes([0, 1]) + bytes([0xD6, 0xD7, 0x62, 0xF9, 0xFB, 0xC0]) + b"hci1\0\0\0\0"
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_NEW_INDEX, 1, payload), [])]), seed=lambda m: None
+    )
+    hub.start()
+    hub.stop()
+    assert hub.adapters() == {1: "C0:FB:F9:62:D7:D6"}
+
+
+def test_del_index_forgets_the_adapter_and_its_links(fake_hub_socket):
+    payload = bytes([0, 1]) + bytes([0xD6, 0xD7, 0x62, 0xF9, 0xFB, 0xC0]) + b"hci1\0\0\0\0"
+
+    def seed(peers):
+        peers[(1, 70)] = "BB:BB:BB:BB:BB:BB"
+
+    recs = [(frame(hs.MONITOR_NEW_INDEX, 1, payload), []), (frame(hs.MONITOR_DEL_INDEX, 1, b""), [])]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=seed)
+    hub.start()
+    hub.stop()
+    assert hub.adapters() == {} and hub.peer(1, 70) is None
+
+
+def test_seed_runs_on_open_and_keys_by_controller(fake_hub_socket):
+    def seed(peers):
+        peers[(1, 12)] = "11:22:33:44:55:66"
+
+    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=seed)
+    hub.start()
+    hub.stop()
+    assert hub.peer(1, 12) == "11:22:33:44:55:66" and hub.peer(0, 12) is None
+    assert hub.peers() == {(1, 12): "11:22:33:44:55:66"}
+
+
+def test_permission_error_is_unavailable_with_reason():
+    def deny():
+        raise PermissionError(1, "Operation not permitted")
+
+    c = consumer()
+    hub = HciMonitorHub(open_socket=deny, seed=lambda m: None)
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert not hub.available and hub.unavailable_reason == "no_cap_net_raw"
+    assert ("error", "no_cap_net_raw") in c.states
+
+
+def test_eacces_without_permission_error_type_is_no_cap_net_raw():
+    def deny():
+        raise OSError(errno.EACCES, "denied")
+
+    hub = HciMonitorHub(open_socket=deny, seed=lambda m: None)
+    hub.start()
+    hub.stop()
+    assert hub.unavailable_reason == "no_cap_net_raw"
+
+
+def test_non_linux_is_unsupported_platform(monkeypatch):
+    from sendspin_bridge.services.bluetooth import hci_monitor_hub as mod
+
+    monkeypatch.setattr(mod.sys, "platform", "darwin")
+
+    def no_linux():
+        raise OSError("HCI raw sockets require Linux")
+
+    hub = HciMonitorHub(open_socket=no_linux, seed=lambda m: None)
+    hub.start()
+    hub.stop()
+    assert hub.unavailable_reason == "unsupported_platform"
+
+
+def test_other_open_errors_retry_with_backoff():
+    calls = {"n": 0}
+    opened = threading.Event()
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError(errno.ENODEV, "no such device")
+        opened.set()
+        return FakeMonitorSocket([])
+
+    c = consumer()
+    hub = HciMonitorHub(open_socket=flaky, seed=lambda m: None, backoff_s=0.0)
+    hub.add_consumer(c)
+    hub.start()
+    assert opened.wait(2)
+    assert hub.wait_open(2)
+    hub.stop()
+    assert c.states[0] == ("error", "monitor_error")
+    assert ("open", None) in c.states and hub.generation == 1
+
+
+def test_socket_error_reopens_and_bumps_the_generation(fake_hub_socket_failing_once):
+    c = consumer()
+    hub = HciMonitorHub(open_socket=fake_hub_socket_failing_once, seed=lambda m: None, backoff_s=0.0)
+    hub.add_consumer(c)
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    assert hub.generation == 2 and [s for s, _ in c.states].count("open") == 2
+    assert ("error", "monitor_error") in c.states and c.states[-1] == ("closed", None)
+
+
+def test_open_sets_timestamps_and_a_large_receive_buffer(fake_hub_socket):
+    opener = fake_hub_socket([])
+    hub = HciMonitorHub(open_socket=opener, seed=lambda m: None)
+    hub.start()
+    hub.stop()
+    sock = opener.made[0]
+    opts = {opt for _level, opt, _value in sock.setsockopt_calls}
+    assert hs.SO_TIMESTAMPNS in opts and hs.SO_RXQ_OVFL in opts
+    assert sock.timeouts == [0.5] and sock.closed
+
+
+def test_meminfo_drops_are_attached_when_no_cmsg(fake_hub_socket):
+    c = consumer()
+    sock = fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [])], meminfo_drops=5)
+    hub = HciMonitorHub(open_socket=sock, seed=lambda m: None)
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert c.seen[-1].drops == 5 and hub.counters()["drop_source"] == "meminfo"
+    assert hub.counters()["drops"] == 5
+
+
+def test_no_drop_source_means_unknown_not_zero(fake_hub_socket):
+    c = consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [])]), seed=lambda m: None
+    )
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert c.seen[-1].drops is None and hub.counters()["drop_source"] == "none"
+
+
+def test_a_failing_consumer_does_not_stop_the_others(fake_hub_socket):
+    class Bad:
+        wants_acl_tx = False
+
+        def on_record(self, rec):
+            raise RuntimeError("boom")
+
+        def on_hub_state(self, s, r):
+            pass
+
+    good = consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [])] * 3), seed=lambda m: None
+    )
+    hub.add_consumer(Bad())
+    hub.add_consumer(good)
+    hub.start()
+    hub.stop()
+    assert len(good.seen) == 3
+
+
+def test_removed_consumer_gets_nothing(fake_hub_socket):
+    a, b = consumer(), consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [])]), seed=lambda m: None
+    )
+    hub.add_consumer(a)
+    hub.add_consumer(b)
+    hub.remove_consumer(a)
+    hub.start()
+    hub.stop()
+    assert (len(a.seen), len(b.seen)) == (0, 1)
+
+
+def test_a_consumer_added_while_open_is_told_on_the_hub_thread(fake_hub_socket):
+    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=lambda m: None)
+    hub.start()
+    assert hub.wait_open(2)
+    late = consumer()
+    seen_on: list[str] = []
+    original = late.on_hub_state
+
+    def on_state(state, reason):
+        seen_on.append(threading.current_thread().name)
+        original(state, reason)
+
+    late.on_hub_state = on_state
+    hub.add_consumer(late)
+    hub.stop()
+    assert late.states[0] == ("open", None) and seen_on[0] == "hci-monitor"
+
+
+def test_start_is_idempotent_and_names_the_thread(fake_hub_socket):
+    started: list[str] = []
+
+    def thread_factory(*, target, name, daemon):
+        started.append(name)
+        return threading.Thread(target=target, name=name, daemon=daemon)
+
+    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=lambda m: None, thread_factory=thread_factory)
+    hub.start()
+    hub.start()
+    hub.stop()
+    hub.stop()
+    assert started == ["hci-monitor"]
+
+
+class _ScriptedClockMap:
+    """Resolves a REALTIME stamp only after the hub has taken two samples (one after the record)."""
+
+    def __init__(self, offset_us):
+        self.samples = 0
+        self.offset_us = offset_us
+        self.epoch = 0
+
+    def sample(self):
+        self.samples += 1
+        return True
+
+    def to_raw_us(self, real_ns):
+        if self.samples < 2:
+            return None
+        return real_ns / 1000.0 - self.offset_us
+
+
+def test_kernel_stamps_wait_for_a_later_pair_and_keep_order(fake_hub_socket):
+    ticks = iter(range(0, 10_000))
+
+    def monotonic():
+        # 0.3 s per call: every loop pass is a 250 ms tick.
+        return next(ticks) * 0.3
+
+    clock_map = _ScriptedClockMap(offset_us=1_000.0)
+    stamp = 1_700_000_000_123_456_789
+    recs = [
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(stamp)]),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x01"), []),
+    ]
+    c = consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket(recs), seed=lambda m: None, clock_map=clock_map, monotonic=monotonic
+    )
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert [r.payload for r in c.seen] == [b"\x13\x00", b"\x13\x01"]
+    assert c.seen[0].timestamp == "kernel"
+    assert c.seen[0].t_raw_us == pytest.approx(stamp / 1000.0 - 1_000.0)
+    assert c.seen[1].timestamp == "recv"
+
+
+def test_an_unresolvable_kernel_stamp_falls_back_to_receive_time(fake_hub_socket):
+    class NeverMap:
+        epoch = 0
+
+        def sample(self):
+            return True
+
+        def to_raw_us(self, real_ns):
+            return None
+
+    c = consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(10**18)])]),
+        seed=lambda m: None,
+        clock_map=NeverMap(),
+    )
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert [r.timestamp for r in c.seen] == ["recv"]
+    assert hub.counters()["recv_stamped"] == 1
+
+
+def test_the_clock_is_sampled_at_every_open(fake_hub_socket_failing_once):
+    clock_map = _ScriptedClockMap(offset_us=0.0)
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket_failing_once, seed=lambda m: None, backoff_s=0.0, clock_map=clock_map
+    )
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    assert clock_map.samples >= 2
+
+
+def test_counters_report_records_and_streaming_links(fake_hub_socket):
+    recs = [
+        (frame(hs.MONITOR_ACL_TX_PKT, 0, struct.pack("<HH", 0x2046, 0)), []),
+        (frame(hs.MONITOR_ACL_TX_PKT, 1, struct.pack("<HH", 0x2046, 0)), []),
+        (frame(hs.MONITOR_ACL_TX_PKT, 1, struct.pack("<HH", 0x2046, 0)), []),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), []),
+    ]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None)
+    hub.start()
+    hub.stop()
+    counters = hub.counters()
+    assert counters["records"] == 4 and counters["streaming_links"] == 2
+    assert counters["cpu_fraction"] is None  # no 30 s window completed yet
+
+
+def test_cpu_fraction_is_thread_time_over_wall_time_per_window(fake_hub_socket):
+    wall = iter(range(0, 10_000))
+    cpu = iter(range(0, 10_000))
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([]),
+        seed=lambda m: None,
+        monotonic=lambda: next(wall) * 10.0,
+        thread_time=lambda: next(cpu) * 0.1,
+    )
+    hub.start()
+    hub.stop()
+    fraction = hub.counters()["cpu_fraction"]
+    assert isinstance(fraction, float) and 0.0 < fraction < 0.05
+
+
+def test_avrcp_consumer_routes_by_index_and_handle(fake_hub_socket, monkeypatch):
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    noted = []
+    tracker = type("T", (), {"note_activity": lambda self, mac: noted.append(mac)})()
+    c = m.AvrcpConsumer(tracker=tracker)
+    c._conn[(1, 70)] = "AA:AA:AA:AA:AA:AA"
+    c._conn[(0, 70)] = "BB:BB:BB:BB:BB:BB"
+    avc = bytes([0x00, 0x11, 0x0E, 0x00, 0x48, 0x7C, 0x44, 0x00])  # play pressed
+    acl = struct.pack("<HH", 70, 4 + len(avc)) + struct.pack("<HH", len(avc), 0x0041) + avc
+    c.on_record(type("R", (), {"opcode": hs.MONITOR_ACL_RX_PKT, "index": 1, "payload": acl})())
+    assert noted == ["AA:AA:AA:AA:AA:AA"]
+
+
+def _cc_event(handle, bdaddr_le):
+    params = bytes([0]) + struct.pack("<H", handle) + bdaddr_le + bytes([1, 0])
+    return bytes([0x03, len(params)]) + params
+
+
+def _play_press_acl(handle):
+    avc = bytes([0x00, 0x11, 0x0E, 0x00, 0x48, 0x7C, 0x44, 0x00])
+    return struct.pack("<HH", handle, 4 + len(avc)) + struct.pack("<HH", len(avc), 0x0041) + avc
+
+
+def test_avrcp_consumer_on_the_hub_keeps_two_adapters_apart(fake_hub_socket):
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    noted: list[str] = []
+    tracker = type("T", (), {"note_activity": lambda self, mac: noted.append(mac)})()
+    recs = [
+        (frame(hs.MONITOR_EVENT_PKT, 0, _cc_event(70, bytes([1, 2, 3, 4, 5, 6]))), []),
+        (frame(hs.MONITOR_EVENT_PKT, 1, _cc_event(70, bytes([6, 5, 4, 3, 2, 1]))), []),
+        (frame(hs.MONITOR_ACL_RX_PKT, 1, _play_press_acl(70)), []),
+        (frame(hs.MONITOR_ACL_RX_PKT, 0, _play_press_acl(70)), []),
+    ]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None)
+    hub.add_consumer(m.AvrcpConsumer(tracker=tracker, peers=hub.peers))
+    hub.start()
+    hub.stop()
+    assert noted == ["01:02:03:04:05:06", "06:05:04:03:02:01"]
+
+
+def test_avrcp_consumer_takes_the_seeded_links_on_open(fake_hub_socket):
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    noted: list[str] = []
+    tracker = type("T", (), {"note_activity": lambda self, mac: noted.append(mac)})()
+
+    def seed(peers):
+        peers[(1, 70)] = "CC:CC:CC:CC:CC:CC"
+
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(frame(hs.MONITOR_ACL_RX_PKT, 1, _play_press_acl(70)), [])]), seed=seed
+    )
+    hub.add_consumer(m.AvrcpConsumer(tracker=tracker, peers=hub.peers))
+    hub.start()
+    hub.stop()
+    assert noted == ["CC:CC:CC:CC:CC:CC"]
+
+
+def test_avrcp_consumer_does_not_want_acl_tx():
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    assert m.AvrcpConsumer(tracker=object()).wants_acl_tx is False
+
+
+def test_get_hub_is_a_process_wide_singleton():
+    from sendspin_bridge.services.bluetooth.hci_monitor_hub import get_hub
+
+    assert get_hub() is get_hub()
