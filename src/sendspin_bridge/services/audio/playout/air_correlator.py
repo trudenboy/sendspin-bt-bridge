@@ -16,10 +16,15 @@ Per window (spec "Correlation", steps 1, 2, 4–6):
    ``ρ(ℓ) = Σ â_j·w_{j+ℓ} / (N·σ_w(ℓ))`` (``Σ â = 0`` removes the written mean). Flatness:
    ``σ_a ≥`` :data:`FLAT_AIR` and ``σ_w ≥`` :data:`FLAT_WRITTEN` (lags below it score 0; a
    window with no such lag is ``flat``).
-4. **Peak and side lobe** — ``ℓ*`` = argmax; side lobe = max ρ outside the main lobe, the
-   peak's monotone descent on each side but at least ``|ℓ − ℓ*| ≤`` :data:`SIDE_EXCLUDE`
-   (:func:`side_lobe`); ``PSR = ρ(ℓ*)/max(ρ_s, 0.01)``; a peak on the first or last lag is
-   ``edge`` (the true lag may lie outside the range).
+4. **Peak and side lobe** — ``ℓ*`` = argmax over the search range; a peak on its first or
+   last lag is ``edge`` (the true lag may lie outside). The side lobe is measured over a fixed
+   scan of ``±``:data:`SIDE_SCAN` lags around ``ℓ*`` (lags beyond the search range come from
+   the caller's ``margin`` and are computed for the side lobe only), so the PSR does not depend
+   on the search range: max ρ outside the main lobe, the peak's monotone descent capped at
+   ``±``:data:`SIDE_MAX` but at least ``±``:data:`SIDE_EXCLUDE` (:func:`side_lobe`);
+   ``PSR = ρ(ℓ*)/max(ρ_s, 0.01)``. Data too short for the scan → ``no_side_lobe``. Search
+   lags beyond the scan (acquisition) also count as side lobe, so a loop's neighbour period
+   is seen: a wider range can only lower the PSR, a range inside the scan never changes it.
 5. **Gate** — ``confirmed`` when ``PSR ≥`` :data:`PSR_GATE` and ``ρ ≥`` :data:`RHO_MIN`, else
    ``rejected``.
 6. **Sub-frame** — parabolic ``λ`` on ``ρ(ℓ*−1), ρ(ℓ*), ρ(ℓ*+1)`` clamped to ±0.5;
@@ -47,13 +52,15 @@ if TYPE_CHECKING:
 PSR_GATE = 1.17
 RHO_MIN = 0.25
 SIDE_EXCLUDE = 2  # cells excluded around the peak for the side lobe
+SIDE_MAX = 8  # the main lobe ends at the first rise or this many cells from the peak
+SIDE_SCAN = SIDE_MAX + 24  # the side lobe is always measured over ±this many lags around the peak
 FLAT_AIR = 2.0  # energy units (1/8 bit), sigma_a minimum
 FLAT_WRITTEN = 0.25  # bits, sigma_w minimum
 MIN_PRESENT = 0.90  # share of air cells present
 MIN_PROGRAM = 0.80  # share of written cells program over the zero-lag-centred span
 SIDE_FLOOR = 0.01  # a side lobe at or below this counts as this
 
-Status = Literal["confirmed", "rejected", "flat", "invalid", "edge"]
+Status = Literal["confirmed", "rejected", "flat", "invalid", "edge", "no_side_lobe"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,43 +136,99 @@ def ncc_scan(air: Sequence[float | None], written: Sequence[float], lag_lo: int,
     return _scan(air, written, lag_lo, lag_hi, 0.0)[0]
 
 
-def side_lobe(rho: Sequence[float], best: int) -> float:
-    """Highest ρ outside the main lobe of the peak at ``best`` (:data:`SIDE_FLOOR` when none).
+def side_lobe(rho: Sequence[float], best: int) -> float | None:
+    """Highest ρ outside the main lobe of the peak at ``best`` (None when no lag lies outside).
 
-    The main lobe is the peak's monotone descent on each side (to the first rise), and never
-    less than ±:data:`SIDE_EXCLUDE` cells: a lag on the peak's own shoulder is not a competing
-    alignment, a neighbour period of a loop is.
+    The main lobe is the peak's monotone descent on each side, ending at the first rise or
+    :data:`SIDE_MAX` cells from the peak, and never less than ±:data:`SIDE_EXCLUDE` cells: a
+    lag on the peak's own shoulder is not a competing alignment, a neighbour period of a loop is.
     """
     lo = hi = best
-    while lo > 0 and rho[lo - 1] <= rho[lo]:
+    while lo > 0 and best - lo < SIDE_MAX and rho[lo - 1] <= rho[lo]:
         lo -= 1
-    while hi < len(rho) - 1 and rho[hi + 1] <= rho[hi]:
+    while hi < len(rho) - 1 and hi - best < SIDE_MAX and rho[hi + 1] <= rho[hi]:
         hi += 1
     lo = min(lo, best - SIDE_EXCLUDE)
     hi = max(hi, best + SIDE_EXCLUDE)
-    return max((r for i, r in enumerate(rho) if i < lo or i > hi), default=SIDE_FLOOR)
+    return max((r for i, r in enumerate(rho) if i < lo or i > hi), default=None)
+
+
+def _side_scan(
+    air: Sequence[float | None],
+    written: Sequence[float],
+    rho: list[float],
+    lag_lo: int,
+    lag_hi: int,
+    margin: int,
+    peak_lag: int,
+) -> tuple[int, list[float]] | None:
+    """``(first lag, ρ)`` over the ``2·SIDE_SCAN + 1`` lags around the peak, or None.
+
+    The scan is shifted to fit the available lags; lags inside the search range reuse ``rho``,
+    the others are computed for the side lobe only.
+    """
+    avail_lo, avail_hi = lag_lo - margin, lag_hi + margin
+    if avail_hi - avail_lo < 2 * SIDE_SCAN:
+        return None
+    a = max(avail_lo, min(peak_lag - SIDE_SCAN, avail_hi - 2 * SIDE_SCAN))
+    b = a + 2 * SIDE_SCAN
+    n = len(air)
+
+    def extra(x: int, y: int) -> list[float]:
+        k = x - avail_lo
+        return _scan(air, written[k : k + n + y - x], x, y, FLAT_WRITTEN)[0]
+
+    left = extra(a, lag_lo - 1) if a < lag_lo else []
+    right = extra(lag_hi + 1, b) if b > lag_hi else []
+    return a, left + rho[max(a, lag_lo) - lag_lo : min(b, lag_hi) - lag_lo + 1] + right
 
 
 def correlate_window(
-    air: Sequence[float | None], written: Sequence[float], program: bytes, lag_lo: int, lag_hi: int
+    air: Sequence[float | None],
+    written: Sequence[float],
+    program: bytes,
+    lag_lo: int,
+    lag_hi: int,
+    *,
+    margin: int = 0,
 ) -> WindowResult:
-    """One window: validity, NCC over the lag range, peak/side-lobe gate, sub-frame lag."""
+    """One window: validity, NCC over the lag range, peak/side-lobe gate, sub-frame lag.
+
+    The caller centres ``[lag_lo, lag_hi]`` on its prior: the program share is judged on the
+    written span the midpoint lag aligns with. ``written``/``program`` cover the lags
+    ``[lag_lo − margin, lag_hi + margin]`` (``len(air) + lag_hi − lag_lo + 2·margin`` cells);
+    the margin lags never hold the peak, they only let the side lobe be measured over the same
+    ``±SIDE_SCAN`` lags around it whatever the search range. A window whose lags cannot hold
+    that scan is ``no_side_lobe`` (PSR unmeasurable, never confirmed). Non-finite values make
+    a window ``invalid``.
+    """
     n = len(air)
-    if n == 0:
+    if n == 0 or not all(map(math.isfinite, written)) or not all(math.isfinite(a) for a in air if a is not None):
         return WindowResult("invalid", None, None, None)
     present = n - sum(1 for a in air if a is None)
-    centre = (lag_lo + lag_hi) // 2 - lag_lo
+    centre = (lag_lo + lag_hi) // 2 - lag_lo + margin
     span = program[centre : centre + n]
     if present < MIN_PRESENT * n or sum(1 for p in span if p) < MIN_PROGRAM * n:
         return WindowResult("invalid", None, None, None)
-    rho, sigma_a, max_sigma_w = _scan(air, written, lag_lo, lag_hi, FLAT_WRITTEN)
+    search = written[margin : margin + n + lag_hi - lag_lo]
+    rho, sigma_a, max_sigma_w = _scan(air, search, lag_lo, lag_hi, FLAT_WRITTEN)
     if sigma_a < FLAT_AIR or max_sigma_w < FLAT_WRITTEN:
         return WindowResult("flat", None, None, None)
     best = max(range(len(rho)), key=rho.__getitem__)
     peak = rho[best]
-    psr = peak / max(side_lobe(rho, best), SIDE_FLOOR)
     if best == 0 or best == len(rho) - 1:
-        return WindowResult("edge", None, peak, psr)
+        return WindowResult("edge", None, peak, None)
+    scanned = _side_scan(air, written, rho, lag_lo, lag_hi, margin, lag_lo + best)
+    if scanned is None:
+        return WindowResult("no_side_lobe", None, peak, None)
+    a, scan = scanned
+    side = side_lobe(scan, lag_lo + best - a)
+    if side is None:
+        return WindowResult("no_side_lobe", None, peak, None)
+    # A search range wider than the scan also competes (a loop's neighbour period lies there).
+    beyond = [r for i, r in enumerate(rho) if not a <= lag_lo + i <= a + 2 * SIDE_SCAN]
+    side = max(side, *beyond) if beyond else side
+    psr = peak / max(side, SIDE_FLOOR)
     if psr < PSR_GATE or peak < RHO_MIN:
         return WindowResult("rejected", None, peak, psr)
     lag = lag_lo + best + refine(rho[best - 1], peak, rho[best + 1])

@@ -12,6 +12,7 @@ import pytest
 from sendspin_bridge.services.audio.playout.air_correlator import (
     PSR_GATE,
     RHO_MIN,
+    SIDE_MAX,
     bandpass_peak_log2,
     correlate_window,
     ncc_scan,
@@ -56,8 +57,17 @@ def test_refine_is_zero_on_a_flat_top():
 
 
 def test_the_peaks_own_shoulder_is_not_a_side_lobe():
-    rho = [0.1, 0.5, 0.8, 0.9, 1.0, 0.9, 0.8, 0.5, 0.1]
-    assert side_lobe(rho, 4) == 0.01
+    rho = [0.1, 0.5, 0.8, 0.9, 1.0, 0.9, 0.8, 0.5, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert side_lobe(rho, 4) == 0.0
+
+
+def test_the_main_lobe_is_capped():
+    rho = [1.0 - 0.01 * abs(i - 20) for i in range(41)]  # monotone over the whole range
+    assert side_lobe(rho, 20) == pytest.approx(1.0 - 0.01 * (SIDE_MAX + 1))
+
+
+def test_no_lag_outside_the_main_lobe_has_no_side_lobe():
+    assert side_lobe([0.5, 1.0, 0.5], 1) is None
 
 
 def test_a_secondary_peak_beyond_the_main_lobe_is_the_side_lobe():
@@ -194,3 +204,45 @@ def test_bandpass_and_comb_both_rank_5khz_above_200hz_by_more_than_24db():
     comb = comb_peak_log2(hi, 2, start, frames, prev_hi, lag) - comb_peak_log2(lo, 2, start, frames, prev_lo, lag)
     assert bp > bits_24db
     assert comb > bits_24db
+
+
+def _tracking(air, w, prog, lo_full, centre, half, margin):
+    lo, hi = centre - half, centre + half
+    start = lo - margin - lo_full
+    length = len(air) + hi - lo + 2 * margin
+    return correlate_window(air, w[start : start + length], prog[start : start + length], lo, hi, margin=margin)
+
+
+@pytest.mark.parametrize("half", [20, 5])
+def test_tracking_windows_measure_the_same_psr_as_acquisition(half):
+    air, w, prog = make(lag_true=37.0, lo=-172, hi=172)
+    acq = correlate_window(air, w, prog, -172, 172)
+    trk = _tracking(air, w, prog, -172, 37, half, margin=SIDE_MAX + 24)
+    assert acq.status == trk.status == "confirmed"
+    assert math.isfinite(trk.psr)
+    assert trk.psr == pytest.approx(acq.psr, rel=0.05)
+    assert trk.lag == pytest.approx(acq.lag, abs=1e-9)
+
+
+def test_psr_does_not_depend_on_the_acquisition_range():
+    air, w, prog = make(lag_true=37.0, lo=-172, hi=172)
+    wide = correlate_window(air, w, prog, -172, 172)
+    narrow = correlate_window(air, w[86 : 86 + len(air) + 172], prog[86 : 86 + len(air) + 172], -86, 86)
+    assert narrow.psr == pytest.approx(wide.psr, rel=1e-9)
+
+
+def test_a_window_too_narrow_for_the_side_lobe_scan_is_not_confirmed():
+    air, w, prog = make(lag_true=37.0, lo=-172, hi=172)
+    r = _tracking(air, w, prog, -172, 37, 5, margin=0)
+    assert r.status == "no_side_lobe"
+    assert r.psr is None
+    assert r.lag is None
+
+
+def test_non_finite_input_makes_a_window_invalid():
+    air, w, prog = make()
+    air[10] = float("nan")
+    assert correlate_window(air, w, prog, -86, 86).status == "invalid"
+    air, w, prog = make()
+    w[5] = float("inf")
+    assert correlate_window(air, w, prog, -86, 86).status == "invalid"
