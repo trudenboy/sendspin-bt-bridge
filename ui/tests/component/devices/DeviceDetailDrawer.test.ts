@@ -95,6 +95,23 @@ describe('DeviceDetailDrawer', () => {
     expect(w.text()).toContain('SBC')
   })
 
+  it('shows the delay the speaker reports only when it reports one', async () => {
+    setActivePinia(createPinia())
+    const w = await mountDrawer()
+    expect(w.find('[data-reported-delay]').exists()).toBe(false)
+
+    mockDevice.bluetooth!.reported_delay_ms = 123.4
+    try {
+      const reporting = await mountDrawer()
+      const row = reporting.find('[data-reported-delay]')
+      expect(row.exists()).toBe(true)
+      expect(row.text()).toContain('Reported delay')
+      expect(row.text()).toContain('123.4 ms')
+    } finally {
+      mockDevice.bluetooth!.reported_delay_ms = null
+    }
+  })
+
   it('offers repair and the pairing window only when the backend supports them', async () => {
     setActivePinia(createPinia())
     const all = mockDevice.supported_actions

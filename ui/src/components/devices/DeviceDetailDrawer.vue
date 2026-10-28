@@ -236,6 +236,12 @@ function onAdapterReboot() {
                 <span class="text-text-secondary">{{ t('drawer.status.codec') }}</span>
                 <p class="mt-1 text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</p>
               </div>
+              <div v-if="!pulse && device.bluetooth?.reported_delay_ms != null" data-reported-delay>
+                <span class="text-text-secondary">{{ t('drawer.status.reportedDelay') }}</span>
+                <p class="mt-1 text-text-primary" :title="t('drawer.status.reportedDelayHint')">
+                  {{ device.bluetooth.reported_delay_ms.toFixed(1) }} ms
+                </p>
+              </div>
               <div>
                 <span class="text-text-secondary">{{ t('drawer.status.sampleRate') }}</span>
                 <p class="mt-1 text-text-primary">{{ device.audio.format ?? '—' }}</p>

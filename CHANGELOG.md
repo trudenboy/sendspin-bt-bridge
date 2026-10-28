@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Device details show the delay a Bluetooth speaker reports for itself
+  (A2DP Delay Reporting) when the speaker supports it, and the log notes
+  when that reported delay appears or changes by 1 ms or more; speakers
+  that do not report a delay show nothing extra.
+
 ## [3.1.0-beta.16] - 2026-10-27
 
 ### Fixed

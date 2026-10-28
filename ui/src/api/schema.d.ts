@@ -3331,7 +3331,10 @@ export interface components {
              * @description 'user' or 'auto' when released.
              */
             released_by: string | null;
-            /** Reported Delay Ms */
+            /**
+             * Reported Delay Ms
+             * @description Delay the speaker reports over AVDTP Delay Reporting, in ms. Advisory: reported by the speaker, not measured. Null when the speaker sends no Delay Report.
+             */
             reported_delay_ms: number | null;
             /**
              * Rssi At

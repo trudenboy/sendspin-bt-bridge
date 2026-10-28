@@ -78,3 +78,55 @@ def test_no_transport_no_line():
     from sendspin_bridge.services.bluetooth.transport_telemetry import transport_connect_line
 
     assert transport_connect_line(None, BluetoothTransportSnapshot()) is None
+
+
+def test_delay_report_units_are_tenths_of_a_millisecond():
+    managed = {f"{DEVICE}/sep1/fd0": {MEDIA_TRANSPORT_IFACE: {"Device": DEVICE, "State": "active", "Delay": 1234}}}
+
+    snapshot = select_transport_snapshot(managed, DEVICE)
+
+    assert snapshot.delay_tenths_ms == 1234
+    assert snapshot.delay_ms == 123.4
+
+
+def test_the_connect_line_says_the_speaker_does_not_report_a_delay():
+    from sendspin_bridge.services.bluetooth.transport_telemetry import transport_connect_line
+
+    managed = {f"{DEVICE}/fd1": {MEDIA_TRANSPORT_IFACE: {"Device": DEVICE, "State": "idle", "Codec": 0}}}
+    line = transport_connect_line(None, select_transport_snapshot(managed, DEVICE))
+
+    assert line is not None
+    assert "does not report an A2DP delay" in line
+
+
+def _with_delay(tenths: int) -> BluetoothTransportSnapshot:
+    managed = {f"{DEVICE}/fd1": {MEDIA_TRANSPORT_IFACE: {"Device": DEVICE, "State": "active", "Delay": tenths}}}
+    return select_transport_snapshot(managed, DEVICE)
+
+
+def test_a_delay_that_appears_gets_a_line():
+    from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line
+
+    assert delay_change_line(None, _with_delay(1234)) == "A2DP delay report: 123.4 ms"
+
+
+def test_jitter_under_a_millisecond_gets_no_line():
+    from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line
+
+    assert delay_change_line(123.4, _with_delay(1240)) is None
+    assert delay_change_line(123.4, _with_delay(1228)) is None
+
+
+def test_a_change_of_a_millisecond_or_more_gets_a_line():
+    from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line
+
+    assert delay_change_line(123.4, _with_delay(1244)) == "A2DP delay report: 124.4 ms"
+    assert delay_change_line(123.4, _with_delay(1000)) == "A2DP delay report: 100.0 ms"
+
+
+def test_no_delay_property_gets_no_change_line():
+    from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line
+
+    managed = {f"{DEVICE}/fd1": {MEDIA_TRANSPORT_IFACE: {"Device": DEVICE, "State": "active"}}}
+    assert delay_change_line(None, select_transport_snapshot(managed, DEVICE)) is None
+    assert delay_change_line(None, BluetoothTransportSnapshot()) is None

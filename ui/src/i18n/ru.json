@@ -529,6 +529,8 @@
       "audioSink": "Аудиовыход",
       "connected": "Подключён",
       "codec": "Кодек",
+      "reportedDelay": "Заявленная задержка",
+      "reportedDelayHint": "Задержка, которую колонка сообщает по Bluetooth (A2DP Delay Reporting). Справочно: значение сообщает колонка, оно не измерено.",
       "sampleRate": "Частота дискретизации"
     },
     "config": {

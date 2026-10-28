@@ -282,6 +282,44 @@ async def test_a_speaker_without_a_transport_still_answers_a_snapshot():
     assert snapshot.state is None
 
 
+@pytest.mark.asyncio
+async def test_the_snapshot_carries_the_speaker_s_delay_report_in_milliseconds():
+    bluez = _bluez(connected=True)
+    bluez.add_transport(f"{PATH}/sep1/fd0", "active", device=PATH)
+    bluez.objects[f"{PATH}/sep1/fd0"]["org.bluez.MediaTransport1"]["Delay"] = 1234
+
+    snapshot = await _device(bluez).transport_snapshot()
+
+    assert snapshot.delay_supported is True
+    assert snapshot.delay_ms == 123.4
+
+
+@pytest.mark.asyncio
+async def test_a_transport_without_delay_reporting_has_no_delay():
+    """The common case: most speakers do not send AVDTP Delay Reports."""
+    bluez = _bluez(connected=True)
+    bluez.add_transport(f"{PATH}/sep1/fd0", "active", device=PATH)
+
+    snapshot = await _device(bluez).transport_snapshot()
+
+    assert snapshot.state == "active"
+    assert snapshot.delay_supported is False
+    assert snapshot.delay_ms is None
+
+
+@pytest.mark.asyncio
+async def test_a_bus_error_answers_no_delay_instead_of_raising():
+    bluez = _bluez(connected=True)
+    bluez.add_transport(f"{PATH}/sep1/fd0", "active", device=PATH)
+    bluez.objects[f"{PATH}/sep1/fd0"]["org.bluez.MediaTransport1"]["Delay"] = 1234
+    bluez.fail["GetManagedObjects"] = RuntimeError("org.freedesktop.DBus.Error.NoReply")
+
+    snapshot = await _device(bluez).transport_snapshot()
+
+    assert snapshot.delay_ms is None
+    assert snapshot.delay_supported is False
+
+
 # ── before the controller is known ───────────────────────────────────────
 
 

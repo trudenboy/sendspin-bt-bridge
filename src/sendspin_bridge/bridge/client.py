@@ -66,7 +66,7 @@ from sendspin_bridge.services.audio.latency_calibration import (
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.audio.player.settings import output_latency_compensated
-from sendspin_bridge.services.bluetooth.transport_telemetry import transport_connect_line
+from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line, transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
 from sendspin_bridge.services.infrastructure.config_validation import (
@@ -670,6 +670,9 @@ class SendspinClient:
         self.player_name = player_name
         # The BlueZ transport last described in the log (one line per connect).
         self._described_transport_path: str | None = None
+        # The speaker's reported A2DP Delay as last written to the log, so a
+        # report is logged when it appears or moves, not on every poll.
+        self._logged_transport_delay_ms: float | None = None
         self.server_host = server_host
         self.server_port = server_port
         self.bt_manager = bt_manager
@@ -2641,6 +2644,12 @@ class SendspinClient:
                 line = transport_connect_line(self._described_transport_path, snapshot)
                 if line is not None:
                     logger.info("[%s] %s", self.player_name, line)
+                    self._logged_transport_delay_ms = snapshot.delay_ms
+                elif (change := delay_change_line(self._logged_transport_delay_ms, snapshot)) is not None:
+                    logger.info("[%s] %s", self.player_name, change)
+                    self._logged_transport_delay_ms = snapshot.delay_ms
+                if snapshot.path is None:
+                    self._logged_transport_delay_ms = None
                 self._described_transport_path = snapshot.path
                 codec_name = (
                     snapshot.codec_name
