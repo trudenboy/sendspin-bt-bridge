@@ -167,8 +167,8 @@ DisablePlugins=hfp,hsp
 **Что может сделать bridge.** Включите **Восстанавливать пропавший аудиовыход** (расширенные настройки восстановления Bluetooth, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`). Для колонки, у которой есть и Audio Source, и Audio Sink, bridge тогда:
 
 1. сразу после установления связи — в том числе когда Echo подключается сама — запрашивает профиль Audio Sink, не трогая source-профиль (лог: `Early Audio Sink ConnectProfile (source kept): …`);
-2. если sink не появился, запрашивает ещё раз с сохранённым source-профилем, и только при отказе отключает source-профиль и запрашивает снова (лог: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);
-3. **не** выполняет «танец» disconnect/reconnect, если колонка отказала: после него Echo рвёт каждое переподключение через секунду и перестаёт отвечать, пока её не спарят заново.
+2. если подключение установил сам bridge и sink не появился, запрашивает ещё раз с сохранённым source-профилем, и только при отказе отключает source-профиль и запрашивает снова (лог: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);
+3. в том же случае **не** выполняет «танец» disconnect/reconnect, если такая колонка (умеющая быть и источником звука) отказала и разорвала связь (лог: `Skipping the disconnect/reconnect dance: …`): после него Echo рвёт каждое переподключение через секунду и перестаёт отвечать, пока её не спарят заново. При отказе на живой связи «танец» выполняется.
 
 Можно ли вообще развернуть Echo со стороны хоста, пока не известно; если пробуете, приложите эти строки лога к #476.
 

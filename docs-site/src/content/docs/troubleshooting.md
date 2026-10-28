@@ -327,8 +327,8 @@ Then restart the BlueZ daemon (`systemctl restart bluetooth` on a regular host).
 **What the bridge can do.** Turn on **Recover a missing audio sink** (advanced Bluetooth recovery settings, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`). For a speaker that lists both Audio Source and Audio Sink it then:
 
 1. asks for the Audio Sink profile right after the link comes up — also when the Echo reconnects on its own — leaving the source profile alone (log: `Early Audio Sink ConnectProfile (source kept): …`);
-2. if no sink appears, asks again with the source profile kept, and only if that is refused drops the source profile and asks once more (log: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);
-3. does **not** run the disconnect/reconnect dance when the speaker refused: an Echo then drops every reconnect within a second and stops answering until it is re-paired.
+2. when the bridge itself made the connection and no sink appears, asks again with the source profile kept, and only if that is refused drops the source profile and asks once more (log: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);
+3. in that same case, does **not** run the disconnect/reconnect dance when such a speaker (one that is also an audio source) refused and dropped the link (log: `Skipping the disconnect/reconnect dance: …`): an Echo then drops every reconnect within a second and stops answering until it is re-paired. A refusal on a link that stays up still gets the dance.
 
 Whether an Echo can be turned round from the host side at all is still open; please attach those log lines to #476 if you try it.
 
