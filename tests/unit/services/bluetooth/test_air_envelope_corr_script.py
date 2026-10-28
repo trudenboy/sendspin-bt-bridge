@@ -189,3 +189,35 @@ def test_impl_cells_span_the_sbc_look_back_like_the_daemon_tap(tool):
     data = [v for f in frames for v in (f, f)]
     cells = tool.impl_source_cells(data, 2, 44100, 2, "comb")
     assert cells[3] == pytest.approx(math.log2(4001), abs=1e-4) and cells[4] == 0.0
+
+
+def test_offline_h_credits_the_comb_and_the_look_back(tool):
+    """Pinned: ``offline_h = α + u_mid − src_mid − (d_enc − d_comb)`` with
+    ``d_comb = (comb lag + look-back)/2/rate``; at M = 8 and 44.1 kHz that is +1.5 samples."""
+    rate = 44100
+    pk = tuple(tool.PacketTime(seg=0, u_s=k * 896 / rate, t_send=100.0 + k * 896 / rate) for k in range(10))
+    meta = tool.CellMeta(rate=rate, subbands=8, cell0_ticks=0, packet_of=(0,) * 8, packets=pk)
+    rows = [{"k": 0, "lag": 0.0}]
+    tool.annotate(rows, definition="impl", offset=0, meta=meta, window=4, offline_h=True, comb=True)
+    assert rows[0]["offline_h_s"] == pytest.approx(100.0 - (36 - (3 + 72) / 2) / rate, abs=1e-9)
+
+
+def test_offline_h_on_the_click_capture_agrees_with_the_phase_tool(tmp_path, tool, click_wav):
+    """The offline H of every confirmed window, folded onto the click cycle, lands within 1 ms of the
+    phase tool's air phase (the clicks start at the WAV's LEAD_IN_S); a flipped look-back credit
+    (1.6 ms) does not."""
+    from scripts.a2dp_air_phase import analyze
+
+    csv_path = tmp_path / "o.csv"
+    args = [str(CLICKS), str(click_wav), "--definition", "impl", "--window-frames", "600", "--hop-frames", "300"]
+    assert tool.main([*args, "--offline-h", "--csv", str(csv_path)]) == 0
+    head, *rows = [line.split(",") for line in csv_path.read_text().splitlines()]
+    col, status = head.index("offline_h_s"), head.index("status")
+    phi = analyze(CLICKS, 1, 70)[0][0].phase_send_ms
+    cycle = ct.CYCLE_S * 1000.0
+    diffs = [
+        (float(r[col]) * 1000.0 - phi + cycle / 2) % cycle - cycle / 2
+        for r in rows
+        if r[status] == "confirmed" and r[col]
+    ]
+    assert len(diffs) >= 3 and max(abs(d) for d in diffs) <= 1.0
