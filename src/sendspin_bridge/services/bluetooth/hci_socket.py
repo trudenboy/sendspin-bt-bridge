@@ -26,6 +26,10 @@ import ctypes
 import socket
 import struct
 import sys
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # AF_BLUETOOTH constants — hardcoded so imports don't fail on macOS dev
 # boxes where ``socket.AF_BLUETOOTH`` may be absent. Real binding only
@@ -64,6 +68,110 @@ def parse_monitor_packet(data: bytes) -> tuple[int, int, bytes] | None:
     if len(data) < end:
         return None
     return opcode, index, bytes(data[MONITOR_HEADER_LEN:end])
+
+
+# Socket options the monitor hub uses (asm-generic/socket.h, the values on every Linux arch the
+# bridge ships for). Hardcoded: ``socket`` does not export them.
+SO_RCVBUFFORCE: int = 33  # needs CAP_NET_ADMIN; falls back to SO_RCVBUF (capped by rmem_max)
+SO_TIMESTAMPNS: int = 35  # SO_TIMESTAMPNS_OLD: a native ``struct timespec`` in CLOCK_REALTIME
+SCM_TIMESTAMPNS: int = SO_TIMESTAMPNS
+SO_RXQ_OVFL: int = 40  # cumulative u32 drop count as a cmsg (hci_sock_recvmsg likely never sends it)
+SO_MEMINFO: int = 55  # u32[SK_MEMINFO_VARS]
+SK_MEMINFO_DROPS: int = 8  # index into the u32 array SO_MEMINFO returns
+SK_MEMINFO_VARS: int = 9
+
+_NSEC_PER_SEC = 1_000_000_000
+# struct timespec: two 64-bit fields on 64-bit userspace, two 32-bit longs on armv7.
+_TIMESPEC_FORMATS = {struct.calcsize("qq"): "qq", struct.calcsize("ii"): "ii"}
+_U32 = struct.Struct("I")
+
+
+def enable_monitor_sockopts(sock: socket.socket, *, rcvbuf: int = 4 << 20) -> dict[str, bool]:
+    """Set SO_TIMESTAMPNS, SO_RXQ_OVFL and the receive buffer (SO_RCVBUFFORCE, else SO_RCVBUF); returns what succeeded."""
+
+    def _try(opt: int, value: int) -> bool:
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, opt, value)
+        except OSError:
+            return False
+        return True
+
+    result = {
+        "timestamps": _try(SO_TIMESTAMPNS, 1),
+        "rxq_ovfl": _try(SO_RXQ_OVFL, 1),
+        "rcvbuf_force": _try(SO_RCVBUFFORCE, rcvbuf),
+    }
+    result["rcvbuf"] = result["rcvbuf_force"] or _try(socket.SO_RCVBUF, rcvbuf)
+    return result
+
+
+def parse_monitor_cmsgs(ancdata: list[tuple[int, int, bytes]]) -> tuple[int | None, int | None]:
+    """(realtime_ns, rxq_ovfl_drops) from recvmsg ancillary data; None for what is absent or malformed."""
+    realtime_ns: int | None = None
+    drops: int | None = None
+    for level, kind, data in ancdata:
+        if level != socket.SOL_SOCKET:
+            continue
+        if kind == SCM_TIMESTAMPNS:
+            fmt = _TIMESPEC_FORMATS.get(len(data))
+            if fmt is None:
+                continue
+            sec, nsec = struct.unpack(fmt, data)
+            if sec >= 0 and 0 <= nsec < _NSEC_PER_SEC:
+                realtime_ns = sec * _NSEC_PER_SEC + nsec
+        elif kind == SO_RXQ_OVFL and len(data) == _U32.size:
+            (drops,) = _U32.unpack(data)
+    return realtime_ns, drops
+
+
+def read_meminfo_drops(sock: socket.socket) -> int | None:
+    """Cumulative SK_MEMINFO_DROPS via getsockopt(SOL_SOCKET, SO_MEMINFO); None when unsupported."""
+    try:
+        raw = sock.getsockopt(socket.SOL_SOCKET, SO_MEMINFO, _U32.size * SK_MEMINFO_VARS)
+    except OSError:
+        return None
+    offset = _U32.size * SK_MEMINFO_DROPS
+    if len(raw) < offset + _U32.size:
+        return None
+    (drops,) = _U32.unpack_from(raw, offset)
+    return int(drops)
+
+
+class DropCounter:
+    """Prefers the cmsg count once one has been seen; otherwise polls SO_MEMINFO (every 250 ms).
+
+    The caller drives it: :meth:`on_cmsg` with each record's SO_RXQ_OVFL value (``None`` when the
+    record carried none) and :meth:`tick` on its 250 ms cadence. Both counts are cumulative socket
+    drops; once a cmsg count has been seen, polling stops. A failed poll keeps the last value.
+    """
+
+    def __init__(self, *, poll: Callable[[], int | None]) -> None:
+        self._poll = poll
+        self._drops: int | None = None
+        self._source: Literal["cmsg", "meminfo", "none"] = "none"
+
+    def on_cmsg(self, drops: int | None) -> None:
+        if drops is None:
+            return
+        self._drops = drops
+        self._source = "cmsg"
+
+    def tick(self) -> None:
+        if self._source == "cmsg":
+            return
+        drops = self._poll()
+        if drops is None:
+            return
+        self._drops = drops
+        self._source = "meminfo"
+
+    @property
+    def drops(self) -> int | None:
+        return self._drops
+
+    @property
+    def source(self) -> Literal["cmsg", "meminfo", "none"]:
+        return self._source
 
 
 # struct sockaddr_hci { sa_family_t hci_family; uint16_t hci_dev;
