@@ -13,6 +13,7 @@ The caller (the monitor hub) samples every 250 ms; this class keeps no thread an
 
 from __future__ import annotations
 
+import itertools
 import time
 from collections import deque
 from typing import TYPE_CHECKING
@@ -79,7 +80,7 @@ class RawRealtimeMap:
         pairs = self._pairs
         if len(pairs) < 2 or not pairs[0][0] <= real_ns <= pairs[-1][0]:
             return None
-        for (r0, o0), (r1, o1) in zip(list(pairs), list(pairs)[1:], strict=False):
+        for (r0, o0), (r1, o1) in itertools.pairwise(pairs):
             if r0 <= real_ns <= r1:
                 slew = (o1 - o0) * (real_ns - r0) / (r1 - r0)
                 return ((real_ns - o0) - slew) / 1000.0
