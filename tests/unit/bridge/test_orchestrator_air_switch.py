@@ -163,3 +163,21 @@ def test_switch_on_registers_the_consumer_before_the_hub_starts_and_stops_it_at_
     env.start()
     assert [type(c).__name__ for c in seen_at_start[0]] == ["AvrcpConsumer"]
     assert env.hub.stopped and not env.avrcp_monitor.stopped
+
+
+def test_selecting_the_monitor_twice_registers_one_avrcp_consumer(monkeypatch):
+    from sendspin_bridge.bridge import orchestrator as orch
+    from sendspin_bridge.services.bluetooth import hci_monitor_hub
+
+    hub = FakeHub()
+    monkeypatch.setattr(hci_monitor_hub, "get_hub", lambda: hub)
+    first = orch._hci_monitor_for({"EXPERIMENTAL_AIR_SENSOR": True})
+    second = orch._hci_monitor_for({"EXPERIMENTAL_AIR_SENSOR": True})
+
+    async def run():
+        await first.start()
+        await second.start()
+        await first.stop()
+
+    asyncio.run(run())
+    assert [type(c).__name__ for c in hub.consumers] == ["AvrcpConsumer"]

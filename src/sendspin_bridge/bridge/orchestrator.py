@@ -290,10 +290,8 @@ def _hci_monitor_for(config: dict[str, Any]) -> Any:
 
         return hci_avrcp_monitor.get_monitor()
     from sendspin_bridge.services.bluetooth import hci_monitor_hub
-    from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import AvrcpConsumer
 
-    hub = hci_monitor_hub.get_hub()
-    return hci_monitor_hub.AsyncHubLifecycle(hub, [AvrcpConsumer(peers=hub.peers)])
+    return hci_monitor_hub.get_avrcp_hub_lifecycle()
 
 
 @dataclass

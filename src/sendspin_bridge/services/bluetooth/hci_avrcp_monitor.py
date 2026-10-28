@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from sendspin_bridge.services.bluetooth.hci_socket import (
     MONITOR_ACL_RX_PKT,
+    MONITOR_DEL_INDEX,
     MONITOR_EVENT_PKT,
     parse_monitor_packet,
 )
@@ -333,6 +334,9 @@ def _process_record(
             disc_handle = _parse_disconnect_complete(params)
             if disc_handle is not None:
                 conn_map.pop((index, disc_handle), None)
+    elif opcode == MONITOR_DEL_INDEX:
+        for key in [k for k in conn_map if k[0] == index]:
+            del conn_map[key]
     elif opcode == _OPCODE_ACL_RX_PKT:
         if len(payload) < 4:
             return
@@ -373,7 +377,7 @@ class AvrcpConsumer:
         return self._tracker
 
     def on_record(self, rec: _RecordLike) -> None:
-        if rec.opcode in (_OPCODE_EVENT_PKT, _OPCODE_ACL_RX_PKT):
+        if rec.opcode in (_OPCODE_EVENT_PKT, _OPCODE_ACL_RX_PKT, MONITOR_DEL_INDEX):
             _process_record(rec, self._conn, self._get_tracker())
 
     def on_hub_state(self, state: str, reason: str | None) -> None:

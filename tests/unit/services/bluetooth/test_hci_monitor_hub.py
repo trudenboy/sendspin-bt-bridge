@@ -403,7 +403,7 @@ def test_kernel_stamps_wait_for_a_later_pair_and_keep_order(fake_hub_socket):
         (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(stamp)]),
         (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x01"), []),
     ]
-    c = consumer()
+    c = kernel_consumer()
     hub = HciMonitorHub(
         open_socket=fake_hub_socket(recs), seed=lambda m: None, clock_map=clock_map, monotonic=monotonic
     )
@@ -426,7 +426,7 @@ def test_an_unresolvable_kernel_stamp_falls_back_to_receive_time(fake_hub_socket
         def to_raw_us(self, real_ns):
             return None
 
-    c = consumer()
+    c = kernel_consumer()
     hub = HciMonitorHub(
         open_socket=fake_hub_socket([(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(10**18)])]),
         seed=lambda m: None,
@@ -550,3 +550,189 @@ def test_get_hub_is_a_process_wide_singleton():
     from sendspin_bridge.services.bluetooth.hci_monitor_hub import get_hub
 
     assert get_hub() is get_hub()
+
+
+# ---------------------------------------------------------------- fix round 1
+
+
+def kernel_consumer():
+    c = consumer(True)
+    c.wants_kernel_time = True
+    return c
+
+
+class _FrozenClock:
+    """Monotonic time that never advances: after the open tick no 250 ms tick ever comes."""
+
+    def __call__(self):
+        return 100.0
+
+
+def test_a_quiet_bus_press_reaches_the_avrcp_consumer_without_waiting_for_a_tick(fake_hub_socket):
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    noted = threading.Event()
+    tracker = type("T", (), {"note_activity": lambda self, mac: noted.set()})()
+
+    def seed(peers):
+        peers[(1, 70)] = "CC:CC:CC:CC:CC:CC"
+
+    class NeverMap:
+        epoch = 0
+
+        def sample(self):
+            return True
+
+        def to_raw_us(self, real_ns):
+            return None
+
+    recs = [(frame(hs.MONITOR_ACL_RX_PKT, 1, _play_press_acl(70)), [timestamp_cmsg(10**18)])]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=seed, clock_map=NeverMap(), monotonic=_FrozenClock())
+    hub.add_consumer(m.AvrcpConsumer(tracker=tracker, peers=hub.peers))
+    hub.add_consumer(kernel_consumer())  # a kernel-time consumer keeps the record pending
+    hub.start()
+    try:
+        assert noted.wait(1.0)
+    finally:
+        hub.stop()
+
+
+def test_order_is_kept_per_consumer_on_both_paths(fake_hub_socket):
+    ticks = iter(range(0, 10_000))
+    clock_map = _ScriptedClockMap(offset_us=0.0)
+    recs = [
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(1_700_000_000_000_000_000)]),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x01"), []),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x02"), [timestamp_cmsg(1_700_000_000_000_100_000)]),
+    ]
+    plain, timed = consumer(), kernel_consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket(recs),
+        seed=lambda m: None,
+        clock_map=clock_map,
+        monotonic=lambda: next(ticks) * 0.3,
+    )
+    hub.add_consumer(plain)
+    hub.add_consumer(timed)
+    hub.start()
+    hub.stop()
+    expected = [b"\x13\x00", b"\x13\x01", b"\x13\x02"]
+    assert [r.payload for r in plain.seen] == expected
+    assert [r.payload for r in timed.seen] == expected
+    assert [r.timestamp for r in timed.seen] == ["kernel", "recv", "kernel"]
+    assert {r.timestamp for r in plain.seen} == {"recv"}
+
+
+def test_without_kernel_time_consumers_nothing_waits(fake_hub_socket):
+    got = threading.Event()
+    plain = consumer()
+    plain.on_record = lambda rec: got.set()
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(10**18)])]
+    opener = fake_hub_socket(recs)
+    hub = HciMonitorHub(open_socket=opener, seed=lambda m: None, monotonic=_FrozenClock())
+    hub.add_consumer(plain)
+    hub.start()
+    try:
+        assert got.wait(1.0)
+    finally:
+        hub.stop()
+    assert opener.made[0].timeouts == [0.5] and hub.counters()["recv_stamped"] == 0
+
+
+def test_the_read_timeout_is_bounded_by_the_next_tick_while_records_wait(fake_hub_socket):
+    class NeverMap:
+        epoch = 0
+
+        def sample(self):
+            return True
+
+        def to_raw_us(self, real_ns):
+            return None
+
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(10**18)])]
+    opener = fake_hub_socket(recs)
+    hub = HciMonitorHub(open_socket=opener, seed=lambda m: None, clock_map=NeverMap())
+    hub.add_consumer(kernel_consumer())
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    timeouts = opener.made[0].timeouts
+    assert timeouts[0] == 0.5 and any(t < 0.5 for t in timeouts[1:])
+    assert all(0 < t <= 0.5 for t in timeouts)
+
+
+def test_records_carry_the_clock_epoch(fake_hub_socket):
+    ticks = iter(range(0, 10_000))
+    clock_map = _ScriptedClockMap(offset_us=0.0)
+    clock_map.epoch = 3
+    recs = [
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(1_700_000_000_000_000_000)]),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x01"), []),
+    ]
+    plain, timed = consumer(), kernel_consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket(recs),
+        seed=lambda m: None,
+        clock_map=clock_map,
+        monotonic=lambda: next(ticks) * 0.3,
+    )
+    hub.add_consumer(plain)
+    hub.add_consumer(timed)
+    hub.start()
+    hub.stop()
+    assert [r.clock_epoch for r in timed.seen] == [3, 3]
+    assert [r.clock_epoch for r in plain.seen] == [3, 3]
+
+
+def test_cpu_fraction_reports_within_the_first_window(fake_hub_socket):
+    wall = iter(range(0, 100_000))
+    cpu = iter(range(0, 100_000))
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([]),
+        seed=lambda m: None,
+        monotonic=lambda: min(next(wall), 20) * 0.3,  # never reaches the end of a 30 s window
+        thread_time=lambda: next(cpu) * 0.003,
+    )
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    fraction = hub.counters()["cpu_fraction"]
+    assert isinstance(fraction, float) and 0.0 < fraction < 0.05
+
+
+def test_an_unexpected_error_while_serving_reopens_with_monitor_error(fake_hub_socket):
+    class ExplodingOnce:
+        epoch = 0
+
+        def __init__(self):
+            self.calls = 0
+
+        def sample(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("unexpected")
+            return True
+
+        def to_raw_us(self, real_ns):
+            return None
+
+    c = consumer()
+    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=lambda m: None, clock_map=ExplodingOnce(), backoff_s=0.0)
+    hub.add_consumer(c)
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    assert ("error", "monitor_error") in c.states and hub.generation == 2
+
+
+def test_avrcp_consumer_forgets_links_of_a_removed_controller():
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    noted: list[str] = []
+    tracker = type("T", (), {"note_activity": lambda self, mac: noted.append(mac)})()
+    c = m.AvrcpConsumer(tracker=tracker)
+    c._conn[(1, 70)] = "AA:AA:AA:AA:AA:AA"
+    c._conn[(0, 70)] = "BB:BB:BB:BB:BB:BB"
+    rec = type("R", (), {"opcode": hs.MONITOR_DEL_INDEX, "index": 1, "payload": b""})()
+    c.on_record(rec)
+    assert c._conn == {(0, 70): "BB:BB:BB:BB:BB:BB"}

@@ -5,10 +5,15 @@ With the switch on, the hub replaces the asyncio ``HciAvrcpMonitor`` as the owne
 handed to the registered consumers on the hub thread; AVRCP source correlation is one consumer
 (``AvrcpConsumer``), the air sensor will be another.
 
-Timestamps: the kernel stamps each monitor frame in ``CLOCK_REALTIME`` (``SO_TIMESTAMPNS``). A
-stamped record waits (≤ 250 ms, in order) until a later ``RawRealtimeMap`` pair brackets it; a
-record without a stamp, or one no pair can bracket, gets the RAW time at ``recvmsg`` return and
-``timestamp="recv"`` (R-3). The map is sampled at every (re)open and then every 250 ms.
+Timestamps: the kernel stamps each monitor frame in ``CLOCK_REALTIME`` (``SO_TIMESTAMPNS``).
+Consumers that declare ``wants_kernel_time = True`` (the air consumer) get records through a
+queue: a stamped record waits (≤ 250 ms, in order) until a later ``RawRealtimeMap`` pair brackets
+it; a record without a stamp, or one no pair can bracket, gets the RAW time at ``recvmsg`` return
+and ``timestamp="recv"`` (R-3). Every other consumer (AVRCP, which never reads the time) gets each
+record at once, stamped ``recv``. The map is sampled at every (re)open and then every 250 ms; while
+records wait, the read timeout is bounded by the next tick. ``clock_epoch`` is the map's epoch used
+for the bracket (the current epoch for ``recv`` records). For a kernel-time consumer, a ``recv``
+record inside a kernel-stamped stream, or a change of ``clock_epoch``, is a segment break.
 
 Drops: the ``SO_RXQ_OVFL`` cmsg when the kernel sends one, else ``SO_MEMINFO`` polled every
 250 ms (the only path seen on the monitor channel so far). ``drops=None`` means unknown, never zero.
@@ -84,9 +89,12 @@ class HubRecord:
     payload: bytes
     drops: int | None
     timestamp: Literal["kernel", "recv"]
+    clock_epoch: int = 0
 
 
 class HubConsumer(Protocol):
+    """``wants_acl_tx`` opts into ACL TX; an optional ``wants_kernel_time = True`` opts into the bracketed path."""
+
     wants_acl_tx: bool
 
     def on_record(self, rec: HubRecord) -> None: ...  # hub thread; must not block
@@ -167,6 +175,11 @@ class HciMonitorHub:
 
         self._lock = threading.Lock()
         self._consumers: tuple[HubConsumer, ...] = ()
+        self._immediate: tuple[HubConsumer, ...] = ()
+        self._timed: tuple[HubConsumer, ...] = ()
+        self._timeout = _SOCKET_TIMEOUT_S
+        self._last_cpu_sample: tuple[float, float] | None = None
+        self._unexpected_logged_at: float | None = None
         self._greet: list[HubConsumer] = []
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -199,6 +212,7 @@ class HciMonitorHub:
             if c in self._consumers:
                 return
             self._consumers = (*self._consumers, c)
+            self._split_consumers()
             if self._is_open:
                 # Told "open" on the hub thread, like every other state callback.
                 self._greet.append(c)
@@ -206,7 +220,14 @@ class HciMonitorHub:
     def remove_consumer(self, c: HubConsumer) -> None:
         with self._lock:
             self._consumers = tuple(x for x in self._consumers if x is not c)
+            self._split_consumers()
             self._greet = [x for x in self._greet if x is not c]
+
+    def _split_consumers(self) -> None:
+        # Caller holds the lock. Read lock-free on the hub thread (tuples are swapped whole).
+        timed = tuple(c for c in self._consumers if getattr(c, "wants_kernel_time", False))
+        self._immediate = tuple(c for c in self._consumers if c not in timed)
+        self._timed = timed
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -223,7 +244,13 @@ class HciMonitorHub:
         thread.start()
 
     def stop(self, timeout: float = 2.0) -> None:
-        """Stop the reader: it drains what is already queued (≤ *timeout*), closes the socket and exits."""
+        """Stop the reader: it drains the socket queue, closes the socket and exits.
+
+        The drain ends at the first idle read timeout (≤ 0.5 s) or *timeout* after this call,
+        whichever comes first; with A2DP still streaming it can take the full *timeout*. A stop
+        requested before the first open still lets the thread try the open once (so an error is
+        reported and records already queued in the kernel are delivered).
+        """
         with self._lock:
             thread = self._thread
             if thread is None:
@@ -276,11 +303,20 @@ class HciMonitorHub:
                 "drops": self._drops,
                 "drop_source": self._drop_source,
                 "clock_steps": self._clock_map.epoch - self._clock_epoch0,
-                "cpu_fraction": self._cpu_fraction,
+                "cpu_fraction": self._cpu_fraction_now(),
                 "streaming_links": streaming,
                 "recv_stamped": self._recv_stamped,
                 "generation": self._generation,
             }
+
+    def _cpu_fraction_now(self) -> float | None:
+        """The last completed 30 s window; within the first window, the window so far (≥ 1 s)."""
+        if self._cpu_fraction is not None:
+            return self._cpu_fraction
+        start, last = self._window_start, self._last_cpu_sample
+        if start is None or last is None or last[0] - start[0] < 1.0:
+            return None
+        return max(0.0, last[1] - start[1]) / (last[0] - start[0])
 
     # ------------------------------------------------------------------ thread
 
@@ -303,8 +339,13 @@ class HciMonitorHub:
                 try:
                     self._serve(sock)
                     return
-                except (OSError, ValueError, TypeError) as exc:
-                    self._flush_pending(force=True)  # records already read still reach the consumers
+                except Exception as exc:
+                    try:
+                        self._flush_pending(force=True)  # records already read still reach the consumers
+                    except Exception:
+                        self._pending.clear()
+                    if not isinstance(exc, OSError):
+                        self._log_unexpected()
                     self._fail("monitor_error", f"socket error ({exc})")
                 finally:
                     self._close(sock)
@@ -315,6 +356,14 @@ class HciMonitorHub:
             with self._lock:
                 self._is_open = False
             self._notify_state("closed", None)
+
+    def _log_unexpected(self) -> None:
+        now = self._monotonic()
+        last = self._unexpected_logged_at
+        if last is not None and now - last < _CONSUMER_LOG_INTERVAL_S:
+            return
+        self._unexpected_logged_at = now
+        logger.warning("HciMonitorHub: unexpected error in the reader", exc_info=True)
 
     def _close(self, sock: Any) -> None:
         with self._lock:
@@ -338,6 +387,7 @@ class HciMonitorHub:
     def _serve(self, sock: Any) -> None:
         opts = enable_monitor_sockopts(sock)
         sock.settimeout(_SOCKET_TIMEOUT_S)
+        self._timeout = _SOCKET_TIMEOUT_S
         drop_counter = self._drop_counter_factory(sock)
         seeded: dict[tuple[int, int], str] = {}
         try:
@@ -373,6 +423,7 @@ class HciMonitorHub:
             if self._stopping_past_deadline(now):
                 self._finish_pending()
                 return
+            self._bound_timeout(sock, now)
             try:
                 data, ancdata, _flags, _addr = sock.recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
             except TimeoutError:
@@ -383,6 +434,15 @@ class HciMonitorHub:
                 continue
             self._open_event.set()
             self._on_datagram(data, ancdata)
+
+    def _bound_timeout(self, sock: Any, now: float) -> None:
+        """While records wait for a pair, wake for the next tick instead of idling 0.5 s."""
+        want = _SOCKET_TIMEOUT_S
+        if self._pending:
+            want = min(_SOCKET_TIMEOUT_S, max(0.001, self._next_tick - now))
+        if want != self._timeout:
+            sock.settimeout(want)
+            self._timeout = want
 
     def _stopping_past_deadline(self, now: float) -> bool:
         deadline = self._stop_deadline
@@ -405,6 +465,7 @@ class HciMonitorHub:
         self._clock_map.sample()
         self._flush_pending(force=False)
         cpu = self._thread_time()
+        self._last_cpu_sample = (now, cpu)
         if self._window_start is None:
             self._window_start = (now, cpu)
         elif now - self._window_start[0] >= _CPU_WINDOW_S:
@@ -425,7 +486,16 @@ class HciMonitorHub:
             self._drops, self._drop_source = drop_counter.drops, drop_counter.source
         self._update_maps(opcode, index, payload)
         self._records += 1
-        entry = _Pending(real_ns, opcode, index, payload, self._drops, t_recv_us)
+        drops = self._drops
+        acl_tx = opcode == MONITOR_ACL_TX_PKT
+        immediate = self._immediate
+        if immediate:
+            rec = HubRecord(t_recv_us, index, opcode, payload, drops, "recv", self._clock_map.epoch)
+            self._fan_out(immediate, rec, acl_tx)
+        if not self._timed:
+            self._pending.clear()
+            return
+        entry = _Pending(real_ns, opcode, index, payload, drops, t_recv_us)
         if not self._pending and real_ns is None:
             self._deliver(entry, None)
             return
@@ -490,13 +560,17 @@ class HciMonitorHub:
                     del self._tx_links[key]
 
     def _deliver(self, entry: _Pending, t_raw_us: float | None) -> None:
+        """Deliver one queued record to the kernel-time consumers."""
+        epoch = self._clock_map.epoch
         if t_raw_us is None:
             self._recv_stamped += 1
-            rec = HubRecord(entry.t_recv_us, entry.index, entry.opcode, entry.payload, entry.drops, "recv")
+            rec = HubRecord(entry.t_recv_us, entry.index, entry.opcode, entry.payload, entry.drops, "recv", epoch)
         else:
-            rec = HubRecord(t_raw_us, entry.index, entry.opcode, entry.payload, entry.drops, "kernel")
-        acl_tx = rec.opcode == MONITOR_ACL_TX_PKT
-        for c in self._consumers:
+            rec = HubRecord(t_raw_us, entry.index, entry.opcode, entry.payload, entry.drops, "kernel", epoch)
+        self._fan_out(self._timed, rec, rec.opcode == MONITOR_ACL_TX_PKT)
+
+    def _fan_out(self, consumers: tuple[HubConsumer, ...], rec: HubRecord, acl_tx: bool) -> None:
+        for c in consumers:
             if acl_tx and not c.wants_acl_tx:
                 continue
             try:
@@ -537,22 +611,47 @@ def get_hub() -> HciMonitorHub:
 
 
 class AsyncHubLifecycle:
-    """The hub behind the async ``start()``/``stop()`` the bridge lifecycle awaits (like ``HciAvrcpMonitor``)."""
+    """The hub behind the async ``start()``/``stop()`` the bridge lifecycle awaits (like ``HciAvrcpMonitor``).
+
+    Registers its consumers once, however often ``start()`` runs.
+    """
 
     def __init__(self, hub: Any, consumers: list[Any]) -> None:
         self._hub = hub
         self._consumers = consumers
+        self._registered = False
+
+    @property
+    def hub(self) -> Any:
+        return self._hub
 
     @property
     def available(self) -> bool:
         return bool(getattr(self._hub, "available", False))
 
     async def start(self) -> None:
-        for c in self._consumers:
-            self._hub.add_consumer(c)
+        if not self._registered:
+            for c in self._consumers:
+                self._hub.add_consumer(c)
+            self._registered = True
         self._hub.start()
 
     async def stop(self) -> None:
         import asyncio
 
         await asyncio.to_thread(self._hub.stop)
+
+
+_AVRCP_LIFECYCLE: AsyncHubLifecycle | None = None
+
+
+def get_avrcp_hub_lifecycle() -> AsyncHubLifecycle:
+    """The process-wide hub lifecycle with the AVRCP consumer (one consumer, however often asked)."""
+    global _AVRCP_LIFECYCLE
+    from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import AvrcpConsumer
+
+    hub = get_hub()
+    with _HUB_LOCK:
+        if _AVRCP_LIFECYCLE is None or _AVRCP_LIFECYCLE.hub is not hub:
+            _AVRCP_LIFECYCLE = AsyncHubLifecycle(hub, [AvrcpConsumer(peers=hub.peers)])
+        return _AVRCP_LIFECYCLE
