@@ -8,7 +8,8 @@ sensor (``GstPortClock``). What is written, and when, is decided by the ``Playou
 Threading: every public method enqueues a command under ``_cmd_lock`` and returns. One
 feeder thread per output (``_run``, a 5 ms ``Event.wait``) applies the commands, keeps
 ``appsrc`` ``LEAD_MS`` ahead, calls ``engine.sense()`` every 100 ms with
-``delivered = x_w − current-level-time`` and publishes what ``metrics()`` reports under
+``delivered = x_w − current-level-time`` (and reports ``delivered`` every tick, so the
+engine sees an underrun's silence up to the data's arrival) and publishes what ``metrics()`` reports under
 ``_pub_lock``. The engine and every GStreamer element are touched by the feeder only;
 the caller thread builds the output (``prepare_output``), closes it (``stop``, after the
 feeder joined) and reads the sink's audio clock (``audio_clock_ns``, a read-only clock
@@ -538,6 +539,8 @@ class PlayoutPlayer:
         self._poll_bus(out, engine)
         if self._input_format_set:
             self._feed(out, engine, now_us)
+        # Every tick (R3): the first delivery after the port ran dry dates where our data lands.
+        engine.delivered(now_us, max(0, self._x_w_ns - _level_time_ns(out.appsrc)))
         sensed = False
         if self._next_sense_us is None or now_us >= self._next_sense_us:
             self._next_sense_us = now_us + SENSE_INTERVAL_US

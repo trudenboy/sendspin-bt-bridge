@@ -151,3 +151,100 @@ def test_two_delay_changes_before_a_render_add_up(caplog):
     assert [j for j in jumps(caplog) if j[0] == "delay"] == [("delay", pytest.approx(30.0, abs=0.05))]
     drive(eng, port, raw, 23.0)
     assert port.heard_at_us(first_nonzero=True) == pytest.approx(due - 30_000, abs=200)
+
+
+def test_a_placement_right_after_a_steady_jump_keeps_the_baseline(caplog):
+    # A held baseline (an artefact of the reading) plus a real step: the steady jump removes the
+    # step only; the error it leaves is the baseline, so a placement right after it (here a
+    # clear) must not move the audio by it.
+    eng, port, raw = engine("measure")
+    zeros_then_marker(eng, raw, zero_s=60.0)
+    drive(eng, port, raw, 12.0)
+    port.starve(800.0)
+    drive_until(eng, port, raw, lambda s: s["underruns"] >= 1 and s["last_jump_reason"] == "underrun")
+    port.slew(-30.0, 300.0)  # the reading settles 30 ms behind the port: the baseline
+    drive(eng, port, raw, 12.0)
+    assert eng.snapshot()["error_ms"] == pytest.approx(30.0, abs=3.0)
+    port.skip(-40.0)  # a real step: the audio is heard 40 ms late
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        for _ in range(30_000):
+            drive(eng, port, raw, 0.001)
+            if eng.snapshot()["last_jump_reason"] == "steady":
+                break
+        else:
+            raise AssertionError("no steady jump")
+    assert [j for j in jumps(caplog) if j[0] == "steady"] == [("steady", pytest.approx(40.0, abs=2.0))]
+    eng.clear()  # before the next reading
+    due = raw.t_us + 2e6
+    eng.submit(int(raw.t_us + 1e6), ZERO * FS)
+    eng.submit(int(due), TONE * FS)
+    drive(eng, port, raw, 4.0)
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - due == pytest.approx(0.0, abs=1_500)  # today: 30 ms early
+    assert eng.snapshot()["error_ms"] == pytest.approx(30.0, abs=3.0)
+
+
+def test_a_delay_change_while_a_placement_is_pending_is_left_to_the_placement(caplog):
+    eng, port, raw = engine("measure")
+    due = zeros_then_marker(eng, raw, zero_s=30.0)
+    drive(eng, port, raw, 5.0)
+    port.skip(-13.4)
+    drive(eng, port, raw, 8.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        eng.resync(0)  # an engine-requested placement, not yet rendered
+        assert eng.resync(-30_000) is True
+        drive(eng, port, raw, 2.0)
+    reasons = [r for r, _ in jumps(caplog) if r in ("delay", "steady")]
+    assert reasons == ["delay"]  # the placement only, no jump on top of it
+    assert eng.snapshot()["error_ms"] == pytest.approx(13.4, abs=1.5)  # the placement kept o
+    drive(eng, port, raw, 23.0)
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - (due - 30_000) == pytest.approx(13_400, abs=500)
+
+
+def test_a_delay_change_replaces_a_decided_steady_jump(caplog):
+    eng, port, raw = engine("measure")
+    due = zeros_then_marker(eng, raw, zero_s=40.0)
+    drive(eng, port, raw, 5.0)
+    port.skip(-25.0)  # 25 ms late: over J = 20 ms, a steady jump is decided after 5 s
+    replaced = []
+
+    def on_sense():
+        if not replaced and eng._pending_jump_us is not None:  # decided, not yet rendered
+            replaced.append(eng._pending_jump_us)
+            eng.resync(-30_000)
+
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        drive(eng, port, raw, 8.0, on_sense=on_sense)
+    assert replaced == [pytest.approx(25_000, abs=1_000)]
+    first = [j for j in jumps(caplog) if j[0] in ("delay", "steady")]
+    assert first[0] == ("delay", pytest.approx(30.0, abs=0.05))
+    assert ("steady", pytest.approx(25.0, abs=1.0)) not in first[:1]
+    caplog.clear()
+    # The controller decides again; the steady jump comes later, on the shifted schedule.
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        drive(eng, port, raw, 30.0)
+    assert ("steady", pytest.approx(25.0, abs=1.5)) in jumps(caplog)
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - (due - 30_000) == pytest.approx(0.0, abs=1_500)
+
+
+def test_a_delay_drop_over_an_unfinished_insert_does_not_freeze_the_controller(caplog):
+    eng, port, raw = engine("measure")
+    due = zeros_then_marker(eng, raw, zero_s=40.0)
+    drive(eng, port, raw, 5.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        eng.resync(300_000)  # -300 ms: an insert of 300 ms, written over ~30 blocks
+        drive(eng, port, raw, 0.05)
+        eng.resync(-300_000)  # +300 ms: drops the rest of the insert, then program
+        drive(eng, port, raw, 2.0)
+        port.skip(-30.0)  # a real step: the controller must still see it
+        drive(eng, port, raw, 15.0)
+    assert ("steady", pytest.approx(30.0, abs=1.5)) in jumps(caplog)
+    drive(eng, port, raw, 20.0)
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - due == pytest.approx(0.0, abs=1_500)

@@ -615,3 +615,23 @@ def test_sink_rate_is_read_from_pactl_short_listing():
     assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink") == 48000
     assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.missing") is None
     assert sink_rate_from_pactl("garbage\n", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink") is None
+
+
+@requires_gst
+def test_every_feeder_tick_reports_what_the_sink_took():
+    # R3: an underrun's silence played after the last reading is seen at the first delivery,
+    # so the engine hears of deliveries every tick, not only at the 100 ms readings.
+    player = _player()
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(2_000_000, bytes(19200))
+    seen: list[tuple[float, int]] = []
+    engine = player._engine
+    real = engine.delivered
+    engine.delivered = lambda now_us, delivered_ns: (seen.append((now_us, delivered_ns)), real(now_us, delivered_ns))
+    ticks = [1_000_000.0 + i * 5_000 for i in range(6)]
+    for now_us in ticks:
+        player._tick(now_us=now_us)
+        time.sleep(0.002)
+    assert [t for t, _ in seen] == ticks
+    assert all(0 <= d <= player._x_w_ns for _, d in seen)
+    player.stop()

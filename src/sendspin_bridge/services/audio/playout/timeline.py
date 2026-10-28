@@ -88,6 +88,9 @@ class PortReading:
 
 
 _STALL_PROGRESS_NS = 100_000  # the audio clock must advance more than 0.1 ms to count as progress
+# A delivery is checked against the port (one extra clock read) only when the ring is
+# predicted to hold less than this: in steady play it holds the whole sink buffer.
+DELIVERY_CHECK_FILL_NS = 20_000_000
 
 
 class PortObserver:
@@ -97,6 +100,13 @@ class PortObserver:
     our data, so the origin ``k`` moves by the deficit and the port position is
     ``delivered``. An episode lasts until the first reading with ``fill >= 0``.
     A stall is an audio clock that advanced at most 0.1 ms over ``stall_ms``.
+
+    The port keeps playing silence after the last reading of an underrun until our data
+    arrives, and the data lands where the port is then. Readings alone miss that part (up
+    to one sense interval), and an underrun that begins and ends between two readings
+    entirely. ``on_delivery`` closes the gap: at the first delivery into a (predicted)
+    near-empty ring the port is read, and when it ran past our data ``k`` takes the rest of
+    the deficit then; an underrun seen only this way is reported at the next reading.
     """
 
     def __init__(self, *, k0_ns: int = 0, stall_ms: float = 300.0) -> None:
@@ -106,12 +116,39 @@ class PortObserver:
         self._recover_pending = False
         self._progress_t_us: float | None = None
         self._progress_a_ns = 0
+        self._last: PortSample | None = None  # the last reading
+        self._delivery_underrun = False  # an underrun found at a delivery, not yet reported
 
     @property
     def k_ns(self) -> int:
         return self._k_ns
 
+    def delivery_check_due(self, now_us: float, delivered_ns: int) -> bool:
+        """The data after ``delivered_ns`` may land in an empty ring now (checked by ``on_delivery``)."""
+        last = self._last
+        if last is None:
+            return False  # before the first reading the start placement aligns the stream
+        if self._in_underrun:
+            return True
+        a_est = last.a_ns + (now_us - last.t_us) * 1000.0
+        return delivered_ns + self._k_ns - a_est < DELIVERY_CHECK_FILL_NS
+
+    def on_delivery(self, sample: PortSample, delivered_ns: int) -> bool:
+        """Data from ``delivered_ns`` on just reached the sink, read as ``sample``.
+
+        If the port ran past ``delivered_ns`` the data lands where the port is: ``k`` moves by
+        the deficit not yet seen. Returns whether it moved.
+        """
+        excess = sample.a_ns - (delivered_ns + self._k_ns)
+        if excess <= 0:
+            return False
+        self._k_ns += excess
+        if not self._in_underrun:
+            self._delivery_underrun = True
+        return True
+
     def observe(self, sample: PortSample, delivered_ns: int) -> PortReading:
+        self._last = sample
         a = sample.a_ns
         if self._progress_t_us is None or a - self._progress_a_ns > _STALL_PROGRESS_NS:
             self._progress_t_us = sample.t_us
@@ -127,6 +164,14 @@ class PortObserver:
             fill = 0
             x_port = delivered_ns
             underrun = not self._in_underrun
+            self._in_underrun = True
+            self._delivery_underrun = False
+        elif self._delivery_underrun:
+            # The ring ran dry and refilled since the last reading: this reading is the
+            # underrun (k already holds the deficit), the next one with fill >= 0 recovers.
+            self._delivery_underrun = False
+            x_port = a - self._k_ns
+            underrun = True
             self._in_underrun = True
         else:
             x_port = a - self._k_ns

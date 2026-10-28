@@ -208,6 +208,7 @@ def drive(
         while port.appsrc_ns < lead_ns:
             port.push(engine.next_block(raw.t_us))
             port.pump()
+        engine.delivered(raw.t_us, port.delivered_ns)  # the feeder reports every tick
         if raw.t_us >= next_sense:
             engine.sense(raw.t_us, port.delivered_ns)
             next_sense += sense_every_us

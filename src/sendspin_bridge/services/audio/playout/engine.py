@@ -109,6 +109,7 @@ class PlayoutEngine:
         self._empty_reads = 0
         self._reading: PortReading | None = None
         self._reading_x_w_ns = 0  # write head at the last reading
+        self._delivered_ns = 0  # output stream time handed to the sink, as last reported
         self._fmt: InputFormat | None = None
         self._placements_seen = 0
         self._pending_place: str | None = None  # engine-requested placement not yet carried out
@@ -233,7 +234,7 @@ class PlayoutEngine:
             # it; a delay jump has nothing to move (the next chunk is placed with o).
             if not self._sched.queued and jump_reason == "steady":
                 if self._sched.reanchor(target):
-                    self._record_event(jump, "steady")
+                    self._record_event(jump, "steady", residual_us=self._baseline_us)
                 else:  # an insert is still being written; the next readings decide again
                     logger.debug("playout: steady jump of %.1f ms dropped (insert owed)", jump / 1000.0)
             else:
@@ -249,12 +250,16 @@ class PlayoutEngine:
                 self._controller.placed(t_s, o - self._baseline_us, quiet_wait=True)
                 self._record_event(jump, "delay", residual_us=o)
             else:
-                self._record_event(jump, "steady")  # the controller reset itself when it decided it
+                # The controller reset itself when it decided it; the jump removed e_w - β, so the
+                # raw error it leaves is the baseline.
+                self._record_event(jump, "steady", residual_us=self._baseline_us)
             frames = round(abs(jump) * self._fmt.sample_rate / 1e6) if self._fmt is not None else 0
             if jump > 0:
                 jump_dropped = min(block.dropped, frames)
+                # A drop undoes an unfinished insert first (a delay jump can land on one).
+                self._insert_left = max(0, self._insert_left - frames)
             else:
-                self._insert_left = frames
+                self._insert_left += frames
         if self._insert_left:
             jump_inserted = min(block.inserted, self._insert_left)
             self._insert_left -= jump_inserted
@@ -270,6 +275,22 @@ class PlayoutEngine:
         self._stats.correction(t_s, block.inserted - jump_inserted, block.dropped - jump_dropped)
         return block
 
+    def delivered(self, now_us: float, delivered_ns: int) -> None:
+        """The feeder's view of what the sink took (``delivered``), every tick.
+
+        Cheap unless the ring is predicted near empty: then the first new delivery reads the
+        port once, so silence the port played before the data arrived is seen (R3).
+        """
+        prev = self._delivered_ns
+        if delivered_ns <= prev:
+            return
+        self._delivered_ns = delivered_ns
+        if not self._observer.delivery_check_due(now_us, prev):
+            return
+        sample = self._port.read()
+        if sample is not None and self._observer.on_delivery(sample, prev):
+            self._offsets.clear()  # k moved: older readings no longer date the port
+
     def sense(self, now_us: float, delivered_ns: int) -> None:
         self._tick(now_us)
         rejected_before = self._stats.rejected_samples
@@ -284,6 +305,7 @@ class PlayoutEngine:
             self._empty_reads += 1
             return
         self._empty_reads = 0
+        self._delivered_ns = max(self._delivered_ns, delivered_ns)
         r = self._observer.observe(sample, delivered_ns)
         self._reading = r
         self._reading_x_w_ns = self._sched.x_w_ns
