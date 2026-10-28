@@ -682,6 +682,8 @@ async def test_an_overlong_line_split_across_reads_is_dropped_whole_and_counted_
     # The tail of the long line is itself a valid command: it must not be executed.
     tail = (json.dumps({"cmd": "set_volume", "value": 99, "protocol_version": 2}) + "\n").encode()
     head = b'{"pad": "' + b"P" * 200_000
-    await _feed_chunks([head[:70_000], head[70_000:140_000], head[140_000:], b'", "x": 1}' + tail, SET_VOLUME], [daemon])
+    await _feed_chunks(
+        [head[:70_000], head[70_000:140_000], head[140_000:], b'", "x": 1}' + tail, SET_VOLUME], [daemon]
+    )
     assert [c.kwargs["volume"] for c in daemon.apply_bridge_volume.call_args_list] == [30]
     assert daemon_process.stdin_drop_counters["overlong"] == before + 1
