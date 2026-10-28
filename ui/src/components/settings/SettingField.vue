@@ -5,6 +5,7 @@ import { SbToggle } from '@/kit'
 import SettingsRow from './SettingsRow.vue'
 import { getPath, type FieldDef } from '@/settings/layout'
 import { useConfigStore } from '@/stores/config'
+import { useAuthStore } from '@/stores/auth'
 
 const props = withDefaults(
   defineProps<{
@@ -22,12 +23,19 @@ const props = withDefaults(
 
 const { t, te } = useI18n()
 const configStore = useConfigStore()
+const authStore = useAuthStore()
 
 const id = `setting-${useId()}`
 const helpId = `${id}-help`
 const base = computed(() => `${props.i18nBase}.${props.field.key}`)
 const label = computed(() => t(`${base.value}.label`))
-const help = computed(() => t(`${base.value}.help`))
+// ``<key>.addonHelp`` is added under the Home Assistant add-on, whose own
+// options overwrite some bridge settings on every restart (LOG_LEVEL, #476).
+const help = computed(() => {
+  const text = t(`${base.value}.help`)
+  const addonKey = `${base.value}.addonHelp`
+  return authStore.haAddon && te(addonKey) ? `${text} ${t(addonKey)}` : text
+})
 
 const value = computed(() => {
   const v = props.read ? props.read(props.field.key) : getPath(configStore.config as Record<string, unknown>, props.field.key)

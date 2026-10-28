@@ -796,7 +796,8 @@
       },
       "LOG_LEVEL": {
         "label": "Log level",
-        "help": "DEBUG writes much more detail; use it while investigating a problem."
+        "help": "DEBUG writes much more detail; use it while investigating a problem.",
+        "addonHelp": "In the Home Assistant add-on, the add-on's own log_level option (Configuration tab) sets this on every restart. Change it there to keep it."
       },
       "SENDSPIN_SERVER": {
         "label": "Music Assistant server",

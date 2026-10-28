@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { SbButton, SbBadge, SbSpinner, SbEmptyState } from '@/kit'
 import { RefreshCw, Download, Search, ArrowDownToLine } from 'lucide-vue-next'
 import { getLogs, downloadLogs, setLogLevel } from '@/api/diagnostics'
+import { useAuthStore } from '@/stores/auth'
 
 type LogLevel = 'ERROR' | 'WARNING' | 'INFO' | 'DEBUG'
 
@@ -15,6 +16,7 @@ interface ParsedLine {
 }
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const lines = ref<ParsedLine[]>([])
@@ -138,6 +140,10 @@ onMounted(fetchLogs)
         </SbButton>
       </div>
     </div>
+    <!-- The add-on's own log_level option is applied again on restart (#476). -->
+    <p v-if="authStore.haAddon" class="text-[13px] leading-snug text-text-secondary">
+      {{ t('settings.fields.LOG_LEVEL.addonHelp') }}
+    </p>
 
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-2">
