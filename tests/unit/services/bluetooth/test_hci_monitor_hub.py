@@ -694,7 +694,7 @@ def test_without_kernel_time_consumers_nothing_waits(fake_hub_socket):
         assert got.wait(1.0)
     finally:
         hub.stop()
-    assert hub.counters()["recv_stamped"] == 0
+    assert opener.made[0].timeouts == [0.0] and hub.counters()["recv_stamped"] == 0
 
 
 def recording_waiter(waits):
@@ -1028,13 +1028,72 @@ def test_stop_cuts_the_batching_sleep_short_and_still_delivers_what_was_queued(f
 
 
 def test_stop_on_a_quiet_bus_is_prompt(fake_hub_socket):
-    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=lambda m: None)
+    from sendspin_bridge.services.bluetooth.hci_monitor_hub import _poll_waiter
+
+    def stretched(sock, wake_fd):
+        wait = _poll_waiter(sock, wake_fd)
+        return lambda timeout_s: wait(timeout_s * 40)  # every readability wait now lasts up to 10 s
+
+    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=lambda m: None, readable_waiter=stretched)
     hub.start()
     assert hub.wait_open(2)
-    time.sleep(0.05)  # the reader is now in a readability wait of up to 250 ms
+    time.sleep(0.05)  # the reader is now in a long readability wait
     t0 = time.monotonic()
     hub.stop()
-    assert time.monotonic() - t0 < 0.15  # stop() wakes the wait instead of letting it run out
+    assert time.monotonic() - t0 < 1.0  # stop() wakes the wait instead of letting it run out
+
+
+def _recording_pipe(monkeypatch):
+    from sendspin_bridge.services.bluetooth import hci_monitor_hub as mod
+
+    made: list[tuple[int, int]] = []
+    real_pipe = os.pipe
+
+    def pipe():
+        fds = real_pipe()
+        made.append(fds)
+        return fds
+
+    monkeypatch.setattr(mod.os, "pipe", pipe)
+    return mod, made
+
+
+def _is_closed(fd):
+    try:
+        os.fstat(fd)
+    except OSError as exc:
+        return exc.errno == errno.EBADF
+    return False
+
+
+def test_the_wake_pipe_is_closed_when_making_it_non_blocking_fails(monkeypatch):
+    mod, made = _recording_pipe(monkeypatch)
+
+    def refuse(fd, blocking):
+        raise OSError(errno.EINVAL, "no")
+
+    monkeypatch.setattr(mod.os, "set_blocking", refuse)
+    hub = HciMonitorHub(open_socket=lambda: None, seed=lambda m: None)
+    with pytest.raises(OSError):
+        hub._serve(object())
+    assert made and all(_is_closed(fd) for fd in made[0])
+
+
+def test_the_wake_pipe_read_end_is_closed_even_if_closing_the_write_end_fails(monkeypatch):
+    mod, made = _recording_pipe(monkeypatch)
+    real_close = os.close
+
+    def close(fd):
+        real_close(fd)
+        if made and fd == made[0][1]:
+            raise OSError(errno.EIO, "close failed")
+
+    monkeypatch.setattr(mod.os, "close", close)
+    hub = HciMonitorHub(open_socket=lambda: None, seed=lambda m: None)
+    monkeypatch.setattr(hub, "_serve_open", lambda sock, wake_fd: None)
+    with pytest.raises(OSError):
+        hub._serve(object())
+    assert made and _is_closed(made[0][0])
 
 
 def test_records_arriving_together_are_read_after_the_batching_interval(fake_hub_socket):

@@ -468,18 +468,20 @@ class HciMonitorHub:
 
     def _serve(self, sock: Any) -> None:
         wake_r, wake_w = os.pipe()
-        os.set_blocking(wake_w, False)
-        with self._lock:
-            self._wake_w = wake_w
-            if self._stop.is_set():
-                os.write(wake_w, b"x")
         try:
+            os.set_blocking(wake_w, False)
+            with self._lock:
+                self._wake_w = wake_w
+                if self._stop.is_set():
+                    os.write(wake_w, b"x")
             self._serve_open(sock, wake_r)
         finally:
             with self._lock:
                 self._wake_w = None
-            os.close(wake_w)
-            os.close(wake_r)
+            try:
+                os.close(wake_w)
+            finally:
+                os.close(wake_r)
 
     def _serve_open(self, sock: Any, wake_fd: int) -> None:
         opts = enable_monitor_sockopts(sock)
