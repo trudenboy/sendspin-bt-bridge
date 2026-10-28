@@ -199,10 +199,19 @@ def correlate_window(
     ``[lag_lo − margin, lag_hi + margin]`` (``len(air) + lag_hi − lag_lo + 2·margin`` cells);
     the margin lags never hold the peak, they only let the side lobe be measured over the same
     ``±SIDE_SCAN`` lags around it whatever the search range. A window whose lags cannot hold
-    that scan is ``no_side_lobe`` (PSR unmeasurable, never confirmed). Non-finite values make
+    that scan is ``no_side_lobe`` (PSR unmeasurable, never confirmed). Near the data end the
+    scan is shifted inside it and is effectively one-sided there (PSR slightly optimistic). Non-finite values make
     a window ``invalid``.
     """
     n = len(air)
+    if margin < 0:
+        raise ValueError(f"margin must be >= 0, got {margin}")
+    expected = n + lag_hi - lag_lo + 2 * margin
+    if lag_hi < lag_lo or len(written) != expected or len(program) != expected:
+        raise ValueError(
+            f"written and program must hold len(air) + lag_hi - lag_lo + 2*margin = {expected} cells, "
+            f"got {len(written)} and {len(program)}"
+        )
     if n == 0 or not all(map(math.isfinite, written)) or not all(math.isfinite(a) for a in air if a is not None):
         return WindowResult("invalid", None, None, None)
     present = n - sum(1 for a in air if a is None)

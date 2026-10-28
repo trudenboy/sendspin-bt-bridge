@@ -246,3 +246,23 @@ def test_non_finite_input_makes_a_window_invalid():
     air, w, prog = make()
     w[5] = float("inf")
     assert correlate_window(air, w, prog, -86, 86).status == "invalid"
+
+
+@pytest.mark.parametrize("cut", ["written", "program"])
+def test_written_and_program_must_match_the_lag_range_exactly(cut):
+    air, w, prog = make()
+    if cut == "written":
+        w = w[:-1]
+    else:
+        prog = prog[:-1]
+    with pytest.raises(ValueError):
+        correlate_window(air, w, prog, -86, 86)
+    air, w, prog = make()
+    with pytest.raises(ValueError):
+        correlate_window(air, w, prog, -86, 86, margin=1)  # margin cells missing
+
+
+def test_a_negative_margin_is_rejected():
+    air, w, prog = make()
+    with pytest.raises(ValueError):
+        correlate_window(air, w[1:-1], prog[1:-1], -86, 86, margin=-1)
