@@ -116,11 +116,10 @@ def comb_delay_us(rate: int) -> float:
     return comb_lag(rate) / 2.0 / rate * 1e6
 
 
-def lookback_delay_us(rate: int) -> float:
-    """A written cell's span reaches ``LOOKBACK_FRAMES`` back, so its energy is centred half of
-    that earlier than the cell; credited back with ``d_comb`` (with M = 8 at 44.1 kHz it cancels
-    ``d_enc``)."""
-    return LOOKBACK_FRAMES / 2.0 / rate * 1e6
+def lookback_delay_us(rate: int, frames: int = LOOKBACK_FRAMES) -> float:
+    """A written cell's span reaches ``frames`` (9·M) back, so its energy is centred half of that
+    earlier than the cell; credited back with ``d_comb`` (at equal rates it cancels ``d_enc``)."""
+    return frames / 2.0 / rate * 1e6
 
 
 class AirStream:
@@ -351,6 +350,7 @@ class AirSensor:
     def on_envelope(self, env: AirEnvelope) -> None:
         try:
             status = self._air.add(env)
+            self._tap.set_sbc_format(env.subbands, env.rate)
             if status == "dropped":
                 self._dropped += 1
                 self._reset_lock()
@@ -442,7 +442,7 @@ class AirSensor:
         n = round(WINDOW_S * 1e6 / cell)
         in_rate = round(CELL_FRAMES / cell * 1e6)
         d_enc = enc_delay_us(self._air.subbands, self._air.rate)
-        d_comb = comb_delay_us(in_rate) + lookback_delay_us(in_rate)  # the written cells' centre
+        d_comb = comb_delay_us(in_rate) + lookback_delay_us(in_rate, tap.lookback_frames)  # cells' centre
         mode, half = self._search(now, cell)
         margin = SIDE_SCAN
         u_end: float | None = u_new

@@ -24,8 +24,8 @@ can decide on real music:
 with ``α_local`` the median of ``t_send − u`` over the packets within ±1 s of the window, taken
 inside the window's anchor segment only (segments end at an RTP skip, sequence gap, SSRC change
 or a send gap over 1 s) and independent of the live sensor's running median;
-``d_enc = 4.5·M/rate``, ``d_comb = ((comb lag + LOOKBACK_FRAMES) / 2)/rate`` (the comb cells
-span the cell and the ``LOOKBACK_FRAMES`` before it, as the daemon's tap does; 0 for ``legacy``
+``d_enc = 4.5·M/rate``, ``d_comb = ((comb lag + 9·M) / 2)/rate`` (the comb cells
+span the cell and the 9·M frames before it, as the daemon's tap does; 0 for ``legacy``
 rows and the band-pass reference). ``src_mid`` is the source time of the matched cell.
 
 Making a capture (the morning one is copyrighted music and stays private): on the speaker
@@ -67,6 +67,7 @@ from sendspin_bridge.services.audio.playout.air_tap import (  # noqa: E402
     LOOKBACK_FRAMES,
     comb_lag,
     comb_peak_log2,
+    lookback_frames,
     to_s16,
 )
 from sendspin_bridge.services.bluetooth import a2dp_air  # noqa: E402
@@ -221,9 +222,11 @@ def legacy_source_cells(data: Sequence[int], ch: int, rate: int, width: int) -> 
     return out
 
 
-def impl_source_cells(data: Sequence[int], ch: int, rate: int, width: int, envelope: str) -> list[float]:
-    """The daemon's written cells: comb envelope over each 128 input frames and the LOOKBACK_FRAMES
-    before them (or the reference band-pass) per 128 input frames."""
+def impl_source_cells(
+    data: Sequence[int], ch: int, rate: int, width: int, envelope: str, *, lookback: int = LOOKBACK_FRAMES
+) -> list[float]:
+    """The daemon's written cells: comb envelope over each 128 input frames and the ``lookback``
+    (9·M) before them, or the reference band-pass, per 128 input frames."""
     s16 = to_s16(b"".join(v.to_bytes(width, "little", signed=True) for v in data), width)
     frames = len(s16) // ch
     out = []
@@ -231,7 +234,7 @@ def impl_source_cells(data: Sequence[int], ch: int, rate: int, width: int, envel
         lag = comb_lag(rate)
         zeros = (0,) * (lag * ch)
         for start in range(0, frames - CELL + 1, CELL):
-            lo = max(0, start - LOOKBACK_FRAMES)  # the span an SBC frame's scale factors see
+            lo = max(0, start - lookback)  # the span an SBC frame's scale factors see
             prev = tuple(s16[(lo - lag) * ch : lo * ch]) if lo >= lag else zeros
             out.append(comb_peak_log2(s16, ch, lo, start + CELL, prev, lag))
     else:
@@ -405,7 +408,8 @@ def annotate(
     rate = meta.rate
     alpha_global = statistics.median(q.t_send - q.u_s for q in meta.packets)
     d_enc = 4.5 * meta.subbands / rate
-    d_comb = ((comb_lag(rate) + LOOKBACK_FRAMES) / 2.0) / rate if comb and definition == "impl" else 0.0
+    back = lookback_frames(meta.subbands, rate, rate)
+    d_comb = ((comb_lag(rate) + back) / 2.0) / rate if comb and definition == "impl" else 0.0
     for r in rows:
         r["t_minus_src_s"] = r["offline_h_s"] = None
         if r["lag"] is None:
@@ -483,7 +487,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             written = (
                 legacy_source_cells(data, ch, fs, width)
                 if d == "legacy"
-                else impl_source_cells(data, ch, fs, width, args.envelope)
+                else impl_source_cells(
+                    data, ch, fs, width, args.envelope, lookback=lookback_frames(meta.subbands, fs, fs)
+                )
             )
             series[d] = (cells, meta, written)
     except (ValueError, OSError, wave.Error) as exc:

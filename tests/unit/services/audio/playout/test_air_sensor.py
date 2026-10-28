@@ -785,3 +785,17 @@ async def test_a_half_cell_lag_keeps_the_sub_cell_bias_within_bounds(air_world, 
     h = w.sensor.snapshot()["host_placement_ms"]
     record_property("half_cell_bias_ms", h)
     assert h is not None and abs(h) <= 0.5
+
+
+async def test_an_m4_stream_sets_the_written_look_back_and_its_credit(air_world):
+    """The air side's sub-bands drive the tap's look-back (9·M) and the credit follows it."""
+    from sendspin_bridge.services.audio.playout.air_sensor import lookback_delay_us
+
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=1)
+    assert w.tap.lookback_frames == 72
+    from dataclasses import replace
+
+    w.sensor.on_envelope(replace(env(epoch=5, t0=w.now, n=4, frame_us=64 * 1e6 / AIR_RATE), subbands=4))
+    assert w.tap.lookback_frames == 36
+    assert lookback_delay_us(44100, 36) == pytest.approx(enc_delay_us(4, 44100))

@@ -221,3 +221,18 @@ def test_offline_h_on_the_click_capture_agrees_with_the_phase_tool(tmp_path, too
         if r[status] == "confirmed" and r[col]
     ]
     assert len(diffs) >= 3 and max(abs(d) for d in diffs) <= 1.0
+
+
+def test_offline_look_back_follows_the_sub_bands(tool):
+    """M = 4: the cells look back 36 frames and the credit is (3 + 36)/2 samples."""
+    rate = 44100
+    pk = tuple(tool.PacketTime(seg=0, u_s=k * 896 / rate, t_send=100.0 + k * 896 / rate) for k in range(10))
+    meta = tool.CellMeta(rate=rate, subbands=4, cell0_ticks=0, packet_of=(0,) * 8, packets=pk)
+    rows = [{"k": 0, "lag": 0.0}]
+    tool.annotate(rows, definition="impl", offset=0, meta=meta, window=4, offline_h=True, comb=True)
+    assert rows[0]["offline_h_s"] == pytest.approx(100.0 - (18 - (3 + 36) / 2) / rate, abs=1e-9)
+    frames = [0] * 640
+    frames[3 * 128 - 45] = 4000
+    data = [v for f in frames for v in (f, f)]
+    assert tool.impl_source_cells(data, 2, rate, 2, "comb", lookback=36)[3] == 0.0
+    assert tool.impl_source_cells(data, 2, rate, 2, "comb", lookback=72)[3] > 0.0

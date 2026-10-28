@@ -517,3 +517,36 @@ def test_the_look_back_is_continuous_across_blocks():
     for a, b in ((0, 380), (380, 383), (383, 640)):
         split.add_block(mk(a, b), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     assert list(split.slice(0, 5).w) == list(_impulse_tap(3 * 128 - 10).slice(0, 5).w)
+
+
+def test_the_look_back_follows_the_sbc_sub_bands():
+    """9·M input frames: 72 for M = 8 (the default), 36 for M = 4; scaled when the rates differ."""
+    tap = WrittenEnvelope()
+    assert tap.lookback_frames == LOOKBACK_FRAMES == 72
+    tap.set_sbc_format(4, 44100)
+    xs = [0] * 640
+    xs[3 * 128 - 30] = 4000  # comb peaks at -30 and -27: inside 36
+    tap.add_block(
+        Block(s16(interleave(xs)), 0, round(640e9 / 44100), True, 0, 0, 0.0),
+        F16,
+        lambda x: x / 1000.0,
+        lambda x: "program",
+        d_out_us=0.0,
+    )
+    assert tap.lookback_frames == 36 and tap.slice(0, 5).w[3] > 0
+    far = WrittenEnvelope()
+    far.set_sbc_format(4, 44100)
+    xs = [0] * 640
+    xs[3 * 128 - 45] = 4000  # beyond 36, inside 72
+    far.add_block(
+        Block(s16(interleave(xs)), 0, round(640e9 / 44100), True, 0, 0, 0.0),
+        F16,
+        lambda x: x / 1000.0,
+        lambda x: "program",
+        d_out_us=0.0,
+    )
+    assert far.slice(0, 5).w[3] == 0.0
+    scaled = WrittenEnvelope()
+    scaled.set_sbc_format(8, 44100)
+    scaled.add_block(block(F24, 0, 256), F24, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
+    assert scaled.lookback_frames == round(72 * 48000 / 44100)

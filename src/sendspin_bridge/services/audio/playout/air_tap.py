@@ -8,8 +8,8 @@ records nothing and reports ``unsupported`` (``input:<rate>/<bits>``).
 Each sample is reduced to its top 16 bits at C speed, the comb high-pass
 ``y[n] = x[n] − x[n−d]`` (``d = comb_lag(rate)``, 3 at 44.1/48 kHz) runs on each channel,
 and every cell of ``CELL_FRAMES`` input frames gets ``w = log2(1 + max|y|)`` over both
-channels and over the cell plus the ``LOOKBACK_FRAMES`` before it (the span an SBC frame's
-scale factors see), the scheduled port time ``s`` of its first frame (``ScheduleMap.at``), ``T = s + D_out``
+channels and over the cell plus the ``9·M`` input frames before it (the span an SBC frame's
+scale factors see; ``M`` from :meth:`WrittenEnvelope.set_sbc_format`, 8 until told), the scheduled port time ``s`` of its first frame (``ScheduleMap.at``), ``T = s + D_out``
 with the output delay at write time and the map's kind (``program``/``silence``). Silence cells
 have ``w = 0``. Whether a cell is muted is decided when it is read, from a RAW-timed mute
 timeline at the cell's port time ``s`` (a mute applied after the push still covers audio that
@@ -43,7 +43,15 @@ CELL_FRAMES = 128
 # analysis window; libsbc 1.3.1: an impulse shows up in frame k for input samples 128k - 72 …
 # 128k + 126). A written cell takes its peak over the same span for M = 8, so the two envelopes
 # rise and fall on the same samples whatever the attack and decay of the sound.
-LOOKBACK_FRAMES = 72
+LOOKBACK_FRAMES = 72  # 9·M for M = 8, the default until the air side says otherwise
+SBC_LOOKBACK_BLOCKS = 9  # (10·M-tap window - M) / M
+
+
+def lookback_frames(subbands: int, air_rate: int, input_rate: int) -> int:
+    """``9·M`` air samples in input frames (scaled when PulseAudio resamples)."""
+    return round(SBC_LOOKBACK_BLOCKS * subbands * input_rate / air_rate)
+
+
 MUTE_KEEP_US = 30_000_000.0  # mute transitions older than this are forgotten (the state before them stays)
 INTERNAL_ERROR = "internal_error"
 
@@ -122,6 +130,7 @@ class WrittenEnvelope:
         self._lock = threading.Lock()
         # Ring (guarded by _lock).
         self._fmt: InputFormat | None = None
+        self._sbc: tuple[int, int] | None = None  # (sub-bands, air rate) of the speaker's SBC stream
         self._unsupported: str | None = None
         self._error: str | None = None
         self._cell_us: float | None = None
@@ -139,7 +148,7 @@ class WrittenEnvelope:
         self._carry_gen = -1
         self._hist = b""
         self._fp: list[int] = []  # per-frame comb peaks: the look-back, then the partial cell
-        self._fp_back = 0  # look-back frames at the start of _fp (at most LOOKBACK_FRAMES)
+        self._fp_back = 0  # look-back frames at the start of _fp (at most the look-back)
         self._carry_x_ns = 0  # x of the partial cell's first frame
 
     # -- feeder side ------------------------------------------------------------------------
@@ -163,6 +172,7 @@ class WrittenEnvelope:
             if not supported:
                 return
             gen = self._gen
+            back = self._lookback_locked(rate)
         lag = comb_lag(rate)
         hist_len = lag * channels
         if gen != self._carry_gen:
@@ -183,20 +193,20 @@ class WrittenEnvelope:
         self._hist = view[-hist_len:].tobytes()
         frame_peaks = peaks if channels == 1 else list(map(max, *(peaks[c::channels] for c in range(channels))))
 
-        # A cell's peak spans its CELL_FRAMES frames and the LOOKBACK_FRAMES before them.
+        # A cell's peak spans its CELL_FRAMES frames and the `back` (9·M) before them.
         held = len(self._fp)  # frames carried from earlier blocks (look-back and partial cell)
         fp = self._fp + frame_peaks
         cells: list[tuple[int, int]] = []  # (x of the first frame, comb peak)
         x0 = block.x0_ns
         pos = self._fp_back  # index in fp of the next cell's first frame
         while len(fp) - pos >= CELL_FRAMES:
-            peak = max(fp[max(0, pos - LOOKBACK_FRAMES) : pos + CELL_FRAMES])
+            peak = max(fp[max(0, pos - back) : pos + CELL_FRAMES])
             x = self._carry_x_ns if pos < held else x0 + round((pos - held) * 1e9 / rate)
             cells.append((x, peak))
             pos += CELL_FRAMES
         if pos < len(fp) and pos >= held:  # a partial cell starts in this block
             self._carry_x_ns = x0 + round((pos - held) * 1e9 / rate)
-        keep = max(0, pos - LOOKBACK_FRAMES)
+        keep = max(0, pos - back)
         self._fp = fp[keep:]
         self._fp_back = pos - keep
         if not cells:
@@ -242,6 +252,12 @@ class WrittenEnvelope:
         with self._lock:
             self._error = INTERNAL_ERROR
 
+    def set_sbc_format(self, subbands: int, air_rate: int) -> None:
+        """The speaker's SBC sub-bands and rate (from the air side): cells written from now on look
+        back ``9·M`` air samples. Cells already in the ring keep the span they were cut with."""
+        with self._lock:
+            self._sbc = (subbands, air_rate)
+
     def reset(self) -> None:
         """The output was reopened: forget every cell (``x`` restarts at 0). The mute timeline stays."""
         with self._lock:
@@ -269,6 +285,17 @@ class WrittenEnvelope:
         """Bumped by every reset and format change: cell indexes of another generation are unrelated."""
         with self._lock:
             return self._gen
+
+    @property
+    def lookback_frames(self) -> int:
+        """Input frames a cell currently looks back (``LOOKBACK_FRAMES`` until the format is known)."""
+        with self._lock:
+            return self._lookback_locked(self._fmt.sample_rate if self._fmt is not None else None)
+
+    def _lookback_locked(self, input_rate: int | None) -> int:
+        if self._sbc is None or input_rate is None:
+            return LOOKBACK_FRAMES if self._sbc is None else self._sbc[0] * SBC_LOOKBACK_BLOCKS
+        return lookback_frames(self._sbc[0], self._sbc[1], input_rate)
 
     @property
     def cell_us(self) -> float | None:
