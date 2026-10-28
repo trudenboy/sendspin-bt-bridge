@@ -84,3 +84,32 @@ describe('DeviceTimingPanel air sensor block', () => {
     expect(block(w).text()).toContain('Недоступен')
   })
 })
+
+describe('DeviceTimingPanel air sensor reasons match their producers', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it.each([
+    ['no_cap_net_raw', 'CAP_NET_RAW'],
+    ['unsupported_platform', 'Linux'],
+    ['input:96000/24', '44.1 and 48 kHz'],
+  ])('explains %s', (reason, expected) => {
+    const text = block(mountPanel({ state: 'unavailable', reason })).text()
+    expect(text).toContain(expected)
+    expect(text).not.toContain('Reason:')
+  })
+
+  it.each(['no_cap_net_raw', 'unsupported_platform', 'input:44100/8'])('has Russian text for %s', (reason) => {
+    const text = block(mountPanel({ state: 'unavailable', reason }, 'ru')).text()
+    expect(text).not.toContain('Причина:')
+    expect(text).not.toMatch(/timing\.air/)
+  })
+
+  it('keeps the English and Russian air keys in sync, without unused ones', () => {
+    const keys = (o: Record<string, unknown>, p = ''): string[] =>
+      Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? keys(v as Record<string, unknown>, `${p}${k}.`) : [`${p}${k}`]))
+    const enAir = keys((en as any).timing.air).sort()
+    expect(keys((ru as any).timing.air).sort()).toEqual(enAir)
+    expect(enAir).not.toContain('rows.reason')
+    expect(enAir).not.toContain('reasons.no_monitor')
+  })
+})

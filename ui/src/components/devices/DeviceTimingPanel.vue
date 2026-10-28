@@ -170,6 +170,8 @@ const airReason = computed(() => {
   const reason = air.value?.reason
   if (!reason) return null
   if (reason.startsWith('codec:')) return t('timing.air.reasons.codec', { codec: reason.slice(6).toUpperCase() })
+  /* input:<rate>/<bits> from the daemon's tap: the format it cannot read. */
+  if (reason.startsWith('input:')) return t('timing.air.reasons.unsupported_input')
   const key = `timing.air.reasons.${reason}`
   return te(key) ? t(key) : t('timing.air.reasons.unknown', { reason })
 })

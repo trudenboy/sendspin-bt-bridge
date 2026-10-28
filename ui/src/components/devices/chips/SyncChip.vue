@@ -8,7 +8,7 @@ import type { Device } from '@/api/types'
 
 /** "Sync" (with the sync error) or "Re-anchoring" while streaming, plus the re-anchor count. */
 const props = defineProps<{ device: Device }>()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 /* The device's re-anchor memory lives while some chip shows it (see reanchorHold). */
 let release = retainReanchor(props.device.id)
@@ -52,7 +52,8 @@ const baseTitle = computed(() => {
 const titleKey = computed(() => {
   const air = airChipSummary(props.device)
   if (!air) return baseTitle.value
-  const state = t(`timing.air.states.${air.state}`).toLowerCase()
+  const stateKey = `timing.air.states.${air.state}`
+  const state = te(stateKey) ? t(stateKey).toLowerCase() : air.state
   const line = air.hMs == null ? t('timing.air.chipNoH', { state }) : t('timing.air.chip', { state, h: signedMs(air.hMs) })
   return `${baseTitle.value}\n${line}`
 })

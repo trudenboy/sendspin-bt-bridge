@@ -1297,7 +1297,6 @@
       },
       "rows": {
         "state": "State",
-        "reason": "Reason",
         "host": "Host placement",
         "air": "Air error",
         "confidence": "Confidence",
@@ -1314,7 +1313,8 @@
         "internal_error": "Stopped after an internal error; it restarts with the next stream.",
         "playout_fallback": "Playout sync fell back to the plain output.",
         "unsupported_input": "The audio format is not supported (44.1 and 48 kHz, 16 to 32 bit).",
-        "no_monitor": "The Bluetooth monitor is not available (needs CAP_NET_RAW).",
+        "no_cap_net_raw": "The Bluetooth monitor is not available (needs CAP_NET_RAW).",
+        "unsupported_platform": "This system has no Bluetooth HCI monitor (Linux only).",
         "monitor_error": "The Bluetooth monitor failed.",
         "sbc_params": "The SBC stream parameters are not supported.",
         "sbc_fragmented": "The speaker splits SBC frames over several packets.",
