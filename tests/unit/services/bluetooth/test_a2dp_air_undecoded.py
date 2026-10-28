@@ -124,3 +124,13 @@ def test_the_energy_memo_stays_bounded():
         view, _ = air.walk_sbc_frames(random_frame(rng, b1=0xBF), check_crc=False)  # stereo, 8 sub-bands
         assert sbc_envelopes(view, wide) == [frame_envelope(f, wide) for f in view.decode()]
         assert len(env._ENERGY) <= 4096
+
+
+def test_the_layout_memo_stays_bounded():
+    # Garbage headers (every header byte 1 / bitpool pair) must not grow the memo without bound.
+    air._LAYOUTS.clear()
+    for b1 in range(256):
+        for bitpool in range(0, 256, 4):
+            air._sbc_layout(b1, bitpool)
+            assert len(air._LAYOUTS) <= air._LAYOUTS_MAX
+    assert air._sbc_layout(0xBD, 53) == air._sbc_layout(0xBD, 53)  # still correct after a restart

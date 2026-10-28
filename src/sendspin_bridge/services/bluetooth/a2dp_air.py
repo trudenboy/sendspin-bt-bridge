@@ -398,7 +398,8 @@ class SbcLayout:
     side_bits: int  # join bits + 4-bit scale factors
 
 
-_LAYOUTS: dict[int, SbcLayout | None] = {}  # (header byte 1 << 8 | bitpool) -> layout; ≤ 65 536 entries
+_LAYOUTS: dict[int, SbcLayout | None] = {}  # (header byte 1 << 8 | bitpool) -> layout (memo)
+_LAYOUTS_MAX = 1024  # restarted at this many entries (a real stream uses a handful)
 
 
 def _sbc_layout(b1: int, bitpool: int) -> SbcLayout | None:
@@ -428,6 +429,8 @@ def _sbc_layout(b1: int, bitpool: int) -> SbcLayout | None:
             join_bits,
             join_bits + 4 * subbands * channels,
         )
+    if len(_LAYOUTS) >= _LAYOUTS_MAX:
+        _LAYOUTS.clear()
     _LAYOUTS[key] = layout
     return layout
 
