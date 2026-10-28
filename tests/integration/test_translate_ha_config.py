@@ -964,3 +964,46 @@ def test_playout_sync_enabled_preserved_for_a_v6_players_config(tmp_path):
     stored = [p for p in players if (p.get("backend") or {}).get("mac") == "AA:BB:CC:DD:EE:FF"]
     legacy = [d for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac") == "AA:BB:CC:DD:EE:FF"]
     assert (stored or legacy)[0]["playout_sync_enabled"] is False
+
+
+def test_air_calibrations_of_a_speaker_preserved_across_addon_restart(tmp_path):
+    """Air-to-sound calibrations come from the sync wizard, never from the add-on options."""
+    from tests.support.config_v6 import v6_config
+
+    entry = {
+        "codec": "sbc",
+        "rate": 44100,
+        "adapter": "C0:FB:F9:62:D7:D6",
+        "latency_ms": 203.4,
+        "measured_at": "2026-10-28T09:00:00+00:00",
+    }
+    existing = v6_config([{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Speaker", "air_to_sound_latency": [entry]}])
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    stored = [p for p in cfg.get("players") or [] if (p.get("backend") or {}).get("mac") == "AA:BB:CC:DD:EE:FF"]
+    legacy = [d for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac") == "AA:BB:CC:DD:EE:FF"]
+    assert (stored or legacy)[0]["air_to_sound_latency"] == [entry]
+
+
+def test_air_calibrations_of_a_v5_speaker_preserved_across_addon_restart(tmp_path):
+    entry = {
+        "codec": "sbc",
+        "rate": 48000,
+        "adapter": "C0:FB:F9:62:D7:D6",
+        "latency_ms": 180.0,
+        "measured_at": "2026-10-28T09:00:00+00:00",
+    }
+    existing = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "air_to_sound_latency": [entry]}]}
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    devs = {d["mac"]: d for d in _read_json(tmp_path / "config.json")["BLUETOOTH_DEVICES"]}
+    assert devs["AA:BB:CC:DD:EE:FF"]["air_to_sound_latency"] == [entry]

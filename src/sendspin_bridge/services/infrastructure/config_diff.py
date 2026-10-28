@@ -39,6 +39,8 @@ _DEVICE_HOT_FIELDS: frozenset[str] = frozenset(
         "keepalive_interval",
         "room_id",
         "room_name",
+        # Air sensor calibrations: the matching entry is resent to the running daemon.
+        "air_to_sound_latency",
     }
 )
 
@@ -313,7 +315,7 @@ def _normalize_scalar(value: Any) -> Any:
     UI often map to ``None`` in normalised configs.  Treat them as equivalent
     so we don't spuriously flag changes.
     """
-    if value is None:
+    if value is None or value == []:
         return ""
     if isinstance(value, str):
         return value.strip()

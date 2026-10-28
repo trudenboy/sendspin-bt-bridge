@@ -631,6 +631,22 @@ def load_player_state_for_mac(mac: str) -> dict:
     return dict(state) if isinstance(state, dict) else {}
 
 
+def resolve_air_latency(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> float | None:
+    """The player's air-to-sound latency (ms) for this codec, SBC rate and adapter MAC, or None (R-12)."""
+    from sendspin_bridge.config.players import resolve_air_latency as _resolve
+
+    return _resolve(player_cfg, codec, rate, adapter)
+
+
+def upsert_air_latency(entries: list[dict], entry: dict, *, max_entries: int = 8) -> list[dict]:
+    """*entries* with *entry* saved under its (codec, rate, adapter) key; the oldest beyond *max_entries* go."""
+    from sendspin_bridge.config.players import upsert_air_latency as _upsert
+
+    return _upsert(entries, entry, max_entries=max_entries)
+
+
 def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> str:
     """The playout mode one player runs: ``off`` when it opted out, else ``PLAYOUT_SYNC``.
 

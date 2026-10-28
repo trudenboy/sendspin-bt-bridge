@@ -386,6 +386,23 @@ def _player_backend_is_valid(entry: dict) -> bool:
     return True
 
 
+def _clean_air_latency(entry: dict) -> None:
+    """Drop invalid air-to-sound calibrations one by one (never the player); keep the newest 8."""
+    from sendspin_bridge.config.players import valid_air_latency_entries
+
+    raw = entry.get("air_to_sound_latency")
+    if raw is None:
+        return
+    clean = valid_air_latency_entries(raw)
+    if not isinstance(raw, list) or len(clean) != len(raw):
+        logger.warning(
+            "Player %s: dropped %s invalid or surplus air-to-sound calibration(s)",
+            entry.get("id"),
+            len(raw) - len(clean) if isinstance(raw, list) else "all",
+        )
+    entry["air_to_sound_latency"] = clean
+
+
 def _normalize_players(config: dict) -> None:
     from pydantic import ValidationError
 
@@ -397,6 +414,7 @@ def _normalize_players(config: dict) -> None:
         for entry in raw_players:
             if isinstance(entry, dict):
                 _clamp_power_save_delay(entry)
+                _clean_air_latency(entry)
             try:
                 kept.append(Player.model_validate(entry).model_dump(mode="json", exclude_unset=True))
                 continue

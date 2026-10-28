@@ -371,6 +371,8 @@ def main() -> None:
                     # Per-speaker opt-out of playout sync: a web UI setting
                     # that is not part of the add-on options schema.
                     "playout_sync_enabled",
+                    # Air sensor calibrations from the sync wizard (web UI only).
+                    "air_to_sound_latency",
                     # Preserve MA-pushed static_delay_ms across addon restarts.
                     # The Supervisor options.json is the source of truth for
                     # fields the user touched in the HA addon UI; everything

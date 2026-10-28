@@ -11,9 +11,13 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from typing import Annotated, Any, Final, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, field_validator, model_validator
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +93,27 @@ class PulseSinkBackend(BaseModel):
 
 Backend = Annotated[BluetoothBackend | PulseSinkBackend, Field(discriminator="type")]
 
+# R-12: the air-to-sound latency is stored per (codec, SBC rate, adapter MAC), at most 8 per player.
+AIR_LATENCY_MAX_ENTRIES: Final = 8
+
+
+class AirLatencyEntry(BaseModel):
+    """One air-to-sound calibration of a speaker (the sync wizard's ``L_as``). Strict: no string numbers."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    codec: Literal["sbc"]
+    rate: Literal[16000, 32000, 44100, 48000]
+    adapter: str = Field(pattern=r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
+    latency_ms: float = Field(ge=0, le=2000)
+    spread_ms: float | None = Field(None, ge=0, le=500)
+    measured_at: str
+    reference: str = Field("", max_length=80)
+    source: Literal["sync_wizard", "manual"] = "sync_wizard"
+
+    def key(self) -> tuple[str, int, str]:
+        return (self.codec, self.rate, self.adapter)
+
 
 class Player(BaseModel):
     # Extra keys survive (legacy keep-alive fields, future additions).
@@ -119,6 +144,8 @@ class Player(BaseModel):
     # false = this speaker runs the way it did before playout sync (legacy player,
     # not held warm, no automatic offset); null / true follow PLAYOUT_SYNC.
     playout_sync_enabled: StrictBool | None = None
+    # Air sensor calibrations, one per (codec, SBC rate, adapter); applied live.
+    air_to_sound_latency: list[AirLatencyEntry] | None = Field(None, max_length=AIR_LATENCY_MAX_ENTRIES)
     backend: Backend
 
     @field_validator("keepalive_interval")
@@ -126,6 +153,13 @@ class Player(BaseModel):
     def _keepalive_interval_range(cls, value: int | None) -> int | None:
         if value is not None and value != 0 and not 30 <= value <= 3600:
             raise ValueError("keepalive_interval must be 0 (off) or between 30 and 3600")
+        return value
+
+    @field_validator("air_to_sound_latency")
+    @classmethod
+    def _unique_air_latency_keys(cls, value: list[AirLatencyEntry] | None) -> list[AirLatencyEntry] | None:
+        if value is not None and len({entry.key() for entry in value}) != len(value):
+            raise ValueError("air_to_sound_latency has two entries for the same codec, rate and adapter")
         return value
 
     @model_validator(mode="after")
@@ -251,6 +285,91 @@ def player_state(config: dict[str, Any], player_id: str) -> dict[str, Any]:
     if not isinstance(entry, dict):
         entry = state[player_id] = {}
     return entry
+
+
+def _measured_at(entry: Mapping[str, Any]) -> datetime:
+    """When an entry was measured (for eviction); an unreadable time counts as oldest."""
+    try:
+        when = datetime.fromisoformat(str(entry.get("measured_at")).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+
+
+def _air_key(entry: Mapping[str, Any]) -> tuple[str, int, str]:
+    return (str(entry["codec"]), int(entry["rate"]), str(entry["adapter"]))
+
+
+def _cap_air_latency(entries: list[dict[str, Any]], max_entries: int) -> list[dict[str, Any]]:
+    """*entries* without the oldest measurements beyond *max_entries* (order kept)."""
+    if len(entries) <= max_entries:
+        return entries
+    newest = sorted(range(len(entries)), key=lambda i: _measured_at(entries[i]), reverse=True)[:max_entries]
+    keep = set(newest)
+    return [entry for i, entry in enumerate(entries) if i in keep]
+
+
+def valid_air_latency_entries(raw: object, *, max_entries: int = AIR_LATENCY_MAX_ENTRIES) -> list[dict[str, Any]]:
+    """The valid entries of a stored ``air_to_sound_latency`` value, as dicts.
+
+    Invalid entries are dropped one by one, a repeated key keeps its newest
+    measurement, and only the newest *max_entries* measurements stay.
+    """
+    if not isinstance(raw, list):
+        return []
+    by_key: dict[tuple[str, int, str], dict[str, Any]] = {}
+    for item in raw:
+        try:
+            entry = AirLatencyEntry.model_validate(item)
+        except ValidationError:
+            continue
+        dumped = entry.model_dump(mode="json", exclude_unset=True)
+        previous = by_key.get(entry.key())
+        if previous is None or _measured_at(dumped) >= _measured_at(previous):
+            by_key[entry.key()] = dumped
+    return _cap_air_latency(list(by_key.values()), max_entries)
+
+
+def resolve_air_latency(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> float | None:
+    """The stored air-to-sound latency for the speaker's current codec, SBC rate and adapter, or None."""
+    if not isinstance(codec, str) or not isinstance(rate, int) or isinstance(rate, bool):
+        return None
+    wanted = (codec.strip().lower(), rate, normalize_mac(adapter))
+    if not wanted[2]:
+        return None
+    for entry in valid_air_latency_entries(player_cfg.get("air_to_sound_latency")):
+        if _air_key(entry) == wanted:
+            return float(entry["latency_ms"])
+    return None
+
+
+def upsert_air_latency(
+    entries: list[dict[str, Any]], entry: dict[str, Any], *, max_entries: int = AIR_LATENCY_MAX_ENTRIES
+) -> list[dict[str, Any]]:
+    """*entries* with *entry* saved: it replaces the one with its key; the oldest measurements beyond *max_entries* go.
+
+    Raises ``pydantic.ValidationError`` when *entry* is not a valid calibration.
+    """
+    new = AirLatencyEntry.model_validate(entry)
+    kept = [e for e in valid_air_latency_entries(entries, max_entries=max_entries) if _air_key(e) != new.key()]
+    return _cap_air_latency([*kept, new.model_dump(mode="json", exclude_unset=True)], max_entries)
+
+
+def forget_air_latency(
+    entries: object, codec: str | None = None, rate: int | None = None, adapter: str | None = None
+) -> tuple[list[dict[str, Any]], int]:
+    """*entries* without the one for (codec, rate, adapter), or without all of them when *codec* is None.
+
+    Returns the remaining valid entries and how many were removed.
+    """
+    valid = valid_air_latency_entries(entries)
+    if codec is None:
+        return [], len(valid)
+    wanted = (codec.strip().lower(), rate, normalize_mac(adapter))
+    remaining = [e for e in valid if _air_key(e) != wanted]
+    return remaining, len(valid) - len(remaining)
 
 
 def supported_actions_for(backend_type: str) -> list[str]:
