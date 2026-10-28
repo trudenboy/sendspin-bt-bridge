@@ -876,3 +876,20 @@ class TestDescribePAFailure:
         label, hint = _describe_pa_failure(RuntimeError("weird"))
         assert label == "unknown"
         assert "RuntimeError" in hint
+
+
+def test_state_listener_sees_every_state_change_including_idle_to_suspended():
+    from sendspin_bridge.services.audio.sink_monitor import SinkMonitor
+
+    m = SinkMonitor()
+    seen: list[tuple] = []
+    m.add_state_listener(lambda *a: seen.append(a))
+    m.add_state_listener(lambda *a: 1 / 0)  # a failing listener never breaks the monitor
+    m.register("AA:BB", "bluez_sink.AA_BB.a2dp_sink", lambda: None, lambda: None)
+    m._sink_states["bluez_sink.AA_BB.a2dp_sink"] = "running"
+    m._observe_state("bluez_sink.AA_BB.a2dp_sink", "idle")
+    m._observe_state("bluez_sink.AA_BB.a2dp_sink", "suspended")
+    assert seen == [
+        ("AA:BB", "running", "idle", "bluez_sink.AA_BB.a2dp_sink"),
+        ("AA:BB", "idle", "suspended", "bluez_sink.AA_BB.a2dp_sink"),
+    ]
