@@ -250,14 +250,20 @@ _Params = tuple[int, int, int, "ChannelMode"]
 class AirLinkTracker:
     """Per-link air envelope: see the module docstring. Not thread-safe (one hub thread feeds it)."""
 
-    def __init__(self, *, codec_hint: Callable[[], str | None] = lambda: None, max_frames_per_s: int = 400) -> None:
+    def __init__(
+        self,
+        *,
+        codec_hint: Callable[[], str | None] = lambda: None,
+        max_frames_per_s: int = 400,
+        first_epoch: int = 0,
+    ) -> None:
         self._codec_hint = codec_hint
         self._max_frames_per_s = max_frames_per_s
         self._anchor = SendAnchor()
         self._runs: deque[_Run] = deque()
         self._pending = 0
         self._lags: deque[tuple[float, float]] = deque()
-        self._epoch = 0
+        self._epoch = first_epoch  # a resubscribed speaker continues its epochs (never back to 0)
         self._epoch_packets = 0
         self._segments = 1
         self._sent = 0
@@ -275,6 +281,11 @@ class AirLinkTracker:
         self._last_cells: tuple[int, int, float] | None = None
 
     # -- input ----------------------------------------------------------------
+
+    @property
+    def next_epoch(self) -> int:
+        """The first epoch a tracker replacing this one starts at (past every epoch it used)."""
+        return self._epoch + 1
 
     def on_link_reset(self) -> None:
         self._end_epoch()

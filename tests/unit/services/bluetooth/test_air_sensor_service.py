@@ -755,3 +755,20 @@ async def test_stop_drops_every_fold(air_env):
     fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
     await env.service.stop()
     assert env.service.finish_fold(fold_id, to_us=env.now_us).reason == "not_armed"
+
+
+async def test_a_resubscribe_continues_the_speakers_epochs(air_env):
+    # The same daemon sees a new epoch after an unsubscribe/subscribe, never epoch 0 again.
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    await env.replay_fixture()
+    await env.ticks(8)
+    first = [c.epoch for c in env.client(ENEBY).sent if isinstance(c, AirEnvelope)]
+    assert first
+    env.service.unsubscribe(ENEBY)
+    env.client(ENEBY).sent.clear()
+    env.service.subscribe(ENEBY)
+    await env.replay_fixture()
+    await env.ticks(8)
+    second = [c.epoch for c in env.client(ENEBY).sent if isinstance(c, AirEnvelope)]
+    assert second and min(second) > max(first)

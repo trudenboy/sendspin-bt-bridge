@@ -15,8 +15,7 @@ delays another. An ``air_source`` goes out on change and every 5 s, ahead of the
 The service is a hub consumer only while at least one device is subscribed. CPU guard (per
 streaming speaker): each completed hub CPU window (``cpu_windows``, counted once) has its
 ``cpu_fraction`` compared with ``cpu_per_speaker × max(1, streaming_links)``; two consecutive
-windows over budget remove the
-consumer and every device reports ``unavailable: cpu_budget`` until the next restart.
+windows over budget remove the consumer and every device reports ``unavailable: cpu_budget`` until the next restart.
 
 Subscriptions follow the clients (``SendspinClient`` subscribes its speaker while its daemon
 advertises ``accepts``, the speaker is connected, managed and not in standby). ``subscribe`` and
@@ -271,6 +270,8 @@ class AirSensorService:
         # Guards the parser, the trackers and the device map (hub thread vs bridge loop).
         self._lock = threading.Lock()
         self._devices: dict[str, _Device] = {}
+        # Per MAC, the epoch a resubscribed speaker continues at (its daemon never sees 0 again).
+        self._next_epoch: dict[str, int] = {}
         self._registered = False
         self._registration_lock = threading.Lock()
         self._last_drops: int | None = None
@@ -304,7 +305,9 @@ class AirSensorService:
                     mac=key,
                     # codec_hint is called by the tracker on the hub thread: it only reads the
                     # client's status (no writes, no locks of the client).
-                    tracker=AirLinkTracker(codec_hint=lambda: self._codec_hint(key)),
+                    tracker=AirLinkTracker(
+                        codec_hint=lambda: self._codec_hint(key), first_epoch=self._next_epoch.get(key, 0)
+                    ),
                     queue=deque(maxlen=self._queue_len),
                 )
         self._sync_registration()
@@ -313,6 +316,8 @@ class AirSensorService:
         """Any thread. The device leaves the map and its sender task is cancelled on the loop."""
         with self._lock:
             dev = self._devices.pop(mac.upper(), None)
+            if dev is not None:
+                self._next_epoch[dev.mac] = dev.tracker.next_epoch
             fold_id = self._fold_of.pop(mac.upper(), None)
             if fold_id is not None:
                 self._folds.pop(fold_id, None)
