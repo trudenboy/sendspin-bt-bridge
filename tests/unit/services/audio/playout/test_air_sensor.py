@@ -728,3 +728,36 @@ async def test_air_that_stopped_arriving_is_not_correlated_again(air_world):
     assert (
         s["windows_confirmed"] + s["windows_rejected"] <= before["windows_confirmed"] + before["windows_rejected"] + 1
     )
+
+
+def _window_lines(caplog) -> list[tuple[float, float | None]]:
+    """``(t_mid µs, H ms or None)`` of every ``Air window:`` debug line."""
+    out = []
+    for r in caplog.records:
+        msg = r.getMessage()
+        if "Air window:" in msg:
+            t_mid = float(msg.split("t_mid=")[1].split()[0])
+            h = msg.split(" H=")[1].split()[0]
+            out.append((t_mid, None if h == "-" else float(h.removesuffix("ms"))))
+    return out
+
+
+async def test_a_window_reports_the_schedule_segment_at_its_middle(air_world, monkeypatch, caplog):
+    """H describes the window's middle: with s stepping twice inside the window (a 0.8 s segment
+    around the middle, longer ones either side), the middle's segment is used, not the longest."""
+    monkeypatch.setenv("SENDSPIN_AIR_DEBUG", "1")
+    with caplog.at_level("DEBUG", logger=air_sensor_module.__name__):
+        a = air_world(H_true_ms=10.0)
+        await a.run(seconds=16)
+    tau = next(t for t, h in _window_lines(caplog) if h is not None and t > a.out.t_air(0) + 13e6)
+    caplog.clear()
+    with caplog.at_level("DEBUG", logger=air_sensor_module.__name__):
+        b = air_world(H_true_ms=10.0)
+        for at_air, ms in ((tau - 0.4e6, -20.0), (tau + 0.4e6, 20.0)):
+            # what is written now plays PA_LATENCY_US later, H_true later on the air
+            while b.now < at_air - 10_000.0 - PA_LATENCY_US:
+                await b.run(seconds=TICK_US / 1e6)
+            b.shift_schedule_ms(ms)
+        await b.run(seconds=3)
+    h = next(h for t, h in _window_lines(caplog) if abs(t - tau) < 1.0)
+    assert h == pytest.approx(30.0, abs=0.5)

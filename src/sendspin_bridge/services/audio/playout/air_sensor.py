@@ -10,8 +10,9 @@ executor in the daemon) and turns a confirmed lag into the host placement
     H = t_mid − s(i_m) − (d_enc − d_comb)        E = H + L_as − D_out   (with a calibration)
 
 with ``t_mid`` the energy-cell air time of the window's middle air cell, ``i_m`` its written
-partner (fractional; ``s`` interpolated inside one schedule segment), ``d_enc = 4.5·M/rate`` the
-SBC analysis delay of the air energy and ``d_comb`` the comb's half lag on the written side.
+partner (fractional; ``s`` interpolated inside the schedule segment that holds it, else the
+longest one), ``d_enc = 4.5·M/rate`` the SBC analysis delay of the air energy and ``d_comb`` the
+comb's half lag on the written side.
 
 **Lag.** ``L`` relates the written cell index (since the output opened) to the air media time:
 ``i = u / cell_us + L``. PulseAudio consumes ``x`` and the encoder stamps it with RTP media time
@@ -565,21 +566,25 @@ class AirSensor:
         lo = max(0, math.floor(off))
         hi = min(len(s) - 1, math.ceil(off + plan.n - 1))
         # Segments of the matched span: a step of s by more than half a cell off its cadence ends one.
-        best: tuple[int, int] | None = None
+        segments: list[tuple[int, int]] = []
         start = None
         for k in range(lo, hi + 1):
             ok = not math.isnan(s[k])
             if ok and start is not None and abs(s[k] - s[k - 1] - cell) <= cell / 2:
                 continue
-            if start is not None and (best is None or k - start > best[1] - best[0] + 1):
-                best = (start, k - 1)
+            if start is not None:
+                segments.append((start, k - 1))
             start = k if ok else None
-        if start is not None and (best is None or hi + 1 - start > best[1] - best[0] + 1):
-            best = (start, hi)
-        if best is None:
+        if start is not None:
+            segments.append((start, hi))
+        if not segments:
             return None
-        a, b = best
+        # H describes the window's middle: s from the segment holding it (an engine step inside the
+        # window is placed by where the middle is), else from the longest one.
         x_m = off + plan.n // 2
+        k_m = math.floor(x_m)
+        middle = [(a, b) for a, b in segments if a <= k_m <= b and b > a]
+        a, b = middle[0] if middle else max(segments, key=lambda seg: seg[1] - seg[0])
         if b > a:
             k = min(max(math.floor(x_m), a), b - 1)
             slope = s[k + 1] - s[k]
