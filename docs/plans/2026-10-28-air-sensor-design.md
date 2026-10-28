@@ -1028,3 +1028,12 @@ Rulings (controller, after the test):
   Validation: the ENEBY capture of this test must give a stable H offline with the count anchor.
 - **R-19 CPU.** Optimise the live parse path (frame header/scale factors) and re-derive the
   per-speaker budget from the HAOS VM, with the passive overlay bench before A17.
+- **R-18 superseded (A4b result).** The media-time anchor with the α − Δu reseed is mathematically
+  identical to the count-axis anchor (both give the same t0 on every batch, within 0.5 µs). Offline
+  on the ENEBY capture, H follows the send lateness against PulseAudio's media schedule to within
+  ~3 ms: flat while PulseAudio keeps up, ramping to +100…+290 ms through ~10 s congested stretches
+  and dropping back at each PulseAudio skip; Lenco on the uncongested link stays within ±0.4 ms
+  (p10–p90). The swings most likely are real: late sends drain the speaker buffer, so the audio is
+  late until PulseAudio's skip realigns it. A17 verifies this acoustically (microphone + HCI capture
+  on ENEBY at the same time). The count-axis refactor and the daemon's skip-window placement fix
+  stay (equivalent / correct). ENEBY's congested link on the shared adapter is tracked in #562.
