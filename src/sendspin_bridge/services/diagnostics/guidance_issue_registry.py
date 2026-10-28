@@ -41,6 +41,31 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("permission_denied", "read_only_filesystem"),
     ),
+    # EXPERIMENTAL_AIR_SENSOR only: the sensor cannot run (bridge-wide or for one speaker).
+    # Informational: playback is never affected.
+    "air_sensor_unavailable": GuidanceIssueDefinition(
+        key="air_sensor_unavailable",
+        layer="bluetooth",
+        priority=90,
+        severity="info",
+        default_reason_codes=(
+            "no_cap_net_raw",
+            "unsupported_platform",
+            "monitor_error",
+            "cpu_budget",
+            "unsupported_input",
+            "playout_fallback",
+            "internal_error",
+        ),
+    ),
+    # EXPERIMENTAL_AIR_SENSOR only: the speaker does not stream SBC, which the sensor reads.
+    "air_sensor_codec": GuidanceIssueDefinition(
+        key="air_sensor_codec",
+        layer="bluetooth",
+        priority=91,
+        severity="info",
+        default_reason_codes=("non_sbc_codec",),
+    ),
     "bluetooth_unavailable": GuidanceIssueDefinition(
         key="bluetooth_unavailable",
         layer="bluetooth",

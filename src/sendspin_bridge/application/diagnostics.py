@@ -268,6 +268,36 @@ def _collect_sink_input_diagnostics() -> list[dict]:
     return sink_inputs
 
 
+def _air_sensor_diagnostics(snapshot: object) -> dict | None:
+    """A device's air sensor snapshot for the bundle (aggregates only); ``None`` with the switch off."""
+    if not isinstance(snapshot, dict):
+        return None
+    return {k: v for k, v in snapshot.items() if k != "accepts"}
+
+
+_HCI_MONITOR_COUNTERS = ("records", "drops", "drop_source", "clock_steps", "cpu_fraction", "streaming_links")
+
+
+def _collect_hci_monitor_diagnostics() -> dict | None:
+    """The monitor hub's counters and the air sensor service state; ``None`` when no hub runs (switch off).
+
+    Counters only: the hub never exposes monitor records.
+    """
+    from sendspin_bridge.services.bluetooth import air_sensor_service, hci_monitor_hub
+
+    hub = hci_monitor_hub.peek_hub()
+    if hub is None:
+        return None
+    counters = hub.counters()
+    service = air_sensor_service.get_air_sensor_service()
+    return {
+        "available": bool(hub.available),
+        "reason": hub.unavailable_reason,
+        **{key: counters.get(key) for key in _HCI_MONITOR_COUNTERS},
+        "air_service": service.status() if service is not None else None,
+    }
+
+
 def _collect_portaudio_device_diagnostics() -> list[dict]:
     try:
         devices = query_audio_devices()
@@ -729,9 +759,21 @@ def diagnostics(*, auth_enabled: bool = False) -> dict:
                     "health_summary": device.health_summary,
                     "capabilities": device.capabilities,
                     "recent_events": device.recent_events,
+                    "air_sensor": _air_sensor_diagnostics(device.extra.get("air_sensor")),
                 }
             )
         diag["devices"] = device_diag
+
+        try:
+            diag["hci_monitor"] = _collect_hci_monitor_diagnostics()
+            _record_success("hci_monitor")
+        except Exception as exc:
+            diag["hci_monitor"] = _record_failure(
+                "hci_monitor",
+                exc,
+                fallback={"error": "Failed to collect HCI monitor counters"},
+                log_message="Failed to collect HCI monitor counters for diagnostics",
+            )
 
         # MA API integration status
         ma_url, ma_token = get_ma_api_credentials()

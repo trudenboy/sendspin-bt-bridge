@@ -152,6 +152,7 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
             "backend_type": facts.backend_type,
             "output_sink": facts.audio_sink if facts.backend_type == "pulse_sink" else None,
             "host_sink_suspends": facts.host_sink_suspends,
+            "air_sensor": facts.air_sensor,
         },
         transport={
             "daemon_connected": bool(_obj_get(device, "server_connected", False)),

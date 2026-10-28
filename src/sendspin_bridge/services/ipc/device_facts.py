@@ -206,6 +206,11 @@ class DeviceFacts:
         """The read-only host sink-suspend check (``DeviceStatus.host_sink_suspends``)."""
         return self._dict_fact("host_sink_suspends")
 
+    @property
+    def air_sensor(self) -> dict[str, Any] | None:
+        """The air sensor snapshot (``DeviceStatus.air_sensor``); ``None`` with the switch off."""
+        return self._dict_fact("air_sensor")
+
     # -- runtime --------------------------------------------------------
 
     @property

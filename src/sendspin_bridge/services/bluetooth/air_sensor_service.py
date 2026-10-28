@@ -186,6 +186,12 @@ class AirSensorService:
             self._call_on_loop(task.cancel)
         self._sync_registration()
 
+    def status(self) -> dict[str, str | None]:
+        """For diagnostics: ``running``, or ``tripped`` (``cpu_budget``) until the next restart."""
+        if self._tripped:
+            return {"state": "tripped", "reason": "cpu_budget"}
+        return {"state": "running", "reason": None}
+
     def is_subscribed(self, mac: str) -> bool:
         with self._lock:
             return mac.upper() in self._devices

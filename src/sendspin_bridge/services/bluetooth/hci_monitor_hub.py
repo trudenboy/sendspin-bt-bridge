@@ -662,6 +662,11 @@ def get_hub() -> HciMonitorHub:
         return _HUB
 
 
+def peek_hub() -> HciMonitorHub | None:
+    """The process-wide hub if one was created (switch on), else ``None``; never creates one."""
+    return _HUB
+
+
 class AsyncHubLifecycle:
     """The hub behind the async ``start()``/``stop()`` the bridge lifecycle awaits (like ``HciAvrcpMonitor``).
 

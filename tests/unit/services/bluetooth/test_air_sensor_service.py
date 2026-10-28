@@ -238,6 +238,14 @@ async def test_cpu_guard_scales_with_streaming_speakers(air_env):
     assert src.reason == "cpu_budget"
 
 
+async def test_the_service_status_tells_a_cpu_trip_for_diagnostics(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.06, streaming_links=1)
+    assert env.service.status() == {"state": "running", "reason": None}
+    env.service.subscribe(ENEBY)
+    await env.ticks(2)
+    assert env.service.status() == {"state": "tripped", "reason": "cpu_budget"}
+
+
 async def test_one_window_over_budget_does_not_trip_the_guard(air_env):
     env = await air_env(peers={(1, 70): ENEBY}, accepts=[1], cpu_fraction=0.06, streaming_links=1)
     env.service.subscribe(ENEBY)
