@@ -28,7 +28,6 @@ from __future__ import annotations
 import collections
 import errno
 import logging
-import struct
 import sys
 import threading
 import time
@@ -79,6 +78,8 @@ _CONSUMER_LOG_INTERVAL_S = 600.0
 _BACKOFF_BASE_S = 5.0
 _BACKOFF_MAX_S = 60.0
 _BACKOFF_FACTOR = 2.0
+_ROUTES_MAX = 4096  # (opcode, event code) routes cached before the cache restarts
+_TX_LINK_REFRESH_S = 1.0  # streaming-link times are refreshed at most this often per link
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +94,12 @@ class HubRecord:
 
 
 class HubConsumer(Protocol):
-    """``wants_acl_tx`` opts into ACL TX; an optional ``wants_kernel_time = True`` opts into the bracketed path."""
+    """``wants_acl_tx`` opts into ACL TX; an optional ``wants_kernel_time = True`` opts into the bracketed path.
+
+    Optional ``opcodes`` / ``event_codes`` (frozensets) name the monitor opcodes and, for event
+    records, the HCI event codes the consumer reads; the hub skips other records for it without
+    building anything (R-19). Absent means every record (ACL TX still only with ``wants_acl_tx``).
+    """
 
     wants_acl_tx: bool
 
@@ -133,11 +139,28 @@ def _mac(bdaddr_le: bytes) -> str:
     return ":".join(f"{b:02X}" for b in reversed(bdaddr_le))
 
 
+def _wants(c: HubConsumer, opcode: int, event_code: int) -> bool:
+    if opcode == MONITOR_ACL_TX_PKT and not c.wants_acl_tx:
+        return False
+    opcodes = getattr(c, "opcodes", None)
+    if opcodes is not None and opcode not in opcodes:
+        return False
+    event_codes = getattr(c, "event_codes", None)
+    return not (opcode == MONITOR_EVENT_PKT and event_codes is not None and event_code not in event_codes)
+
+
 class _Pending:
-    __slots__ = ("drops", "index", "opcode", "payload", "real_ns", "t_recv_us")
+    __slots__ = ("drops", "index", "opcode", "payload", "real_ns", "route", "t_recv_us")
 
     def __init__(
-        self, real_ns: int | None, opcode: int, index: int, payload: bytes, drops: int | None, t_recv_us: float
+        self,
+        real_ns: int | None,
+        opcode: int,
+        index: int,
+        payload: bytes,
+        drops: int | None,
+        t_recv_us: float,
+        route: tuple[int, int],
     ) -> None:
         self.real_ns = real_ns
         self.opcode = opcode
@@ -145,6 +168,7 @@ class _Pending:
         self.payload = payload
         self.drops = drops
         self.t_recv_us = t_recv_us
+        self.route = route  # (opcode, event code): who gets it is decided at delivery
 
 
 class HciMonitorHub:
@@ -177,6 +201,8 @@ class HciMonitorHub:
         self._consumers: tuple[HubConsumer, ...] = ()
         self._immediate: tuple[HubConsumer, ...] = ()
         self._timed: tuple[HubConsumer, ...] = ()
+        # (opcode, event code or -1) -> (immediate consumers, kernel-time consumers) wanting it
+        self._routes: dict[tuple[int, int], tuple[tuple[HubConsumer, ...], tuple[HubConsumer, ...]]] = {}
         self._timeout = _SOCKET_TIMEOUT_S
         self._last_cpu_sample: tuple[float, float] | None = None
         self._unexpected_logged_at: float | None = None
@@ -228,6 +254,22 @@ class HciMonitorHub:
         timed = tuple(c for c in self._consumers if getattr(c, "wants_kernel_time", False))
         self._immediate = tuple(c for c in self._consumers if c not in timed)
         self._timed = timed
+        self._routes = {}  # swapped whole, like the tuples
+
+    def _route(self, key: tuple[int, int]) -> tuple[tuple[HubConsumer, ...], tuple[HubConsumer, ...]]:
+        """Consumers wanting records of *key* = (opcode, event code); computed once per key."""
+        routes = self._routes
+        route = routes.get(key)
+        if route is None:
+            opcode, event_code = key
+            route = (
+                tuple(c for c in self._immediate if _wants(c, opcode, event_code)),
+                tuple(c for c in self._timed if _wants(c, opcode, event_code)),
+            )
+            if len(routes) >= _ROUTES_MAX:
+                routes.clear()
+            routes[key] = route
+        return route
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -432,7 +474,8 @@ class HciMonitorHub:
                     self._finish_pending()
                     return
                 continue
-            self._open_event.set()
+            if not self._open_event.is_set():  # set() takes a lock and notifies: once per open
+                self._open_event.set()
             self._on_datagram(data, ancdata)
 
     def _bound_timeout(self, sock: Any, now: float) -> None:
@@ -480,22 +523,25 @@ class HciMonitorHub:
             return
         opcode, index, payload = frame
         real_ns, rxq_drops = parse_monitor_cmsgs(ancdata)
-        drop_counter = self._drop_counter
-        if drop_counter is not None and rxq_drops is not None:
-            drop_counter.on_cmsg(rxq_drops)
-            self._drops, self._drop_source = drop_counter.drops, drop_counter.source
+        if rxq_drops is not None:
+            drop_counter = self._drop_counter
+            if drop_counter is not None:
+                drop_counter.on_cmsg(rxq_drops)
+                self._drops, self._drop_source = drop_counter.drops, drop_counter.source
         self._update_maps(opcode, index, payload)
         self._records += 1
         drops = self._drops
-        acl_tx = opcode == MONITOR_ACL_TX_PKT
-        immediate = self._immediate
+        key = (opcode, payload[0] if opcode == MONITOR_EVENT_PKT and payload else -1)
+        immediate, timed = self._route(key)
         if immediate:
             rec = HubRecord(t_recv_us, index, opcode, payload, drops, "recv", self._clock_map.epoch)
-            self._fan_out(immediate, rec, acl_tx)
+            self._fan_out(immediate, rec)
         if not self._timed:
             self._pending.clear()
             return
-        entry = _Pending(real_ns, opcode, index, payload, drops, t_recv_us)
+        if not timed:
+            return  # no kernel-time consumer reads it: it never waits for a pair
+        entry = _Pending(real_ns, opcode, index, payload, drops, t_recv_us, key)
         if not self._pending and real_ns is None:
             self._deliver(entry, None)
             return
@@ -543,10 +589,12 @@ class HciMonitorHub:
                         self._tx_links.pop((index, handle), None)
         elif opcode == MONITOR_ACL_TX_PKT:
             if len(payload) >= 2:
-                (handle_flags,) = struct.unpack_from("<H", payload, 0)
+                key = (index, (payload[0] | payload[1] << 8) & 0x0FFF)
                 now = self._monotonic()
-                with self._lock:
-                    self._tx_links[(index, handle_flags & 0x0FFF)] = now
+                last = self._tx_links.get(key)  # only this thread writes it
+                if last is None or now - last >= _TX_LINK_REFRESH_S:  # a 30 s window needs no finer time
+                    with self._lock:
+                        self._tx_links[key] = now
         elif opcode == MONITOR_NEW_INDEX:
             if len(payload) >= 8:
                 with self._lock:
@@ -560,19 +608,20 @@ class HciMonitorHub:
                     del self._tx_links[key]
 
     def _deliver(self, entry: _Pending, t_raw_us: float | None) -> None:
-        """Deliver one queued record to the kernel-time consumers."""
+        """Deliver one queued record to the kernel-time consumers that want it now."""
+        consumers = self._route(entry.route)[1]
+        if not consumers:
+            return
         epoch = self._clock_map.epoch
         if t_raw_us is None:
             self._recv_stamped += 1
             rec = HubRecord(entry.t_recv_us, entry.index, entry.opcode, entry.payload, entry.drops, "recv", epoch)
         else:
             rec = HubRecord(t_raw_us, entry.index, entry.opcode, entry.payload, entry.drops, "kernel", epoch)
-        self._fan_out(self._timed, rec, rec.opcode == MONITOR_ACL_TX_PKT)
+        self._fan_out(consumers, rec)
 
-    def _fan_out(self, consumers: tuple[HubConsumer, ...], rec: HubRecord, acl_tx: bool) -> None:
+    def _fan_out(self, consumers: tuple[HubConsumer, ...], rec: HubRecord) -> None:
         for c in consumers:
-            if acl_tx and not c.wants_acl_tx:
-                continue
             try:
                 c.on_record(rec)
             except Exception:

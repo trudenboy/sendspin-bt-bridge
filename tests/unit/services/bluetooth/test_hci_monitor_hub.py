@@ -736,3 +736,65 @@ def test_avrcp_consumer_forgets_links_of_a_removed_controller():
     rec = type("R", (), {"opcode": hs.MONITOR_DEL_INDEX, "index": 1, "payload": b""})()
     c.on_record(rec)
     assert c._conn == {(0, 70): "BB:BB:BB:BB:BB:BB"}
+
+
+# ---------------------------------------------------------------- R-19: routing by what consumers use
+
+
+def _mixed_records():
+    return [
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x05\x01\x46\x00\x01\x00"), []),  # NOCP
+        (frame(hs.MONITOR_ACL_RX_PKT, 0, b"\x46\x00\x04\x00abcd"), []),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x3e\x02\x02\x00"), []),  # LE meta
+        (frame(hs.MONITOR_ACL_TX_PKT, 0, b"\x46\x20\x00\x00"), []),
+        (frame(hs.MONITOR_EVENT_PKT, 0, b"\x05\x04\x00\x46\x00\x13"), []),  # Disconnection Complete
+    ]
+
+
+@pytest.mark.parametrize("timed", [False, True])
+def test_a_consumer_declaring_opcodes_and_event_codes_gets_only_those(fake_hub_socket, timed):
+    picky = kernel_consumer() if timed else consumer(True)
+    picky.opcodes = frozenset({hs.MONITOR_EVENT_PKT, hs.MONITOR_ACL_TX_PKT})
+    picky.event_codes = frozenset({0x13, 0x05})
+    everything = kernel_consumer() if timed else consumer(True)
+    hub = HciMonitorHub(open_socket=fake_hub_socket(_mixed_records()), seed=lambda m: None)
+    hub.add_consumer(picky)
+    hub.add_consumer(everything)
+    hub.start()
+    hub.stop()
+    assert [(r.opcode, r.payload[0]) for r in picky.seen] == [
+        (hs.MONITOR_EVENT_PKT, 0x13),
+        (hs.MONITOR_ACL_TX_PKT, 0x46),
+        (hs.MONITOR_EVENT_PKT, 0x05),
+    ]
+    assert len(everything.seen) == 5
+
+
+def test_opcodes_do_not_override_wants_acl_tx(fake_hub_socket):
+    c = consumer(False)
+    c.opcodes = frozenset({hs.MONITOR_ACL_TX_PKT, hs.MONITOR_ACL_RX_PKT})
+    hub = HciMonitorHub(open_socket=fake_hub_socket(_mixed_records()), seed=lambda m: None)
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert [r.opcode for r in c.seen] == [hs.MONITOR_ACL_RX_PKT]
+
+
+def test_records_nobody_uses_still_update_the_link_maps(fake_hub_socket):
+    c = consumer(True)
+    c.opcodes = frozenset({hs.MONITOR_ACL_RX_PKT})
+    hub = HciMonitorHub(open_socket=fake_hub_socket(_mixed_records()), seed=lambda m: m.update({(0, 0x46): "AA"}))
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert hub.peers() == {}  # the Disconnection Complete nobody consumes still removed the link
+    assert hub.counters()["records"] == 5
+    assert [r.opcode for r in c.seen] == [hs.MONITOR_ACL_RX_PKT]
+
+
+def test_avrcp_consumer_declares_what_it_reads():
+    from sendspin_bridge.services.bluetooth import hci_avrcp_monitor as m
+
+    c = m.AvrcpConsumer(tracker=object())
+    assert c.opcodes == frozenset({hs.MONITOR_EVENT_PKT, hs.MONITOR_ACL_RX_PKT, hs.MONITOR_DEL_INDEX})
+    assert c.event_codes == frozenset({0x03, 0x05})  # Connection / Disconnection Complete

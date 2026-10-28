@@ -80,6 +80,10 @@ class RawRealtimeMap:
         pairs = self._pairs
         if len(pairs) < 2 or not pairs[0][0] <= real_ns <= pairs[-1][0]:
             return None
+        r0, o0 = pairs[-2]
+        if r0 < real_ns:  # the newest bracket, where nearly every stamp lands: no earlier pair holds it
+            r1, o1 = pairs[-1]
+            return ((real_ns - o0) - (o1 - o0) * (real_ns - r0) / (r1 - r0)) / 1000.0
         for (r0, o0), (r1, o1) in itertools.pairwise(pairs):
             if r0 <= real_ns <= r1:
                 slew = (o1 - o0) * (real_ns - r0) / (r1 - r0)

@@ -362,3 +362,11 @@ async def test_client_refuses_when_the_daemon_is_gone():
     client._daemon_proc.returncode = 0
     assert client.send_air_command(_source()) is False
     assert stdin.writes == []
+
+
+async def test_the_service_declares_the_monitor_records_its_parser_reads():
+    # NEW_INDEX, DEL_INDEX, COMMAND (HCI_Reset), EVENT, ACL TX; and of the events, Connection
+    # Complete, Disconnection Complete, Hardware Error and Number Of Completed Packets: the hub
+    # skips everything else for it (R-19).
+    assert AirSensorService.opcodes == frozenset({0, 1, 2, 3, 4})
+    assert AirSensorService.event_codes == frozenset({0x03, 0x05, 0x10, 0x13})

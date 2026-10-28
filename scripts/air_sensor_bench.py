@@ -36,11 +36,15 @@ if str(ROOT / "src") not in sys.path:
 from sendspin_bridge.services.bluetooth.a2dp_air import A2dpAirParser, read_btsnoop  # noqa: E402
 from sendspin_bridge.services.bluetooth.a2dp_air_envelope import AirLinkTracker  # noqa: E402
 from sendspin_bridge.services.bluetooth.air_sensor_service import AirSensorService  # noqa: E402
-from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import AvrcpConsumer  # noqa: E402
+from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import (  # noqa: E402
+    AvrcpConsumer,
+    _parse_connection_complete,
+)
 from sendspin_bridge.services.bluetooth.hci_clock import RawRealtimeMap  # noqa: E402
 from sendspin_bridge.services.bluetooth.hci_monitor_hub import HciMonitorHub  # noqa: E402
 from sendspin_bridge.services.bluetooth.hci_socket import (  # noqa: E402
     MONITOR_ACL_TX_PKT,
+    MONITOR_EVENT_PKT,
     SCM_TIMESTAMPNS,
     DropCounter,
 )
@@ -177,6 +181,11 @@ def run_hub_once(records: list[MonitorRecord]) -> tuple[float, dict[tuple[int, i
         {(r.index, int.from_bytes(r.payload[:2], "little") & 0x0FFF) for r in records if r.opcode == MONITOR_ACL_TX_PKT}
     )
     peers = {key: f"00:00:00:00:{key[0]:02X}:{key[1] & 0xFF:02X}" for key in links}
+    for r in records:  # a Connection Complete in the capture names the link's peer (the hub maps it)
+        if r.opcode == MONITOR_EVENT_PKT and len(r.payload) >= 2 and r.payload[0] == 0x03:
+            conn = _parse_connection_complete(r.payload[2:])
+            if conn is not None:
+                peers[(r.index, conn[0])] = conn[1]
     clock = _ReplayClock(records[0].t - 0.001)
     sock = _ReplaySocket(records, clock)
     hub = HciMonitorHub(

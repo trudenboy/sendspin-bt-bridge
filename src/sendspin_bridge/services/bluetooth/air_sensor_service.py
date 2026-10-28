@@ -36,7 +36,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from sendspin_bridge.services.bluetooth.a2dp_air import A2dpAirParser
+from sendspin_bridge.services.bluetooth.a2dp_air import AIR_EVENT_CODES, AIR_MONITOR_OPCODES, A2dpAirParser
 from sendspin_bridge.services.bluetooth.a2dp_air_envelope import AirLinkTracker, TrackerState
 from sendspin_bridge.services.bluetooth.hci_clock import _raw_ns
 from sendspin_bridge.services.ipc.commands import (
@@ -105,6 +105,8 @@ class AirSensorService:
 
     wants_acl_tx = True
     wants_kernel_time = True
+    opcodes = AIR_MONITOR_OPCODES  # the hub skips records the parser ignores (R-19)
+    event_codes = AIR_EVENT_CODES
 
     def __init__(
         self,
@@ -223,7 +225,6 @@ class AirSensorService:
             packets = self._parser.feed(rec.t_raw_us / 1e6, rec.index, rec.opcode, rec.payload, rec.drops)
             if not packets:
                 return
-            states = self._parser.link_states()
             for p in packets:
                 key = (p.index, p.handle)
                 mac = self._hub.peer(p.index, p.handle)
@@ -234,12 +235,8 @@ class AirSensorService:
                     if dev.link is not None:
                         dev.tracker.on_link_reset()
                     dev.link = key
-                state = states.get(key)
                 dev.tracker.on_packet(
-                    p,
-                    timestamp=rec.timestamp,
-                    in_step=bool(state is not None and state.in_step),
-                    clock_epoch=rec.clock_epoch,
+                    p, timestamp=rec.timestamp, in_step=self._parser.link_in_step(key), clock_epoch=rec.clock_epoch
                 )
 
     def on_hub_state(self, state: str, reason: str | None) -> None:

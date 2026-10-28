@@ -358,6 +358,9 @@ class AvrcpConsumer:
     """
 
     wants_acl_tx = False
+    # What _process_record reads; the hub skips the rest for this consumer.
+    opcodes = frozenset({_OPCODE_EVENT_PKT, _OPCODE_ACL_RX_PKT, MONITOR_DEL_INDEX})
+    event_codes = frozenset({_HCI_EVT_CONNECTION_COMPLETE, _HCI_EVT_DISCONNECT_COMPLETE})
 
     def __init__(
         self,
