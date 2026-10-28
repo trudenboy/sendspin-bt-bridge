@@ -55,6 +55,14 @@ class SuspendPolicy:
     source: Source
 
 
+_last_policy: SuspendPolicy | None = None
+
+
+def last_suspend_policy() -> SuspendPolicy | None:
+    """The most recent probe result (for clients that appear after it ran)."""
+    return _last_policy
+
+
 _UNKNOWN = SuspendPolicy(server="unknown", suspends=None, timeout_s=None, source="unknown")
 
 
@@ -121,6 +129,7 @@ async def _run_subprocess(argv: list[str]) -> tuple[int, str]:
         out, _ = await proc.communicate()
     except BaseException:
         proc.kill()
+        await proc.wait()
         raise
     return proc.returncode or 0, out.decode("utf-8", "replace")
 
@@ -174,7 +183,8 @@ class SuspendObserver:
                 self._idle_since = now
             return
         idle_since, self._idle_since = self._idle_since, None
-        if new != "suspended" or bridge_requested or not connected:
+        # A sink that first appears (old None) is born suspended: not a host suspend.
+        if new != "suspended" or old not in ("running", "idle") or bridge_requested or not connected:
             return
         self._observed += 1
         self._last_mono = now
@@ -209,8 +219,18 @@ async def run_suspend_probe_loop(
     probe: Callable[[], Awaitable[SuspendPolicy]] = probe_suspend_policy,
 ) -> None:
     """Probe at start and every *interval_s*, handing the policy to every client."""
+    global _last_policy
     while True:
         policy = await probe()
+        if policy != _last_policy:
+            logger.info(
+                "Host sink-suspend policy: server=%s suspends=%s timeout=%s source=%s",
+                policy.server,
+                policy.suspends,
+                policy.timeout_s,
+                policy.source,
+            )
+        _last_policy = policy
         for client in list(get_clients()):
             try:
                 client.set_suspend_policy(policy)

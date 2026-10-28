@@ -361,6 +361,15 @@ def _build_sink_suspend_issues(devices: list[Any]) -> list[RecoveryIssue]:
         facts = _host_sink_suspends(device)
         if not facts.get("warn"):
             continue
+        # Only a connected, bridge-managed speaker: nothing to suspend otherwise.
+        bluetooth = _device_state_model(device).get("bluetooth") or {}
+        management = _device_state_model(device).get("management") or {}
+        connected = (
+            bool(bluetooth.get("connected")) if bluetooth else bool(getattr(device, "bluetooth_connected", False))
+        )
+        released = management.get("released") if management else getattr(device, "bt_management_enabled", True) is False
+        if not connected or released:
+            continue
         name = str(getattr(device, "player_name", None) or "Unknown")
         cause = _SINK_SUSPEND_CAUSES.get(str(facts.get("reason") or ""), "")
         primary_action, secondary_actions = build_recovery_issue_actions("bt_sink_suspend_in_gaps", [name])

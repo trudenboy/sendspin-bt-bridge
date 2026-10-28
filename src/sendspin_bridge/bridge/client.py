@@ -66,7 +66,11 @@ from sendspin_bridge.services.audio.latency_calibration import (
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.audio.player.settings import output_latency_compensated
-from sendspin_bridge.services.audio.sink_suspend_policy import SuspendObserver, SuspendPolicy
+from sendspin_bridge.services.audio.sink_suspend_policy import (
+    SuspendObserver,
+    SuspendPolicy,
+    last_suspend_policy,
+)
 from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line, transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -795,6 +799,7 @@ class SendspinClient:
         self._suspend_observer = SuspendObserver()
         self._suspend_policy: SuspendPolicy | None = None
         self._suspend_listener_attached = False
+        self._suspend_warned = False
         self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
         # Ring of recent daemon spawns/exits.  Populated on spawn (entry created)
         # and on death (exit fields filled).  Used for the diagnostics report
@@ -1150,8 +1155,18 @@ class SendspinClient:
         self._publish_host_sink_suspends()
 
     def _publish_host_sink_suspends(self) -> None:
+        if self.backend_type != BLUETOOTH:
+            return
         snapshot = self._suspend_observer.snapshot(self._suspend_policy)
         if snapshot != self.status.get("host_sink_suspends"):
+            warn = bool(snapshot and snapshot.get("warn"))
+            if warn and not self._suspend_warned:
+                logger.info(
+                    "[%s] The host suspends the Bluetooth sink in gaps (%s); see the Bluetooth sink suspend docs",
+                    self.player_name,
+                    (snapshot or {}).get("reason"),
+                )
+            self._suspend_warned = warn
             self._update_status({"host_sink_suspends": snapshot})
 
     def _attach_suspend_listener(self, monitor: object | None) -> None:
@@ -1160,6 +1175,9 @@ class SendspinClient:
             return
         self._suspend_listener_attached = True
         add(self._on_sink_state_change)
+        cached = last_suspend_policy()
+        if cached is not None and self._suspend_policy is None:
+            self.set_suspend_policy(cached)
 
     # ---- Sink mute watchdog (safety net) ----
 

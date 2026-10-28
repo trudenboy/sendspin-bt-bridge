@@ -195,3 +195,41 @@ async def test_probe_loop_survives_a_failing_client():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert good.got is not None
+
+
+def test_a_sink_that_first_appears_suspended_is_not_a_host_suspend():
+    obs = SuspendObserver()
+    obs.on_state(None, "suspended", bridge_requested=False, connected=True)
+    assert obs.snapshot(None) is None
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_stops_the_probe_task():
+    import asyncio
+
+    from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
+
+    o = BridgeOrchestrator()
+    o._suspend_probe_task = asyncio.create_task(asyncio.sleep(60))
+    task = o._suspend_probe_task
+    await o._stop_suspend_probe()
+    assert task.cancelled() and o._suspend_probe_task is None
+
+
+@pytest.mark.asyncio
+async def test_probe_loop_remembers_the_last_policy():
+    import asyncio
+
+    from sendspin_bridge.services.audio import sink_suspend_policy as m
+
+    policy = SuspendPolicy("pulseaudio", True, 2.0, "module-suspend-on-idle")
+
+    async def probe():
+        return policy
+
+    task = asyncio.create_task(m.run_suspend_probe_loop(lambda: [], interval_s=0.01, probe=probe))
+    await asyncio.sleep(0.03)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert m.last_suspend_policy() == policy
