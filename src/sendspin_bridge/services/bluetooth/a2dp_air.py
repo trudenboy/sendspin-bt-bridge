@@ -88,7 +88,7 @@ import gzip
 import struct
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from sendspin_bridge.services.bluetooth.hci_socket import (
     MONITOR_ACL_TX_PKT,
@@ -337,15 +337,17 @@ def parse_sbc_frame(data: bytes, offset: int = 0, *, check_crc: bool = True) -> 
     return SbcFrame(rate, blocks, subbands, mode, snr, bitpool, length, join, scale)
 
 
-def parse_sbc_frames(payload: bytes, *, check_crc: bool = True) -> tuple[tuple[SbcFrame, ...], bool]:
+def parse_sbc_frames(payload: bytes, *, check_crc: bool | Literal["first"] = True) -> tuple[tuple[SbcFrame, ...], bool]:
     """Walk consecutive SBC frames; returns ``(frames, complete)``.
 
     ``complete`` is False when bytes remain that do not form a valid frame.
+    ``check_crc="first"`` checks the CRC of the first frame only (the live path's CPU saving, R-4).
     """
     frames: list[SbcFrame] = []
     pos = 0
     while pos < len(payload):
-        frame = parse_sbc_frame(payload, pos, check_crc=check_crc)
+        check = check_crc if check_crc != "first" else not frames
+        frame = parse_sbc_frame(payload, pos, check_crc=check)
         if frame is None:
             return tuple(frames), False
         frames.append(frame)
@@ -488,7 +490,13 @@ class MediaPacket:
 
 
 def _media_packet(
-    t: float, index: int, handle: int, sdu: L2capSdu, stats: ParseStats, sbc_streams: set[int]
+    t: float,
+    index: int,
+    handle: int,
+    sdu: L2capSdu,
+    stats: ParseStats,
+    sbc_streams: set[int],
+    check_crc: bool | Literal["first"] = True,
 ) -> MediaPacket | None:
     """*sbc_streams* holds the CIDs of this link already seen carrying SBC (for S=0 frame fragments)."""
     if sdu.cid < L2CAP_FIRST_DYNAMIC_CID:
@@ -508,7 +516,7 @@ def _media_packet(
         sbc_streams.add(sdu.cid)
         fragmented = bool(body[0] & 0x80)
         if not fragmented:
-            frames, complete = parse_sbc_frames(body[1:])
+            frames, complete = parse_sbc_frames(body[1:], check_crc=check_crc)
             if not complete or len(frames) != body[0] & 0x0F:
                 stats.sbc_errors += 1
     return MediaPacket(
@@ -586,8 +594,13 @@ class A2dpAirParser:
         max_links: int = 64,
         max_sdu: int = L2CAP_MAX_SDU,
         stats: ParseStats | None = None,
+        check_crc: Literal["all", "first"] = "all",
     ) -> None:
+        """``check_crc="first"`` checks only each media packet's first SBC frame CRC (live path, R-4)."""
+        if check_crc not in ("all", "first"):
+            raise ValueError(f"check_crc must be 'all' or 'first', not {check_crc!r}")
         self.max_links = max_links
+        self._check_crc: bool | Literal["first"] = True if check_crc == "all" else "first"
         self.max_sdu = max_sdu
         self.stats = stats if stats is not None else ParseStats()
         self._links: dict[tuple[int, int], _Link] = {}
@@ -753,7 +766,7 @@ class A2dpAirParser:
             return out
         sdu = link.reassembler.push(pb, data)
         if sdu is not None:
-            frag.packet = _media_packet(t, index, handle, sdu, self.stats, link.sbc_streams)
+            frag.packet = _media_packet(t, index, handle, sdu, self.stats, link.sbc_streams, self._check_crc)
         return out
 
     def _event(self, t: float, index: int, payload: bytes) -> list[MediaPacket]:
