@@ -133,11 +133,16 @@ async def air_child():
 
     yield _start
     for child in started:
-        child._pump.cancel()
+        if child.proc.stdin is not None:
+            with contextlib.suppress(Exception):
+                child.proc.stdin.close()
         if child.proc.returncode is None:
             child.proc.kill()
         with contextlib.suppress(Exception):
             await child.proc.wait()
+        child._pump.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await child._pump
 
 
 def _counters(status: dict) -> dict:
@@ -229,21 +234,24 @@ async def test_a_hostile_stream_does_not_stop_the_reader(air_child):
 
 async def test_an_overlong_line_is_dropped_once_and_its_tail_never_runs(air_child):
     child = await air_child()
-    # Written in pieces so it arrives across several pipe reads; its tail is a valid air command.
-    tail = (json.dumps(encode_command(SetAirCalibration(latency_ms=999.0))) + "\n").encode()
-    junk = b'{"pad": "' + b"P" * 300_000
+    # The over-long line arrives across several pipe reads and ends with its own newline; its last
+    # piece, written on its own, is a complete valid command. A reader that resumed at a read
+    # boundary would run that tail (a second accepted command, 999 ms).
+    junk = b'{"pad": "' + b"P" * (300_000 - 9)  # whole 50 kB pieces: the reader holds nothing of it at the end
     for start in range(0, len(junk), 50_000):
         child.write_raw(junk[start : start + 50_000])
         await child.proc.stdin.drain()
         await asyncio.sleep(0.01)
-    child.write_raw(b'", "x": 1}' + tail)
+    child.write_raw((json.dumps(encode_command(SetAirCalibration(latency_ms=999.0))) + "\n").encode())
     await child.proc.stdin.drain()
+    # The next line is a distinct valid command: it must run.
     await child.send_all([SetAirCalibration(latency_ms=5.0)])
     status = await child.read_status_until(
         lambda s: s.get("air_sensor", {}).get("air_to_sound_ms") == 5.0 and _counters(s).get("stdin_overlong", 0) >= 1,
         timeout=5,
     )
     assert _counters(status)["stdin_overlong"] == 1
+    assert _counters(status)["air_accepted"] == 1  # only the 5 ms line; the tail never ran
     assert status["air_sensor"]["air_to_sound_ms"] == 5.0
 
 
