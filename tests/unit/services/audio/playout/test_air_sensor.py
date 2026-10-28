@@ -859,3 +859,39 @@ async def test_accepted_windows_are_readable(air_world):
     wins = w.sensor.accepted_windows()
     assert len(wins) >= 2 and all(abs(x.h_us / 1000.0 - 37.0) < 0.5 and x.psr > 1.0 for x in wins)
     assert wins == tuple(sorted(wins, key=lambda x: x.at_us))
+
+
+# -- INFO on state changes (A13) -----------------------------------------------------------------
+
+
+def _info_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.levelname == "INFO" and r.getMessage().startswith("Air sensor")]
+
+
+async def test_the_lock_is_logged_with_h_and_psr(air_world, caplog):
+    w = air_world(H_true_ms=37.0)
+    with caplog.at_level("INFO", logger=air_sensor_module.__name__):
+        await w.run(seconds=10)
+    locked = [m for m in _info_lines(caplog) if "locked" in m]
+    assert len(locked) == 1
+    assert "H=37." in locked[0] and "PSR=" in locked[0]
+
+
+async def test_an_unavailable_state_is_logged_with_its_reason(air_world, caplog):
+    w = air_world(H_true_ms=10.0)
+    w.source(state="unavailable", reason="no_cap_net_raw")
+    with caplog.at_level("INFO", logger=air_sensor_module.__name__):
+        await w.run(seconds=1)
+    assert _info_lines(caplog) == ["Air sensor: unavailable (no_cap_net_raw)"]
+
+
+async def test_state_changes_are_logged_at_most_once_a_minute_per_kind(air_world, caplog):
+    w = air_world(H_true_ms=10.0)
+    with caplog.at_level("INFO", logger=air_sensor_module.__name__):
+        for _ in range(3):
+            w.source(state="unavailable", reason="monitor_error")
+            await w.run(seconds=1)
+            w.source(state="unsupported_codec", reason="codec:aac")
+            await w.run(seconds=1)
+    lines = _info_lines(caplog)
+    assert lines == ["Air sensor: unavailable (monitor_error)", "Air sensor: unsupported_codec (codec:aac)"]

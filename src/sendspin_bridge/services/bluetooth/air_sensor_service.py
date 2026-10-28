@@ -230,6 +230,11 @@ class AirSensorService:
             if rec.drops is not None:
                 if self._last_drops is not None and rec.drops > self._last_drops:
                     self._discontinuity()
+                    self._log_once(
+                        "drops",
+                        f"Air sensor: the HCI monitor dropped {rec.drops - self._last_drops} record(s) "
+                        f"({rec.drops} in total); air epochs restart (one warning per 10 min)",
+                    )
                 self._last_drops = rec.drops
             if self._last_clock_epoch is not None and rec.clock_epoch != self._last_clock_epoch:
                 self._discontinuity()

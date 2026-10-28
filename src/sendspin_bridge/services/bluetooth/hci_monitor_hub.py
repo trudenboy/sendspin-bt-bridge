@@ -199,6 +199,7 @@ class HciMonitorHub:
         self._timeout = _SOCKET_TIMEOUT_S
         self._last_cpu_sample: tuple[float, float] | None = None
         self._unexpected_logged_at: float | None = None
+        self._monitor_error_logged_at: float | None = None
         self._greet: list[HubConsumer] = []
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -415,7 +416,14 @@ class HciMonitorHub:
             self._is_open = False
             self._reason = reason
         if reason == "monitor_error":
-            logger.warning("HciMonitorHub: %s — retrying", detail)
+            # Retries come every 5 to 60 s: one WARNING per 10 min, the rest at DEBUG.
+            now = self._monotonic()
+            last = self._monitor_error_logged_at
+            if last is None or now - last >= _CONSUMER_LOG_INTERVAL_S:
+                self._monitor_error_logged_at = now
+                logger.warning("HciMonitorHub: %s — retrying (one warning per 10 min)", detail)
+            else:
+                logger.debug("HciMonitorHub: %s — retrying", detail)
         else:
             logger.info("HciMonitorHub: %s — monitor unavailable (%s)", detail, reason)
         self._notify_state("error", reason)

@@ -462,3 +462,24 @@ async def test_the_stand_in_runs_until_cancelled():
         await task
     await stub.stop()
     assert len(client.sent) >= 2
+
+
+async def test_monitor_drops_warn_once_per_ten_minutes(air_env, caplog):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+
+    def drop(total):
+        env.hub.deliver(HubRecord(env.now_us, 1, MONITOR_EVENT_PKT, b"\x0e\x00", total, "kernel", 0))
+
+    def warnings():
+        return [r for r in caplog.records if r.levelname == "WARNING" and "dropped" in r.getMessage()]
+
+    with caplog.at_level("WARNING", logger="sendspin_bridge.services.bluetooth.air_sensor_service"):
+        drop(0)
+        drop(2)
+        drop(5)
+        assert len(warnings()) == 1
+        env.now_us += 601e6
+        drop(6)
+    assert len(warnings()) == 2
+    assert all("\\x" not in r.getMessage() for r in warnings())  # counts only, never record bytes

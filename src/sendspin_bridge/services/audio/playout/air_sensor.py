@@ -431,8 +431,8 @@ class AirSensor:
     async def _step(self) -> None:
         self._check_tap()
         now = self._now()
-        state, _reason = self._state(now)
-        self._note_state(state, now)
+        state, reason = self._state(now)
+        self._note_state(state, reason, now)
         if self._fallback or self._error is not None or state not in ("acquiring", "locked", "holding", "no_lock"):
             return
         if self._last_window_now is not None and now - self._last_window_now < HOP_S * 1e6:
@@ -793,13 +793,20 @@ class AirSensor:
 
     # -- logging ----------------------------------------------------------------------------
 
-    def _note_state(self, state: str, now: float) -> None:
+    def _note_state(self, state: str, reason: str | None, now: float) -> None:
         if state != self._state_logged:
             self._state_logged = state
             last = self._info_at.get(state)
             if last is None or now - last >= INFO_EVERY_S * 1e6:
                 self._info_at[state] = now
-                self._log.info("Air sensor: %s", state)
+                h = self._reported_h() if state == "locked" else None
+                if h is not None:
+                    psr = "-" if self._last_psr is None else f"{self._last_psr:.2f}"
+                    self._log.info("Air sensor: locked (H=%.2f ms, PSR=%s)", h / 1000.0, psr)
+                elif reason:
+                    self._log.info("Air sensor: %s (%s)", state, reason)
+                else:
+                    self._log.info("Air sensor: %s", state)
         if self._summary_at is None or now - self._summary_at >= DEBUG_SUMMARY_S * 1e6:
             self._summary_at = now
             if self._log.isEnabledFor(logging.DEBUG):

@@ -825,3 +825,24 @@ def test_a_drop_change_reaches_a_consumer_that_skips_the_record_carrying_it(fake
         (hs.MONITOR_EVENT_PKT, 1),
         (hs.MONITOR_ACL_RX_PKT, 2),
     ]
+
+
+def test_repeated_monitor_errors_warn_once_per_ten_minutes(caplog):
+    calls = {"n": 0}
+    opened = threading.Event()
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] <= 4:
+            raise OSError(errno.ENODEV, "no such device")
+        opened.set()
+        return FakeMonitorSocket([])
+
+    hub = HciMonitorHub(open_socket=flaky, seed=lambda m: None, backoff_s=0.0)
+    with caplog.at_level("DEBUG", logger="sendspin_bridge.services.bluetooth.hci_monitor_hub"):
+        hub.start()
+        assert opened.wait(2)
+        hub.stop()
+    retry = [r for r in caplog.records if "retrying" in r.getMessage()]
+    assert len(retry) == 4
+    assert [r.levelname for r in retry] == ["WARNING", "DEBUG", "DEBUG", "DEBUG"]
