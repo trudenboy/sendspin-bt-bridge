@@ -420,6 +420,13 @@ async def test_status_has_no_air_key_without_the_sensor(telemetry_watcher_harnes
 
 
 @pytest.mark.asyncio
+async def test_no_air_step_is_scheduled_without_the_sensor(telemetry_watcher_harness):
+    h = await telemetry_watcher_harness(air=False)
+    await h.advance(3.1)
+    assert h.steps["n"] == 0  # switch off: no task per tick
+
+
+@pytest.mark.asyncio
 async def test_status_carries_air_sensor_at_1hz(telemetry_watcher_harness):
     h = await telemetry_watcher_harness(air=True)
     await h.advance(2.1)

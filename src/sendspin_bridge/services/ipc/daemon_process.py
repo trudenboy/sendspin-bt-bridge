@@ -411,15 +411,17 @@ def _air_status_tick(daemon, status: StatusStore | dict, last: dict | None, step
     """Start the air sensor's step and patch ``status["air_sensor"]`` if its snapshot changed.
 
     Returns the snapshot now published (``last`` when nothing changed). A daemon without a
-    sensor has no ``air_snapshot`` value, and the key is never written.
+    sensor has no ``air_snapshot`` value: nothing is scheduled and the key is never written.
     """
     air_step = getattr(daemon, "air_step", None)
     air_snapshot = getattr(daemon, "air_snapshot", None)
     if not callable(air_step) or not callable(air_snapshot):
         return last
+    snap = air_snapshot()  # taken before the step task runs, as before (the kick only schedules it)
+    if snap is None:
+        return last
     stepper.kick(air_step)
-    snap = air_snapshot()
-    if snap is None or snap == last:
+    if snap == last:
         return last
     _patch_status(status, {"air_sensor": snap})
     return snap
