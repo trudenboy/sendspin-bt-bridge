@@ -92,7 +92,8 @@ async def test_no_retry_once_the_flip_was_made_for_this_link(installed_bluez):
     bluez = bluez_knowing(mgr, connected=True, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID))
     attach(mgr, bluez)
     path = next(iter(bluez.objects))
-    mgr._early_flip_claimed = True  # the connect loop already asked on this link
+    mgr._apply_connected_state(True)
+    mgr._early_flip_seq = mgr._transition_seq  # the connect loop already asked on this link
 
     with patch.object(mgr, "early_a2dp_role_flip", return_value=True) as flip:
         await _run_monitor_while(mgr, [lambda: bluez.set_property(path, "ServicesResolved", True)])
@@ -128,9 +129,35 @@ async def test_a_link_found_already_up_gets_the_early_flip_before_audio_is_confi
     order: list[str] = []
 
     with (
-        patch.object(mgr, "early_a2dp_role_flip", side_effect=lambda: order.append("flip") or True),
+        patch.object(
+            mgr, "early_a2dp_role_flip", side_effect=lambda **kw: order.append(f"flip wait={kw.get('wait')}") or True
+        ),
         patch.object(mgr, "configure_bluetooth_audio", side_effect=lambda: order.append("audio") or True),
     ):
         assert await _start_player_on_established_link(mgr, asyncio.get_running_loop()) is True
 
-    assert order == ["flip", "audio"]
+    # May wait (bounded) for a flip another path has in flight.
+    assert order == ["flip wait=2.0", "audio"]
+
+
+@pytest.mark.asyncio
+async def test_the_monitor_leaves_the_flip_to_a_bridge_connect_that_is_running(installed_bluez):
+    mgr = _manager(installed_bluez)
+    bluez = bluez_knowing(mgr, connected=False, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID))
+    attach(mgr, bluez)
+    path = next(iter(bluez.objects))
+
+    mgr._connect_lock.acquire()
+    try:
+        with patch.object(mgr, "early_a2dp_role_flip", return_value=True) as flip:
+            await _run_monitor_while(
+                mgr,
+                [
+                    lambda: bluez.set_property(path, "Connected", True),
+                    lambda: bluez.set_property(path, "ServicesResolved", True),
+                ],
+            )
+    finally:
+        mgr._connect_lock.release()
+
+    flip.assert_not_called()

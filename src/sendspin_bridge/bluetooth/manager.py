@@ -89,6 +89,16 @@ _RSSI_REFRESH_INTERVAL_S = 5.0
 # can escalate to pair_device (KALLSUP-class loop, #162).
 _PAIRED_UNKNOWN_THRESHOLD = 3
 
+# BlueZ answers that say "not now" rather than "no": the request may work a
+# moment later (another connect still running, the adapter busy, no reply).
+_TRANSIENT_PROFILE_ERRORS = ("inprogress", "in progress", "busy", "timeout", "timed out", "noreply", "no reply")
+
+
+def _is_transient_profile_refusal(reason: str | None) -> bool:
+    """Is a refused ConnectProfile worth retrying shortly (#476)?"""
+    text = (reason or "").lower()
+    return any(marker in text for marker in _TRANSIENT_PROFILE_ERRORS)
+
 
 def install_dbus_hci_resolver(transport_factory=None) -> None:
     """Give the shared transport the D-Bus ``hciN`` → MAC lookup.
@@ -188,8 +198,12 @@ class BluetoothManager:
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
         # The early role flip (#476) runs once per connection, from whichever
         # path sees the link first: the connect loop or the monitor.
+        # Held for the whole attempt, so a caller that may wait can.  The
+        # attempt is keyed to the connection transition it was made on.
         self._early_flip_lock = threading.Lock()
-        self._early_flip_claimed = False
+        self._early_flip_seq: int | None = None
+        # Why the last late role flip was refused (None: accepted or not run).
+        self._last_role_flip_refusal: str | None = None
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
         # EXPERIMENTAL_ADAPTER_AUTO_RECOVERY — gates the last-ditch
         # bluetooth-auto-recovery ladder call in _handle_reconnect_failure.
@@ -794,7 +808,7 @@ class BluetoothManager:
             if self._abort_connect_if_cancelled():
                 return False
             # An Echo that connected on its own (#476).
-            self.early_a2dp_role_flip()
+            self.early_a2dp_role_flip(wait=2.0)
             # Ensure audio is configured
             self.configure_bluetooth_audio()
             return not self._abort_connect_if_cancelled()
@@ -842,7 +856,7 @@ class BluetoothManager:
                 # A dual-role speaker (an Echo, #476) picks its role as the
                 # link comes up: ask for its sink before it opens its own
                 # source stream towards the host.
-                self.early_a2dp_role_flip()
+                self.early_a2dp_role_flip(wait=2.0)
                 if self._abort_connect_if_cancelled():
                     return False
                 # Wait (up to 10s) for BlueZ to finish SDP resolution before
@@ -894,19 +908,17 @@ class BluetoothManager:
                     # A speaker that streams to the host instead (#476) gets
                     # its roles swapped first; the dance is the fallback.
                     dual_role = self._is_dual_role_speaker()
-                    flipped = self._a2dp_role_flip()
+                    self._last_role_flip_refusal = None
+                    flipped = self._a2dp_role_flip(dual_role)
                     if flipped:
                         sink_ok = self.configure_bluetooth_audio()
                     if not sink_ok and not self._abort_connect_if_cancelled():
-                        if dual_role and not flipped:
-                            # An Echo that refused the flip drops every
-                            # reconnect within a second and then ignores
-                            # pages until it is re-paired (#476).
+                        skip_reason = self._dance_skip_reason(dual_role, flipped)
+                        if skip_reason:
                             logger.warning(
-                                "[%s] Skipping the disconnect/reconnect dance: the speaker refused the role "
-                                "flip and is also an audio source — the dance only locks such speakers out "
-                                "until they are re-paired",
+                                "[%s] Skipping the disconnect/reconnect dance: %s",
                                 self.device_name,
+                                skip_reason,
                             )
                         elif self._a2dp_recovery_dance():
                             sink_ok = self.configure_bluetooth_audio()
@@ -1046,7 +1058,6 @@ class BluetoothManager:
             self.connected = value
             if not value:
                 self.audio_sink_ready = False
-                self._early_flip_claimed = False
             self._transition_seq += 1
             sequence = self._transition_seq
         # The sampled host probe (paired devices, sinks) is stale from here on.
@@ -1125,6 +1136,11 @@ class BluetoothManager:
         uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
         return A2DP_SOURCE_UUID in uuids and A2DP_SINK_UUID in uuids
 
+    @property
+    def connect_in_progress(self) -> bool:
+        """Is a bridge-started connect running (it owns the early role flip then)?"""
+        return self._connect_lock.locked()
+
     def _connect_sink_profile_logged(self, label: str) -> bool:
         """``ConnectProfile(Audio Sink)``, with its outcome logged under *label*."""
         connected = self.device.connect_profile_blocking(A2DP_SINK_UUID)
@@ -1139,9 +1155,9 @@ class BluetoothManager:
     @property
     def early_role_flip_pending(self) -> bool:
         """Is the early role flip on and not yet made for the current connection?"""
-        return self._enable_a2dp_dance and not self._early_flip_claimed
+        return self._enable_a2dp_dance and self._early_flip_seq != self._transition_seq
 
-    def early_a2dp_role_flip(self) -> bool:
+    def early_a2dp_role_flip(self, *, wait: float = 0.0) -> bool:
         """Ask a dual-role speaker for its sink as soon as the link is up.
 
         An Echo picks its role per connection; once it has opened its own
@@ -1150,14 +1166,20 @@ class BluetoothManager:
         — gives it the chance to pick the speaker role. The source profile is
         left alone. Only with the experimental sink recovery on, and once per
         connection: the connect loop and the monitor both call it, whichever
-        sees the link first wins. While BlueZ does not know the speaker's
-        services yet the attempt is not used up, so the monitor can retry when
-        ``UUIDs`` / ``ServicesResolved`` arrive. Blocking: call it off the loop.
+        sees the link first wins. The attempt is not used up while BlueZ does
+        not know the speaker's services yet, nor when the refusal is
+        transient (in progress, busy, no reply), so a later path can retry.
+
+        *wait* bounds how long to wait for an attempt another path has in
+        flight; ``0`` returns at once. Blocking: call it off the loop.
         """
-        if not self._enable_a2dp_dance:
+        if not self.early_role_flip_pending:
             return False
-        with self._early_flip_lock:
-            if self._early_flip_claimed:
+        acquired = self._early_flip_lock.acquire(timeout=wait) if wait > 0 else self._early_flip_lock.acquire(False)
+        if not acquired:
+            return False
+        try:
+            if not self.early_role_flip_pending:
                 return False
             uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
             if not uuids:
@@ -1166,12 +1188,26 @@ class BluetoothManager:
                     self.device_name,
                 )
                 return False
-            self._early_flip_claimed = True
-        if A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids:
+            claimed_at = self._transition_seq
+            self._early_flip_seq = claimed_at
+            if A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids:
+                return False
+            if self._connect_sink_profile_logged("Early Audio Sink ConnectProfile (source kept)"):
+                return True
+            reason = self.device.last_error
+            if _is_transient_profile_refusal(reason):
+                if self._early_flip_seq == claimed_at:
+                    self._early_flip_seq = None
+                logger.debug(
+                    "[%s] Early role flip refusal is transient (%s) — leaving it for a later attempt",
+                    self.device_name,
+                    reason,
+                )
             return False
-        return self._connect_sink_profile_logged("Early Audio Sink ConnectProfile (source kept)")
+        finally:
+            self._early_flip_lock.release()
 
-    def _a2dp_role_flip(self) -> bool:
+    def _a2dp_role_flip(self, dual_role: bool | None = None) -> bool:
         """Ask a dual-role speaker to accept audio instead of sending it.
 
         An Echo is an audio sink and an audio source. Connected to the bridge
@@ -1179,10 +1215,14 @@ class BluetoothManager:
         sink profile, so PulseAudio refuses ``a2dp_sink`` with "Not connected"
         (#476). First the sink profile is requested with the source profile
         still up; only when that is refused is the source profile dropped and
-        the sink requested again. Returns ``True`` when a sink profile request
-        was accepted; ``False`` when skipped or refused.
+        the sink requested again. *dual_role* is what the caller already knows
+        (read from BlueZ when ``None``). Returns ``True`` when a sink profile
+        request was accepted; ``False`` when skipped or refused — a refusal's
+        reason is kept in ``_last_role_flip_refusal``.
         """
-        if not self._is_dual_role_speaker():
+        if dual_role is None:
+            dual_role = self._is_dual_role_speaker()
+        if not dual_role:
             return False
         logger.warning(
             "[%s] No A2DP sink and the speaker is also an audio source — asking it to accept audio instead",
@@ -1201,9 +1241,29 @@ class BluetoothManager:
         if not self._wait_with_cancel(1):
             return False
         connected = self._connect_sink_profile_logged("Audio Sink ConnectProfile (after dropping the source)")
+        if not connected:
+            self._last_role_flip_refusal = self.device.last_error or "no reason given"
         if not self._wait_with_cancel(2):
             return False
         return connected
+
+    def _dance_skip_reason(self, dual_role: bool, flipped: bool) -> str | None:
+        """Why the disconnect/reconnect dance must not run, or ``None``.
+
+        Narrow on purpose: only a speaker that is also an audio source, that
+        refused the role flip, and whose link is gone afterwards. That is the
+        reporter's Echo (#476): it refused, dropped the link, and the dance's
+        reconnects then locked it out until it was paired again. A refusal on
+        a link that stays up — transient or not — still gets the dance.
+        """
+        if not dual_role or flipped or self._last_role_flip_refusal is None:
+            return None
+        if self.is_device_connected():
+            return None
+        return (
+            f"the speaker is also an audio source, refused the role flip ({self._last_role_flip_refusal}) "
+            "and dropped the link — reconnecting such a speaker locks it out until it is paired again"
+        )
 
     def _a2dp_recovery_dance(self) -> bool:
         """Disconnect → wait → reconnect to nudge BlueZ into registering A2DP Sink.

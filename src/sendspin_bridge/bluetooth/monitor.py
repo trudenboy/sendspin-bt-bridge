@@ -8,6 +8,7 @@ same attributes and helpers as the original methods.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import time
 from datetime import datetime, timezone
@@ -140,8 +141,12 @@ async def _link_confirmed(device) -> bool:
 
 
 async def _early_role_flip(mgr: BluetoothManager, loop) -> None:
-    """Run the manager's early role flip (#476) off the loop; it blocks on D-Bus."""
-    if not mgr.early_role_flip_pending:
+    """Run the manager's early role flip (#476) off the loop; it blocks on D-Bus.
+
+    For links the monitor sees first. A bridge-started connect owns the flip
+    while it runs: asked now, BlueZ would answer "in progress" mid-connect.
+    """
+    if not mgr.early_role_flip_pending or mgr.connect_in_progress:
         return
     await loop.run_in_executor(bt_executor(), mgr.early_a2dp_role_flip)
 
@@ -157,7 +162,10 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         return False
     try:
         logger.info("[%s] Connected without a player — configuring audio and starting sendspin", mgr.device_name)
-        await _early_role_flip(mgr, loop)
+        if mgr.early_role_flip_pending:
+            # Waits briefly for a flip another path has in flight, so audio
+            # is not configured while the speaker is still choosing its role.
+            await loop.run_in_executor(bt_executor(), functools.partial(mgr.early_a2dp_role_flip, wait=2.0))
         await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     finally:
         lease.release()
@@ -293,7 +301,7 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
                 if name in ("UUIDs", "ServicesResolved"):
                     # BlueZ learned the services of a link whose early role
                     # flip had to wait for them (#476).
-                    if value and mgr.connected and mgr.early_role_flip_pending:
+                    if value and mgr.connected and mgr.early_role_flip_pending and not mgr.connect_in_progress:
                         loop.call_soon_threadsafe(_spawn_background, _early_role_flip(mgr, loop))
                     return
                 if name != "Connected":
@@ -316,7 +324,7 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
                 logger.info("[%s] PropertiesChanged: Connected!", mgr.device_name)
                 # A link the speaker brought up itself (an Echo, #476): ask
                 # for its sink before it opens its own source stream.
-                if mgr.early_role_flip_pending:
+                if mgr.early_role_flip_pending and not mgr.connect_in_progress:
                     loop.call_soon_threadsafe(_spawn_background, _early_role_flip(mgr, loop))
                 # The disconnect that set this event is over; left set, the
                 # connected branch's wait returns at once and the loop spins
