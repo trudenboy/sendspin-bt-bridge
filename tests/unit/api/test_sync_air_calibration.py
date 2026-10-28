@@ -375,7 +375,6 @@ def test_live_lock_is_not_required(sync_air_env):
     ("kw", "reason"),
     [
         ({"effective": False}, "not_effective"),
-        ({"switch": False}, "not_effective"),
         ({"reference": None}, "no_reference"),
         ({"acoustic": {"kiosk": 1200.0, "eneby": None}}, "not_measured"),
         ({"acoustic": {"kiosk": None, "eneby": 1415.0}}, "not_measured"),
@@ -388,6 +387,19 @@ def test_live_lock_is_not_required(sync_air_env):
 def test_ineligible_reasons(sync_air_env, kw, reason):
     c = _eneby(sync_air_env(**{**BASE, **kw}).record_and_get_session())
     assert not c["eligible"] and c["reason"] == reason and c["latency_ms"] is None
+
+
+def test_switch_off_shows_no_candidates(sync_air_env):
+    # The wizard shows no air section at all while EXPERIMENTAL_AIR_SENSOR is off.
+    session = sync_air_env(**{**BASE, "switch": False}).record_and_get_session()
+    assert session["air_calibrations"] == []
+
+
+def test_switch_off_refuses_a_save(sync_air_env):
+    env = sync_air_env(**{**BASE, "switch": False})
+    env.record_and_get_session()
+    r = env.client.post(f"/api/v1/sync/sessions/{env.sid}/air-calibrations", json={"members": ["eneby"]})
+    assert r.status_code == 409 and r.json()["code"] == "not_eligible"
 
 
 @pytest.mark.parametrize(

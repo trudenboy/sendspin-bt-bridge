@@ -957,9 +957,12 @@ def air_calibration_candidates(
     session: Mapping[str, Any], folds: Mapping[str, AirMemberFold]
 ) -> list[AirCalibrationCandidate]:
     """For every bridge member of the last measured sequence (the reference excepted), its latency or
-    the first reason there is none. *session* is the session's ``to_dict()``."""
+    the first reason there is none. *session* is the session's ``to_dict()``. With the air sensor
+    off (no service running and no fold recorded for the session) there are none at all."""
     current = session.get("sequence")
     if not current or not current.get("uploaded"):
+        return []
+    if not folds and _air_service() is None:
         return []
     reference = session.get("reference")
     played = set(current.get("members") or ())
