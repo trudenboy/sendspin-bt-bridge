@@ -306,6 +306,13 @@ class WrittenEnvelope:
         with self._lock:
             return self._n - 1 if self._n else None
 
+    def held(self) -> tuple[int, int] | None:
+        """``(i0, i1)`` of the cells the ring holds now (all written since the last reset), None if none."""
+        with self._lock:
+            if self._cell_us is None or not self._n:
+                return None
+            return max(0, self._n - self._cap), self._n
+
     def mute_timeline(self) -> list[tuple[float, bool]]:
         """The retained mute transitions ``(t_raw_us, muted)``, oldest first."""
         with self._lock:

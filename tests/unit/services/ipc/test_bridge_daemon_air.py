@@ -131,10 +131,13 @@ def test_the_tap_gets_the_output_delay_in_microseconds(make_daemon):
     assert player._output_delay_us() == 150_000.0
 
 
-def test_a_fold_is_answered_not_implemented_until_a16b(make_daemon):
+@pytest.mark.asyncio
+async def test_a_fold_is_answered_in_the_air_sensor_status(make_daemon):
+    """Through the daemon's intake and step: an empty tap holds no written clicks."""
     d = make_daemon(playout_mode="measure", air_sensor=ON)
     d.air_intake(AirFold(id="c1f3a2b4", from_us=1.0, to_us=12e6))
-    assert d.air_snapshot()["fold"] == {"id": "c1f3a2b4", "phase_ms": None, "ok": False, "reason": "not_implemented"}
+    await d.air_step()
+    assert d.air_snapshot()["fold"] == {"id": "c1f3a2b4", "phase_ms": None, "ok": False, "reason": "no_written_clicks"}
 
 
 # -- fallback -----------------------------------------------------------------------------

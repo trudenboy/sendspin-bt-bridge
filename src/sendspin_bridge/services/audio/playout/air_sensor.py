@@ -40,6 +40,15 @@ window: ``locked`` ≤ :data:`LOCK_HOLD_S`, ``holding`` up to :data:`NO_LOCK_S`,
 (values null). A new epoch, a reopen or a tap generation change (format change) clears the lag:
 ``acquiring``. ``fallback`` → ``unavailable``/``playout_fallback`` and ``accepts = []``.
 
+**Written fold (calibration, ``air_fold``).** :meth:`AirSensor.fold` folds the tap's program cells
+whose heard time ``T`` lies in the requested span over the click cycle (``click_phase_ms`` with
+the full ``d_comb``, comb half-lag plus look-back half, removed), regardless of mute: mute acts
+after the tap, so the written PCM carries every click even while MA mutes the speaker. Only cells
+since the last reopen exist in the tap; fewer than :data:`FOLD_MIN_S` of program cells in the span,
+or no click pattern, is ``no_written_clicks``. The fold runs in ``run_fold`` (the default executor),
+never on the loop; the answer goes into the snapshot's ``fold`` slot, a newer id replacing a
+pending one.
+
 **Windows.** Valid when the correlator's checks pass (≥ 90 % air present, ≥ 80 % written program)
 and at most :data:`MAX_MUTED_FRACTION` of the written partner cells are muted; muted, invalid and
 flat windows are *skipped* (they never count against the confidence), edge/no-side-lobe/gate
@@ -61,10 +70,12 @@ import statistics
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Literal
 
 from sendspin_bridge.services.audio.playout.air_correlator import PSR_GATE, SIDE_SCAN, WindowResult, correlate_window
 from sendspin_bridge.services.audio.playout.air_tap import CELL_FRAMES, INTERNAL_ERROR, LOOKBACK_FRAMES, comb_lag
+from sendspin_bridge.services.bluetooth.a2dp_air_fold import click_fold_found, click_phase_ms
 from sendspin_bridge.services.ipc.commands import AirEnvelope, AirFold, AirSource, SetAirCalibration
 
 if TYPE_CHECKING:
@@ -103,8 +114,13 @@ _GRID_TOL_US = 1.0  # a grid point this close to an air frame takes its value as
 _CONTIGUOUS = 1.001  # frames closer than this many frame durations are contiguous (interpolated)
 _SOURCE_STATES = {"unavailable": "unavailable", "unsupported_codec": "unsupported_codec", "no_traffic": "no_signal"}
 
+FOLD_SPAN_S = 12.0  # the written fold's default span: the last 12 s of heard time
+FOLD_MIN_S = 5.0  # fewer program cells than this in the span: no_written_clicks
+NO_WRITTEN_CLICKS = "no_written_clicks"
+
 EngineEvent = Literal["underrun", "pa_step", "stall", "reopen", "fallback"]
 AddStatus = Literal["ok", "new_epoch", "anchor_reset", "dropped"]
+FoldOutcome = tuple[float | None, str | None]  # (phase_ms, reason)
 
 
 def enc_delay_us(subbands: int, rate: int) -> float:
@@ -289,7 +305,7 @@ class AirWindow:
     s_mid: float
 
 
-async def _run_in_executor(fn: Callable[[], WindowResult]) -> WindowResult:
+async def _run_in_executor[R](fn: Callable[[], R]) -> R:
     return await asyncio.get_running_loop().run_in_executor(None, fn)
 
 
@@ -309,6 +325,7 @@ class AirSensor:
         now_us: Callable[[], float],
         output_delay_ms: Callable[[], float],
         run_window: Callable[[Callable[[], WindowResult]], Awaitable[WindowResult]] | None = None,
+        run_fold: Callable[[Callable[[], FoldOutcome]], Awaitable[FoldOutcome]] | None = None,
         wall_iso: Callable[[], str] = _iso_now,
         log: logging.Logger = logger,
     ) -> None:
@@ -316,6 +333,7 @@ class AirSensor:
         self._now = now_us
         self._output_delay_ms = output_delay_ms
         self._run_window = run_window or _run_in_executor
+        self._run_fold = run_fold or _run_in_executor
         self._wall_iso = wall_iso
         self._log = log
         self._debug_windows = os.environ.get("SENDSPIN_AIR_DEBUG") == "1"
@@ -324,6 +342,9 @@ class AirSensor:
         self._source: AirSource | None = None
         self._latency_ms: float | None = None
         self._fold: dict[str, object] | None = None  # status ``fold``: the answer to the last air_fold
+        self._fold_pending: AirFold | None = None  # the newest air_fold not yet folded
+        self._fold_task: asyncio.Task[None] | None = None
+        self._fold_running = False
         self._fallback = False
         self._error: str | None = None
         self._busy = False
@@ -367,9 +388,7 @@ class AirSensor:
         elif isinstance(command, SetAirCalibration):
             self.set_calibration(command.latency_ms)
         elif isinstance(command, AirFold):
-            # The written fold arrives with the calibration task (A16b); until then every fold is
-            # answered, so the parent never waits for one.
-            self._fold = {"id": command.id, "phase_ms": None, "ok": False, "reason": "not_implemented"}
+            self.request_fold(command)
 
     def on_envelope(self, env: AirEnvelope) -> None:
         try:
@@ -417,10 +436,83 @@ class AirSensor:
         except Exception:
             self._fail()
 
+    # -- written fold (calibration) ---------------------------------------------------------
+
+    def request_fold(self, command: AirFold) -> None:
+        """Queue one ``air_fold`` (a newer id replaces a pending one); started now when a loop runs,
+        else by the next :meth:`step`."""
+        self._fold_pending = command
+        if self._fold_running or (self._fold_task is not None and not self._fold_task.done()):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._fold_task = loop.create_task(self._drive_fold())
+
+    async def _drive_fold(self) -> None:
+        if self._fold_running:
+            return
+        self._fold_running = True
+        try:
+            while (cmd := self._fold_pending) is not None:
+                self._fold_pending = None
+                try:
+                    span_s = (cmd.to_us - cmd.from_us) / 1e6
+                    phase, reason = await self._run_fold(partial(self.fold, cmd.to_us, span_s))
+                except Exception:
+                    self._log.debug("Air sensor: written fold failed", exc_info=True)
+                    phase, reason = None, INTERNAL_ERROR
+                if self._fold_pending is not None:
+                    continue  # a newer id arrived while this one folded: it replaces it
+                self._fold = {
+                    "id": cmd.id,
+                    "phase_ms": _round(phase, 3),
+                    "ok": phase is not None and reason is None,
+                    "reason": reason,
+                }
+        finally:
+            self._fold_running = False
+
+    async def _step_fold(self) -> None:
+        task = self._fold_task
+        if task is not None and not task.done():
+            await asyncio.shield(task)
+        elif self._fold_pending is not None:
+            await self._drive_fold()
+
+    def fold(self, to_us: float, span_s: float = FOLD_SPAN_S) -> FoldOutcome:
+        """The written click phase (ms on the 10 s cycle, chirp start) over the program cells whose
+        heard time ``T`` lies in ``[to_us − span_s, to_us]``, mute ignored and ``d_comb`` removed;
+        ``(None, "no_written_clicks")`` with fewer than :data:`FOLD_MIN_S` of them since the last
+        reopen or without the click pattern. Thread-safe (reads the tap only): run it off the loop."""
+        tap = self._tap
+        held = tap.held()
+        sl = tap.slice(*held) if held is not None else None
+        if sl is None:
+            return None, NO_WRITTEN_CLICKS
+        in_rate = round(CELL_FRAMES / sl.cell_us * 1e6)
+        d_comb_s = (comb_delay_us(in_rate) + lookback_delay_us(in_rate, tap.lookback_frames)) / 1e6
+        cell_s = sl.cell_us / 1e6
+        lo = to_us - span_s * 1e6
+        # NaN T (no schedule) fails both comparisons; mute is deliberately not looked at.
+        rows = [(t / 1e6, 2.0**w) for w, t, p in zip(sl.w, sl.t, sl.program, strict=True) if p and lo <= t <= to_us]
+        if len(rows) * cell_s < FOLD_MIN_S - 1e-9 or not click_fold_found(rows, cell_s, 0.0, d_comb_s):
+            return None, NO_WRITTEN_CLICKS
+        phase = click_phase_ms(rows, cell_s, 0.0, d_comb_s)
+        if phase is None:
+            return None, NO_WRITTEN_CLICKS
+        return phase, None
+
     # -- window step ------------------------------------------------------------------------
 
     async def step(self) -> None:
-        """Compute at most one window per :data:`HOP_S`, off the loop via ``run_window``."""
+        """Compute at most one window per :data:`HOP_S`, off the loop via ``run_window`` (and run a
+        pending written fold first, off the loop via ``run_fold``)."""
+        try:
+            await self._step_fold()
+        except Exception:
+            self._log.debug("Air sensor: written fold step failed", exc_info=True)
         if self._busy:
             return
         try:
