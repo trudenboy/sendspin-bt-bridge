@@ -952,3 +952,19 @@ Decisions (design review, 2026-10-28):
 - The residual inside the measure dead band stays for Stage 3; the dead band is re-derived for the
   new sensor's accuracy.
 - AVDTP delay reports: telemetry only (#559). LE Audio presentation delay: research track.
+
+### Morning follow-up (2026-10-28)
+
+- **Sink suspend in gaps (AVDTP SUSPEND/START).** 8 cycles with `pactl suspend-sink` during an
+  8 s gap (the capture shows the A2DP pause and RTP restarting from 0): the speaker's
+  air-to-sound latency had σ 9 ms, spread 29 ms, with one outlier 20 ms early; without it σ ≈ 4 ms.
+  AVDTP restarts occasionally move the speaker buffer; the air sensor cannot see that. Decision
+  input: a warm hold is not needed, but hosts should not suspend the Bluetooth sink in gaps
+  (document the WirePlumber suspend timeout; consider setting it from the bridge).
+- **Air sensor on music.** A 2-minute music track to ENEBY20 with a `btmon` capture: matching the
+  source PCM's 2.7–8 kHz envelope to the SBC scale-factor envelope (3 s windows, ±20 frame search)
+  located the source time of each window at the air with a stable mapping over 110 s
+  (peak/side-lobe 1.2–1.5, at 1-frame = 2.9 ms resolution). It also showed the engine's own
+  correction: a 41.5 ms shift between 7 s and 10 s after the start, where the bridge logged
+  "playout jump: steady, 45.3 ms" at +11 s. The content-matching approach works on real music;
+  sub-frame refinement and a confidence gate are still to be designed.
