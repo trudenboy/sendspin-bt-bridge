@@ -18,8 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Recover a missing audio sink** (experimental): a speaker that is
   both an audio source and an audio sink, such as an Amazon Echo, is
-  asked for its audio sink as soon as it connects, before it can start
-  sending audio to the bridge. When no audio output appears, the
+  asked for its audio sink as soon as it connects, including when it
+  reconnects on its own, before it can start sending audio to the
+  bridge. When no audio output appears, the
   bridge asks again while the speaker's source stays connected, and
   only if that is refused drops the source and asks once more; each
   step and its answer is logged

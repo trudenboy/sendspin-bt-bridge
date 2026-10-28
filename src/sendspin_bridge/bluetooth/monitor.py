@@ -139,6 +139,13 @@ async def _link_confirmed(device) -> bool:
         return False
 
 
+async def _early_role_flip(mgr: BluetoothManager, loop) -> None:
+    """Run the manager's early role flip (#476) off the loop; it blocks on D-Bus."""
+    if not mgr.early_role_flip_pending:
+        return
+    await loop.run_in_executor(bt_executor(), mgr.early_a2dp_role_flip)
+
+
 async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool:
     """Configure audio and start the player for a link that is already up.
 
@@ -150,6 +157,7 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         return False
     try:
         logger.info("[%s] Connected without a player — configuring audio and starting sendspin", mgr.device_name)
+        await _early_role_flip(mgr, loop)
         await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     finally:
         lease.release()
@@ -282,6 +290,12 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
                 disconnect_event: asyncio.Event = disconnect_event,
                 connect_event: asyncio.Event = connect_event,
             ) -> None:
+                if name in ("UUIDs", "ServicesResolved"):
+                    # BlueZ learned the services of a link whose early role
+                    # flip had to wait for them (#476).
+                    if value and mgr.connected and mgr.early_role_flip_pending:
+                        loop.call_soon_threadsafe(_spawn_background, _early_role_flip(mgr, loop))
+                    return
                 if name != "Connected":
                     return
                 new_connected = bool(value)
@@ -300,6 +314,10 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
                     loop.call_soon_threadsafe(disconnect_event.set)
                     return
                 logger.info("[%s] PropertiesChanged: Connected!", mgr.device_name)
+                # A link the speaker brought up itself (an Echo, #476): ask
+                # for its sink before it opens its own source stream.
+                if mgr.early_role_flip_pending:
+                    loop.call_soon_threadsafe(_spawn_background, _early_role_flip(mgr, loop))
                 # The disconnect that set this event is over; left set, the
                 # connected branch's wait returns at once and the loop spins
                 # without yielding (#470).

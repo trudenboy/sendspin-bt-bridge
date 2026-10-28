@@ -186,6 +186,10 @@ class BluetoothManager:
         self.last_check: float = 0
         # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
+        # The early role flip (#476) runs once per connection, from whichever
+        # path sees the link first: the connect loop or the monitor.
+        self._early_flip_lock = threading.Lock()
+        self._early_flip_claimed = False
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
         # EXPERIMENTAL_ADAPTER_AUTO_RECOVERY — gates the last-ditch
         # bluetooth-auto-recovery ladder call in _handle_reconnect_failure.
@@ -789,6 +793,8 @@ class BluetoothManager:
             self._paired_unknown_count = 0
             if self._abort_connect_if_cancelled():
                 return False
+            # An Echo that connected on its own (#476).
+            self.early_a2dp_role_flip()
             # Ensure audio is configured
             self.configure_bluetooth_audio()
             return not self._abort_connect_if_cancelled()
@@ -836,7 +842,7 @@ class BluetoothManager:
                 # A dual-role speaker (an Echo, #476) picks its role as the
                 # link comes up: ask for its sink before it opens its own
                 # source stream towards the host.
-                self._early_a2dp_role_flip()
+                self.early_a2dp_role_flip()
                 if self._abort_connect_if_cancelled():
                     return False
                 # Wait (up to 10s) for BlueZ to finish SDP resolution before
@@ -1040,6 +1046,7 @@ class BluetoothManager:
             self.connected = value
             if not value:
                 self.audio_sink_ready = False
+                self._early_flip_claimed = False
             self._transition_seq += 1
             sequence = self._transition_seq
         # The sampled host probe (paired devices, sinks) is stale from here on.
@@ -1129,16 +1136,38 @@ class BluetoothManager:
         )
         return connected
 
-    def _early_a2dp_role_flip(self) -> bool:
+    @property
+    def early_role_flip_pending(self) -> bool:
+        """Is the early role flip on and not yet made for the current connection?"""
+        return self._enable_a2dp_dance and not self._early_flip_claimed
+
+    def early_a2dp_role_flip(self) -> bool:
         """Ask a dual-role speaker for its sink as soon as the link is up.
 
         An Echo picks its role per connection; once it has opened its own
         source stream towards the host it refuses the sink (#476). Asking
         right after ``Connected`` — before SDP resolution and the sink lookup
         — gives it the chance to pick the speaker role. The source profile is
-        left alone. Only with the experimental sink recovery on.
+        left alone. Only with the experimental sink recovery on, and once per
+        connection: the connect loop and the monitor both call it, whichever
+        sees the link first wins. While BlueZ does not know the speaker's
+        services yet the attempt is not used up, so the monitor can retry when
+        ``UUIDs`` / ``ServicesResolved`` arrive. Blocking: call it off the loop.
         """
-        if not self._enable_a2dp_dance or not self._is_dual_role_speaker():
+        if not self._enable_a2dp_dance:
+            return False
+        with self._early_flip_lock:
+            if self._early_flip_claimed:
+                return False
+            uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
+            if not uuids:
+                logger.debug(
+                    "[%s] Early role flip skipped: the speaker's UUIDs are not known yet — retrying when BlueZ resolves them",
+                    self.device_name,
+                )
+                return False
+            self._early_flip_claimed = True
+        if A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids:
             return False
         return self._connect_sink_profile_logged("Early Audio Sink ConnectProfile (source kept)")
 

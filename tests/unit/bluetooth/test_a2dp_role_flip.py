@@ -274,3 +274,65 @@ def test_describe_uuids_names_known_services_and_keeps_unknown_ones():
 
     assert "Audio Sink" in text
     assert "0000feed" in text
+
+
+# -- the early flip on every way a link comes up --------------------------
+
+
+def _sink_requests(bluez):
+    return [c for c in _profile_calls(bluez) if c == ("ConnectProfile", (A2DP_SINK_UUID,))]
+
+
+def test_the_early_flip_runs_once_per_connection(echo):
+    mgr, bluez = echo
+    mgr._apply_connected_state(True)
+
+    mgr.early_a2dp_role_flip()
+    mgr.early_a2dp_role_flip()
+    assert len(_sink_requests(bluez)) == 1
+    assert mgr.early_role_flip_pending is False
+
+    mgr._apply_connected_state(False)
+    mgr._apply_connected_state(True)
+    assert mgr.early_role_flip_pending is True
+    mgr.early_a2dp_role_flip()
+    assert len(_sink_requests(bluez)) == 2
+
+
+def test_the_early_flip_waits_for_bluez_to_know_the_services(installed_bluez, caplog):
+    installed_bluez.on("show", stdout="")
+    mgr = _manager(enable_a2dp_dance=True)
+    bluez = bluez_knowing(mgr, connected=True, paired=True, services_resolved=False, uuids=())
+    attach(mgr, bluez)
+    caplog.set_level(logging.DEBUG, logger="sendspin_bridge.bluetooth.manager")
+
+    assert mgr.early_a2dp_role_flip() is False
+    assert _profile_calls(bluez) == []
+    assert any("UUIDs are not known yet" in r.getMessage() and r.levelno == logging.DEBUG for r in caplog.records)
+    assert mgr.early_role_flip_pending is True
+
+    path = next(iter(bluez.objects))
+    bluez.set_property(path, "UUIDs", [A2DP_SOURCE_UUID, A2DP_SINK_UUID])
+    assert mgr.early_a2dp_role_flip() is True
+    assert _sink_requests(bluez) == [("ConnectProfile", (A2DP_SINK_UUID,))]
+    assert mgr.early_role_flip_pending is False
+
+
+def test_no_early_flip_is_pending_without_the_experimental_recovery(installed_bluez):
+    installed_bluez.on("show", stdout="")
+    mgr = _manager(enable_a2dp_dance=False)
+    attach(mgr, bluez_knowing(mgr, connected=True, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID)))
+
+    assert mgr.early_role_flip_pending is False
+
+
+def test_connect_on_a_link_that_is_already_up_asks_for_the_sink(echo):
+    mgr, bluez = echo
+    with (
+        patch.object(mgr, "is_device_connected", return_value=True),
+        patch.object(mgr, "is_device_paired", return_value=True),
+        patch.object(mgr, "configure_bluetooth_audio", return_value=True),
+    ):
+        mgr.connect_device()
+
+    assert _sink_requests(bluez) == [("ConnectProfile", (A2DP_SINK_UUID,))]
