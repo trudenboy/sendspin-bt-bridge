@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (A2DP Delay Reporting) when the speaker supports it, and the log notes
   when that reported delay appears or changes by 1 ms or more; speakers
   that do not report a delay show nothing extra.
+- Diagnostics warn when the host suspends a Bluetooth speaker's audio sink
+  between songs (PipeWire's suspend timeout, PulseAudio's suspend-on-idle);
+  speakers can shift by tens of ms after such a pause. The bridge never
+  changes the host setting.
 
 ## [3.1.0-beta.16] - 2026-10-27
 

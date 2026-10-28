@@ -1325,7 +1325,13 @@
   },
   "guidance": {
     "title": "What needs attention",
-    "done": "Done: {action}"
+    "done": "Done: {action}",
+    "issues": {
+      "bt_sink_suspend_in_gaps": {
+        "title": "{name}: the host suspends the Bluetooth sink between songs",
+        "summary": "After such a pause the speaker restarts its stream and may shift by tens of milliseconds. The bridge never changes host audio settings; disable the sink suspend on the host to stop it."
+      }
+    }
   },
   "nav": {
     "home": "Speakers",

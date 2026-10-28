@@ -57,3 +57,35 @@ If your model isn't listed, please [open an issue](https://github.com/trudenboy/
 - **Confirmed working** doesn't mean "works on every host." A speaker that's clean on PulseAudio 17 + BlueZ 5.82 might still hit a `pulse_latency_msec` tuning step on PipeWire-pulse, or need an adapter swap if the on-board controller is overloaded. Cross-check against [Bluetooth Adapters](/bluetooth-adapters/) and [Troubleshooting](/troubleshooting/) when in doubt.
 - **Working with caveats** entries mean the workaround is **available in the bridge or in the docs** — you don't need a custom firmware build to get there.
 - **Documented quirks** is here so a future operator can recognize the fingerprint quickly instead of debugging from scratch. If you find a workaround, please report it back so we can re-tier the speaker.
+
+## Bluetooth sink suspend
+
+When the host suspends a speaker's audio sink in the gap between songs, the speaker's A2DP stream stops and restarts. After such a restart the speaker's buffer can shift by tens of milliseconds, so a group that was in sync before the pause may be slightly off afterwards.
+
+The bridge only **reads** the host's behaviour; it never changes a host audio setting. It raises the guidance card "the host suspends the Bluetooth sink between songs" when it sees the sink go to `suspended` while the speaker was connected and the bridge had not asked for it, or when it finds a suspend policy with a timeout shorter than 60 s (PipeWire's WirePlumber, or PulseAudio's `module-suspend-on-idle`). The card clears after 24 hours without an observed suspend and a clean probe. The probe needs `pactl`; on PipeWire it also needs `pw-dump` and the native PipeWire socket, otherwise only observed suspends raise the card.
+
+To stop the host from suspending the sink, change the host, not the bridge:
+
+**WirePlumber 0.5 (PipeWire 1.0 and newer)**: create `~/.config/wireplumber/wireplumber.conf.d/51-bluez-no-suspend.conf`:
+
+```
+monitor.bluez.rules = [
+  {
+    matches = [ { node.name = "~bluez_output.*" } ]
+    actions = { update-props = { session.suspend-timeout-seconds = 0 } }
+  }
+]
+```
+
+**WirePlumber 0.4**: create `~/.config/wireplumber/bluetooth.lua.d/51-bluez-no-suspend.lua`:
+
+```lua
+table.insert(bluez_monitor.rules, {
+  matches = { { { "node.name", "matches", "bluez_output.*" } } },
+  apply_properties = { ["session.suspend-timeout-seconds"] = 0 },
+})
+```
+
+Restart WirePlumber (`systemctl --user restart wireplumber`) and reconnect the speaker.
+
+**PulseAudio**: unload the module for the running server with `pactl unload-module module-suspend-on-idle`, and remove the `load-module module-suspend-on-idle` line from `/etc/pulse/default.pa` (or your `~/.config/pulse/default.pa`) to keep it off after a restart. Home Assistant OS does not load this module, so nothing is needed there.

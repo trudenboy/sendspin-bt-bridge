@@ -56,3 +56,35 @@ description: Bluetooth-колонки и наушники, протестиро�
 - **Подтверждённые** ≠ "работает на любом хосте". Чистая на PulseAudio 17 + BlueZ 5.82 колонка всё ещё может потребовать тюнинг `pulse_latency_msec` на PipeWire-pulse, или замену адаптера, если onboard-контроллер перегружен. Если сомневаетесь — сверьтесь с [Bluetooth-адаптеры](/ru/bluetooth-adapters/) и [Troubleshooting](/ru/troubleshooting/).
 - Записи в **С оговорками** означают, что workaround **уже доступен в мосту или в доках** — не нужно собирать кастомный firmware.
 - Раздел **Documented quirks** существует, чтобы будущий оператор быстро узнавал отпечаток, а не дебажил с нуля. Если найдёте workaround — расскажите, чтобы мы переклассифицировали колонку.
+
+## Приостановка Bluetooth-синка (suspend)
+
+Если хост приостанавливает аудио-синк колонки в паузе между песнями, A2DP-поток колонки останавливается и запускается заново. После такого перезапуска буфер колонки может сместиться на десятки миллисекунд, и группа, которая до паузы играла синхронно, после неё может слегка разойтись.
+
+Мост только **читает** поведение хоста и никогда не меняет настройки звука хоста. Карточка «хост приостанавливает Bluetooth-синк между песнями» появляется, когда синк ушёл в `suspended`, пока колонка была подключена, а мост этого не запрашивал, либо когда найдена политика приостановки с таймаутом короче 60 с (WirePlumber в PipeWire или `module-suspend-on-idle` в PulseAudio). Карточка исчезает после 24 часов без наблюдаемых приостановок и с чистой проверкой. Для проверки нужен `pactl`; на PipeWire ещё нужны `pw-dump` и нативный сокет PipeWire, иначе карточку вызывают только наблюдаемые приостановки.
+
+Чтобы хост перестал приостанавливать синк, меняйте хост, а не мост:
+
+**WirePlumber 0.5 (PipeWire 1.0 и новее)**: создайте `~/.config/wireplumber/wireplumber.conf.d/51-bluez-no-suspend.conf`:
+
+```
+monitor.bluez.rules = [
+  {
+    matches = [ { node.name = "~bluez_output.*" } ]
+    actions = { update-props = { session.suspend-timeout-seconds = 0 } }
+  }
+]
+```
+
+**WirePlumber 0.4**: создайте `~/.config/wireplumber/bluetooth.lua.d/51-bluez-no-suspend.lua`:
+
+```lua
+table.insert(bluez_monitor.rules, {
+  matches = { { { "node.name", "matches", "bluez_output.*" } } },
+  apply_properties = { ["session.suspend-timeout-seconds"] = 0 },
+})
+```
+
+Перезапустите WirePlumber (`systemctl --user restart wireplumber`) и переподключите колонку.
+
+**PulseAudio**: выгрузите модуль в работающем сервере командой `pactl unload-module module-suspend-on-idle` и уберите строку `load-module module-suspend-on-idle` из `/etc/pulse/default.pa` (или `~/.config/pulse/default.pa`), чтобы он не загружался после перезапуска. Home Assistant OS этот модуль не загружает, там ничего делать не нужно.
