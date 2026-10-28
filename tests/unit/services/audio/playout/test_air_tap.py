@@ -451,3 +451,17 @@ def test_a_tap_exception_never_reaches_the_feeder(playout_player_factory, caplog
     assert not p._feeder_failed
     assert tap.error == "internal_error"
     assert sum("air tap" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_the_generation_changes_on_reset_and_on_a_format_change():
+    tap = WrittenEnvelope()
+    tap.add_block(block(F16, 0, 441), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
+    g0 = tap.gen
+    assert tap.slice(0, 2).gen == g0
+    tap.add_block(block(F16, 10_000_000, 441), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
+    assert tap.gen == g0  # same format, same stream
+    tap.add_block(block(F24, 0, 480), F24, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
+    g1 = tap.gen
+    assert g1 != g0 and tap.slice(0, 2).gen == g1  # cell indexes restarted
+    tap.reset()
+    assert tap.gen not in (g0, g1)

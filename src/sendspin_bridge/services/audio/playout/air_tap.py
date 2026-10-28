@@ -98,6 +98,7 @@ class WrittenSlice:
     t: array  # 'd' T = s + D_out at write time
     program: bytes  # 1 = ScheduleMap kind "program", 0 = "silence"
     muted: bytes  # 1 = the mute timeline is muted at the cell's port time s_i (resolved at slice time)
+    gen: int = 0  # the ring generation the cells belong to (see WrittenEnvelope.gen)
 
 
 def _muted_at(times: Sequence[float], states: Sequence[bool], s_us: float) -> bool:
@@ -260,6 +261,12 @@ class WrittenEnvelope:
             return self._error
 
     @property
+    def gen(self) -> int:
+        """Bumped by every reset and format change: cell indexes of another generation are unrelated."""
+        with self._lock:
+            return self._gen
+
+    @property
     def cell_us(self) -> float | None:
         with self._lock:
             return self._cell_us
@@ -283,10 +290,11 @@ class WrittenEnvelope:
             s = self._take(self._s, i0, i1)
             t = self._take(self._t, i0, i1)
             program = bytes(self._take(self._program, i0, i1))
+            gen = self._gen
             times = list(self._mute_t)
             states = list(self._mute_v)
         muted = bytes(_muted_at(times, states, v) for v in s) if states else bytes(len(s))
-        return WrittenSlice(i0=i0, cell_us=cell_us, w=w, s=s, t=t, program=program, muted=muted)
+        return WrittenSlice(i0=i0, cell_us=cell_us, w=w, s=s, t=t, program=program, muted=muted, gen=gen)
 
     def cell_near(self, s_us: float, around: int, span_s: float = 2.0) -> int | None:
         """Newest cell within ±``span_s`` of cell ``around`` whose ``s`` is within half a cell of ``s_us``.
