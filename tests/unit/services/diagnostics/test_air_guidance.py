@@ -171,3 +171,25 @@ def test_real_normalized_state_carries_the_warning_to_the_producer():
         player_name=state.player_name, state_model=state.to_dict(), health_summary={}, recent_events=[]
     )
     assert [i.key for i in _build_sink_suspend_issues([dev])] == ["bt_sink_suspend_in_gaps"]
+
+
+def test_a_device_snapshot_carries_the_warning_to_the_producer():
+    """Production hands the bridge state model ``DeviceSnapshot`` s: the status lives in ``extra``."""
+    from sendspin_bridge.services.diagnostics.recovery_assistant import (
+        NormalizedRecoveryDevice,
+        _build_sink_suspend_issues,
+    )
+    from sendspin_bridge.services.ipc.bridge_state_model import build_normalized_device_state
+    from sendspin_bridge.services.lifecycle.status_snapshot import DeviceSnapshot
+
+    snap = DeviceSnapshot(
+        player_name="ENEBY20",
+        bluetooth_connected=True,
+        has_sink=True,
+        extra={"host_sink_suspends": {"warn": True, "reason": "observed_suspend"}},
+    )
+    state = build_normalized_device_state(snap)
+    dev = NormalizedRecoveryDevice(
+        player_name=state.player_name, state_model=state.to_dict(), health_summary={}, recent_events=[]
+    )
+    assert [i.key for i in _build_sink_suspend_issues([dev])] == ["bt_sink_suspend_in_gaps"]
