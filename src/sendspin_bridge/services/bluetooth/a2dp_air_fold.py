@@ -91,7 +91,7 @@ def sbc_encoder_delay_samples(subbands: int) -> float:
     return 4.5 * subbands
 
 
-MIN_COVERED_CHIRPS = 4  # of the 10 chirps in a cycle (5 clicks × 2): a position scored on fewer is not trusted
+MIN_COVERED_CHIRPS = 4  # of the 10 chirps in a cycle (5 clicks, a pair each): a position scored on fewer is not trusted
 FOUND_PEAK_RATIO = 3.0  # "clicks present": pattern-score peak at least this many times the median score
 
 
