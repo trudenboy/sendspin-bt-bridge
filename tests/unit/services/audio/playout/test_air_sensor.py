@@ -799,3 +799,11 @@ async def test_an_m4_stream_sets_the_written_look_back_and_its_credit(air_world)
     w.sensor.on_envelope(replace(env(epoch=5, t0=w.now, n=4, frame_us=64 * 1e6 / AIR_RATE), subbands=4))
     assert w.tap.lookback_frames == 36
     assert lookback_delay_us(44100, 36) == pytest.approx(enc_delay_us(4, 44100))
+
+
+async def test_accepted_windows_are_readable(air_world):
+    w = air_world(H_true_ms=37.0)
+    await w.run(seconds=10)
+    wins = w.sensor.accepted_windows()
+    assert len(wins) >= 2 and all(abs(x.h_us / 1000.0 - 37.0) < 0.5 and x.psr > 1.0 for x in wins)
+    assert wins == tuple(sorted(wins, key=lambda x: x.at_us))

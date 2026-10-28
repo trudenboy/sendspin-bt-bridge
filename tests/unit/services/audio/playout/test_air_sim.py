@@ -19,7 +19,7 @@ The synthetic music's PSR values are **not** used to set the correlator gate (R-
 nothing about real music. The confirmed-window PSR median and the noise control's maximum are
 recorded with ``record_property`` for information only; the gate is set in A17 on real music.
 
-Measured: the bias and p95 run over the windows the sensor accepted (read from its window deque,
+Measured: the bias and p95 run over the windows the sensor accepted (``AirSensor.accepted_windows``,
 so a candidate refuted later never counts) whose 3 s span holds a single ``H_truth`` value.
 
 Time axis: seconds after the capture's first record (the music capture's Connection Complete).
@@ -270,8 +270,8 @@ class AirSim:
                 )
                 sensor.submit(wire(src))
             await sensor.step()
-            # Measurement: the sensor's accepted windows (its own deque) and its snapshot.
-            for w in list(sensor._windows):
+            # Measurement: the sensor's accepted windows and its snapshot.
+            for w in sensor.accepted_windows():
                 if id(w) not in seen:
                     seen[id(w)] = w
                     windows.append(Window(self.rel(now), self.rel(w.at_us), w.h_us / 1000.0, w.psr))

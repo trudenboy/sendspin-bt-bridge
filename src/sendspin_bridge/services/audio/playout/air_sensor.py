@@ -259,7 +259,7 @@ class _Plan:
 
 
 @dataclass(frozen=True, slots=True)
-class _Window:
+class AirWindow:
     """An accepted (or candidate) confirmed window."""
 
     at_us: float  # energy-cell air time of the window's middle
@@ -320,8 +320,8 @@ class AirSensor:
         self._complete_lag_us: float | None = None
         # Lock state.
         self._lag: float | None = None
-        self._candidate: _Window | None = None
-        self._windows: deque[_Window] = deque()
+        self._candidate: AirWindow | None = None
+        self._windows: deque[AirWindow] = deque()
         self._outcomes: deque[tuple[float, bool]] = deque()  # (air time, accepted) of non-skipped windows
         self._last_at: float | None = None  # air time of the newest accepted window's middle
         self._last_psr: float | None = None
@@ -549,7 +549,7 @@ class AirSensor:
             self._skipped_n += 1
             return
         h_us, d_out_us, s_mid = placed
-        win = _Window(plan.t_mid, res.lag - plan.frac, h_us, d_out_us, res.psr, s_mid)
+        win = AirWindow(plan.t_mid, res.lag - plan.frac, h_us, d_out_us, res.psr, s_mid)
         self._debug_window(plan, res, win)
         cand = self._candidate
         if self._lag is not None and abs(win.lag - self._lag) <= JUMP_CONFIRM_CELLS:
@@ -603,7 +603,7 @@ class AirSensor:
             d_out = self._output_delay_ms() * 1000.0
         return plan.t_mid - s_mid - (plan.d_enc - plan.d_comb), d_out, s_mid
 
-    def _accept(self, win: _Window) -> None:
+    def _accept(self, win: AirWindow) -> None:
         if self._last_at is not None and win.at_us - self._last_at > NO_LOCK_S * 1e6:
             # A lock regained after no_lock: what was measured before it says nothing about now.
             self._windows.clear()
@@ -711,6 +711,10 @@ class AirSensor:
         med = statistics.median(hs)
         return 1.4826 * statistics.median(abs(h - med) for h in hs) / 1000.0
 
+    def accepted_windows(self) -> tuple[AirWindow, ...]:
+        """The accepted windows behind the reported values (the last 30 s, at least 5), oldest first."""
+        return tuple(self._windows)
+
     def snapshot(self) -> dict[str, object]:
         """The status dict (``DeviceStatus.air_sensor``). Call it on the daemon loop, like every
         other method: the sensor's state is not locked."""
@@ -784,7 +788,7 @@ class AirSensor:
                     self._frames,
                 )
 
-    def _debug_window(self, plan: _Plan, res: WindowResult, win: _Window | None) -> None:
+    def _debug_window(self, plan: _Plan, res: WindowResult, win: AirWindow | None) -> None:
         if not self._debug_windows:
             return
         self._log.debug(
