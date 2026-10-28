@@ -1,0 +1,103 @@
+"""The live air path (parser → tracker → batches) produces exactly the batches it produced before
+the R-19 CPU work.
+
+The digests below were recorded from the pre-optimisation code (commit 4e6c4469) on the fixtures,
+untouched and with deterministic corruption (flipped bytes inside SBC payloads, a monitor drop),
+so any change in an energy cell, a time, a flag or a batch boundary changes them.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from sendspin_bridge.services.bluetooth.a2dp_air import A2dpAirParser, MonitorRecord, read_btsnoop
+from sendspin_bridge.services.bluetooth.a2dp_air_envelope import AirLinkTracker
+from sendspin_bridge.services.bluetooth.hci_socket import MONITOR_ACL_TX_PKT
+
+FIX = Path(__file__).resolve().parents[3] / "fixtures" / "a2dp_air"
+TAKE_EVERY_S = 0.25
+
+
+def _corrupt(records: list[MonitorRecord], every: int, step: int) -> list[MonitorRecord]:
+    """Flip one byte of every *every*-th ACL TX payload past the ACL header, at a position that walks
+    by *step* (so headers, scale factors and audio bits of the SBC frames all get hit)."""
+    out: list[MonitorRecord] = []
+    n = 0
+    for rec in records:
+        if rec.opcode == MONITOR_ACL_TX_PKT:
+            n += 1
+            if n % every == 0 and len(rec.payload) > 4:
+                p = bytearray(rec.payload)
+                p[4 + (n * step) % (len(p) - 4)] ^= 0x5A
+                rec = replace(rec, payload=bytes(p))
+        out.append(rec)
+    return out
+
+
+def _drop_at(records: list[MonitorRecord], k: int) -> list[MonitorRecord]:
+    """A monitor drop counter that grows at record *k*."""
+    return [replace(r, drops=1 if i >= k else 0) for i, r in enumerate(records)]
+
+
+def _variant(name: str) -> list[MonitorRecord]:
+    fixture, _, kind = name.partition(":")
+    records = list(read_btsnoop(FIX / f"{fixture}.btsnoop.gz"))
+    if kind == "corrupt_a":
+        return _corrupt(records, 3, 37)
+    if kind == "corrupt_b":
+        return _corrupt(records, 5, 11)
+    if kind == "drop":
+        return _drop_at(records, len(records) // 2)
+    return records
+
+
+def live_batches(records: list[MonitorRecord], parser: A2dpAirParser) -> tuple[list[str], str]:
+    trackers: dict[tuple[int, int], AirLinkTracker] = {}
+    out: list[str] = []
+    next_take: float | None = None
+
+    def deliver(packets) -> None:
+        for p in packets:
+            key = (p.index, p.handle)
+            tr = trackers.get(key)
+            if tr is None:
+                tr = trackers[key] = AirLinkTracker()
+            tr.on_packet(p, timestamp="kernel", in_step=p.t_complete is not None, clock_epoch=0)
+
+    def take(now_us: float, *, force: bool) -> None:
+        for key, tr in trackers.items():
+            out.extend(f"{key} {b!r}" for b in tr.take_batches(now_us, force=force))
+
+    for rec in records:
+        deliver(parser.feed(rec.t, rec.index, rec.opcode, rec.payload, rec.drops))
+        if next_take is None:
+            next_take = rec.t + TAKE_EVERY_S
+        elif rec.t >= next_take:
+            take(rec.t * 1e6, force=False)
+            next_take += TAKE_EVERY_S
+    deliver(parser.flush())
+    take(float("inf"), force=True)
+    return out, repr(parser.stats)
+
+
+GOLDEN: dict[str, tuple[int, str]] = {
+    "eneby_clicks": (19, "5c4a8e5668ba7e679a32c78e09762793cb3b42e59e68b62a4a17eb96556464d2"),
+    "eneby_clicks:corrupt_a": (19, "eaf9532e5c6c1cae779239cd0bf8b676ae2e338a695e9518c7b0f57dd6225872"),
+    "eneby_clicks:corrupt_b": (17, "ef4e1daa68208752f865de6d3be4ecc1c091ce3126f3d1b6594e6dcae4d1c40c"),
+    "eneby_clicks:drop": (19, "2666afb3749f5fbb527679041bf237fabeced90391f5e0644f563894243df408"),
+    "air_music": (58, "4dbff0ab79fab326c4c7d07bad47c777cce3cf67a7f976616f437c47dca51279"),
+    "air_music:corrupt_a": (37, "5afa4c0e6bcb844a3b1a55bb38adff2e6cfb9b4903113a6fba0aa051c9cd3247"),
+    "air_music:corrupt_b": (32, "b1ee57b36f6b82d4622807868379e3d6b28d28c5526bbb203caeb4eab04dca6b"),
+    "air_music:drop": (58, "2e67216840de27b0ac4c6dbf79c7e0bb5e8c70f35366e9f3c547bc8ea074da8d"),
+}
+
+
+@pytest.mark.parametrize("variant", sorted(GOLDEN))
+def test_live_path_batches_match_the_recorded_output(variant):
+    batches, stats = live_batches(_variant(variant), A2dpAirParser(check_crc="first"))
+    digest = hashlib.sha256("\n".join([*batches, stats]).encode()).hexdigest()
+    assert (len(batches), digest) == GOLDEN[variant]
