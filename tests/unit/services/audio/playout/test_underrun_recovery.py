@@ -67,3 +67,71 @@ def test_after_a_stall_the_audio_is_heard_on_schedule(stall_ms):
     heard = port.heard_at_us(first_nonzero=True)
     assert heard is not None
     assert heard - due == pytest.approx(0.0, abs=1_000)
+
+
+# The feeder reports ``delivered`` every 5 ms tick, racing the streaming thread: the sink may
+# take data just before the report or just after it (then the report, or the sensor, sees it
+# up to one tick later). Arrivals reported by the buffer probe date it exactly in both orders.
+@pytest.mark.parametrize("report_before_pump", [False, True])
+@pytest.mark.parametrize("starve_ms", [800.0, 650.0, 730.0])
+def test_the_underrun_is_dated_by_the_arrival_in_both_race_orders(report_before_pump, starve_ms):
+    eng, port, raw = engine()
+    due = zeros_then_marker(eng, raw, zero_s=30.0)
+    kw = {"step_ms": 5.0, "report_before_pump": report_before_pump}
+    drive(eng, port, raw, 12.0, **kw)
+    port.starve(starve_ms)
+    drive(eng, port, raw, 20.0, **kw)
+    assert eng.snapshot()["underruns"] == 1
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - due == pytest.approx(0.0, abs=1_000)
+
+
+@pytest.mark.parametrize("starve_ms", [800.0, 730.0])
+def test_a_delivery_first_seen_by_the_sensor_still_dates_the_underrun(starve_ms):
+    # No arrival reports: the sensor's own level read may be the first to see the data.
+    eng, port, raw = engine()
+    due = zeros_then_marker(eng, raw, zero_s=30.0)
+    kw = {"report_before_pump": True, "arrivals": False}
+    drive(eng, port, raw, 12.0, **kw)
+    port.starve(starve_ms)
+    drive(eng, port, raw, 20.0, **kw)
+    assert eng.snapshot()["underruns"] == 1
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - due == pytest.approx(0.0, abs=1_000)  # without the check in sense: 30 ms late
+
+
+def counting(port):
+    reads = []
+    real = port.read
+
+    def read():
+        reads.append(1)
+        return real()
+
+    port.read = read
+    return reads
+
+
+# Small rings with a noisy or sawtooth clock: the ring is near empty before every delivery, but
+# nothing starved. No underrun may be found, and steady play costs no extra clock reads.
+@pytest.mark.parametrize("ring_ms", [20.0, 25.0, 30.0])
+@pytest.mark.parametrize(
+    ("noise_us", "saw"), [(4000.0, None), (0.0, (10.0, 2.0)), (4000.0, (10.0, 2.0)), (2000.0, (30.0, 5.0))]
+)
+@pytest.mark.parametrize("seed", [1, 2])
+def test_a_small_ring_gives_no_false_underruns(ring_ms, noise_us, saw, seed):
+    raw = FakeRaw(1_000_000.0)
+    port = SimulatedPort(raw, buffer_ms=ring_ms, noise_us=noise_us, seed=seed)
+    if saw is not None:
+        port.sawtooth(*saw)
+    reads = counting(port)
+    eng = PlayoutEngine(settings=PlayoutSettings(mode="measure"), port=port)
+    eng.set_format(InputFormat(sample_rate=FS))
+    eng.submit(int(raw.t_us + 1e6), TONE * FS * 60)
+    drive(eng, port, raw, 50.0)
+    assert port.underrun_ns == 0
+    snap = eng.snapshot()
+    assert snap["underruns"] == 0 and snap["jumps"] == 1
+    assert len(reads) <= 510  # the 10 Hz readings (500) and a few more

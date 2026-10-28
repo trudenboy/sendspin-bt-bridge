@@ -1,7 +1,10 @@
 """Playout engine: composes the scheduler, the port observer, the loop controller and the stats.
 
 Two ticks drive it, both on the feeder thread: ``next_block`` renders the block at the write
-head, ``sense`` (10 Hz) reads the port. With ``x_port = A − k`` (``PortObserver``):
+head, ``sense`` (10 Hz) reads the port. The feeder also reports what the sink took every tick
+(``delivered``) and, while ``arrival_wanted``, when data reached the sink (``note_arrival``,
+from its buffer probe), so silence the port plays between our data is seen (R3). With
+``x_port = A − k`` (``PortObserver``):
 
 * ``e   = t − s(x_port)`` — the error heard now (positive = late), fed to the stats;
 * ``e_w = t + (x_w − x_port)·(1 + ρ̂) − s(x_w)`` — the error predicted at the write head, fed
@@ -20,6 +23,7 @@ the scheduler; only placements and jumps act on the audio.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import os
 import statistics
@@ -37,7 +41,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from sendspin_bridge.services.audio.playout.scheduler import Block, InputFormat
-    from sendspin_bridge.services.audio.playout.sensor import PortClock
+    from sendspin_bridge.services.audio.playout.sensor import PortClock, PortSample
     from sendspin_bridge.services.audio.playout.timeline import PortReading
 
 logger = logging.getLogger(__name__)
@@ -52,6 +56,16 @@ REJECTED_WARN_FRACTION = 0.30
 REJECTED_WINDOW = 600  # readings (60 s)
 SENSOR_DEAD_READS = 10  # consecutive empty readings (1 s) = sensor unavailable
 PREDICT_READINGS = 9  # readings whose median offset dates the port for a placement
+# R3: a delivery is checked for an underrun (did the port run past our data before it
+# arrived?) only when it arrives at least STARVE_MARGIN_US after the ring was predicted to run
+# dry; the feeder reports arrivals from ARRIVAL_ARM_EARLY_US before that. In steady play the
+# next delivery always comes before it, so steady play costs no extra clock read and a noisy
+# clock cannot fake an underrun.
+STARVE_MARGIN_US = 3_000.0
+ARRIVAL_ARM_EARLY_US = 6_000.0  # > one feeder tick (5 ms)
+ARRIVALS_KEPT = 8
+MIN_DEFICIT_NS = 3_000_000  # a smaller deficit is the reading's noise (sigma 4 ms per reading)
+ARRIVAL_X_TOLERANCE_NS = 20_000_000  # an arrival dates the delivery it starts within this
 # After an underrun or stall placement (R3, R14) the error restarts from a fresh baseline:
 # once the port reaches the placed audio, e_w is taken in 1 s medians; the baseline is the
 # last of two consecutive medians within BASELINE_STABLE_US (or the last one after
@@ -110,12 +124,14 @@ class PlayoutEngine:
         self._reading: PortReading | None = None
         self._reading_x_w_ns = 0  # write head at the last reading
         self._delivered_ns = 0  # output stream time handed to the sink, as last reported
+        # RAW time the ring is predicted to run dry if nothing more is delivered (R3).
+        self._empty_at_us: float | None = None
+        self._arrivals: deque[tuple[int, PortSample]] = deque(maxlen=ARRIVALS_KEPT)
         self._fmt: InputFormat | None = None
         self._placements_seen = 0
         self._pending_place: str | None = None  # engine-requested placement not yet carried out
         self._pending_jump_us: float | None = None  # steady or delay jump decided, not yet rendered
         self._pending_jump_reason = "steady"
-        self._insert_left = 0  # frames of a rendered negative jump still to be written
         self._settle_x_ns: int | None = None  # the port reaches the last event's audio here
         self._prev_a_minus_t: float | None = None
         self._suspended = False
@@ -242,8 +258,9 @@ class PlayoutEngine:
             jump = None
 
         block = self._sched.render(audible_us=target, now_us=now_us, rate=0.0, jump_us=jump)
-        # R10: frames that belong to a jump are not loop corrections; separate them.
-        jump_dropped = jump_inserted = 0
+        # R10: frames that belong to a jump are not loop corrections. Every insert and drop the
+        # scheduler reports today is a jump's (rate corrections arrive in Stage 3).
+        jump_dropped, jump_inserted = block.dropped, block.inserted
         if jump is not None:
             if jump_reason == "delay":
                 # The schedule stays continuous across a delay jump: the residual is kept.
@@ -253,16 +270,6 @@ class PlayoutEngine:
                 # The controller reset itself when it decided it; the jump removed e_w - β, so the
                 # raw error it leaves is the baseline.
                 self._record_event(jump, "steady", residual_us=self._baseline_us)
-            frames = round(abs(jump) * self._fmt.sample_rate / 1e6) if self._fmt is not None else 0
-            if jump > 0:
-                jump_dropped = min(block.dropped, frames)
-                # A drop undoes an unfinished insert first (a delay jump can land on one).
-                self._insert_left = max(0, self._insert_left - frames)
-            else:
-                self._insert_left += frames
-        if self._insert_left:
-            jump_inserted = min(block.inserted, self._insert_left)
-            self._insert_left -= jump_inserted
 
         count = self._sched.placement_count
         if count != self._placements_seen:
@@ -275,21 +282,64 @@ class PlayoutEngine:
         self._stats.correction(t_s, block.inserted - jump_inserted, block.dropped - jump_dropped)
         return block
 
-    def delivered(self, now_us: float, delivered_ns: int) -> None:
-        """The feeder's view of what the sink took (``delivered``), every tick.
+    def arrival_wanted(self, now_us: float) -> bool:
+        """The feeder should report arrivals now: an underrun is on, or the ring may run dry."""
+        if self._reading is None:
+            return False
+        if self._observer.in_underrun:
+            return True
+        return self._empty_at_us is not None and now_us >= self._empty_at_us - ARRIVAL_ARM_EARLY_US
 
-        Cheap unless the ring is predicted near empty: then the first new delivery reads the
-        port once, so silence the port played before the data arrived is seen (R3).
+    def note_arrival(self, x_ns: int, sample: PortSample | None) -> None:
+        """Data from stream time ``x_ns`` reached the sink when the port read ``sample``."""
+        if sample is not None:
+            self._arrivals.append((x_ns, sample))
+
+    def delivered(self, now_us: float, delivered_ns: int) -> None:
+        """The feeder's view of what the sink took (``delivered``), every tick (R3)."""
+        self._on_delivered(now_us, delivered_ns, None)
+
+    def _on_delivered(self, now_us: float, delivered_ns: int, sample: PortSample | None) -> None:
+        """Check a delivery that ends a starve; ``sample`` is a port reading taken now, if any.
+
+        The data from ``prev`` lands where the port is when it arrives: an arrival report
+        dates that exactly, else the first sight of it (this report or the sensor's reading).
         """
         prev = self._delivered_ns
         if delivered_ns <= prev:
             return
         self._delivered_ns = delivered_ns
-        if not self._observer.delivery_check_due(now_us, prev):
-            return
-        sample = self._port.read()
-        if sample is not None and self._observer.on_delivery(sample, prev):
-            self._offsets.clear()  # k moved: older readings no longer date the port
+        arrival = next(
+            ((x, s) for x, s in self._arrivals if abs(x - prev) <= ARRIVAL_X_TOLERANCE_NS),
+            None,
+        )
+        self._arrivals.clear()
+        t_arrival_us = now_us if arrival is None else arrival[1].t_us
+        starved = self._observer.in_underrun or (
+            self._empty_at_us is not None and t_arrival_us >= self._empty_at_us + STARVE_MARGIN_US
+        )
+        if self._reading is not None and starved:
+            if arrival is None:
+                at = sample if sample is not None else self._port.read()
+                arrival = None if at is None else (prev, at)
+            if arrival is not None:
+                moved_ns = self._observer.on_delivery(arrival[1], arrival[0], min_excess_ns=MIN_DEFICIT_NS)
+                if moved_ns:
+                    # k moved: older readings no longer date the port, and the last one is
+                    # re-dated so the prediction does not extrapolate from the old origin.
+                    self._offsets.clear()
+                    self._reading = dataclasses.replace(self._reading, x_port_ns=self._reading.x_port_ns - moved_ns)
+        x_port_ns = self._predicted_x_port_ns(now_us)
+        self._empty_at_us = None if x_port_ns is None else now_us + (delivered_ns - x_port_ns) / 1000.0
+
+    def _predicted_x_port_ns(self, now_us: float) -> float | None:
+        """``x_port`` now from the recent readings (their median offset), else the last one."""
+        r = self._reading
+        if r is None:
+            return None
+        if self._offsets:
+            return (now_us + statistics.median(self._offsets)) * 1000.0
+        return r.x_port_ns + (now_us - r.t_us) * 1000.0
 
     def sense(self, now_us: float, delivered_ns: int) -> None:
         self._tick(now_us)
@@ -305,7 +355,8 @@ class PlayoutEngine:
             self._empty_reads += 1
             return
         self._empty_reads = 0
-        self._delivered_ns = max(self._delivered_ns, delivered_ns)
+        # The sensor's level read may be the first to see the data that ends a starve.
+        self._on_delivered(now_us, delivered_ns, sample)
         r = self._observer.observe(sample, delivered_ns)
         self._reading = r
         self._reading_x_w_ns = self._sched.x_w_ns
@@ -352,7 +403,7 @@ class PlayoutEngine:
         if s_port is not None and (self._settle_x_ns is None or r.x_port_ns >= self._settle_x_ns):
             self._stats.error(t_s, r.t_us - s_port)
 
-        if self._pending_place is not None or self._pending_jump_us is not None or self._insert_left:
+        if self._pending_place is not None or self._pending_jump_us is not None or self._sched.insert_owed:
             return  # an event is on its way into s(x_w); the controller waits for it
         if self._sched.placement_pending and self._sched.queued:
             return

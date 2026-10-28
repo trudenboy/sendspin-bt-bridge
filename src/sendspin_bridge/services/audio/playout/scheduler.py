@@ -290,6 +290,11 @@ class PlayoutScheduler:
         return self._last_reason
 
     @property
+    def insert_owed(self) -> bool:
+        """A negative jump still has silence to write (cleared with the queue)."""
+        return self._owed_insert > 0
+
+    @property
     def placement_pending(self) -> bool:
         """A placement is requested and not yet decided (the next program frame will be placed)."""
         return self._placement is not None

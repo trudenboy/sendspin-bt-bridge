@@ -635,3 +635,39 @@ def test_every_feeder_tick_reports_what_the_sink_took():
     assert [t for t, _ in seen] == ticks
     assert all(0 <= d <= player._x_w_ns for _, d in seen)
     player.stop()
+
+
+@requires_gst
+def test_buffers_reaching_the_sink_are_reported_while_the_engine_asks():
+    # R3: the feeder's delivered report races the streaming thread; the buffer probe dates the
+    # arrival itself (on the streaming thread), whichever side of a tick it happens on.
+    handed = []
+    player = _player(sink_factory=_recording_fakesink(handed))
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(2_000_000, bytes(19200))
+    engine = player._engine
+    noted: list[tuple[int, object]] = []
+    engine.arrival_wanted = lambda now_us: True
+    engine.note_arrival = lambda x_ns, sample: noted.append((x_ns, sample))
+    _drive_paced(player, 10)
+    _wait_until(lambda: len(handed) >= 4)
+    player._tick(now_us=2_000_000.0)  # drains what arrived since the last tick
+    assert noted, "no arrival reported"
+    pushed = {b.pts for b in handed}
+    assert all(x in pushed and sample is not None for x, sample in noted)
+    xs = [x for x, _ in noted]
+    assert xs == sorted(xs)
+    player.stop()
+
+
+@requires_gst
+def test_no_arrival_is_reported_while_the_engine_does_not_ask():
+    player = _player()
+    player.start(PCM_S16_STEREO_48K)
+    engine = player._engine
+    noted = []
+    engine.arrival_wanted = lambda now_us: False
+    engine.note_arrival = lambda x_ns, sample: noted.append(x_ns)
+    _drive_paced(player, 10)
+    assert noted == []
+    player.stop()

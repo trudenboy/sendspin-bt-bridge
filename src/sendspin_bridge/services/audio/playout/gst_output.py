@@ -8,7 +8,8 @@ sensor (``GstPortClock``). What is written, and when, is decided by the ``Playou
 Threading: every public method enqueues a command under ``_cmd_lock`` and returns. One
 feeder thread per output (``_run``, a 5 ms ``Event.wait``) applies the commands, keeps
 ``appsrc`` ``LEAD_MS`` ahead, calls ``engine.sense()`` every 100 ms with
-``delivered = x_w − current-level-time`` (and reports ``delivered`` every tick, so the
+``delivered = x_w − current-level-time`` (and reports ``delivered`` every tick, plus the
+arrivals a buffer probe on appsrc's src pad sees while the engine asks for them, so the
 engine sees an underrun's silence up to the data's arrival) and publishes what ``metrics()`` reports under
 ``_pub_lock``. The engine and every GStreamer element are touched by the feeder only;
 the caller thread builds the output (``prepare_output``), closes it (``stop``, after the
@@ -23,6 +24,7 @@ import re
 import subprocess
 import threading
 import time
+import weakref
 from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -178,6 +180,68 @@ class _WatchedPort:
         return sample
 
 
+class _ArrivalProbe:
+    """Buffers reaching the sink while the engine asks for them (R3).
+
+    ``on_buffer`` runs on appsrc's streaming thread, which pushes a buffer through convert,
+    resample and into the sink synchronously: a buffer leaving appsrc is data arriving in
+    the sink's ring. While armed by the feeder it reads the port then, so the engine knows
+    where the port was when the data that ends a starve landed (the feeder's own ``delivered``
+    report may come a tick later). One ``threading.Lock``, O(1) critical sections; the port
+    reader is its own instance, not the feeder's.
+    """
+
+    MAX_KEPT = 8
+
+    def __init__(self, port: PortClock) -> None:
+        self._port = port
+        self._lock = threading.Lock()
+        self._armed = False
+        self._seen: deque[tuple[int, PortSample | None]] = deque(maxlen=self.MAX_KEPT)
+
+    def arm(self, armed: bool) -> None:
+        with self._lock:
+            self._armed = armed
+            if not armed:
+                self._seen.clear()
+
+    def on_buffer(self, pts_ns: int) -> None:
+        with self._lock:
+            if not self._armed:
+                return
+        sample = self._port.read()
+        with self._lock:
+            if self._armed:
+                self._seen.append((pts_ns, sample))
+
+    def drain(self) -> list[tuple[int, PortSample | None]]:
+        with self._lock:
+            seen = list(self._seen)
+            self._seen.clear()
+        return seen
+
+
+def _attach_arrival_probe(appsrc: Any, probe: _ArrivalProbe) -> None:
+    """Report every buffer leaving appsrc to ``probe`` (held weakly: a GStreamer callback's
+    reference is invisible to Python's collector)."""
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+
+    get_pad = getattr(appsrc, "get_static_pad", None)
+    pad = get_pad("src") if get_pad is not None else None
+    if pad is None:
+        return  # no pad (a test double): no arrivals, delivered reports still date the rest
+    probe_ref = weakref.ref(probe)
+
+    def _on_buffer(_pad: Any, info: Any) -> Any:
+        target = probe_ref()
+        buf = info.get_buffer()
+        if target is not None and buf is not None and buf.pts != Gst.CLOCK_TIME_NONE:
+            target.on_buffer(int(buf.pts))
+        return Gst.PadProbeReturn.OK
+
+    pad.add_probe(Gst.PadProbeType.BUFFER, _on_buffer)
+
+
 class PlayoutPlayer:
     """StreamPlayer's daemon-facing interface on the playout engine."""
 
@@ -227,6 +291,7 @@ class PlayoutPlayer:
         # Feeder-thread state (reset by adopt before the feeder starts).
         self._engine: PlayoutEngine | None = None
         self._port: _WatchedPort | None = None
+        self._arrivals: _ArrivalProbe | None = None
         self._playing_at_us: float | None = None
         self._next_sense_us: float | None = None
         self._x_w_ns = 0
@@ -315,6 +380,8 @@ class PlayoutPlayer:
         self._appsrc = output.appsrc
         self._sink = output.sink
         self._port = _WatchedPort(self._port_factory(output.sink))
+        self._arrivals = _ArrivalProbe(self._port_factory(output.sink))
+        _attach_arrival_probe(output.appsrc, self._arrivals)
         self._engine = PlayoutEngine(settings=self._settings, port=self._port, k0_ns=output.k0_ns)
         self._playing_at_us = None
         self._next_sense_us = None
@@ -451,6 +518,9 @@ class PlayoutPlayer:
         self._format = None
         self._engine = None
         self._port = None
+        if self._arrivals is not None:
+            self._arrivals.arm(False)
+        self._arrivals = None
         with self._cmd_lock:
             self._commands.clear()
         with self._pub_lock:
@@ -539,13 +609,19 @@ class PlayoutPlayer:
         self._poll_bus(out, engine)
         if self._input_format_set:
             self._feed(out, engine, now_us)
-        # Every tick (R3): the first delivery after the port ran dry dates where our data lands.
+        # Every tick (R3): what the sink took, and when the data that ends a starve arrived.
+        arrivals = self._arrivals
+        if arrivals is not None:
+            for x_ns, sample in arrivals.drain():
+                engine.note_arrival(x_ns, sample)
         engine.delivered(now_us, max(0, self._x_w_ns - _level_time_ns(out.appsrc)))
         sensed = False
         if self._next_sense_us is None or now_us >= self._next_sense_us:
             self._next_sense_us = now_us + SENSE_INTERVAL_US
             self._sense(out, engine, port, now_us)
             sensed = True
+        if arrivals is not None:
+            arrivals.arm(engine.arrival_wanted(now_us))
         with self._pub_lock:
             self._queued = engine.queued
             self._counters.queued_chunks = engine.queued_chunks

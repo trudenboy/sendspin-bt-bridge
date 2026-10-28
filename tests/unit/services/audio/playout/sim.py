@@ -73,6 +73,9 @@ class SimulatedPort:
         self._saw: tuple[float, float, float] | None = None
         self._slews: list[tuple[float, float, float]] = []
         self.next_sense_us: float | None = None  # drive()'s sensor schedule, kept across calls
+        # Called with the stream position of each delivery as it lands, before it is written
+        # (the GStreamer feeder's buffer probe on appsrc's src pad).
+        self.on_arrival: Callable[[int], None] | None = None
 
     # -- time -----------------------------------------------------------------------------
 
@@ -96,6 +99,8 @@ class SimulatedPort:
         if self._t_anchor is None:
             self._t_anchor = self._raw.t_us
             self._first_out = self._raw.t_us
+        elif self.on_arrival is not None:
+            self.on_arrival(self.delivered_ns)
         if self._a_ns > self._write_ns:
             self.underrun_ns += self._a_ns - self._write_ns
             self._write_ns = self._a_ns
@@ -196,19 +201,40 @@ def drive(
     sense_every_ms: float = 100.0,
     step_ms: float = 1.0,
     on_sense: Callable[[], None] | None = None,
+    report_before_pump: bool = False,
+    arrivals: bool = True,
 ) -> None:
-    """Run the real engine in RAW time: blocks to keep the lead, sense at 10 Hz."""
+    """Run the real engine in RAW time: blocks to keep the lead, sense at 10 Hz.
+
+    Every step the feeder reports ``delivered`` to the engine. ``report_before_pump``: the sink
+    takes data only after that report (the other order of the feeder's race with the streaming
+    thread), so a delivery is first seen a step later or by the sensor. ``arrivals``: deliveries
+    are reported as they land (the feeder's buffer probe) while the engine asks for them.
+    """
     del block_ms  # the engine's scheduler decides the block size
     end = raw.t_us + seconds * 1e6
     lead_ns = lead_ms * 1e6
     sense_every_us = sense_every_ms * 1000.0
     next_sense = port.next_sense_us if port.next_sense_us is not None else raw.t_us + sense_every_us
+    if arrivals:
+
+        def on_arrival(x_ns: int) -> None:
+            if engine.arrival_wanted(raw.t_us):
+                engine.note_arrival(x_ns, port.read())
+
+        port.on_arrival = on_arrival
+    else:
+        port.on_arrival = None
     while raw.t_us < end:
-        port.pump()
+        if not report_before_pump:
+            port.pump()
         while port.appsrc_ns < lead_ns:
             port.push(engine.next_block(raw.t_us))
-            port.pump()
+            if not report_before_pump:
+                port.pump()
         engine.delivered(raw.t_us, port.delivered_ns)  # the feeder reports every tick
+        if report_before_pump:
+            port.pump()
         if raw.t_us >= next_sense:
             engine.sense(raw.t_us, port.delivered_ns)
             next_sense += sense_every_us
