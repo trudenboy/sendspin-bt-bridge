@@ -475,3 +475,14 @@ def test_the_fixture_matches_its_truth_table(sim):
     assert frames[j][2] == 0 and frames[j - 1][0] + t["frame_samples"] == skip["pcm_from"]
     pkt_us = t["frames_per_packet"] * t["frame_samples"] * 1e6 / RATE
     assert frames[j][1] - frames[j - 1][1] == pytest.approx(pkt_us, abs=1000.0)
+
+
+def test_the_builder_installs_an_output_only_on_a_hash_match(tmp_path):
+    from tests.fixtures.a2dp_air import build_air_music_fixture as builder
+
+    target = tmp_path / "x.gz"
+    target.write_bytes(b"committed")
+    digest = builder.install(target, b"other", expected="0" * 64)
+    assert target.read_bytes() == b"committed" and (tmp_path / "x.gz.new").exists()
+    assert builder.install(target, b"other", expected=digest) == digest
+    assert target.read_bytes() != b"committed" and not (tmp_path / "x.gz.new").exists()

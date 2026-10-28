@@ -32,13 +32,15 @@ Two disturbances:
 
 The truth (``air_music_truth.json.gz``) is recorded at the PCM instant, independently of the air
 sensor: for every encoded SBC frame, the first PCM sample it consumed, the send time (the btsnoop
-time of its packet's last ACL fragment, µs after the first record) and its position in the packet.
+time of its packet's last ACL fragment, µs after the first record, so it includes the seeded 0–1 ms
+send lateness) and its position in the packet.
 A PCM sample ``p`` of frame ``(p0, t_send, pos)`` left at ``t_send + (pos·128 + p − p0)/rate``;
 samples no frame consumed (the skip, the suspend, the tail) left never.
 
 Built with libsbc ``LIBSBC_VERSION``; the gzip mtime is fixed, so a rebuild with that libsbc (and
 the same libm) must reproduce ``EXPECTED_SHA256`` exactly. The script warns when the loaded libsbc
-is another version and exits 1 when an output differs.
+is another version, and an output whose hash differs is left as ``<name>.new`` (exit 1) without
+touching the committed file.
 
     uv run python tests/fixtures/a2dp_air/build_air_music_fixture.py
 """
@@ -50,6 +52,7 @@ import gzip
 import hashlib
 import json
 import math
+import os
 import random
 import struct
 import sys
@@ -420,6 +423,18 @@ def _gzip(path: Path, data: bytes) -> None:
         gz.write(data)
 
 
+def install(path: Path, data: bytes, expected: str | None) -> str:
+    """Gzip ``data`` to ``<path>.new``; move it onto ``path`` only when its sha256 is ``expected``.
+
+    A mismatch leaves the committed file untouched and the candidate at ``<path>.new``."""
+    tmp = path.with_name(path.name + ".new")
+    _gzip(tmp, data)
+    digest = hashlib.sha256(tmp.read_bytes()).hexdigest()
+    if digest == expected:
+        os.replace(tmp, path)
+    return digest
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs libsbc
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out-dir", type=Path, default=HERE)
@@ -436,14 +451,12 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - needs libs
     }
     mismatches = []
     for name, data in outputs.items():
-        path = args.out_dir / name
-        _gzip(path, data)
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        digest = install(args.out_dir / name, data, EXPECTED_SHA256.get(name))
         if digest != EXPECTED_SHA256.get(name):
             mismatches.append(name)
-        print(f"{name}: {len(data)} bytes raw, {path.stat().st_size} bytes gzip, sha256 {digest}")
+        print(f"{name}: {len(data)} bytes raw, sha256 {digest}")
     if mismatches:
-        print(f"error: outputs differ from the recorded sha256: {', '.join(mismatches)}")
+        print(f"error: outputs differ from the recorded sha256 (left as .new): {', '.join(mismatches)}")
         return 1
     return 0
 
