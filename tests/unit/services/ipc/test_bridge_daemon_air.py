@@ -615,3 +615,119 @@ def test_the_daemon_air_status_passes_the_ipc_allowlist():
     from sendspin_bridge.bridge.client import _IPC_ALLOWED_KEYS
 
     assert "air_sensor" in _IPC_ALLOWED_KEYS
+
+
+# -- hardening (after review) -------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_slow_correlation_does_not_delay_the_fallback_detection():
+    calls = {"metrics": 0}
+    fell_back: list[str] = []
+
+    def metrics():
+        calls["metrics"] += 1
+        state = "playing" if calls["metrics"] == 1 else "fallback"
+        return {"playout": {"state": state, "fallback_reason": "no audio clock"}}
+
+    async def slow_step() -> None:
+        await asyncio.sleep(50 * _TICK_S)  # a correlation far longer than a watcher tick
+
+    daemon = SimpleNamespace(
+        _audio_handler=SimpleNamespace(metrics=metrics),
+        _client=None,
+        _args=SimpleNamespace(playout_mode="measure"),
+        fall_back_to_legacy=fell_back.append,
+        air_step=slow_step,
+        air_snapshot=lambda: {"state": "acquiring", "accepts": [1]},
+    )
+    status = _RecordingStatus(playing=False)
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        daemon_process._timing_telemetry_watcher(daemon, status, lambda: None, stop, poll_interval=_TICK_S)
+    )
+    await asyncio.sleep(3.5 * _TICK_S)
+    stop.set()
+    await asyncio.wait_for(task, 1.0)
+    assert fell_back == ["no audio clock"]
+    assert status["playout"]["state"] == "fallback"
+    assert status["air_sensor"]["state"] == "acquiring"
+
+
+@pytest.mark.asyncio
+async def test_a_step_still_running_is_not_started_again():
+    running = {"now": 0, "max": 0, "started": 0}
+
+    async def slow_step() -> None:
+        running["started"] += 1
+        running["now"] += 1
+        running["max"] = max(running["max"], running["now"])
+        await asyncio.sleep(5 * _TICK_S)
+        running["now"] -= 1
+
+    daemon = SimpleNamespace(
+        _audio_handler=None,
+        _client=None,
+        _args=SimpleNamespace(playout_mode="measure"),
+        fall_back_to_legacy=lambda reason: None,
+        air_step=slow_step,
+        air_snapshot=lambda: {"state": "acquiring", "accepts": [1]},
+    )
+    status = _RecordingStatus(playing=True)
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        daemon_process._timing_telemetry_watcher(daemon, status, lambda: None, stop, poll_interval=_TICK_S)
+    )
+    await asyncio.sleep(4 * _TICK_S)
+    stop.set()
+    await task
+    assert running["max"] == 1 and running["started"] == 1
+
+
+def test_an_engine_event_without_a_loop_is_dropped_not_run_on_the_feeder(make_daemon, caplog):
+    import logging
+
+    d = make_daemon(playout_mode="measure", air_sensor=ON)
+    player = d._make_player("bluez_sink.X")  # no running loop: none is known
+    rec = _RecordingSensor()
+    d._air_sensor = rec  # type: ignore[assignment]
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.ipc.bridge_daemon"):
+        player._on_engine_event("underrun")
+        player._on_engine_event("stall")
+    assert rec.events == []
+    assert caplog.text.count("no event loop") == 1
+
+
+def test_an_engine_event_after_the_loop_closed_is_dropped(make_daemon):
+    d = make_daemon(playout_mode="measure", air_sensor=ON)
+    player = d._make_player("bluez_sink.X")
+    loop = asyncio.new_event_loop()
+    loop.close()
+    d._air_loop = loop
+    rec = _RecordingSensor()
+    d._air_sensor = rec  # type: ignore[assignment]
+    player._on_engine_event("underrun")  # must not raise
+    assert rec.events == []
+
+
+@pytest.mark.asyncio
+async def test_engine_events_of_the_retired_player_are_dropped_after_fallback(make_daemon):
+    d = make_daemon(playout_mode="measure", air_sensor=ON)
+    retired = d._make_player("bluez_sink.X")
+    d._player = retired
+    d._audio_handler = retired
+    d.fall_back_to_legacy("no audio clock")
+    rec = _RecordingSensor()
+    d._air_sensor = rec  # type: ignore[assignment]
+    retired._on_engine_event("underrun")
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert rec.events == []
+
+
+def test_the_raw_clock_is_public_and_shared():
+    from sendspin_bridge.services.audio.playout import gst_output
+    from sendspin_bridge.services.ipc import bridge_daemon
+
+    assert callable(gst_output.raw_now_us)
+    assert bridge_daemon.raw_now_us is gst_output.raw_now_us

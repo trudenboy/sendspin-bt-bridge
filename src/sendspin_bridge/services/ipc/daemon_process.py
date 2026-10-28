@@ -381,8 +381,34 @@ def _air_sensor_args(raw: object) -> dict | None:
     return {"enabled": True, "latency_ms": latency_ms}
 
 
-async def _air_status_tick(daemon, status: StatusStore | dict, last: dict | None) -> dict | None:
-    """Step the air sensor once and patch ``status["air_sensor"]`` if its snapshot changed.
+def _air_step_done(task: asyncio.Future) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.debug("air sensor step failed: %s", task.exception())
+
+
+class _AirStepper:
+    """Runs the air sensor's step as a background task, never two at once.
+
+    The watcher never waits on a correlation: a step still running when the next tick comes
+    is left alone (the sensor's own guard keeps at most one window in flight as well).
+    """
+
+    def __init__(self) -> None:
+        self.task: asyncio.Future | None = None
+
+    def kick(self, air_step) -> None:
+        if self.task is not None and not self.task.done():
+            return
+        self.task = asyncio.ensure_future(air_step())
+        self.task.add_done_callback(_air_step_done)
+
+    def cancel(self) -> None:
+        if self.task is not None and not self.task.done():
+            self.task.cancel()
+
+
+def _air_status_tick(daemon, status: StatusStore | dict, last: dict | None, stepper: _AirStepper) -> dict | None:
+    """Start the air sensor's step and patch ``status["air_sensor"]`` if its snapshot changed.
 
     Returns the snapshot now published (``last`` when nothing changed). A daemon without a
     sensor has no ``air_snapshot`` value, and the key is never written.
@@ -391,10 +417,7 @@ async def _air_status_tick(daemon, status: StatusStore | dict, last: dict | None
     air_snapshot = getattr(daemon, "air_snapshot", None)
     if not callable(air_step) or not callable(air_snapshot):
         return last
-    try:
-        await air_step()
-    except Exception as exc:  # the daemon contains its own; never let one stop the watcher
-        logger.debug("air sensor step failed: %s", exc)
+    stepper.kick(air_step)
     snap = air_snapshot()
     if snap is None or snap == last:
         return last
@@ -422,94 +445,101 @@ async def _timing_telemetry_watcher(
     fell_back = False
     playout_error_ms: float | None = None
     air_published: dict | None = None
-    while not stop_event.is_set():
-        try:
+    air_stepper = _AirStepper()
+    try:
+        while not stop_event.is_set():
             try:
-                slew.sample()
-                slew_ppm = slew.ppm()
-            except Exception as exc:
-                logger.debug("clock slew estimate failed: %s", exc)
-                slew_ppm = None
-            playout_changed = False
-            if playout_on:
-                # The engine's snapshot (1 s while playing, 5 s otherwise) and its
-                # fallback, checked every tick. After a fallback the legacy player
-                # has no snapshot: the last one (state "fallback") stays.
                 try:
-                    playout = _read_playout(getattr(daemon, "_audio_handler", None))
-                    if playout is None:
-                        playout_error_ms = None
-                    elif playout.get("state") == "fallback" and not fell_back:
-                        fell_back = True
-                        playout_error_ms = None
-                        _patch_status(status, {"playout": playout})
-                        playout_changed = True
-                        try:
-                            daemon.fall_back_to_legacy(str(playout.get("fallback_reason") or "playout engine fallback"))
-                        except Exception as exc:
-                            logger.warning("Falling back to the legacy player failed: %s", exc)
-                    elif time.monotonic() >= next_playout_at:
-                        playing = bool(status.get("playing"))
-                        next_playout_at = time.monotonic() + (
-                            _PLAYOUT_STATUS_PLAYING_S if playing else _PLAYOUT_STATUS_IDLE_S
-                        )
-                        error = playout.get("error_ms")
-                        playout_error_ms = float(error) if isinstance(error, int | float) else None
-                        _patch_status(status, {"playout": playout, "playback_sync_error_ms": playout_error_ms})
-                        playout_changed = True
+                    slew.sample()
+                    slew_ppm = slew.ppm()
                 except Exception as exc:
-                    logger.debug("playout status update failed: %s", exc)
-            audio_handler = getattr(daemon, "_audio_handler", None)
-            client = getattr(daemon, "_client", None)
-            metrics_due = audio_handler is not None and client is not None and time.monotonic() >= next_metrics_at
-            pa_latency_ms: float | None = None
-            # measure/loop: read every second alongside the playout snapshot;
-            # off: only with the metrics tick, so it adds no status patches.
-            pa_due = time.monotonic() >= next_pa_latency_at if playout_on else metrics_due
-            if status.get("playing") and pa_due:
-                next_pa_latency_at = time.monotonic() + 1.0
-                pa_latency_ms = await _pa_latency_or_none()
-            changed = playout_changed
-            # The air sensor: one step per tick (1 s) on this loop, its snapshot published on change.
-            try:
-                air_now = await _air_status_tick(daemon, status, air_published)
-            except Exception as exc:
-                logger.debug("air sensor status update failed: %s", exc)
-                air_now = air_published
-            if air_now is not air_published:
-                air_published = air_now
-                changed = True
-            if audio_handler is not None:
-                changed = _observe_structured_reanchor(audio_handler, status) or changed
-            now = time.monotonic()
-            if metrics_due:
-                snapshot = collect_timing_snapshot(audio_handler, client)
-                if playout_error_ms is not None:
-                    # In measure/loop the sync error is the engine's.
-                    snapshot["playback_sync_error_ms"] = playout_error_ms
-                if slew_ppm is not None:
-                    snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
+                    logger.debug("clock slew estimate failed: %s", exc)
+                    slew_ppm = None
+                playout_changed = False
+                if playout_on:
+                    # The engine's snapshot (1 s while playing, 5 s otherwise) and its
+                    # fallback, checked every tick. After a fallback the legacy player
+                    # has no snapshot: the last one (state "fallback") stays.
+                    try:
+                        playout = _read_playout(getattr(daemon, "_audio_handler", None))
+                        if playout is None:
+                            playout_error_ms = None
+                        elif playout.get("state") == "fallback" and not fell_back:
+                            fell_back = True
+                            playout_error_ms = None
+                            _patch_status(status, {"playout": playout})
+                            playout_changed = True
+                            try:
+                                daemon.fall_back_to_legacy(
+                                    str(playout.get("fallback_reason") or "playout engine fallback")
+                                )
+                            except Exception as exc:
+                                logger.warning("Falling back to the legacy player failed: %s", exc)
+                        elif time.monotonic() >= next_playout_at:
+                            playing = bool(status.get("playing"))
+                            next_playout_at = time.monotonic() + (
+                                _PLAYOUT_STATUS_PLAYING_S if playing else _PLAYOUT_STATUS_IDLE_S
+                            )
+                            error = playout.get("error_ms")
+                            playout_error_ms = float(error) if isinstance(error, int | float) else None
+                            _patch_status(status, {"playout": playout, "playback_sync_error_ms": playout_error_ms})
+                            playout_changed = True
+                    except Exception as exc:
+                        logger.debug("playout status update failed: %s", exc)
+                audio_handler = getattr(daemon, "_audio_handler", None)
+                client = getattr(daemon, "_client", None)
+                metrics_due = audio_handler is not None and client is not None and time.monotonic() >= next_metrics_at
+                pa_latency_ms: float | None = None
+                # measure/loop: read every second alongside the playout snapshot;
+                # off: only with the metrics tick, so it adds no status patches.
+                pa_due = time.monotonic() >= next_pa_latency_at if playout_on else metrics_due
+                if status.get("playing") and pa_due:
+                    next_pa_latency_at = time.monotonic() + 1.0
+                    pa_latency_ms = await _pa_latency_or_none()
+                changed = playout_changed
+                # The air sensor: a step started per tick (1 s) on this loop, never awaited here;
+                # its snapshot is published on change.
+                try:
+                    air_now = _air_status_tick(daemon, status, air_published, air_stepper)
+                except Exception as exc:
+                    logger.debug("air sensor status update failed: %s", exc)
+                    air_now = air_published
+                if air_now is not air_published:
+                    air_published = air_now
+                    changed = True
+                if audio_handler is not None:
+                    changed = _observe_structured_reanchor(audio_handler, status) or changed
+                now = time.monotonic()
+                if metrics_due:
+                    snapshot = collect_timing_snapshot(audio_handler, client)
+                    if playout_error_ms is not None:
+                        # In measure/loop the sync error is the engine's.
+                        snapshot["playback_sync_error_ms"] = playout_error_ms
+                    if slew_ppm is not None:
+                        snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
+                    if pa_latency_ms is not None:
+                        snapshot["pa_latency_ms"] = round(pa_latency_ms, 1)
+                        pa_latency_ms = None
+                    _patch_status(status, snapshot)
+                    changed = True
+                    next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
+                elif slew_ppm is not None and status.get("clock_slew_ppm") is None:
+                    # First estimate: publish at once instead of waiting for the next metrics tick.
+                    _patch_status(status, {"clock_slew_ppm": round(slew_ppm, 1)})
+                    changed = True
                 if pa_latency_ms is not None:
-                    snapshot["pa_latency_ms"] = round(pa_latency_ms, 1)
-                    pa_latency_ms = None
-                _patch_status(status, snapshot)
-                changed = True
-                next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
-            elif slew_ppm is not None and status.get("clock_slew_ppm") is None:
-                # First estimate: publish at once instead of waiting for the next metrics tick.
-                _patch_status(status, {"clock_slew_ppm": round(slew_ppm, 1)})
-                changed = True
-            if pa_latency_ms is not None:
-                _patch_status(status, {"pa_latency_ms": round(pa_latency_ms, 1)})
-                changed = True
-            if changed and callable(on_status_change):
-                on_status_change()
-            failure_reported = False
-        except Exception as exc:
-            log = logger.debug if failure_reported else logger.warning
-            log("Timing telemetry update failed; playback will continue: %s", exc)
-            failure_reported = True
-        await asyncio.sleep(poll_interval)
+                    _patch_status(status, {"pa_latency_ms": round(pa_latency_ms, 1)})
+                    changed = True
+                if changed and callable(on_status_change):
+                    on_status_change()
+                failure_reported = False
+            except Exception as exc:
+                log = logger.debug if failure_reported else logger.warning
+                log("Timing telemetry update failed; playback will continue: %s", exc)
+                failure_reported = True
+            await asyncio.sleep(poll_interval)
+    finally:
+        air_stepper.cancel()
 
 
 async def _startup_sink_routing_watcher(

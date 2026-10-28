@@ -62,7 +62,8 @@ TAIL_MUTE_MARGIN_NS = 20_000_000
 _FALLBACK_NO_CLOCK = "no audio clock from the sink within 2 s of PLAYING"
 
 
-def _raw_now_us() -> int:
+def raw_now_us() -> int:
+    """Now on the RAW clock (``CLOCK_MONOTONIC_RAW`` µs): the play-time axis of the engine and the air sensor."""
     clock_id = getattr(time, "CLOCK_MONOTONIC_RAW", time.CLOCK_MONOTONIC)
     return time.clock_gettime_ns(clock_id) // 1000
 
@@ -185,7 +186,7 @@ class PlayoutPlayer:
         sink_factory: Callable[[], Any],
         settings: PlayoutSettings,
         out_rate: int | None = None,
-        raw_now_us: Callable[[], float] = _raw_now_us,
+        raw_now_us: Callable[[], float] = raw_now_us,
         port_factory: Callable[[Any], PortClock] = GstPortClock,
         thread_factory: Callable[..., Any] = threading.Thread,
         air_tap: WrittenEnvelope | None = None,

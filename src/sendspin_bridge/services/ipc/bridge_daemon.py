@@ -37,8 +37,7 @@ from sendspin_bridge.services.audio.playout.air_tap import INTERNAL_ERROR as _AI
 from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
 from sendspin_bridge.services.audio.playout.engine import PlayoutSettings
 from sendspin_bridge.services.audio.playout.gst_output import LEAD_MS as _PLAYOUT_LEAD_MS
-from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer
-from sendspin_bridge.services.audio.playout.gst_output import _raw_now_us as _air_raw_now_us
+from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer, raw_now_us
 from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
 from sendspin_bridge.services.ipc.commands import AIR_ENVELOPE_VERSION
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
@@ -247,6 +246,7 @@ class BridgeDaemon:
         self._air_tap: WrittenEnvelope | None = None
         self._air_sensor: AirSensor | None = None
         self._air_loop: asyncio.AbstractEventLoop | None = None
+        self._air_no_loop_logged = False
         self._build_air_sensor()
 
     def _build_air_sensor(self) -> None:
@@ -257,9 +257,7 @@ class BridgeDaemon:
         if self._args.playout_mode != "measure":
             return
         self._air_tap = WrittenEnvelope()
-        self._air_sensor = AirSensor(
-            tap=self._air_tap, now_us=_air_raw_now_us, output_delay_ms=self._air_output_delay_ms
-        )
+        self._air_sensor = AirSensor(tap=self._air_tap, now_us=raw_now_us, output_delay_ms=self._air_output_delay_ms)
         latency = params.get("latency_ms")
         if isinstance(latency, int | float) and not isinstance(latency, bool):
             self._air_sensor.set_calibration(float(latency))
@@ -274,22 +272,27 @@ class BridgeDaemon:
         return self._air_output_delay_ms() * 1000.0
 
     def _air_engine_event(self, kind: str) -> None:
-        """The player's listener (feeder or caller thread): the sensor sees the event on the loop."""
-        sensor = self._air_sensor
-        if sensor is None:
+        """The player's listener (feeder or caller thread): the sensor sees the event on the loop.
+
+        Without a usable loop the event is dropped (the sensor is loop-only, never run on the
+        feeder); after a fallback the retired player's events are dropped too.
+        """
+        if self._air_sensor is None or self._playout_fell_back:
             return
         loop = self._air_loop
+        if loop is None or loop.is_closed():
+            if not self._air_no_loop_logged:
+                self._air_no_loop_logged = True
+                logger.debug("air sensor: no event loop for engine events; dropping %s", kind)
+            return
         try:
-            if loop is not None and not loop.is_closed():
-                loop.call_soon_threadsafe(self._air_on_loop, kind)
-            else:
-                self._air_on_loop(kind)
-        except Exception:
-            logger.debug("air sensor: engine event %s not delivered", kind, exc_info=True)
+            loop.call_soon_threadsafe(self._air_on_loop, kind)
+        except RuntimeError:  # the loop closed in between
+            logger.debug("air sensor: engine event %s dropped (loop closed)", kind)
 
     def _air_on_loop(self, kind: Any) -> None:
         sensor = self._air_sensor
-        if sensor is None:
+        if sensor is None or self._playout_fell_back:
             return
         try:
             sensor.on_engine_event(kind)
