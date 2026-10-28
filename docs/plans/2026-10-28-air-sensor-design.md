@@ -895,7 +895,8 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
 - **Switch off:** explicit tests that with `EXPERIMENTAL_AIR_SENSOR=false` the existing AVRCP
   monitor path runs (its tests unchanged), no hub thread starts, no tap is attached, no air command
   is sent, the daemon never publishes the status key, and `DeviceStatus.air_sensor` and the API's
-  `timing.air_sensor` are `null`.
+  `timing.air_sensor` are `null`. Air keys whose value is `null` are still accepted with the switch
+  off: they carry nothing (null only, like the API's `null`; final review M-7, accepted).
 - **Stand validation** (Task A17; HAOS stand, ENEBY20 on hci1, the local reference bridge in
   `off`, headset microphone, the coherent click estimator, the gate experiment's protocol;
   `PLAYOUT_SYNC=measure`, `EXPERIMENTAL_AIR_SENSOR=true`; a `btmon -w` capture runs alongside):
