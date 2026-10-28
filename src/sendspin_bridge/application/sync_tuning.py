@@ -636,8 +636,8 @@ class AirMemberFold:
     """Both folds of one member's solo."""
 
     air: AirFoldResult | None  # None when the fold worker failed (fold_failed)
-    written_phase_ms: float | None  # φ_T, None when the written fold found no clicks
-    written_reason: str | None
+    written_phase_ms: float | None  # φ_T, None when the written fold found no clicks or failed
+    written_reason: str | None  # no_written_clicks, or fold_failed (refused or unanswered request)
     delay_report_ms: float | None  # the speaker's A2DP delay report at the time (a hint)
     stream_codec: str | None = None  # the codec the speaker played then (daemon snapshot, else connection)
 
@@ -716,7 +716,8 @@ def _status_number(client: Any, *path: str) -> float | None:
 
 def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) -> tuple[float | None, str | None]:
     """Ask the daemon for the written click phase over ``WRITTEN_FOLD_SPAN_S`` ending at *to_us* and
-    wait (this worker thread) for its answer in ``air_sensor.fold``."""
+    wait (this worker thread) for its answer in ``air_sensor.fold``. A refused request or no answer
+    in time is ``fold_failed``; an answer without clicks is ``no_written_clicks``."""
     from sendspin_bridge.services.ipc.commands import AirFold
 
     fold_id = uuid.uuid4().hex
@@ -725,8 +726,12 @@ def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) ->
     async def _send() -> bool:
         return bool(client.send_air_command(cmd))
 
-    if not asyncio.run_coroutine_threadsafe(_send(), loop).result(timeout=_AIR_REPLY_S):
-        return None, "no_written_clicks"
+    try:
+        sent = asyncio.run_coroutine_threadsafe(_send(), loop).result(timeout=_AIR_REPLY_S)
+    except TimeoutError:
+        sent = False
+    if not sent:
+        return None, "fold_failed"
     deadline = time.monotonic() + _AIR_REPLY_S
     while True:
         info = client.status.get("air_sensor")
@@ -737,7 +742,7 @@ def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) ->
                 return float(phase), None
             return None, "no_written_clicks"
         if time.monotonic() >= deadline:
-            return None, "no_written_clicks"
+            return None, "fold_failed"
         time.sleep(0.05)
 
 
@@ -947,7 +952,7 @@ def _air_candidate(
     if air.phase_ms is None or not air.found:
         return out("no_air_clicks")
     if fold.written_phase_ms is None:
-        return out("no_written_clicks")
+        return out("fold_failed" if fold.written_reason == "fold_failed" else "no_written_clicks")
     lag = unwrap_lag_ms(speaker, ref)
     placement = unwrap_lag_ms(air.phase_ms, fold.written_phase_ms)  # into ±5 s of the 10 s cycle
     return out(None, lag, placement)

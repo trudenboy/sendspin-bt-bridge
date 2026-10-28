@@ -2476,7 +2476,7 @@ export interface components {
             rate: number | null;
             /**
              * Reason
-             * @description Why there is no value, the first that applies: not_effective (the air sensor was not on for this speaker), no_reference (the session has no reference member), not_measured (the speaker's or the reference's measurement is not ok), fold_failed (the air fold could not be completed), not_sbc, no_air_frames (no SBC frame in its span), air_epoch_changed, no_air_clicks, no_written_clicks.
+             * @description Why there is no value, the first that applies: not_effective (the air sensor was not on for this speaker), no_reference (the session has no reference member), not_measured (the speaker's or the reference's measurement is not ok), fold_failed (the air fold or the written fold could not be completed), not_sbc, no_air_frames (no SBC frame in its span), air_epoch_changed, no_air_clicks, no_written_clicks.
              */
             reason: ("not_effective" | "no_reference" | "not_measured" | "not_sbc" | "air_epoch_changed" | "no_air_clicks" | "no_written_clicks" | "fold_failed" | "no_air_frames") | null;
         };

@@ -600,3 +600,26 @@ def test_picking_the_reference_publishes_an_event(sync_air_env):
     assert len(env.events) > count
     assert env.events[-1]["reference"] == "kiosk"
     assert _eneby(env.events[-1])["latency_ms"] == pytest.approx(203.0)
+
+
+# -- the written fold's failures are fold_failed, not no_written_clicks ----------------------------
+
+
+def test_a_refused_written_fold_request_is_fold_failed(sync_air_env, monkeypatch):
+    env = sync_air_env(**BASE)
+    monkeypatch.setattr(env.bridge, "send_air_command", lambda _cmd: False)  # the daemon's stdin refused it
+    c = _eneby(env.record_and_get_session())
+    assert not c["eligible"] and c["reason"] == "fold_failed"
+
+
+def test_a_written_fold_without_a_reply_is_fold_failed(sync_air_env, monkeypatch):
+    env = sync_air_env(**BASE)
+    monkeypatch.setattr(uc, "_AIR_REPLY_S", 0.05)
+    monkeypatch.setattr(env.bridge, "send_air_command", lambda _cmd: True)  # sent, never answered
+    c = _eneby(env.record_and_get_session())
+    assert not c["eligible"] and c["reason"] == "fold_failed"
+
+
+def test_a_written_fold_that_found_no_clicks_stays_no_written_clicks(sync_air_env):
+    c = _eneby(sync_air_env(**{**BASE, "sched_phase": {"eneby": None}}).record_and_get_session())
+    assert c["reason"] == "no_written_clicks"
