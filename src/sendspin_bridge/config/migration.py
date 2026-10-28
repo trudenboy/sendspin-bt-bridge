@@ -567,6 +567,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "RSSI_BADGE",
         "COMPENSATE_OUTPUT_LATENCY",
         "PLAYOUT_DIAG",
+        "EXPERIMENTAL_AIR_SENSOR",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
 

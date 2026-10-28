@@ -2724,6 +2724,12 @@ export interface components {
              */
             EXPERIMENTAL_ADAPTER_AUTO_RECOVERY?: boolean | null;
             /**
+             * Experimental Air Sensor
+             * @description Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback.
+             * @default false
+             */
+            EXPERIMENTAL_AIR_SENSOR?: boolean | null;
+            /**
              * Experimental Pa Module Reload
              * @description Experimental: reload PulseAudio module-bluez5-discover as a last resort when bluez_card.* fails to appear. Disrupts all active BT audio on the bridge.
              * @default false

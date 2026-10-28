@@ -116,6 +116,9 @@ DEFAULT_CONFIG = {
     "PULSE_LATENCY_MSEC": 600,
     # BT playout sync engine (see the playout sync spec): off = 3.1.0-beta.5 behaviour.
     "PLAYOUT_SYNC": "off",
+    # Air sensor (docs/plans/2026-10-28-air-sensor-design.md): measures when audio leaves over the air;
+    # never changes playback.  Needs PLAYOUT_SYNC=measure; a change needs a bridge restart.
+    "EXPERIMENTAL_AIR_SENSOR": False,
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
     # v2.70.0-rc.2 (#263) — was 0 (unlimited) prior; new default is 5 so
@@ -636,6 +639,28 @@ def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]
     if player_cfg.get("playout_sync_enabled") is False:
         return "off"
     return str(cfg.get("PLAYOUT_SYNC", "off"))
+
+
+def air_sensor_effective(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> tuple[bool, str | None]:
+    """Whether the air sensor runs for one player, and if not, why.
+
+    ``(True, None)`` when ``EXPERIMENTAL_AIR_SENSOR`` is on, the player's effective playout mode is
+    ``measure`` and its backend type is ``bluetooth_a2dp``; otherwise ``(False, reason)`` with reason one of
+    ``switch_off``, ``needs_measure``, ``loop_not_supported_yet``, ``not_bluetooth``.
+    """
+    from sendspin_bridge.config.players import BLUETOOTH
+
+    if not cfg.get("EXPERIMENTAL_AIR_SENSOR", False):
+        return False, "switch_off"
+    mode = effective_playout_mode(player_cfg, cfg)
+    if mode == "loop":
+        return False, "loop_not_supported_yet"
+    if mode != "measure":
+        return False, "needs_measure"
+    backend = player_cfg.get("backend")
+    if not isinstance(backend, dict) or backend.get("type") != BLUETOOTH:
+        return False, "not_bluetooth"
+    return True, None
 
 
 def load_config() -> dict:

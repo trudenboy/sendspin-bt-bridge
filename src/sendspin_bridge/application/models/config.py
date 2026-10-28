@@ -15,7 +15,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from sendspin_bridge.config.players import Player
 
@@ -215,6 +215,10 @@ class BridgeConfig(BaseModel):
     PLAYOUT_SYNC: Literal["off", "measure", "loop"] | None = "off"
     """
     Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it.
+    """
+    EXPERIMENTAL_AIR_SENSOR: StrictBool | None = False
+    """
+    Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback.
     """
     PREFER_SBC_CODEC: bool | None = False
     """

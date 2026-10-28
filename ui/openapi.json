@@ -1007,6 +1007,19 @@
             "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, power-cycle the adapter through Bluetooth MGMT/HCI and optionally issue a USB reset if the power cycle fails. Disruptive to every device on that controller. Requires Linux Bluetooth capabilities; USB escalation additionally requires /dev/bus/usb access.",
             "title": "Experimental Adapter Auto Recovery"
           },
+          "EXPERIMENTAL_AIR_SENSOR": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback.",
+            "title": "Experimental Air Sensor"
+          },
           "EXPERIMENTAL_PA_MODULE_RELOAD": {
             "anyOf": [
               {

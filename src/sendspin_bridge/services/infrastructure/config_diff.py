@@ -120,6 +120,8 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
         "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
         "EXPERIMENTAL_PA_MODULE_RELOAD",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
+        # Decides at start which monitor path owns the HCI socket (R-17).
+        "EXPERIMENTAL_AIR_SENSOR",
     }
 )
 

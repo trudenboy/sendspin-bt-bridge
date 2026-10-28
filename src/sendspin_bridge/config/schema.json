@@ -131,6 +131,11 @@
       "default": "off",
       "description": "Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it."
     },
+    "EXPERIMENTAL_AIR_SENSOR": {
+      "type": "boolean",
+      "default": false,
+      "description": "Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback."
+    },
     "PREFER_SBC_CODEC": {
       "type": "boolean",
       "default": false,
