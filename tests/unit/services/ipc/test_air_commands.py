@@ -106,16 +106,17 @@ def test_envelope_rejects_out_of_range(key, value):
 def test_source_and_calibration_and_fold():
     s = dec(SOURCE)
     assert isinstance(s, AirSource) and s.reason == "codec:aac"
-    assert dec({"cmd": "set_air_calibration", "latency_ms": 9999}) == SetAirCalibration(latency_ms=2000.0)
+    assert dec({"cmd": "set_air_calibration", "v": 1, "latency_ms": 9999}) == SetAirCalibration(latency_ms=2000.0)
     assert encode_command(SetAirCalibration(latency_ms=203.0)) == {
         "cmd": "set_air_calibration",
+        "v": 1,
         "latency_ms": 203.0,
         "protocol_version": 2,
     }
-    assert dec({"cmd": "set_air_calibration", "latency_ms": None}) == SetAirCalibration(latency_ms=None)
+    assert dec({"cmd": "set_air_calibration", "v": 1, "latency_ms": None}) == SetAirCalibration(latency_ms=None)
     with pytest.raises(InvalidCommand):
-        dec({"cmd": "air_fold", "id": "a", "from_us": 0.0, "to_us": 31e6})  # > 30 s span
-    assert isinstance(dec({"cmd": "air_fold", "id": "a" * 8, "from_us": 0.0, "to_us": 10e6}), AirFold)
+        dec({"cmd": "air_fold", "v": 1, "id": "a", "from_us": 0.0, "to_us": 31e6})  # > 30 s span
+    assert isinstance(dec({"cmd": "air_fold", "v": 1, "id": "a" * 8, "from_us": 0.0, "to_us": 10e6}), AirFold)
 
 
 def test_source_reason_is_bounded():
@@ -158,13 +159,21 @@ def test_source_encodes_the_full_wire_message_and_round_trips():
 def test_fold_encodes_the_full_wire_message_and_round_trips():
     cmd = AirFold(id="c1f3a9", from_us=1_000.0, to_us=12_001_000.0)
     wire = encode_command(cmd)
-    assert wire == {"cmd": "air_fold", "id": "c1f3a9", "from_us": 1_000.0, "to_us": 12_001_000.0, "protocol_version": 2}
+    assert wire == {
+        "cmd": "air_fold",
+        "v": 1,
+        "id": "c1f3a9",
+        "from_us": 1_000.0,
+        "to_us": 12_001_000.0,
+        "protocol_version": 2,
+    }
     assert dec(wire) == cmd
 
 
 def test_null_calibration_encodes_null():
     assert encode_command(SetAirCalibration(latency_ms=None)) == {
         "cmd": "set_air_calibration",
+        "v": 1,
         "latency_ms": None,
         "protocol_version": 2,
     }
@@ -256,7 +265,9 @@ def test_other_commands_ignore_the_clock():
     def _boom():
         raise AssertionError("clock read for a non-envelope command")
 
-    assert decode_command({"cmd": "set_air_calibration", "latency_ms": 1}, now_raw_us=_boom) == SetAirCalibration(1.0)
+    assert decode_command(
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": 1}, now_raw_us=_boom
+    ) == SetAirCalibration(1.0)
 
 
 @pytest.mark.parametrize(
@@ -312,11 +323,11 @@ def test_source_accepts_nulls_where_allowed():
 @pytest.mark.parametrize(
     "msg",
     [
-        {"cmd": "set_air_calibration"},
-        {"cmd": "set_air_calibration", "latency_ms": "200"},
-        {"cmd": "set_air_calibration", "latency_ms": True},
-        {"cmd": "set_air_calibration", "latency_ms": float("nan")},
-        {"cmd": "set_air_calibration", "latency_ms": float("inf")},
+        {"cmd": "set_air_calibration", "v": 1},
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": "200"},
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": True},
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": float("nan")},
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": float("inf")},
     ],
 )
 def test_calibration_rejects_bad_values(msg):
@@ -325,21 +336,21 @@ def test_calibration_rejects_bad_values(msg):
 
 
 def test_calibration_clamps_negative_to_zero():
-    assert dec({"cmd": "set_air_calibration", "latency_ms": -5}) == SetAirCalibration(latency_ms=0.0)
+    assert dec({"cmd": "set_air_calibration", "v": 1, "latency_ms": -5}) == SetAirCalibration(latency_ms=0.0)
 
 
 @pytest.mark.parametrize(
     "msg",
     [
-        {"cmd": "air_fold", "id": "", "from_us": 0.0, "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a" * 65, "from_us": 0.0, "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a b", "from_us": 0.0, "to_us": 1e6},
-        {"cmd": "air_fold", "id": 7, "from_us": 0.0, "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a", "from_us": 2e6, "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a", "from_us": float("nan"), "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a", "from_us": True, "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a", "from_us": -1.0, "to_us": 1e6},
-        {"cmd": "air_fold", "id": "a", "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "", "from_us": 0.0, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a" * 65, "from_us": 0.0, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a b", "from_us": 0.0, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": 7, "from_us": 0.0, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a", "from_us": 2e6, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a", "from_us": float("nan"), "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a", "from_us": True, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a", "from_us": -1.0, "to_us": 1e6},
+        {"cmd": "air_fold", "v": 1, "id": "a", "to_us": 1e6},
     ],
 )
 def test_fold_rejects_bad_values(msg):
@@ -452,8 +463,8 @@ async def test_daemon_hands_valid_commands_to_the_sink(daemon_stdin_harness):
     await h.send(
         _envelope_now(),
         SOURCE,
-        {"cmd": "set_air_calibration", "latency_ms": 203.4},
-        {"cmd": "air_fold", "id": "c1f3", "from_us": 0.0, "to_us": 12e6},
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": 203.4},
+        {"cmd": "air_fold", "v": 1, "id": "c1f3", "from_us": 0.0, "to_us": 12e6},
     )
     assert [type(c) for c in sink.received] == [AirEnvelope, AirSource, SetAirCalibration, AirFold]
     assert h.daemon.air_counters["accepted"] == 4 and h.daemon.air_counters["ignored"] == 0
@@ -464,7 +475,7 @@ async def test_daemon_drops_and_counts_invalid_air_commands_without_errors(daemo
     sink = _RecordingSink()
     h = await daemon_stdin_harness(air_sensor=True, sink=sink)
     caplog.set_level(logging.DEBUG)
-    bad = [{**GOOD, "e": [999]}, {**GOOD, "timestamp": "SECRET-RAW"}, {"cmd": "air_fold", "id": "x"}] * 10
+    bad = [{**GOOD, "e": [999]}, {**GOOD, "timestamp": "SECRET-RAW"}, {"cmd": "air_fold", "v": 1, "id": "x"}] * 10
     await h.send(*bad)
     assert sink.received == [] and h.errors == []
     assert h.daemon.air_counters["invalid"] == 30
@@ -532,3 +543,113 @@ async def test_air_commands_with_a_foreign_protocol_version_log_nothing_raw(daem
         await h.send({**GOOD, "protocol_version": "RAW-PV"})
     assert h.daemon.air_counters["ignored"] == 20
     assert all("RAW-PV" not in r.getMessage() for r in caplog.records)
+
+
+# ── Fix round 1: uniform v, overflow, stdin hardening ────────────────────────
+
+
+@pytest.mark.parametrize(
+    "msg",
+    [
+        {"cmd": "set_air_calibration", "latency_ms": 200.0},  # v missing
+        {"cmd": "set_air_calibration", "v": 2, "latency_ms": 200.0},
+        {"cmd": "set_air_calibration", "v": True, "latency_ms": 200.0},
+        {"cmd": "air_fold", "id": "a", "from_us": 0.0, "to_us": 1e6},  # v missing
+        {"cmd": "air_fold", "v": 2, "id": "a", "from_us": 0.0, "to_us": 1e6},
+    ],
+)
+def test_calibration_and_fold_check_the_payload_version(msg):
+    with pytest.raises(InvalidCommand):
+        dec(msg)
+
+
+HUGE = 10**400
+
+
+@pytest.mark.parametrize(
+    "msg",
+    [
+        {"cmd": "set_air_calibration", "v": 1, "latency_ms": HUGE},
+        {"cmd": "air_fold", "v": 1, "id": "a", "from_us": 0.0, "to_us": HUGE},
+        {"cmd": "air_fold", "v": 1, "id": "a", "from_us": HUGE, "to_us": 1e6},
+        {**GOOD, "t0_us": HUGE},
+        {**GOOD, "u0_us": HUGE},
+        {**GOOD, "frame_us": HUGE},
+        {**GOOD, "complete_lag_us": HUGE},
+        {**GOOD, "complete_lag_us": -HUGE},
+    ],
+)
+def test_huge_integers_are_invalid_not_overflow(msg):
+    with pytest.raises(InvalidCommand):
+        dec(msg)
+
+
+def test_huge_integers_from_the_wire_are_invalid():
+    # json.loads turns a 400-digit literal into an int; it must not leak OverflowError.
+    wire = json.dumps(GOOD).replace('"u0_us": 371519.3', '"u0_us": 1' + "0" * 400)
+    with pytest.raises(InvalidCommand):
+        dec(json.loads(wire))
+
+
+async def _feed_raw(data: bytes, daemon_ref: list) -> None:
+    async def _fake_connect_read_pipe(protocol_factory, pipe):
+        protocol = protocol_factory()
+        protocol.connection_made(MagicMock())
+        protocol.data_received(data)
+        protocol.eof_received()
+
+    loop = asyncio.get_running_loop()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(loop, "connect_read_pipe", _fake_connect_read_pipe)
+        await asyncio.wait_for(daemon_process._read_commands(daemon_ref, asyncio.Event()), timeout=5.0)
+
+
+def _volume_daemon(tmp_path):
+    args = DaemonArgs(client_id="air-id", client_name="Speaker", identity_path=str(tmp_path / "identity.key"))
+    daemon = BridgeDaemon(args, {"volume": 50}, None)
+    daemon._notify = MagicMock()
+    daemon.apply_bridge_volume = MagicMock()
+    return daemon
+
+
+SET_VOLUME = (json.dumps({"cmd": "set_volume", "value": 30, "protocol_version": 2}) + "\n").encode()
+
+
+async def test_an_overlong_line_is_dropped_and_the_reader_keeps_going(tmp_path, caplog):
+    daemon = _volume_daemon(tmp_path)
+    before = daemon_process.stdin_drop_counters["overlong"]
+    overlong = (json.dumps({**GOOD, "pad": "P" * 70_000}) + "\n").encode()
+    await _feed_raw(overlong + SET_VOLUME, [daemon])
+    assert daemon._bridge_status["volume"] == 30
+    assert daemon_process.stdin_drop_counters["overlong"] == before + 1
+    assert all("PPPP" not in r.getMessage() for r in caplog.records)
+
+
+async def test_deeply_nested_json_is_dropped_and_the_reader_keeps_going(tmp_path):
+    daemon = _volume_daemon(tmp_path)
+    nested = ("[" * 30_000 + "]" * 30_000 + "\n").encode()
+    await _feed_raw(nested + SET_VOLUME, [daemon])
+    assert daemon._bridge_status["volume"] == 30
+
+
+async def test_a_recursion_error_while_parsing_is_contained(tmp_path, monkeypatch):
+    # Interpreters differ in where json gives up on nesting; force the error so this runs everywhere.
+    daemon = _volume_daemon(tmp_path)
+    real_loads = json.loads
+
+    def _loads(text, *a, **k):
+        if text.startswith("[["):
+            raise RecursionError("maximum recursion depth exceeded")
+        return real_loads(text, *a, **k)
+
+    monkeypatch.setattr(daemon_process.json, "loads", _loads)
+    before = daemon_process.stdin_drop_counters["too_deep"]
+    await _feed_raw(b"[[1]]\n" + SET_VOLUME, [daemon])
+    assert daemon._bridge_status["volume"] == 30
+    assert daemon_process.stdin_drop_counters["too_deep"] == before + 1
+
+
+async def test_air_commands_before_the_daemon_exists_are_counted():
+    before = daemon_process.stdin_drop_counters["air_no_daemon"]
+    await _feed_raw((json.dumps(GOOD) + "\n").encode() * 3, [])
+    assert daemon_process.stdin_drop_counters["air_no_daemon"] == before + 3

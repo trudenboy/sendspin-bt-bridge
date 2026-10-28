@@ -294,9 +294,15 @@ def _air_float(
     value = _field(message, name, key)
     if value is None and nullable:
         return None
-    if type(value) not in (int, float) or not math.isfinite(value) or not low <= value <= high:
+    if type(value) not in (int, float):
         raise InvalidCommand(f"{name} got a bad {key!r}")
-    return float(value)
+    try:
+        number = float(value)  # a JSON integer can be too large for a float
+    except OverflowError:
+        raise InvalidCommand(f"{name} got a bad {key!r}") from None
+    if not math.isfinite(number) or not low <= number <= high:
+        raise InvalidCommand(f"{name} got a bad {key!r}")
+    return number
 
 
 def _air_bool(message: dict, name: str, key: str) -> bool:
@@ -306,9 +312,16 @@ def _air_bool(message: dict, name: str, key: str) -> bool:
     return value
 
 
-def _air_choice(message: dict, name: str, key: str, choices: frozenset[Any]) -> Any:
+def _air_str_choice(message: dict, name: str, key: str, choices: frozenset[str]) -> str:
     value = _field(message, name, key)
-    if type(value) not in (str, int) or value not in choices:
+    if type(value) is not str or value not in choices:
+        raise InvalidCommand(f"{name} got a bad {key!r}")
+    return value
+
+
+def _air_int_choice(message: dict, name: str, key: str, choices: frozenset[int]) -> int:
+    value = _field(message, name, key)
+    if type(value) is not int or value not in choices:
         raise InvalidCommand(f"{name} got a bad {key!r}")
     return value
 
@@ -352,12 +365,10 @@ def _decode_air_envelope(message: dict, now_raw_us: Callable[[], float] | None) 
     now = (now_raw_us or _raw_now_us)()
     if abs(t0_us - now) > AIR_T0_WINDOW_US:
         raise InvalidCommand(f"{name} got a bad 't0_us'")
-    timestamp = _air_choice(message, name, "timestamp", AIR_TIMESTAMPS)
-    rate = _air_choice(message, name, "rate", AIR_RATES)
-    subbands = _air_choice(message, name, "subbands", AIR_SUBBANDS)
-    blocks = _air_choice(message, name, "blocks", AIR_BLOCKS)
-    if type(rate) is not int or type(subbands) is not int or type(blocks) is not int:
-        raise InvalidCommand(f"{name} got a bad SBC parameter")
+    timestamp = _air_str_choice(message, name, "timestamp", AIR_TIMESTAMPS)
+    rate = _air_int_choice(message, name, "rate", AIR_RATES)
+    subbands = _air_int_choice(message, name, "subbands", AIR_SUBBANDS)
+    blocks = _air_int_choice(message, name, "blocks", AIR_BLOCKS)
     bands = _air_int_list(message, name, "bands", 0, subbands - 1, subbands)
     if len(set(bands)) != len(bands):
         raise InvalidCommand(f"{name} got a bad 'bands'")
@@ -384,7 +395,7 @@ def _decode_air_envelope(message: dict, now_raw_us: Callable[[], float] | None) 
 def _decode_air_source(message: dict) -> AirSource:
     name = "air_source"
     _air_version(message, name)
-    state = _air_choice(message, name, "state", AIR_STATES)
+    state = _air_str_choice(message, name, "state", AIR_STATES)
     reason = _air_text(message, name, "reason", AIR_REASON_MAX)
     codec = _air_text(message, name, "codec", AIR_CODEC_MAX)
     adapter = _field(message, name, "adapter")
@@ -404,6 +415,7 @@ def _decode_air_source(message: dict) -> AirSource:
 
 
 def _decode_set_air_calibration(message: dict) -> SetAirCalibration:
+    _air_version(message, "set_air_calibration")
     latency = _air_float(message, "set_air_calibration", "latency_ms", nullable=True)
     if latency is None:
         return SetAirCalibration(latency_ms=None)
@@ -413,6 +425,7 @@ def _decode_set_air_calibration(message: dict) -> SetAirCalibration:
 
 def _decode_air_fold(message: dict) -> AirFold:
     name = "air_fold"
+    _air_version(message, name)
     fold_id = _field(message, name, "id")
     if type(fold_id) is not str or not AIR_FOLD_ID_RE.fullmatch(fold_id):
         raise InvalidCommand(f"{name} got a bad 'id'")
@@ -568,8 +581,10 @@ def encode_command(command: Command) -> dict:
             ipc_dropped=command.ipc_dropped,
         )
     if isinstance(command, SetAirCalibration):
-        return build_command_envelope("set_air_calibration", latency_ms=command.latency_ms)
+        return build_command_envelope("set_air_calibration", v=AIR_ENVELOPE_VERSION, latency_ms=command.latency_ms)
     if isinstance(command, AirFold):
-        return build_command_envelope("air_fold", id=command.id, from_us=command.from_us, to_us=command.to_us)
+        return build_command_envelope(
+            "air_fold", v=AIR_ENVELOPE_VERSION, id=command.id, from_us=command.from_us, to_us=command.to_us
+        )
 
     raise InvalidCommand(f"cannot encode {type(command).__name__}")

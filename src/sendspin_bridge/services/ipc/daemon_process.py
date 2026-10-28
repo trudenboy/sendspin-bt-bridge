@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
 from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
 from sendspin_bridge.services.ipc.commands import (
     AIR_COMMAND_NAMES,
@@ -495,6 +496,16 @@ async def _startup_sink_routing_watcher(
         was_streaming = is_streaming
 
 
+#: Stdin lines dropped before they reached a daemon, by kind (never their content).
+stdin_drop_counters: dict[str, int] = {"overlong": 0, "too_deep": 0, "air_no_daemon": 0}
+_stdin_drop_log = RateLimitedLog(logger, clock=time.monotonic)
+
+
+def _note_stdin_drop(kind: str, message: str) -> None:
+    stdin_drop_counters[kind] += 1
+    _stdin_drop_log.warning(kind, "%s (%d so far; one warning per 10 min)", message, stdin_drop_counters[kind])
+
+
 def _dispatch_air_command(daemon: Any, raw: dict) -> None:
     """Decode one air command and hand it to the daemon; nothing raised, nothing raw logged.
 
@@ -504,6 +515,8 @@ def _dispatch_air_command(daemon: Any, raw: dict) -> None:
     A daemon without an air sensor ignores the verbs without decoding them.
     """
     if daemon is None:
+        # The parent gates air traffic on the daemon's ``accepts``; this is a race at startup.
+        stdin_drop_counters["air_no_daemon"] += 1
         return
     if not daemon.air_accepts():
         daemon.air_ignore()
@@ -536,10 +549,18 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             line = await asyncio.wait_for(reader.readline(), timeout=1.0)
         except TimeoutError:
             continue
+        except ValueError:
+            # A line over the StreamReader limit (64 KiB): the reader has already
+            # discarded it; drop it and keep reading rather than end the loop.
+            _note_stdin_drop("overlong", "Dropped an IPC command line over the 64 KiB limit")
+            continue
         if not line:
             break
         try:
             cmd = parse_command_envelope(json.loads(line.decode().strip()))
+        except RecursionError:
+            _note_stdin_drop("too_deep", "Dropped an IPC command nested too deeply to parse")
+            continue
         except (json.JSONDecodeError, ValueError):
             continue
         if cmd is None:
