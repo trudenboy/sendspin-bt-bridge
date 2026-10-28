@@ -79,6 +79,8 @@ from sendspin_bridge.services.infrastructure.config_validation import (
 )
 from sendspin_bridge.services.infrastructure.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
 from sendspin_bridge.services.ipc.commands import (
+    AIR_ENVELOPE_VERSION,
+    AirCommand,
     Command,
     Reconnect,
     SetMinBufferMs,
@@ -2426,6 +2428,41 @@ class SendspinClient:
         """
         payload = encode_command(cmd) if not isinstance(cmd, dict) else cmd
         await self._command_service.send(self._daemon_proc, payload)
+
+    #: Above this many bytes buffered on the daemon's stdin an air command is skipped, not queued.
+    AIR_WRITE_BUFFER_LIMIT = 64 * 1024
+
+    @property
+    def air_accepts(self) -> tuple[int, ...]:
+        """Air payload versions the daemon advertised in ``status.air_sensor.accepts`` (R-6); ``()`` if none."""
+        info = self.status.get("air_sensor")
+        accepts = info.get("accepts") if isinstance(info, dict) else None
+        if not isinstance(accepts, list):
+            return ()
+        return tuple(v for v in accepts if type(v) is int)
+
+    def send_air_command(self, cmd: AirCommand) -> bool:
+        """Write one air command to the daemon's stdin without waiting; ``False`` when not written.
+
+        Not written when the daemon has not advertised the air payload version, is not running,
+        or its stdin transport holds more than ``AIR_WRITE_BUFFER_LIMIT`` bytes (the caller keeps
+        the command and retries next round instead of awaiting ``drain()``).
+        """
+        if AIR_ENVELOPE_VERSION not in self.air_accepts:
+            return False
+        proc = self._daemon_proc
+        stdin = proc.stdin if proc is not None and proc.returncode is None else None
+        transport = getattr(stdin, "transport", None)
+        if stdin is None or transport is None:
+            return False
+        try:
+            if transport.is_closing() or transport.get_write_buffer_size() > self.AIR_WRITE_BUFFER_LIMIT:
+                return False
+            stdin.write((json.dumps(encode_command(cmd)) + "\n").encode())
+        except Exception as exc:
+            logger.debug("[%s] air command write failed: %s", self.player_name, type(exc).__name__)
+            return False
+        return True
 
     async def send_reconnect(self) -> None:
         """Trigger the sendspin subprocess to reconnect to MA server.
