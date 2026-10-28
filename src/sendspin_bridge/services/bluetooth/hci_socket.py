@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ctypes
 import socket
+import struct
 import sys
 
 # AF_BLUETOOTH constants — hardcoded so imports don't fail on macOS dev
@@ -36,6 +37,33 @@ HCI_CHANNEL_USER: int = 1  # exclusive (steals from bluetoothd) — unused here
 HCI_CHANNEL_MONITOR: int = 2  # passive read-only passthrough of HCI traffic
 HCI_CHANNEL_CONTROL: int = 3  # mgmt API — used by btsocket.btmgmt_socket
 HCI_DEV_NONE: int = 0xFFFF
+
+# HCI_CHANNEL_MONITOR packet opcodes (include/net/bluetooth/hci_mon.h). The
+# same values are the low 16 bits of a btsnoop record's flags for the
+# monitor datalink (2001) that ``btmon -w`` writes.
+MONITOR_NEW_INDEX: int = 0
+MONITOR_DEL_INDEX: int = 1
+MONITOR_COMMAND_PKT: int = 2
+MONITOR_EVENT_PKT: int = 3
+MONITOR_ACL_TX_PKT: int = 4
+MONITOR_ACL_RX_PKT: int = 5
+MONITOR_HEADER_LEN: int = 6  # struct hci_mon_hdr { __le16 opcode; __le16 index; __le16 len; }
+
+
+def parse_monitor_packet(data: bytes) -> tuple[int, int, bytes] | None:
+    """Split one HCI_CHANNEL_MONITOR read into ``(opcode, index, payload)``.
+
+    Returns ``None`` when the header is short or the payload is shorter
+    than the header's ``len`` field (a truncated read); trailing bytes
+    beyond ``len`` are ignored.
+    """
+    if len(data) < MONITOR_HEADER_LEN:
+        return None
+    opcode, index, length = struct.unpack_from("<HHH", data, 0)
+    end = MONITOR_HEADER_LEN + length
+    if len(data) < end:
+        return None
+    return opcode, index, bytes(data[MONITOR_HEADER_LEN:end])
 
 
 # struct sockaddr_hci { sa_family_t hci_family; uint16_t hci_dev;
