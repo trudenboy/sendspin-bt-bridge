@@ -20,6 +20,7 @@ Air batches arrive every ``BATCH_US`` with whatever went over the air until then
 from __future__ import annotations
 
 import math
+import sys
 from array import array
 from functools import lru_cache
 
@@ -773,3 +774,14 @@ async def test_the_written_look_back_is_credited_back_like_the_comb():
     assert lookback_delay_us(44100) == pytest.approx(36 / 44100 * 1e6)
     assert lookback_delay_us(48000) == pytest.approx(36 / 48000 * 1e6)
     assert enc_delay_us(8, 44100) - lookback_delay_us(44100) == pytest.approx(0.0, abs=1e-9)
+
+
+async def test_a_half_cell_lag_keeps_the_sub_cell_bias_within_bounds(air_world, monkeypatch, record_property):
+    """At a fractional true lag the parabolic refinement pulls toward the whole cell: about 0.3 ms
+    on this fixture at half a cell (0.002 ms at a whole cell). Kept visible with its own bound."""
+    monkeypatch.setattr(sys.modules[__name__], "FIRST_MEDIA", FIRST_MEDIA - FRAME_SAMPLES // 2)
+    w = air_world(H_true_ms=0.0)
+    await w.run(seconds=10)
+    h = w.sensor.snapshot()["host_placement_ms"]
+    record_property("half_cell_bias_ms", h)
+    assert h is not None and abs(h) <= 0.5
