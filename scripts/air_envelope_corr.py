@@ -320,8 +320,8 @@ class LiveWindow:
 @dataclass(frozen=True, slots=True)
 class ClockFit:
     offset_s: float  # capture clock (btsnoop, REALTIME) minus RAW, in seconds
-    residual_us: float  # median |live t_mid - nearest live-tracker air time| at that offset
-    tied: tuple[float, ...]  # every offset in the search span that fits as well (whole cells apart)
+    fit_median_us: float  # median |live t_mid - nearest live-tracker air time| at that offset
+    tied: tuple[float, ...]  # every offset in the search span that fits as well (whole cells apart), refined
 
 
 _WINDOW_RE = re.compile(
@@ -379,9 +379,12 @@ def fit_clock_offset(
     """The capture-clock offset that puts every live ``t_mid`` on the live tracker's air times.
 
     The tracker run offline on the capture reproduces the live air-time lattice (same packets, same
-    kernel stamps, same anchor), so at the right offset the live ``t_mid`` land on it to µs. Offsets
-    whole cells apart fit about equally well: the one nearest ``coarse_s`` is taken (a whole-cell
-    shift moves the matched cell and its offline air time together, so ΔH hardly depends on it).
+    kernel stamps, same anchor), so at the right offset the live ``t_mid`` land on it to µs. The
+    lattice search starts from one pivot window; each candidate is then refined on the median over
+    all windows (:func:`_refine`). Offsets whole cells apart fit about equally well: the one nearest
+    ``coarse_s`` is taken (a whole-cell shift moves the matched cell and its offline air time
+    together, so ΔH hardly depends on it). A constant error on every window is absorbed into the
+    offset and is not visible here.
     """
     keys = sorted(times)
     tarr = [times[k] for k in keys]
@@ -401,8 +404,17 @@ def fit_clock_offset(
     if not scored:
         raise ValueError("no clock offset puts the live windows inside the capture")
     best = min(s for s, _ in scored)
-    tied = tuple(o for s, o in scored if s <= best + TIE_S)
-    return ClockFit(min(tied, key=lambda o: abs(o - coarse_s)), best * 1e6, tied)
+    tied = tuple(_refine(windows, tarr, o) for s, o in scored if s <= best + TIE_S)
+    offset = min(tied, key=lambda o: abs(o - coarse_s))
+    res = [abs(tarr[_nearest(tarr, x)] - x) for w in windows if lo <= (x := w.t_mid_us / 1e6 + offset) <= hi]
+    return ClockFit(offset, statistics.median(res) * 1e6, tied)
+
+
+def _refine(windows: Sequence[LiveWindow], tarr: Sequence[float], offset: float) -> float:
+    """Shift a lattice offset by the median signed residual over **every** window inside the capture,
+    so one wrong window (the search's pivot included) cannot carry the offset with it."""
+    res = [x - tarr[_nearest(tarr, x)] for w in windows if tarr[0] <= (x := w.t_mid_us / 1e6 + offset) <= tarr[-1]]
+    return offset - statistics.median(res) if res else offset
 
 
 def offline_air_time(meta: CellMeta, cell: int, cache: dict[int, float | None] | None = None) -> float | None:
@@ -514,10 +526,13 @@ def run_offline_h_windows(args: argparse.Namespace) -> int:
     st = dh_summary(rows)
     step = max(1, len(fit.tied) // 50)
     worst = max(dh_summary(compare_at_offset(windows, times, meta, o))["p95_abs_ms"] for o in fit.tied[::step])
-    verdict = "PASS" if st["p95_abs_ms"] <= DH_PASS_MS else "FAIL"
+    fit_ok = fit.fit_median_us <= TIE_S * 1e6
+    verdict = "PASS" if st["p95_abs_ms"] <= DH_PASS_MS and fit_ok else "FAIL"
+    if not fit_ok:
+        verdict += f" (fit: median residual {fit.fit_median_us:.1f} us > {TIE_S * 1e6:.0f} us, no consistent offset)"
     print(
         f"clock offset {fit.offset_s:.6f} s (coarse {coarse:.3f}; {len(fit.tied)} offsets whole cells apart fit "
-        f"as well, worst p95 over them {worst:.3f} ms); fit residual median {st['fit_median_us']:.1f} us"
+        f"as well, worst p95 over them {worst:.3f} ms); fit residual median {fit.fit_median_us:.1f} us"
     )
     print(
         f"live vs offline H over {st['n']} of {len(windows)} windows: median dH {st['median_ms']:+.3f} ms, "
@@ -891,6 +906,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.selftest:
         return run_selftest()
     if isinstance(args.offline_h, str):
+        if Path(args.offline_h).suffix.lower() == ".wav" or (
+            args.wav is not None and args.wav.suffix.lower() == ".wav"
+        ):
+            ap.error(
+                "--offline-h took a value next to a WAV: with a WAV use a bare --offline-h after it "
+                "(capture source.wav --offline-h); --offline-h WINDOWS takes the daemon log or a CSV and no WAV"
+            )
         if args.capture is None:
             ap.error("--offline-h WINDOWS needs the capture")
         return run_offline_h_windows(args)

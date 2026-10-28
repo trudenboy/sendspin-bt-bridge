@@ -449,3 +449,40 @@ def test_cli_offline_h_from_a_log_needs_no_wav(tmp_path, capsys, tool):
     assert rc == 0 and "p95 |dH|" in out and "PASS" in out
     head, *rows = csv_path.read_text().splitlines()
     assert head.split(",")[:3] == ["t_mid_us", "s_mid_us", "h_live_ms"] and "dh_ms" in head and len(rows) == 4
+
+
+def test_a_wrong_pivot_window_shows_its_error_on_that_window_only(tool):
+    """The lattice search starts from the middle window inside the capture (here index 2); the offset
+    is then refined on the median of every window, so a 1 ms error on that window stays on it."""
+    cells = [600, 944, 1288, 1632, 1800]
+    pk, _, windows = _live_windows(tool, cells, err_us={2: 1000.0})
+    rows, fit = tool.live_vs_offline(windows, pk, coarse_offset_s=RAW_OFFSET)
+    assert rows[2]["dh_ms"] == pytest.approx(1.0, abs=0.1)
+    assert all(abs(r["dh_ms"]) < 0.1 for i, r in enumerate(rows) if i != 2)
+    assert fit.fit_median_us <= 1e6 * tool.TIE_S
+
+
+def test_a_uniform_shift_of_all_windows_is_not_detectable_by_this_check(tool):
+    """Documented limit: a constant error on every live window (e.g. a RAW-REALTIME offset error)
+    is absorbed into the fitted clock offset, so ΔH stays ≈ 0. The microphone series checks it."""
+    cells = [600, 944, 1288, 1632]
+    pk, _, windows = _live_windows(tool, cells, err_us=dict.fromkeys(range(4), 1000.0))
+    rows, _ = tool.live_vs_offline(windows, pk, coarse_offset_s=RAW_OFFSET)
+    assert len(rows) == 4 and all(abs(r["dh_ms"]) < 0.1 for r in rows)
+
+
+def test_a_scattered_fit_flags_the_verdict(tmp_path, capsys, tool):
+    """Windows off the live lattice by more than TIE_S (no consistent offset) fail the check."""
+    errs = {0: 0.0, 1: 400.0, 2: -400.0, 3: 800.0, 4: -800.0}
+    _, _, windows = _live_windows(tool, [600, 944, 1288, 1632, 1800], err_us=errs)
+    log = tmp_path / "w.csv"
+    log.write_text("t_mid_us,s_mid_us,h_ms\n" + "".join(f"{w.t_mid_us},{w.s_mid_us},{w.h_ms}\n" for w in windows))
+    assert tool.main([str(CLICKS), "--offline-h", str(log), "--raw-offset", str(RAW_OFFSET)]) == 0
+    out = capsys.readouterr().out
+    assert "FAIL" in out and "fit" in out
+
+
+def test_offline_h_rejects_a_wav_as_its_windows(tmp_path, capsys, tool, click_wav):
+    with pytest.raises(SystemExit):
+        tool.main([str(CLICKS), "--offline-h", str(click_wav)])
+    assert "wav" in capsys.readouterr().err.lower()
