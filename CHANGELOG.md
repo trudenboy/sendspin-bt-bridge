@@ -7,14 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.1.0-beta.17] - 2026-10-28
-
 ### Added
 
-- Device details show the delay a Bluetooth speaker reports for itself
-  (A2DP Delay Reporting) when the speaker supports it, and the log notes
-  when that reported delay appears or changes by 1 ms or more; speakers
-  that do not report a delay show nothing extra.
 - Diagnostics warn when the host suspends a Bluetooth speaker's audio sink
   between songs (PipeWire's suspend timeout, PulseAudio's suspend-on-idle);
   speakers can shift by tens of ms after such a pause. The bridge never
@@ -25,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   this host placement in the device's timing panel, and the group sync
   wizard can calibrate each speaker's air-to-sound latency. It does not
   change playback and needs the `CAP_NET_RAW` capability.
+
+## [3.1.0-beta.17] - 2026-10-28
+
+### Added
+
+- Device details show the delay a Bluetooth speaker reports for itself
+  (A2DP Delay Reporting) when the speaker supports it, and the log notes
+  when that reported delay appears or changes by 1 ms or more; speakers
+  that do not report a delay show nothing extra.
 
 ### Changed
 
