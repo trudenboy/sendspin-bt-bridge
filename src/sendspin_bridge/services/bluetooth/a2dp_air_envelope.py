@@ -93,7 +93,8 @@ def frame_envelope(frame: SbcFrame, bands: tuple[int, ...]) -> int:
     return min(MAX_ENERGY, round(8.0 * math.log2(1 + total)))
 
 
-_ENERGY: dict[int, int] = {}  # Σ 2^sf -> energy; Σ < 2^20, so bounded
+_ENERGY: dict[int, int] = {}  # Σ 2^sf -> energy (memo, restarted at _ENERGY_MAX entries)
+_ENERGY_MAX = 4096
 _POW_HI = tuple(1 << (b >> 4) for b in range(256))  # 2^(high nibble) of a byte
 _POW_LO = tuple(1 << (b & 0x0F) for b in range(256))  # 2^(low nibble)
 _BAND_FIELDS: dict[tuple[int, int, int, tuple[int, ...]], tuple[tuple[int, tuple[int, ...]], ...]] = {}
@@ -127,6 +128,8 @@ def sbc_envelopes(frames: SbcFrames, bands: tuple[int, ...]) -> list[int]:
             total += pow2[data[off + byte]]
         e = energy.get(total)
         if e is None:
+            if len(energy) >= _ENERGY_MAX:
+                energy.clear()
             e = energy[total] = min(MAX_ENERGY, round(8.0 * math.log2(1 + total)))
         out.append(e)
     return out

@@ -64,7 +64,7 @@ def random_payload(rng: random.Random) -> bytes:
     return b"".join(frames)
 
 
-@pytest.mark.parametrize("check_crc", [True, False, "first"])
+@pytest.mark.parametrize("check_crc", [True, False, "first", 1, 0])  # truthy/falsy like the decoder
 def test_walk_validates_exactly_like_the_decoder(check_crc):
     rng = random.Random(19)
     for _ in range(600):
@@ -113,3 +113,14 @@ def test_undecoded_parser_emits_the_same_packets_with_undecoded_frames(fixture):
             assert u.sbc is None
         assert replace(u, frames=d.frames, sbc=None) == d
     assert undecoded_parser.stats == decoded_parser.stats
+
+
+def test_the_energy_memo_stays_bounded():
+    from sendspin_bridge.services.bluetooth import a2dp_air_envelope as env
+
+    rng = random.Random(4096)
+    wide = tuple(range(1, 8))
+    for _ in range(3000):
+        view, _ = air.walk_sbc_frames(random_frame(rng, b1=0xBF), check_crc=False)  # stereo, 8 sub-bands
+        assert sbc_envelopes(view, wide) == [frame_envelope(f, wide) for f in view.decode()]
+        assert len(env._ENERGY) <= 4096

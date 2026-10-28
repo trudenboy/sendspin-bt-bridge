@@ -23,6 +23,12 @@ advertises ``accepts``, the speaker is connected, managed and not in standby). `
 bridge loop. A hub reopen after an error starts a new epoch on every tracker and sends a fresh
 ``air_source`` to every subscribed device at once.
 
+The hub hands the consumer only the records its parser reacts to (``opcodes`` / ``event_codes``,
+plus any record that changes the drop count). The parser's time-based release of held completions
+(``HELD_RELEASE_S`` after a drain on a link that stops sending) therefore happens at the next such
+record rather than the next record of any kind; it is not driven from the hub's 250 ms tick, whose
+RAW "now" can run ahead of records still waiting for a clock pair and would release them early.
+
 Monitor records are never logged.
 """
 

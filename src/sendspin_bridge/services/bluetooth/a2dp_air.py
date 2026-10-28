@@ -183,6 +183,9 @@ _BTSNOOP_MAX_RECORD = 0x10000 + 64  # a monitor frame never exceeds 64 KiB; larg
 class ParseStats:
     """Counters for everything that was skipped instead of raising."""
 
+    # Every counter covers only the records the parser is fed: in live use the hub skips the opcodes /
+    # event codes outside AIR_MONITOR_OPCODES / AIR_EVENT_CODES, so a malformed record of a skipped
+    # kind (e.g. a truncated LE advert) is no longer counted here.
     malformed_records: int = 0  # monitor records too short / inconsistent to parse
     truncated_records: int = 0  # btsnoop record cut off at the end of the file
     links_refused: int = 0  # records for a new (index, handle) beyond ``max_links``
@@ -467,8 +470,8 @@ def walk_sbc_frames(payload: bytes, *, check_crc: bool | Literal["first"] = True
     layouts: list[SbcLayout] = []
     pos = 0
     end = len(payload)
-    check_all = check_crc is True
-    check = check_all or check_crc == "first"
+    check_all = bool(check_crc) and check_crc != "first"  # truthiness as parse_sbc_frames reads it
+    check = bool(check_crc)
     layouts_cache = _LAYOUTS
     while pos < end:
         if end - pos < SBC_HEADER_LEN or payload[pos] != SBC_SYNCWORD:
