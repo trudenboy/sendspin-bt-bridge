@@ -187,9 +187,13 @@ class AirSensorService:
         return len(dev.queue) if dev is not None else 0
 
     def tracker_epoch(self, mac: str) -> int | None:
+        state = self.tracker_state(mac)
+        return state.epoch if state is not None else None
+
+    def tracker_state(self, mac: str) -> TrackerState | None:
         with self._lock:
             dev = self._devices.get(mac.upper())
-            return dev.tracker.state(self._clock()).epoch if dev is not None else None
+            return dev.tracker.state(self._clock()) if dev is not None else None
 
     def _sync_registration(self) -> None:
         # Hub calls happen outside self._lock: a hub may greet a consumer synchronously.

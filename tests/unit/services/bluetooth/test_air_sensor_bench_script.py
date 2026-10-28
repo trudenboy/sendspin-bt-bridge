@@ -33,3 +33,15 @@ def test_cli_prints_cost_per_record_and_core_fraction(bench, capsys):
     assert bench.main([str(FIXTURE), "--repeat", "1"]) == 0
     out = capsys.readouterr().out
     assert "us/record" in out and "core fraction at 150 records/s" in out
+
+
+def test_hub_mode_replays_the_capture_through_the_monitor_hub(bench, capsys):
+    assert bench.main([str(FIXTURE), "--repeat", "1", "--hub"]) == 0
+    out = capsys.readouterr().out
+    assert "hub path:" in out and "hub's own share" in out
+
+
+def test_hub_replay_feeds_every_frame_to_the_air_service(bench):
+    cpu_s, frames = bench.run_hub_once(bench.load(FIXTURE))
+    assert cpu_s > 0
+    assert frames == {(1, 70): 2065}  # the same frames as the direct pass: nothing lost in the hub
