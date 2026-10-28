@@ -14,6 +14,7 @@ Layers, each usable on its own:
 * :func:`read_btsnoop` — monitor-datalink (2001) btsnoop files → :class:`MonitorRecord`;
 * :class:`AclReassembler` — ACL fragments of one link → L2CAP SDUs;
 * :func:`parse_rtp`, :func:`parse_sbc_frame`, :func:`parse_sbc_frames` — media payloads;
+  :func:`walk_sbc_frames` validates the same frames without decoding them (the live path, R-19);
 * :class:`A2dpAirParser` — ties it together per ``(index, handle)`` and credits completions.
 
 Everything here is pure parsing with no I/O except :func:`read_btsnoop`. Bad
@@ -87,7 +88,7 @@ import enum
 import gzip
 import struct
 from collections import OrderedDict, deque
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from sendspin_bridge.services.bluetooth.hci_socket import (
@@ -113,12 +114,15 @@ __all__ = [
     "ParseStats",
     "RtpHeader",
     "SbcFrame",
+    "SbcFrames",
+    "SbcLayout",
     "parse_records",
     "parse_rtp",
     "parse_sbc_frame",
     "parse_sbc_frames",
     "read_btsnoop",
     "sbc_frame_length",
+    "walk_sbc_frames",
 ]
 
 # ── constants ──────────────────────────────────────────────────────────────
@@ -152,6 +156,8 @@ BTSNOOP_MAGIC = b"btsnoop\0"
 BTSNOOP_DATALINK_MONITOR = 2001
 BTSNOOP_EPOCH_DELTA_US = 0x00DCDDB30F2F8000  # microseconds from 0000-01-01 to 1970-01-01
 _BTSNOOP_RECORD = struct.Struct(">IIIIq")
+_U16_U16 = struct.Struct("<HH")  # ACL header (handle+flags, length), L2CAP header (length, CID), NOCP entry
+_RTP_FIXED = struct.Struct(">BBHII")
 _BTSNOOP_MAX_RECORD = 0x10000 + 64  # a monitor frame never exceeds 64 KiB; larger means garbage
 
 
@@ -355,6 +361,114 @@ def parse_sbc_frames(payload: bytes, *, check_crc: bool | Literal["first"] = Tru
     return tuple(frames), True
 
 
+# ── undecoded SBC frames (live path, R-19) ─────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class SbcLayout:
+    """What an SBC frame's header fixes: its parameters, length and side-information layout."""
+
+    sampling_rate: int
+    blocks: int
+    subbands: int
+    channel_mode: ChannelMode
+    allocation_snr: bool
+    bitpool: int
+    length: int  # bytes, header included
+    channels: int
+    join_bits: int  # joint stereo: one per sub-band, else 0
+    side_bits: int  # join bits + 4-bit scale factors
+
+
+_LAYOUTS: dict[int, SbcLayout | None] = {}  # (header byte 1 << 8 | bitpool) -> layout; ≤ 65 536 entries
+
+
+def _sbc_layout(b1: int, bitpool: int) -> SbcLayout | None:
+    """Layout for header byte 1 and bitpool; ``None`` when the bitpool is out of range (cached)."""
+    key = b1 << 8 | bitpool
+    try:
+        return _LAYOUTS[key]
+    except KeyError:
+        pass
+    mode = ChannelMode((b1 >> 2) & 3)
+    subbands = 8 if b1 & 0x01 else 4
+    blocks = SBC_BLOCKS[(b1 >> 4) & 3]
+    channels = 1 if mode is ChannelMode.MONO else 2
+    max_bitpool = (16 if mode in (ChannelMode.MONO, ChannelMode.DUAL_CHANNEL) else 32) * subbands
+    layout: SbcLayout | None = None
+    if 2 <= bitpool <= max_bitpool:
+        join_bits = subbands if mode is ChannelMode.JOINT_STEREO else 0
+        layout = SbcLayout(
+            SBC_SAMPLING_RATES[b1 >> 6],
+            blocks,
+            subbands,
+            mode,
+            bool(b1 & 0x02),
+            bitpool,
+            sbc_frame_length(mode, subbands, blocks, bitpool),
+            channels,
+            join_bits,
+            join_bits + 4 * subbands * channels,
+        )
+    _LAYOUTS[key] = layout
+    return layout
+
+
+@dataclass(frozen=True, slots=True)
+class SbcFrames:
+    """The valid SBC frames of one media payload, not decoded: *data* holds them back to back from
+    offset 0 (the bytes after the SBC media header), ``offsets[i]`` is frame i's start and
+    ``layouts[i]`` its header layout. Scale factor ``[ch][sb]`` of frame i is the 4-bit field at bit
+    ``layout.join_bits + 4·(ch·subbands + sb)`` after its 4-byte header (always nibble-aligned)."""
+
+    data: bytes
+    offsets: tuple[int, ...]
+    layouts: tuple[SbcLayout, ...]
+
+    def __len__(self) -> int:
+        return len(self.offsets)
+
+    def decode(self) -> tuple[SbcFrame, ...]:
+        """The frames decoded, as :func:`parse_sbc_frames` returns them."""
+        out: list[SbcFrame] = []
+        for frame in (parse_sbc_frame(self.data, off, check_crc=False) for off in self.offsets):
+            assert frame is not None  # every offset was validated by walk_sbc_frames
+            out.append(frame)
+        return tuple(out)
+
+
+def _sbc_crc_ok(data: bytes, offset: int, layout: SbcLayout) -> bool:
+    side = (layout.side_bits + 7) // 8
+    covered = bytes(data[offset + 1 : offset + 3]) + bytes(
+        data[offset + SBC_HEADER_LEN : offset + SBC_HEADER_LEN + side]
+    )
+    return _sbc_crc8(covered, 16 + layout.side_bits) == data[offset + 3]
+
+
+def walk_sbc_frames(payload: bytes, *, check_crc: bool | Literal["first"] = True) -> tuple[SbcFrames, bool]:
+    """:func:`parse_sbc_frames` without decoding: the same frames are accepted, the same ``complete``
+    is returned, but each frame costs a header lookup instead of a decode."""
+    offsets: list[int] = []
+    layouts: list[SbcLayout] = []
+    pos = 0
+    end = len(payload)
+    check_all = check_crc is True
+    check = check_all or check_crc == "first"
+    layouts_cache = _LAYOUTS
+    while pos < end:
+        if end - pos < SBC_HEADER_LEN or payload[pos] != SBC_SYNCWORD:
+            break
+        key = payload[pos + 1] << 8 | payload[pos + 2]
+        layout = layouts_cache[key] if key in layouts_cache else _sbc_layout(payload[pos + 1], payload[pos + 2])
+        if layout is None or end - pos < layout.length or (check and not _sbc_crc_ok(payload, pos, layout)):
+            break
+        offsets.append(pos)
+        layouts.append(layout)
+        pos += layout.length
+        check = check_all
+    return SbcFrames(payload, tuple(offsets), tuple(layouts)), pos >= end
+
+
 # ── RTP ────────────────────────────────────────────────────────────────────
 
 
@@ -373,7 +487,7 @@ def parse_rtp(data: bytes) -> RtpHeader | None:
     """RFC 3550 fixed header (plus CSRC list, header extension and padding), or ``None``."""
     if len(data) < RTP_HEADER_LEN or data[0] >> 6 != RTP_VERSION:
         return None
-    b0, b1, seq, ts, ssrc = struct.unpack_from(">BBHII", data, 0)
+    b0, b1, seq, ts, ssrc = _RTP_FIXED.unpack_from(data, 0)
     end = RTP_HEADER_LEN + 4 * (b0 & 0x0F)
     if b0 & 0x10:
         if len(data) < end + 4:
@@ -434,6 +548,14 @@ class AclReassembler:
         self._buf = None
 
     def push(self, pb: int, data: bytes) -> L2capSdu | None:
+        if pb != ACL_PB_CONTINUATION and len(data) >= L2CAP_HEADER_LEN:
+            length, cid = _U16_U16.unpack_from(data, 0)
+            if len(data) == L2CAP_HEADER_LEN + length and length <= self.max_sdu:
+                # A whole SDU in one start fragment: no buffering (same outcome as the general path).
+                if self._buf is not None:
+                    self.stats.dropped_incomplete += 1
+                    self._buf = None
+                return L2capSdu(cid, data[L2CAP_HEADER_LEN:])
         if pb == ACL_PB_CONTINUATION:
             if self._buf is None:
                 self.stats.dropped_continuations += 1
@@ -449,7 +571,7 @@ class AclReassembler:
         buf = self._buf
         if buf is None or len(buf) < L2CAP_HEADER_LEN:
             return None
-        length, cid = struct.unpack_from("<HH", buf, 0)
+        length, cid = _U16_U16.unpack_from(buf, 0)
         need = L2CAP_HEADER_LEN + length
         if length > self.max_sdu or len(buf) > need:
             self.stats.dropped_malformed += 1
@@ -488,6 +610,7 @@ class MediaPacket:
     frames: tuple[SbcFrame, ...]
     sbc_fragmented: bool = False  # one SBC frame split over several packets (frames not decoded)
     sbc_frame_count: int | None = None  # frame count of the SBC media payload header (None unless unfragmented SBC)
+    sbc: SbcFrames | None = None  # parser with decode_frames=False: the frames undecoded (``frames`` is empty)
 
 
 def _media_packet(
@@ -498,6 +621,7 @@ def _media_packet(
     stats: ParseStats,
     sbc_streams: set[int],
     check_crc: bool | Literal["first"] = True,
+    decode_frames: bool = True,
 ) -> MediaPacket | None:
     """*sbc_streams* holds the CIDs of this link already seen carrying SBC (for S=0 frame fragments)."""
     if sdu.cid < L2CAP_FIRST_DYNAMIC_CID:
@@ -510,6 +634,7 @@ def _media_packet(
         return None
     codec, fragmented = "unknown", False
     frames: tuple[SbcFrame, ...] = ()
+    undecoded: SbcFrames | None = None
     frame_count: int | None = None
     # SBC media payload header: F S L RFA frame-count(4)
     starts_frame = len(body) > SBC_HEADER_LEN and body[1] == SBC_SYNCWORD
@@ -519,8 +644,13 @@ def _media_packet(
         fragmented = bool(body[0] & 0x80)
         if not fragmented:
             frame_count = body[0] & 0x0F
-            frames, complete = parse_sbc_frames(body[1:], check_crc=check_crc)
-            if not complete or len(frames) != body[0] & 0x0F:
+            if decode_frames:
+                frames, complete = parse_sbc_frames(body[1:], check_crc=check_crc)
+                parsed = len(frames)
+            else:
+                undecoded, complete = walk_sbc_frames(body[1:], check_crc=check_crc)
+                parsed = len(undecoded)
+            if not complete or parsed != frame_count:
                 stats.sbc_errors += 1
     return MediaPacket(
         t_send=t,
@@ -536,6 +666,7 @@ def _media_packet(
         frames=frames,
         sbc_fragmented=fragmented,
         sbc_frame_count=frame_count,
+        sbc=undecoded,
     )
 
 
@@ -563,7 +694,9 @@ class _Link:
     last_seen: float
     in_flight: deque[_Fragment] = field(default_factory=deque)
     in_step: bool = False
-    held: list[MediaPacket] = field(default_factory=list)  # credited, waiting for the queue to drain
+    # credited (packet, completion time), waiting for the queue to drain; the packets' own
+    # t_complete is still None
+    held: list[tuple[MediaPacket, float]] = field(default_factory=list)
     busy_since: float | None = None  # when the queue last went from empty to non-empty
     events_since_drain: int = 0
     drained: bool = False  # queue emptied while in step; held packets go out at the next send
@@ -576,6 +709,26 @@ class _Link:
     @property
     def idle(self) -> bool:
         return not self.in_flight and not self.held and self.reassembler.buffered == 0
+
+
+def _completed(p: MediaPacket, t_complete: float) -> MediaPacket:
+    """*p* with its completion time (``dataclasses.replace`` costs several times more per packet)."""
+    return MediaPacket(
+        p.t_send,
+        t_complete,
+        p.index,
+        p.handle,
+        p.cid,
+        p.seq,
+        p.rtp_ts,
+        p.ssrc,
+        p.payload_type,
+        p.codec,
+        p.frames,
+        p.sbc_fragmented,
+        p.sbc_frame_count,
+        p.sbc,
+    )
 
 
 def _is_hci_reset(opcode: int, payload: bytes) -> bool:
@@ -599,12 +752,18 @@ class A2dpAirParser:
         max_sdu: int = L2CAP_MAX_SDU,
         stats: ParseStats | None = None,
         check_crc: Literal["all", "first"] = "all",
+        decode_frames: bool = True,
     ) -> None:
-        """``check_crc="first"`` checks only each media packet's first SBC frame CRC (live path, R-4)."""
+        """``check_crc="first"`` checks only each media packet's first SBC frame CRC (live path, R-4).
+
+        ``decode_frames=False`` (live path, R-19) validates the same SBC frames but leaves them
+        undecoded: packets carry them in ``sbc`` (:class:`SbcFrames`) and ``frames`` stays empty.
+        """
         if check_crc not in ("all", "first"):
             raise ValueError(f"check_crc must be 'all' or 'first', not {check_crc!r}")
         self.max_links = max_links
         self._check_crc: bool | Literal["first"] = True if check_crc == "all" else "first"
+        self._decode_frames = decode_frames
         self.max_sdu = max_sdu
         self.stats = stats if stats is not None else ParseStats()
         self._links: dict[tuple[int, int], _Link] = {}
@@ -625,12 +784,13 @@ class A2dpAirParser:
         if self._start is None:
             self._start = t
         out: list[MediaPacket] = []
-        for link_id, link in list(self._drained.items()):
-            if not link.drained:
-                del self._drained[link_id]
-            elif t - link.drained_at > HELD_RELEASE_S:
-                del self._drained[link_id]
-                out += self._release(link, confirmed=link.in_step)
+        if self._drained:
+            for link_id, link in list(self._drained.items()):
+                if not link.drained:
+                    del self._drained[link_id]
+                elif t - link.drained_at > HELD_RELEASE_S:
+                    del self._drained[link_id]
+                    out += self._release(link, confirmed=link.in_step)
         if drops is not None and drops != self._drops:
             if drops > self._drops:
                 self.stats.monitor_drops += 1
@@ -638,7 +798,7 @@ class A2dpAirParser:
                     out += self._leave_step(link, count=False)
             self._drops = drops
         if opcode == MONITOR_ACL_TX_PKT:
-            out += self._acl_tx(t, index, payload)
+            self._acl_tx(t, index, payload, out)
         elif opcode == MONITOR_EVENT_PKT:
             out += self._event(t, index, payload)
         elif opcode in (MONITOR_NEW_INDEX, MONITOR_DEL_INDEX) or _is_hci_reset(opcode, payload):
@@ -666,7 +826,7 @@ class A2dpAirParser:
         held = link.held
         link.held = []
         link.drained = False
-        return self._emit(link, held if confirmed else [replace(p, t_complete=None) for p in held])
+        return self._emit(link, [_completed(p, t) for p, t in held] if confirmed else [p for p, _ in held])
 
     def _clear(self, link: _Link, *, reassembly: bool = True) -> list[MediaPacket]:
         out = [f.packet for f in link.in_flight if f.packet is not None]
@@ -735,26 +895,29 @@ class A2dpAirParser:
 
     # -- records ------------------------------------------------------------
 
-    def _acl_tx(self, t: float, index: int, payload: bytes) -> list[MediaPacket]:
+    def _acl_tx(self, t: float, index: int, payload: bytes, out: list[MediaPacket]) -> None:
+        """One ACL TX record; packets released by it are appended to *out*."""
         if len(payload) < ACL_HEADER_LEN:
             self.stats.malformed_records += 1
-            return []
-        flags, length = struct.unpack_from("<HH", payload, 0)
-        handle, pb = flags & 0x0FFF, (flags >> 12) & 0b11
+            return
+        flags, length = _U16_U16.unpack_from(payload, 0)
+        handle = flags & 0x0FFF
         key = (index, handle)
-        link = self._links.get(key) or self._new_link(key, t)
+        link = self._links.get(key)
         if link is None:
-            return []
-        out: list[MediaPacket] = []
+            link = self._new_link(key, t)
+            if link is None:
+                return
         if link.drained:
             out += self._release(link, confirmed=link.in_step)
-        if not link.in_flight:
+        in_flight = link.in_flight
+        if not in_flight:
             if not link.in_step and t - link.last_tx > IDLE_SYNC_S:
                 link.in_step = True  # idle long enough: the controller's queue is empty
             link.busy_since = t
             link.events_since_drain = 0
         link.last_tx = link.last_seen = t
-        if len(link.in_flight) >= MAX_IN_FLIGHT:
+        if len(in_flight) >= MAX_IN_FLIGHT:
             self.stats.in_flight_overflows += 1
             out += self._leave_step(link)
             out += self._clear(link, reassembly=False)
@@ -762,16 +925,17 @@ class A2dpAirParser:
         out += self._check_deadline(link, t)
         # Every ACL packet costs one completion credit, even one we cannot parse.
         frag = _Fragment(link.in_step)
-        link.in_flight.append(frag)
-        data = payload[ACL_HEADER_LEN : ACL_HEADER_LEN + length]
-        if len(data) < length:
+        in_flight.append(frag)
+        end = ACL_HEADER_LEN + length
+        if len(payload) < end:
             self.stats.malformed_records += 1
             link.reassembler.reset()
-            return out
-        sdu = link.reassembler.push(pb, data)
+            return
+        sdu = link.reassembler.push((flags >> 12) & 0b11, payload[ACL_HEADER_LEN:end])
         if sdu is not None:
-            frag.packet = _media_packet(t, index, handle, sdu, self.stats, link.sbc_streams, self._check_crc)
-        return out
+            frag.packet = _media_packet(
+                t, index, handle, sdu, self.stats, link.sbc_streams, self._check_crc, self._decode_frames
+            )
 
     def _event(self, t: float, index: int, payload: bytes) -> list[MediaPacket]:
         if len(payload) < 2 or len(payload) < 2 + payload[1]:
@@ -784,7 +948,7 @@ class A2dpAirParser:
                 return []
             out: list[MediaPacket] = []
             for k in range(params[0]):
-                handle, count = struct.unpack_from("<HH", params, 1 + 4 * k)
+                handle, count = _U16_U16.unpack_from(params, 1 + 4 * k)
                 link = self._links.get((index, handle & 0x0FFF))
                 if link is not None:
                     out += self._credit(link, t, count)
@@ -814,7 +978,7 @@ class A2dpAirParser:
             if frag.packet is None:
                 continue
             if frag.in_step and link.in_step:
-                link.held.append(replace(frag.packet, t_complete=t))
+                link.held.append((frag.packet, t))
             else:
                 out += self._emit(link, [frag.packet])
         if count > credited:

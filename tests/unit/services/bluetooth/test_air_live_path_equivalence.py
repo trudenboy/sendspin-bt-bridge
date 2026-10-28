@@ -96,8 +96,15 @@ GOLDEN: dict[str, tuple[int, str]] = {
 }
 
 
+PARSERS = {
+    "decoded": lambda: A2dpAirParser(check_crc="first"),
+    "undecoded": lambda: A2dpAirParser(check_crc="first", decode_frames=False),  # the live path (R-19)
+}
+
+
+@pytest.mark.parametrize("parser", sorted(PARSERS))
 @pytest.mark.parametrize("variant", sorted(GOLDEN))
-def test_live_path_batches_match_the_recorded_output(variant):
-    batches, stats = live_batches(_variant(variant), A2dpAirParser(check_crc="first"))
+def test_live_path_batches_match_the_recorded_output(variant, parser):
+    batches, stats = live_batches(_variant(variant), PARSERS[parser]())
     digest = hashlib.sha256("\n".join([*batches, stats]).encode()).hexdigest()
     assert (len(batches), digest) == GOLDEN[variant]

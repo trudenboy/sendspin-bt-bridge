@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """CPU cost of the air sensor's parent side on a monitor capture.
 
-Runs the capture's records through the live path — ``A2dpAirParser(check_crc="first")`` and one
+Runs the capture's records through the live path — ``A2dpAirParser(check_crc="first",
+decode_frames=False)`` and one
 ``AirLinkTracker`` per link, batches taken every 250 ms of capture time — ``--repeat`` times and
 prints the cost per monitor record and the projected fraction of one core per streaming speaker
 at 150 records/s (the budget is 0.015 per speaker). ``--crc all`` measures full CRC checking.
@@ -61,7 +62,7 @@ def run_once(
     records: list[MonitorRecord], *, check_crc: Literal["all", "first"] = "first"
 ) -> dict[tuple[int, int], int]:
     """One pass; returns the frames batched per link."""
-    parser = A2dpAirParser(check_crc=check_crc)
+    parser = A2dpAirParser(check_crc=check_crc, decode_frames=False)
     trackers: dict[tuple[int, int], AirLinkTracker] = {}
     frames: dict[tuple[int, int], int] = {}
     next_take: float | None = None

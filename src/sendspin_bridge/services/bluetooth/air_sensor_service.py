@@ -1,7 +1,7 @@
 """AirSensorService: the parent side of the air sensor (only with ``EXPERIMENTAL_AIR_SENSOR``).
 
 A hub consumer (``wants_kernel_time``, ``wants_acl_tx``) on the hub thread feeds one
-``A2dpAirParser(check_crc="first")`` with RAW seconds (``rec.t_raw_us / 1e6``; no other time
+``A2dpAirParser(check_crc="first", decode_frames=False)`` with RAW seconds (``rec.t_raw_us / 1e6``; no other time
 conversion exists here) and hands every media packet of a link whose peer is a subscribed speaker
 to that speaker's :class:`AirLinkTracker`. A drop increase, a change of the hub's clock epoch and a
 hub reopen start a new epoch on every tracker.
@@ -122,7 +122,7 @@ class AirSensorService:
         self._hub = hub
         self._loop = loop
         self._resolve_client = resolve_client
-        self._parser = parser if parser is not None else A2dpAirParser(check_crc="first")
+        self._parser = parser if parser is not None else A2dpAirParser(check_crc="first", decode_frames=False)
         self._tick_s = tick_s
         self._queue_len = queue_len
         self._cpu_per_speaker = cpu_per_speaker

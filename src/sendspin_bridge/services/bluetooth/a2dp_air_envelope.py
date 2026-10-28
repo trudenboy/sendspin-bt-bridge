@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.services.bluetooth.a2dp_air import ChannelMode, MediaPacket, SbcFrame
+    from sendspin_bridge.services.bluetooth.a2dp_air import ChannelMode, MediaPacket, SbcFrame, SbcFrames
 
 __all__ = [
     "ANCHOR_PACKETS",
@@ -56,6 +56,7 @@ __all__ = [
     "TrackerState",
     "envelope_subbands",
     "frame_envelope",
+    "sbc_envelopes",
 ]
 
 MISSING = 255
@@ -90,6 +91,45 @@ def frame_envelope(frame: SbcFrame, bands: tuple[int, ...]) -> int:
             if b < len(row):
                 total += 1 << row[b]
     return min(MAX_ENERGY, round(8.0 * math.log2(1 + total)))
+
+
+_ENERGY: dict[int, int] = {}  # Σ 2^sf -> energy; Σ < 2^20, so bounded
+_POW_HI = tuple(1 << (b >> 4) for b in range(256))  # 2^(high nibble) of a byte
+_POW_LO = tuple(1 << (b & 0x0F) for b in range(256))  # 2^(low nibble)
+_BAND_FIELDS: dict[tuple[int, int, int, tuple[int, ...]], tuple[tuple[int, tuple[int, ...]], ...]] = {}
+
+
+def _band_fields(
+    subbands: int, channels: int, join_bits: int, bands: tuple[int, ...]
+) -> tuple[tuple[int, tuple[int, ...]], ...]:
+    """``(byte offset from the frame start, 2^nibble table)`` of each scale factor in *bands* (all channels)."""
+    key = (subbands, channels, join_bits, bands)
+    fields = _BAND_FIELDS.get(key)
+    if fields is None:
+        nibbles = [join_bits // 4 + ch * subbands + b for ch in range(channels) for b in bands if b < subbands]
+        fields = _BAND_FIELDS[key] = tuple((4 + n // 2, _POW_LO if n & 1 else _POW_HI) for n in nibbles)
+    return fields
+
+
+def sbc_envelopes(frames: SbcFrames, bands: tuple[int, ...]) -> list[int]:
+    """:func:`frame_envelope` of every undecoded frame, read straight from the band's scale factors."""
+    data = frames.data
+    energy = _ENERGY
+    out: list[int] = []
+    layout = None
+    fields: tuple[tuple[int, tuple[int, ...]], ...] = ()
+    for off, lay in zip(frames.offsets, frames.layouts, strict=True):
+        if lay is not layout:
+            layout = lay
+            fields = _band_fields(lay.subbands, lay.channels, lay.join_bits, bands)
+        total = 0
+        for byte, pow2 in fields:
+            total += pow2[data[off + byte]]
+        e = energy.get(total)
+        if e is None:
+            e = energy[total] = min(MAX_ENERGY, round(8.0 * math.log2(1 + total)))
+        out.append(e)
+    return out
 
 
 class SendAnchor:
@@ -284,7 +324,11 @@ class AirLinkTracker:
         frame_us = spf * 1e6 / rate
         u_us = u * 1e6 / rate
         self._anchor.add(t * 1e6, self._sent * frame_us)
-        cells = [frame_envelope(f, self._bands) for f in p.frames]
+        cells = (
+            sbc_envelopes(p.sbc, self._bands)
+            if p.sbc is not None
+            else [frame_envelope(f, self._bands) for f in p.frames]
+        )
         # frames the media header counts but that did not parse (they follow the parsed prefix)
         unparsed = (p.sbc_frame_count or 0) - len(cells)
         if unparsed > 0:
@@ -301,6 +345,9 @@ class AirLinkTracker:
             self._lags.popleft()
 
     def _params_of(self, p: MediaPacket) -> _Params | None:
+        if p.sbc is not None and p.sbc.layouts:
+            lay = p.sbc.layouts[0]
+            return (lay.sampling_rate, lay.blocks, lay.subbands, lay.channel_mode)
         if not p.frames:
             return self._params if self._prev is not None else None
         f = p.frames[0]
