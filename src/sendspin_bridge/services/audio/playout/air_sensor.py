@@ -41,7 +41,9 @@ window: ``locked`` ≤ :data:`LOCK_HOLD_S`, ``holding`` up to :data:`NO_LOCK_S`,
 **Windows.** Valid when the correlator's checks pass (≥ 90 % air present, ≥ 80 % written program)
 and at most :data:`MAX_MUTED_FRACTION` of the written partner cells are muted; muted, invalid and
 flat windows are *skipped* (they never count against the confidence), edge/no-side-lobe/gate
-failures are *rejected*.
+failures are *rejected*. A window is cut only when its newest air cell is at least
+:data:`MIN_ADVANCE_S` later in media time than the last window's: air that stopped arriving (a
+stall, an AVDTP gap) is never correlated twice, so two copies of one window cannot "agree".
 
 Nothing here raises into the daemon: any exception puts the sensor into
 ``unavailable``/``internal_error`` until the next reopen.
@@ -84,6 +86,7 @@ DELTA0_US = 10_000.0
 JUMP_CONFIRM_CELLS = 3
 MAX_MUTED_FRACTION = 0.2
 
+MIN_ADVANCE_S = HOP_S / 2  # a window's air must end this much later than the last window's
 AGREE_CELLS = 1.0  # a candidate lag is confirmed by the next confirmed window within this
 MISSING = 255  # air energy of an unparsable frame
 AIR_RING_S = 20.0
@@ -317,6 +320,7 @@ class AirSensor:
         self._last_psr: float | None = None
         self._last_confirmed_iso: str | None = None
         self._last_window_now: float | None = None
+        self._last_u_end: float | None = None  # media time of the last window's newest air cell
         self._wide_after: float | None = None  # wide search until a window starts after this air time
         self._reset_pending = False
         # Logging.
@@ -460,6 +464,8 @@ class AirSensor:
             u_end = self._air.frame_at_or_before(u_end - excess * cell)
         else:
             return None
+        if self._last_u_end is not None and u_end - self._last_u_end < MIN_ADVANCE_S * 1e6:
+            return None  # the air has not moved on (a stall or AVDTP gap): never correlate it twice
         if i0 < 0:
             return None
         sl = tap.slice(i0, i1)
@@ -468,6 +474,7 @@ class AirSensor:
         if sl.gen != self._tap_gen:
             self._check_tap()
             return None
+        self._last_u_end = u_end
         span = sl.muted[half + margin : half + margin + n]
         if sum(span) > MAX_MUTED_FRACTION * n:
             return "skipped"
@@ -621,6 +628,7 @@ class AirSensor:
         self._last_at = None
         self._last_psr = None
         self._last_window_now = None
+        self._last_u_end = None
         self._wide_after = None
         self._reset_pending = False
 

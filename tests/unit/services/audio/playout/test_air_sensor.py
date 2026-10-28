@@ -711,3 +711,20 @@ async def test_air_stream_does_not_interpolate_across_a_skip():
     st.add(env(seq=4, u0=6 * FRAME_US, t0=START_US + 6 * FRAME_US, n=4, anchor_reset=True, e=[50, 60, 70, 80]))
     cells, _u, _t = st.window(9 * FRAME_US, 10, FRAME_US)
     assert cells == [10, 20, 30, 40, None, None, 50, 60, 70, 80]
+
+
+async def test_air_that_stopped_arriving_is_not_correlated_again(air_world):
+    """Found by the A10 simulation: across an AVDTP gap the same air was recomputed every hop and
+    two copies of one window "agreed", which confirmed a lag on unrelated (noise-control) audio."""
+    w = air_world(H_true_ms=10.0)
+    await w.run(seconds=10)
+    before = w.sensor.snapshot()
+    calls = w.runner_calls
+    w._produce_air = lambda: None  # the link went quiet: nothing new on the air
+    await w.run(seconds=4)
+    s = w.sensor.snapshot()
+    # At most the one window over the air that arrived since the last one; no recomputations.
+    assert w.runner_calls <= calls + 1
+    assert (
+        s["windows_confirmed"] + s["windows_rejected"] <= before["windows_confirmed"] + before["windows_rejected"] + 1
+    )
