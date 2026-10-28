@@ -6,6 +6,7 @@ import { SbButton, SbDialog } from '@/kit'
 import type { SyncProposal, SyncSession } from '@/api/types'
 import { formatMs } from '@/sync/format'
 import { speakerName } from '@/sync/names'
+import AirCalibrations from './AirCalibrations.vue'
 import ManualTuning from './ManualTuning.vue'
 
 /**
@@ -94,6 +95,8 @@ function confirmSave() {
     </div>
 
     <ManualTuning skip-prep :measured="measured" :before="before" />
+
+    <AirCalibrations :session="session" />
 
     <p v-if="error" data-tune-error role="alert" class="text-sm text-error">{{ error }}</p>
     <div class="flex flex-wrap justify-end gap-3">

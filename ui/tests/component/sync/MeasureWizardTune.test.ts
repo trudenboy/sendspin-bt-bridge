@@ -92,6 +92,15 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     expect(w.get('[data-spread]').text()).toContain('12 ms measured → about 1 ms now')
   })
 
+  it("shows the bridge speakers' air-to-sound latencies of the measurement on the tune step", async () => {
+    const air = [{ member: 'a', eligible: false, reason: 'no_reference', latency_ms: null, acoustic_lag_ms: null,
+      host_placement_ms: null, codec: 'sbc', rate: 44100, adapter: null, delay_report_ms: null }]
+    vi.mocked(api.applyProposal).mockResolvedValue(tuned({ air_calibrations: air }))
+    const w = mountWizard()
+    await toTune(w)
+    expect(w.get('[data-tune] [data-air-row="a"]').text()).toContain('Choose a reference first')
+  })
+
   it('writes hand adjustments live through the session and finishes: the delays stay, the session ends done', async () => {
     const w = mountWizard()
     await toTune(w)

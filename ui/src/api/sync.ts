@@ -1,6 +1,7 @@
 /* Group sync tuning: Music Assistant groups, tuning sessions, profiles, restores. */
 import { api, apiUrl, ApiError, getCsrfToken, unwrap, type Problem } from './client'
 import type {
+  AirCalibrationCandidate,
   PendingRestore,
   SessionMode,
   SessionPoint,
@@ -178,6 +179,16 @@ export function captureLink(
 /** Play the sequence for the phone: every member alone in turn while the phone records once. */
 export function startSequence(id: string, members: string[]): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/sequence', { ...sessionPath(id), body: { members } }))
+}
+
+/**
+ * Save bridge speakers' air-to-sound latencies from the last measured sequence (applied live);
+ * 409 ``not_eligible`` when a member has none to save (nothing is written then).
+ */
+export function saveAirCalibrations(id: string, members: string[]): Promise<AirCalibrationCandidate[]> {
+  return unwrap(
+    api().POST('/api/v1/sync/sessions/{session_id}/air-calibrations', { ...sessionPath(id), body: { members } }),
+  )
 }
 
 /** One capture as int16 little-endian PCM (raw body, so not through the JSON client). */

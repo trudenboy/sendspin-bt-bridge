@@ -1746,6 +1746,29 @@
       "saveTitle": "Finish and save as profile",
       "saveConfirm": "Save and finish"
     },
+    "air": {
+      "title": "Speaker latency (air → sound)",
+      "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is measured against a reference: a member whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much.",
+      "reference": "Reference",
+      "referencePick": "Choose a reference…",
+      "referenceFailed": "Could not set the reference ({code}).",
+      "value": "{ms} ms",
+      "hint": "the speaker reports {ms} ms",
+      "save": "Save as this speaker's latency",
+      "saveButton": "Save latencies",
+      "saved": "Saved",
+      "saveFailed": "Could not save ({code}).",
+      "outOfRange": "outside {min}–{max} ms, cannot be saved",
+      "reasons": {
+        "not_effective": "The air sensor was not on for this speaker",
+        "no_reference": "Choose a reference first",
+        "not_measured": "This speaker or the reference was not heard",
+        "not_sbc": "The speaker does not play SBC",
+        "air_epoch_changed": "Its Bluetooth stream restarted during its turn",
+        "no_air_clicks": "Its clicks were not found on the air",
+        "no_written_clicks": "Its clicks were not found in what the bridge wrote"
+      }
+    },
     "cancel": {
       "title": "Stop measuring?",
       "message": "Recordings so far will be lost. Speakers the bridge muted are unmuted, volumes go back and the clicks stop.",
