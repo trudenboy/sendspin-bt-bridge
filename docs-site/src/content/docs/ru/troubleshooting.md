@@ -158,6 +158,32 @@ DisablePlugins=hfp,hsp
 
 **Правильный фикс.** Обновите host OS до релиза с `bluez ≥ 5.87` или патченым `5.86-4.1`. На HAOS это происходит автоматически вместе с Supervisor/host update. После этого никаких bridge-side интервенций не нужно.
 
+## Amazon Echo подключается, но аудио-sink не появляется
+
+**Симптом.** Echo (замечено на Echo 2-го поколения, [#476](https://github.com/trudenboy/sendspin-bt-bridge/issues/476)) спаривается и подключается, в логе подключения есть `Speaker offers: Audio Source, Audio Sink, …`, но карта в профиле `a2dp_source`, а переключение на `a2dp_sink` падает с `Input/Output error` (PulseAudio: `Refused to switch profile to a2dp_sink: Not connected`).
+
+**Почему.** Echo умеет быть и колонкой (A2DP sink), и источником («Alexa, connect to my speaker») и выбирает роль на каждом подключении. Если хост тоже готов быть колонкой — PulseAudio и PipeWire по умолчанию регистрируют обе A2DP-роли, — Echo может открыть поток *в сторону хоста* и так и не подключить свой sink-профиль. Смена Class of Device адаптера на этот выбор не влияет.
+
+**Что может сделать bridge.** Включите **Восстанавливать пропавший аудиовыход** (расширенные настройки восстановления Bluetooth, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`). Для колонки, у которой есть и Audio Source, и Audio Sink, bridge тогда:
+
+1. сразу после установления связи запрашивает профиль Audio Sink, не трогая source-профиль (лог: `Early Audio Sink ConnectProfile (source kept): …`);
+2. если sink не появился, запрашивает ещё раз с сохранённым source-профилем, и только при отказе отключает source-профиль и запрашивает снова (лог: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);
+3. **не** выполняет «танец» disconnect/reconnect, если колонка отказала: после него Echo рвёт каждое переподключение через секунду и перестаёт отвечать, пока её не спарят заново.
+
+Можно ли вообще развернуть Echo со стороны хоста, пока не известно; если пробуете, приложите эти строки лога к #476.
+
+**Хосты с PipeWire / WirePlumber (не проверено нами).** Если убрать у хоста роль колонки, у Echo не останется другого выбора, кроме как быть колонкой. Ограничьте Bluetooth-роли WirePlumber так, чтобы среди них не было `a2dp_sink`, например в `~/.config/wireplumber/wireplumber.conf.d/52-bluez-roles.conf` (синтаксис WirePlumber 0.5):
+
+```
+monitor.bluez.properties = {
+  bluez5.roles = [ a2dp_source hfp_ag hsp_ag ]
+}
+```
+
+затем перезапустите WirePlumber, удалите Echo и спарьте заново. Сами мы это не проверяли; учтите, что хост после этого не сможет принимать звук ни с одного Bluetooth-телефона.
+
+**Home Assistant OS.** PulseAudio аудио-плагина HAOS регистрирует обе роли, и из аддона его не изменить, поэтому там единственный вариант — экспериментальный переключатель выше.
+
 ## Reconnect-loop на Sony WH-1000XM4 / других A2DP-наушниках (AVDTP collision на старом BlueZ)
 
 **Симптом.** После disconnect'а — выключения питания, рестарта контейнера или простого выхода из зоны действия — колонка/наушники впадают в шторм connect/disconnect: пейринг проходит, бридж пишет `Using cached sink`, Music Assistant начинает стримить, и через 1–2 секунды связь рвётся. Цикл повторяется, пока не исчерпан `BT_MAX_RECONNECT_FAILS`. Ручной Reclaim из веб-UI бриджа всегда срабатывает с первого раза — падает только автоматический reconnect. В журнале bluetoothd на каждой попытке видны AVDTP-collision сообщения: `cancel_request() Start: Operation canceled`, `SEP in bad state for suspend`, `Transaction label doesn't match`.

@@ -902,7 +902,7 @@
       },
       "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
         "label": "Recover a missing audio sink",
-        "help": "Experimental. When a speaker's audio output never appears, ask a speaker that is also an audio source (such as an Amazon Echo) to accept audio instead, then disconnect and reconnect it."
+        "help": "Experimental. Asks a speaker that is also an audio source (such as an Amazon Echo) to accept audio as soon as it connects, and again if its audio output never appears. Other speakers without an audio output are disconnected and reconnected once; a speaker that is also a source and refuses is left connected."
       },
       "EXPERIMENTAL_PA_MODULE_RELOAD": {
         "label": "Reload the PulseAudio Bluetooth module",
