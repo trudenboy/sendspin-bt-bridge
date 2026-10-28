@@ -1,15 +1,19 @@
 """HciMonitorHub: the reader thread that owns the HCI monitor socket when the air sensor is on.
 
 No real socket is opened: ``fake_hub_socket`` scripts ``recvmsg`` results, then answers
-``socket.timeout`` until closed, and records the socket options the hub sets.
+``EAGAIN`` (the hub's socket is non-blocking) until closed, and records the socket options the hub
+sets. Its ``fileno()`` is a pipe that is readable exactly while a read would return something, so
+the hub's readability wait (``poll``) behaves as on the real monitor socket.
 """
 
 from __future__ import annotations
 
 import errno
+import os
 import socket
 import struct
 import threading
+import time
 
 import pytest
 
@@ -26,6 +30,20 @@ class FakeMonitorSocket:
         self.setsockopt_calls: list[tuple[int, int, int]] = []
         self.getsockopt_calls: list[tuple[int, int, int]] = []
         self.timeouts: list[float | None] = []
+        self._ready_r, self._ready_w = os.pipe()
+        self._ready = False
+        self._sync_ready()
+
+    def _sync_ready(self):
+        want = bool(self._records) or self._fail_first_read
+        if want and not self._ready:
+            os.write(self._ready_w, b"r")
+        elif not want and self._ready:
+            os.read(self._ready_r, 1)
+        self._ready = want
+
+    def fileno(self):
+        return self._ready_r
 
     def setsockopt(self, level, opt, value):
         self.setsockopt_calls.append((level, opt, value))
@@ -46,16 +64,23 @@ class FakeMonitorSocket:
             raise OSError(errno.EBADF, "closed")
         if self._fail_first_read:
             self._fail_first_read = False
+            self._sync_ready()
             raise OSError(errno.ENETDOWN, "monitor went away")
         if self._records:
             item = self._records.pop(0)
+            self._sync_ready()
             if len(item) == 2:
                 data, anc = item
                 return data, anc, 0, None
             return item
+        if self.timeouts and self.timeouts[-1] == 0.0:
+            raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
         raise TimeoutError("timed out")
 
     def close(self):
+        if not self.closed:
+            os.close(self._ready_r)
+            os.close(self._ready_w)
         self.closed = True
 
 
@@ -280,7 +305,7 @@ def test_open_sets_timestamps_and_a_large_receive_buffer(fake_hub_socket):
     sock = opener.made[0]
     opts = {opt for _level, opt, _value in sock.setsockopt_calls}
     assert hs.SO_TIMESTAMPNS in opts and hs.SO_RXQ_OVFL in opts
-    assert sock.timeouts == [0.5] and sock.closed
+    assert sock.timeouts == [0.0] and sock.closed  # non-blocking: reads drain until EAGAIN (R-20)
 
 
 def test_meminfo_drops_are_attached_when_no_cmsg(fake_hub_socket):
@@ -491,6 +516,9 @@ def test_cpu_windows_counts_completed_windows(fake_hub_socket):
     )
     assert hub.counters()["cpu_windows"] == 0
     hub.start()
+    deadline = time.monotonic() + 5.0
+    while hub.counters()["cpu_windows"] < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
     hub.stop()
     assert hub.counters()["cpu_windows"] >= 1
 
@@ -666,10 +694,27 @@ def test_without_kernel_time_consumers_nothing_waits(fake_hub_socket):
         assert got.wait(1.0)
     finally:
         hub.stop()
-    assert opener.made[0].timeouts == [0.5] and hub.counters()["recv_stamped"] == 0
+    assert hub.counters()["recv_stamped"] == 0
 
 
-def test_the_read_timeout_is_bounded_by_the_next_tick_while_records_wait(fake_hub_socket):
+def recording_waiter(waits):
+    """The hub's default readability wait, recording each timeout and its result."""
+    from sendspin_bridge.services.bluetooth.hci_monitor_hub import _poll_waiter
+
+    def factory(sock, wake_fd):
+        wait = _poll_waiter(sock, wake_fd)
+
+        def recorded(timeout_s):
+            ready = wait(timeout_s)
+            waits.append((timeout_s, ready))
+            return ready
+
+        return recorded
+
+    return factory
+
+
+def test_the_readability_wait_is_bounded_by_the_next_tick(fake_hub_socket):
     class NeverMap:
         epoch = 0
 
@@ -679,16 +724,21 @@ def test_the_read_timeout_is_bounded_by_the_next_tick_while_records_wait(fake_hu
         def to_raw_us(self, real_ns):
             return None
 
+    waits: list[tuple[float, bool]] = []
     recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [timestamp_cmsg(10**18)])]
-    opener = fake_hub_socket(recs)
-    hub = HciMonitorHub(open_socket=opener, seed=lambda m: None, clock_map=NeverMap())
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket(recs),
+        seed=lambda m: None,
+        clock_map=NeverMap(),
+        readable_waiter=recording_waiter(waits),
+    )
     hub.add_consumer(kernel_consumer())
     hub.start()
     assert hub.wait_open(2)
+    time.sleep(0.6)  # at least two idle waits
     hub.stop()
-    timeouts = opener.made[0].timeouts
-    assert timeouts[0] == 0.5 and any(t < 0.5 for t in timeouts[1:])
-    assert all(0 < t <= 0.5 for t in timeouts)
+    idle = [t for t, ready in waits if not ready and t > 0]
+    assert len(idle) >= 2 and all(t <= 0.25 + 1e-6 for t in idle)
 
 
 def test_records_carry_the_clock_epoch(fake_hub_socket):
@@ -725,6 +775,9 @@ def test_cpu_fraction_reports_within_the_first_window(fake_hub_socket):
     )
     hub.start()
     assert hub.wait_open(2)
+    deadline = time.monotonic() + 5.0
+    while hub.counters()["cpu_fraction"] is None and time.monotonic() < deadline:
+        time.sleep(0.01)
     hub.stop()
     fraction = hub.counters()["cpu_fraction"]
     assert isinstance(fraction, float) and 0.0 < fraction < 0.05
@@ -876,3 +929,131 @@ def test_repeated_monitor_errors_warn_once_per_ten_minutes(caplog):
     retry = [r for r in caplog.records if "retrying" in r.getMessage()]
     assert len(retry) == 4
     assert [r.levelname for r in retry] == ["WARNING", "DEBUG", "DEBUG", "DEBUG"]
+
+
+# ---------------------------------------------------------------- R-20: batched reads
+
+
+class EndlessMonitorSocket(FakeMonitorSocket):
+    """Always readable; every read returns the next numbered record (continuous traffic)."""
+
+    def __init__(self):
+        super().__init__([])
+        os.write(self._ready_w, b"r")
+        self.reads = 0
+
+    def _sync_ready(self):
+        pass
+
+    def recvmsg(self, bufsize, ancbufsize=0):
+        if self.closed:
+            raise OSError(errno.EBADF, "closed")
+        self.reads += 1
+        return frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00" + struct.pack("<I", self.reads)), [], 0, None
+
+
+def test_one_wakeup_drains_every_queued_datagram_in_order(fake_hub_socket):
+    waits: list[tuple[float, bool]] = []
+    seen_at: list[tuple[bytes, int]] = []
+    c = consumer()
+    c.on_record = lambda rec: seen_at.append((rec.payload, sum(1 for _t, ready in waits if ready)))
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13" + bytes([i])), []) for i in range(10)]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None, readable_waiter=recording_waiter(waits))
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert [p for p, _ in seen_at] == [b"\x13" + bytes([i]) for i in range(10)]
+    assert {n for _, n in seen_at} == {1}  # all ten read after the first readable wakeup
+
+
+def test_a_drain_stops_at_its_bound_and_the_rest_follows_in_order(fake_hub_socket):
+    passes = {"n": 0}
+
+    def monotonic():  # the reader calls it once per loop pass (event records never ask for the time)
+        if threading.current_thread().name == "hci-monitor":
+            passes["n"] += 1
+        return time.monotonic()
+
+    seen: list[tuple[bytes, int]] = []
+    c = consumer()
+    c.on_record = lambda rec: seen.append((rec.payload, passes["n"]))
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00" + struct.pack("<H", i)), []) for i in range(25)]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None, monotonic=monotonic, drain_max=10)
+    hub.add_consumer(c)
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+    assert [p for p, _ in seen] == [b"\x13\x00" + struct.pack("<H", i) for i in range(25)]
+    per_pass = [n for _, n in seen]
+    sizes = [per_pass.count(n) for n in sorted(set(per_pass))]
+    assert sizes == [10, 10, 5]
+
+
+def test_ticks_keep_their_schedule_under_continuous_traffic():
+    class CountingMap:
+        epoch = 0
+
+        def __init__(self):
+            self.samples = 0
+
+        def sample(self):
+            self.samples += 1
+            return True
+
+        def to_raw_us(self, real_ns):
+            return None
+
+    sock = EndlessMonitorSocket()
+    clock_map = CountingMap()
+    hub = HciMonitorHub(open_socket=lambda: sock, seed=lambda m: None, clock_map=clock_map, drain_max=64)
+    hub.start()
+    time.sleep(0.9)
+    samples = clock_map.samples
+    hub.stop(timeout=0.2)
+    assert samples >= 3  # the open sample and at least two 250 ms ticks
+    assert sock.reads > 64
+
+
+def test_stop_cuts_the_batching_sleep_short_and_still_delivers_what_was_queued(fake_hub_socket):
+    c = consumer()
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13" + bytes([i])), []) for i in range(3)]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None, batch_s=5.0)
+    hub.add_consumer(c)
+    hub.start()
+    time.sleep(0.1)  # the reader is now in its 5 s batching sleep
+    t0 = time.monotonic()
+    hub.stop()
+    assert time.monotonic() - t0 < 1.0
+    assert [r.payload for r in c.seen] == [b"\x13" + bytes([i]) for i in range(3)]
+
+
+def test_stop_on_a_quiet_bus_is_prompt(fake_hub_socket):
+    hub = HciMonitorHub(open_socket=fake_hub_socket([]), seed=lambda m: None)
+    hub.start()
+    assert hub.wait_open(2)
+    time.sleep(0.05)  # the reader is now in a readability wait of up to 250 ms
+    t0 = time.monotonic()
+    hub.stop()
+    assert time.monotonic() - t0 < 0.15  # stop() wakes the wait instead of letting it run out
+
+
+def test_records_arriving_together_are_read_after_the_batching_interval(fake_hub_socket):
+    got = threading.Event()
+    c = consumer()
+    c.on_record = lambda rec: got.set()
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00"), [])]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None, batch_s=0.3)
+    hub.add_consumer(c)
+    t0 = time.monotonic()
+    hub.start()
+    try:
+        assert got.wait(2)
+        assert time.monotonic() - t0 >= 0.25
+    finally:
+        hub.stop()
+
+
+def test_the_default_batching_interval_keeps_avrcp_latency_small():
+    from sendspin_bridge.services.bluetooth import hci_monitor_hub as mod
+
+    assert 0.0 < mod._BATCH_S <= 0.05  # AVRCP correlation tolerates <= 50 ms of extra latency

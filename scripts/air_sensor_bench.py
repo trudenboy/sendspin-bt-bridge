@@ -9,7 +9,8 @@ at 150 records/s (the budget is 0.04 per speaker). ``--crc all`` measures full C
 
 ``--hub`` also replays the capture through the monitor hub's reader (``HciMonitorHub`` serving a
 fake socket that returns the records as monitor datagrams with kernel timestamps, on the hub's own
-thread, with the AVRCP consumer and an ``AirSensorService`` subscribed to every ACL link of the
+thread, read in batches as live (R-20: each wakeup drains the records of one batching interval of
+capture time; the batching sleep itself is skipped, it costs no CPU), with the AVRCP consumer and an ``AirSensorService`` subscribed to every ACL link of the
 capture) and prints the hub thread's CPU per record — what the live CPU guard measures, minus the
 non-A2DP traffic a capture filtered to ACL TX + events does not carry — and the hub's own share
 (hub path minus parser + tracker).
@@ -21,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
+import os
 import socket
 import struct
 import sys
@@ -41,7 +44,7 @@ from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import (  # noqa: E402
     _parse_connection_complete,
 )
 from sendspin_bridge.services.bluetooth.hci_clock import RawRealtimeMap  # noqa: E402
-from sendspin_bridge.services.bluetooth.hci_monitor_hub import HciMonitorHub  # noqa: E402
+from sendspin_bridge.services.bluetooth.hci_monitor_hub import _BATCH_S, HciMonitorHub  # noqa: E402
 from sendspin_bridge.services.bluetooth.hci_socket import (  # noqa: E402
     MONITOR_ACL_TX_PKT,
     MONITOR_EVENT_PKT,
@@ -120,7 +123,9 @@ class _ReplaySocket:
     """A monitor socket returning the capture's records as datagrams with SCM_TIMESTAMPNS cmsgs.
 
     Measures the reading thread's CPU from its first ``recvmsg`` to ``close`` (after the hub has
-    delivered what was still waiting for a clock pair).
+    delivered what was still waiting for a clock pair). Like the live non-blocking socket it answers
+    ``EAGAIN`` when a drain has read one batching interval of capture time (what the live reader
+    finds queued after its sleep), and ``fileno()`` is readable while records remain.
     """
 
     def __init__(self, records: list[MonitorRecord], clock: _ReplayClock) -> None:
@@ -143,9 +148,18 @@ class _ReplaySocket:
         ]
         self._clock = clock
         self._i = 0
+        self._slice_end: float | None = None
+        self._at_boundary = False
+        self._ready_r, self._ready_w = os.pipe()
+        if self._items:
+            os.write(self._ready_w, b"r")
+        self._closed = False
         self.cpu_start: float | None = None
         self.cpu_s = 0.0
         self.exhausted = threading.Event()
+
+    def fileno(self) -> int:
+        return self._ready_r
 
     def setsockopt(self, *_args: object) -> None:
         pass
@@ -160,10 +174,17 @@ class _ReplaySocket:
         if self.cpu_start is None:
             self.cpu_start = time.thread_time()
         if self._i >= len(self._items):
-            self.exhausted.set()
-            time.sleep(0.005)  # idle, as a real read timeout would be (no CPU)
-            raise TimeoutError
+            if not self.exhausted.is_set():
+                os.read(self._ready_r, 1)  # nothing left: the hub's poll now idles (no CPU)
+                self.exhausted.set()
+            raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
         t, data, anc = self._items[self._i]
+        if self._slice_end is None or self._at_boundary:
+            self._slice_end = t + _BATCH_S
+            self._at_boundary = False
+        elif t > self._slice_end:
+            self._at_boundary = True  # this drain has read one batching interval: EAGAIN
+            raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
         self._i += 1
         self._clock.t = t
         return data, anc, 0, None
@@ -171,6 +192,10 @@ class _ReplaySocket:
     def close(self) -> None:
         if self.cpu_start is not None:
             self.cpu_s = time.thread_time() - self.cpu_start
+        if not self._closed:
+            self._closed = True
+            os.close(self._ready_r)
+            os.close(self._ready_w)
 
 
 class _NullAvrcpTracker:
@@ -199,6 +224,7 @@ def run_hub_once(records: list[MonitorRecord]) -> tuple[float, dict[tuple[int, i
         drop_counter_factory=lambda _s: DropCounter(poll=lambda: 0),
         raw_ns=clock.raw_ns,
         monotonic=clock.monotonic,
+        batch_s=0.0,  # the socket's slices stand in for the sleep
     )
     loop = asyncio.new_event_loop()
     try:

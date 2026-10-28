@@ -10,13 +10,18 @@ Consumers that declare ``wants_kernel_time = True`` (the air consumer) get recor
 queue: a stamped record waits (≤ 250 ms, in order) until a later ``RawRealtimeMap`` pair brackets
 it; a record without a stamp, or one no pair can bracket, gets the RAW time at ``recvmsg`` return
 and ``timestamp="recv"`` (R-3). Every other consumer (AVRCP, which never reads the time) gets each
-record at once, stamped ``recv``. The map is sampled at every (re)open and then every 250 ms; while
-records wait, the read timeout is bounded by the next tick. ``clock_epoch`` is the map's epoch used
-for the bracket (the current epoch for ``recv`` records). For a kernel-time consumer, a ``recv``
+record at once, stamped ``recv``. The map is sampled at every (re)open and then every 250 ms.
+``clock_epoch`` is the map's epoch used for the bracket (the current epoch for ``recv`` records). For a kernel-time consumer, a ``recv``
 record inside a kernel-stamped stream, or a change of ``clock_epoch``, is a segment break.
 
 Drops: the ``SO_RXQ_OVFL`` cmsg when the kernel sends one, else ``SO_MEMINFO`` polled every
 250 ms (the only path seen on the monitor channel so far). ``drops=None`` means unknown, never zero.
+
+Reads are batched (R-20): the socket is non-blocking; the thread waits for readability (``poll``,
+at most until the next tick; ``stop`` wakes it through a pipe), sleeps a short batching interval
+(20 ms; cut short by ``stop``), then drains every queued datagram until ``EAGAIN``, at most 512 per
+drain so a flood cannot starve the ticks. The cost of a wakeup is shared by the records it reads; record times come from the kernel
+stamps, so the added read latency does not change them (only ``recv``-stamped records move).
 
 Handles are kept per controller: ``(index, handle) → peer MAC`` (R-2), seeded from the kernel's
 connection list at every open and maintained from Connection/Disconnection Complete events;
@@ -28,6 +33,9 @@ from __future__ import annotations
 import collections
 import errno
 import logging
+import math
+import os
+import select
 import sys
 import threading
 import time
@@ -68,8 +76,12 @@ UnavailableReason = Literal["no_cap_net_raw", "unsupported_platform", "monitor_e
 
 _RECV_BUFSIZE = 4096
 _ANC_BUFSIZE = 256
-_SOCKET_TIMEOUT_S = 0.5
-_TICK_S = 0.25  # clock pair + SO_MEMINFO poll cadence
+_TICK_S = 0.25  # clock pair + SO_MEMINFO poll cadence; also the longest readability wait
+# R-20: sleep this long after the socket turns readable, then drain. Live on the HAOS VM the bare
+# read loop cost 64.8 µs/record one read per wakeup, 26.5 at 20 ms, 14.8 at 50 ms; AVRCP source
+# correlation tolerates ≤ 50 ms of extra latency (its resolver waits up to 1 s for the HCI copy).
+_BATCH_S = 0.02
+_DRAIN_MAX = 512  # datagrams per drain: then the loop runs its ticks before reading on
 _PENDING_MAX_AGE_US = 250_000.0  # a kernel-stamped record waits at most this long for a bracketing pair
 _PENDING_MAX = 8192  # bound on records waiting for a pair (≈ 10 s of a busy monitor)
 _CPU_WINDOW_S = 30.0
@@ -127,6 +139,18 @@ def _open_monitor_socket() -> socket.socket:
         raise
 
 
+def _poll_waiter(sock: Any, wake_fd: int) -> Callable[[float], bool]:
+    """``wait(timeout_s)``: True once *sock* or *wake_fd* is readable (or in error), else False after *timeout_s*."""
+    poller = select.poll()
+    poller.register(sock, select.POLLIN)
+    poller.register(wake_fd, select.POLLIN)
+
+    def wait(timeout_s: float) -> bool:
+        return bool(poller.poll(max(0, math.ceil(timeout_s * 1000.0))))
+
+    return wait
+
+
 def _default_drop_counter(sock: socket.socket) -> DropCounter:
     return DropCounter(poll=lambda: read_meminfo_drops(sock))
 
@@ -179,6 +203,9 @@ class HciMonitorHub:
         raw_ns: Callable[[], int] = _raw_ns,
         monotonic: Callable[[], float] = time.monotonic,
         thread_time: Callable[[], float] = time.thread_time,
+        readable_waiter: Callable[[Any, int], Callable[[float], bool]] = _poll_waiter,
+        batch_s: float = _BATCH_S,
+        drain_max: int = _DRAIN_MAX,
     ) -> None:
         self._open_socket = open_socket
         self._seed = seed
@@ -189,6 +216,9 @@ class HciMonitorHub:
         self._raw_ns = raw_ns
         self._monotonic = monotonic
         self._thread_time = thread_time
+        self._readable_waiter = readable_waiter
+        self._batch_s = batch_s
+        self._drain_max = max(1, drain_max)
 
         self._lock = threading.Lock()
         self._consumers: tuple[HubConsumer, ...] = ()
@@ -196,7 +226,6 @@ class HciMonitorHub:
         self._timed: tuple[HubConsumer, ...] = ()
         # (opcode, event code or -1) -> (immediate consumers, kernel-time consumers) wanting it
         self._routes: dict[tuple[int, int], tuple[tuple[HubConsumer, ...], tuple[HubConsumer, ...]]] = {}
-        self._timeout = _SOCKET_TIMEOUT_S
         self._last_cpu_sample: tuple[float, float] | None = None
         self._unexpected_logged_at: float | None = None
         self._monitor_error_logged_at: float | None = None
@@ -204,6 +233,7 @@ class HciMonitorHub:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._stop_deadline: float | None = None
+        self._wake_w: int | None = None  # write end of the pipe that interrupts the readability wait
         self._open_event = threading.Event()
 
         self._is_open = False
@@ -284,10 +314,11 @@ class HciMonitorHub:
     def stop(self, timeout: float = 2.0) -> None:
         """Stop the reader: it drains the socket queue, closes the socket and exits.
 
-        The drain ends at the first idle read timeout (≤ 0.5 s) or *timeout* after this call,
-        whichever comes first; with A2DP still streaming it can take the full *timeout*. A stop
-        requested before the first open still lets the thread try the open once (so an error is
-        reported and records already queued in the kernel are delivered).
+        The drain ends at the first read that finds the queue empty (an idle reader is woken at
+        once, a batching sleep is cut short) or *timeout* after this call, whichever comes first;
+        with A2DP still streaming it can take the full *timeout*. A stop requested before the
+        first open still lets the thread try the open once (so an error is reported and records
+        already queued in the kernel are delivered).
         """
         with self._lock:
             thread = self._thread
@@ -295,6 +326,11 @@ class HciMonitorHub:
                 return
             self._stop_deadline = self._monotonic() + timeout
             self._stop.set()
+            if self._wake_w is not None:
+                try:
+                    os.write(self._wake_w, b"x")
+                except OSError:
+                    pass
         thread.join(timeout + 0.5)
         if thread.is_alive():
             logger.warning("HciMonitorHub: reader thread did not stop within %.1fs", timeout)
@@ -303,7 +339,7 @@ class HciMonitorHub:
                 self._thread = None
 
     def wait_open(self, timeout: float) -> bool:
-        """Block until the socket is open and its first read returned (a record or the idle timeout)."""
+        """Block until the socket is open and its first wait or drain returned (records or idle)."""
         return self._open_event.wait(timeout)
 
     # ------------------------------------------------------------------ queries
@@ -431,9 +467,24 @@ class HciMonitorHub:
         self._notify_state("error", reason)
 
     def _serve(self, sock: Any) -> None:
+        wake_r, wake_w = os.pipe()
+        os.set_blocking(wake_w, False)
+        with self._lock:
+            self._wake_w = wake_w
+            if self._stop.is_set():
+                os.write(wake_w, b"x")
+        try:
+            self._serve_open(sock, wake_r)
+        finally:
+            with self._lock:
+                self._wake_w = None
+            os.close(wake_w)
+            os.close(wake_r)
+
+    def _serve_open(self, sock: Any, wake_fd: int) -> None:
         opts = enable_monitor_sockopts(sock)
-        sock.settimeout(_SOCKET_TIMEOUT_S)
-        self._timeout = _SOCKET_TIMEOUT_S
+        sock.settimeout(0.0)  # non-blocking: a drain ends at EAGAIN (R-20)
+        wait_readable = self._readable_waiter(sock, wake_fd)
         drop_counter = self._drop_counter_factory(sock)
         seeded: dict[tuple[int, int], str] = {}
         try:
@@ -461,8 +512,10 @@ class HciMonitorHub:
         for c in consumers:
             self._call_state(c, "open", None)
 
+        backlog = False  # the last drain stopped at its bound: more is queued
+        first = True  # the first wait only looks: wait_open() returns at once on a quiet bus
         while True:
-            # Once per datagram: the checks are inlined so a quiet loop pass costs no calls (R-19).
+            # Once per wakeup (a drain of many records): the checks are inlined (R-19).
             if self._greet:
                 self._greet_new_consumers()
             now = self._monotonic()
@@ -471,28 +524,37 @@ class HciMonitorHub:
             if self._stop_deadline is not None and self._stopping_past_deadline(now):
                 self._finish_pending()
                 return
-            if self._pending or self._timeout != _SOCKET_TIMEOUT_S:
-                self._bound_timeout(sock, now)
-            try:
-                data, ancdata, _flags, _addr = sock.recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
-            except TimeoutError:
+            stopping = self._stop.is_set()
+            if not backlog:
+                wait = 0.0 if stopping or first else min(_TICK_S, max(0.0, self._next_tick - now))
+                first = False
+                if not wait_readable(wait):
+                    if not self._open_event.is_set():  # set() takes a lock and notifies: once per open
+                        self._open_event.set()
+                    if stopping:
+                        self._finish_pending()
+                        return
+                    continue
+                if not stopping and self._batch_s > 0:
+                    self._stop.wait(self._batch_s)  # let records queue up; stop() cuts it short
+            backlog = self._drain(sock)
+            if not self._open_event.is_set():
                 self._open_event.set()
-                if self._stop.is_set():
-                    self._finish_pending()
-                    return
-                continue
-            if not self._open_event.is_set():  # set() takes a lock and notifies: once per open
-                self._open_event.set()
-            self._on_datagram(data, ancdata)
+            if not backlog and self._stop.is_set():
+                self._finish_pending()
+                return
 
-    def _bound_timeout(self, sock: Any, now: float) -> None:
-        """While records wait for a pair, wake for the next tick instead of idling 0.5 s."""
-        want = _SOCKET_TIMEOUT_S
-        if self._pending:
-            want = min(_SOCKET_TIMEOUT_S, max(0.001, self._next_tick - now))
-        if want != self._timeout:
-            sock.settimeout(want)
-            self._timeout = want
+    def _drain(self, sock: Any) -> bool:
+        """Read queued datagrams until EAGAIN or the bound; True when the bound stopped it."""
+        recvmsg = sock.recvmsg
+        on_datagram = self._on_datagram
+        for _ in range(self._drain_max):
+            try:
+                data, ancdata, _flags, _addr = recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
+            except BlockingIOError:
+                return False
+            on_datagram(data, ancdata)
+        return True
 
     def _stopping_past_deadline(self, now: float) -> bool:
         deadline = self._stop_deadline

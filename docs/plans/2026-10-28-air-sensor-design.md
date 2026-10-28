@@ -136,7 +136,7 @@ playout error once `L_as` is known; with `D_out = L_as` (the speaker's delay set
  parent process                                                     daemon subprocess (per speaker)
  ──────────────────────────────────────────────────────────────    ─────────────────────────────────────────────
  HciMonitorHub (thread; only with the switch on)                             stdin reader (asyncio)
-   recvmsg(HCI_CHANNEL_MONITOR) + SO_TIMESTAMPNS; drops: cmsg|SO_MEMINFO       air_source / air_envelope / air_fold /
+   recvmsg(HCI_CHANNEL_MONITOR) + SO_TIMESTAMPNS, batched (R-20); drops        air_source / air_envelope / air_fold /
    REALTIME→RAW (bracketed offset, 4 Hz)                               set_air_calibration
    index map (NEW_INDEX: hciN → adapter MAC),                              │
    (index, handle) → peer MAC                                              ▼
@@ -999,6 +999,7 @@ spread of the estimator's per-click phases (as reported by `Measurement.spread_m
 | R-15 | Search ranges: acquisition ±500 ms (controller), tracking ±20 cells, ±5 cells after an anchor reset; continuity: a > 3-cell move needs two agreeing windows | covers the largest observed spread and fallback latency guesses; robust to wrong peaks |
 | R-17 | `EXPERIMENTAL_AIR_SENSOR` needs a bridge restart (`RESTART_REQUIRED`) | the switch picks the monitor path that owns the socket at start |
 | R-16 | Window 3 s, hop 1 s; validity ≥ 90 % air present, ≥ 80 % written program and unmuted | faster lock at cold starts than the morning script's 5.8 s; A17 checks PSR at 3 s vs 5.8 s on real music |
+| R-20 | The hub reads in batches: poll for readability (≤ next tick), sleep 20 ms, drain non-blocking until `EAGAIN` (≤ 512 per drain) | the per-wakeup cost dominated the hub thread's CPU on the VM |
 
 ## Intermediate stand test (2026-10-28, HAOS, branch overlay, 3.1.0-beta.17 base)
 
@@ -1044,3 +1045,27 @@ Rulings (controller, after the test):
   / 80 µs (music), of which the hub's own share is 36–43 µs. At ENEBY's real rate that is ≈ 1.4 % of
   a core per speaker. Budget set to 0.04 per streaming speaker (guard against runaway, not normal
   load); A17 checks the live figure.
+- **R-20 batched reads (live stand, HAOS VM, 2 vCPU QEMU).** The hub woke once per monitor record
+  (blocking `recvmsg` with a timeout). Live it read ≈ 388 records/s (mostly Number of Completed
+  Packets events from both adapters, plus A2DP ACL TX) and the hub thread used 7.5 % of a core,
+  which tripped the CPU guard (0.092 against 0.04 × 2 streaming speakers). The bare read loop alone,
+  measured live in the add-on container on the same socket: one `recvmsg` per wakeup with a timeout
+  64.8 µs/record (2.5 % of a core); blocking 58.8; sleep 10 ms then drain with `MSG_DONTWAIT` until
+  `EAGAIN` 42.6; 20 ms 26.5; 50 ms 14.8 µs/record. The cost of a wakeup dominates, so the reader now
+  batches:
+  - the socket is non-blocking; the thread `poll`s it (and a wake pipe that `stop()` writes to)
+    with the time to the next 250 ms tick as the timeout (the first wait after an open only looks);
+  - once readable it sleeps a batching interval of **20 ms** (`stop()` cuts it short), then drains
+    every queued datagram until `EAGAIN`, at most **512** per drain; a drain that hits the bound is
+    followed at once (no sleep) by the next pass, after the tick check, so a flood cannot starve the
+    ticks (drop counter, clock pair, pending flush, CPU window) and records keep their order;
+  - each datagram is processed exactly as before (routing, drops from `SO_RXQ_OVFL` per datagram or
+    `SO_MEMINFO` per tick, the 4 MiB receive buffer holds ≈ 10 s of the live rate).
+  Record times come from the `SO_TIMESTAMPNS` kernel stamps, so the added read latency does not move
+  them; only `recv`-stamped records (R-3 fallback) gain up to the batching interval. 20 ms keeps
+  AVRCP source correlation well inside its tolerance (≤ 50 ms extra; the inbound resolver waits up
+  to 1 s for the HCI copy of a key press, which arrives 2–10 ms after the D-Bus dispatch today).
+  Stop: an idle reader is woken at once; a streaming one still drains until the queue is empty or
+  the stop timeout. `scripts/air_sensor_bench.py --hub` models the batching: its fake socket answers
+  `EAGAIN` after each 20 ms of capture time (the sleep itself is skipped, it costs no CPU). A17 checks
+  the live hub CPU against the guard.
