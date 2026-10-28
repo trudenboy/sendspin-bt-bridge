@@ -35,6 +35,20 @@ frame-count anchor (R-18), ``media`` with the pre-R-18 anchor (median ``t_send �
 (proportionally across a skipped span). A summary gives the median, p10–p90 and the largest step
 between consecutive confirmed windows.
 
+``--offline-h WINDOWS`` (no WAV) is A17 Step 3, live vs offline ``H`` on the same capture: WINDOWS
+is the daemon's ``Air window:`` log lines (``--player`` keeps one speaker's) or a CSV with
+``t_mid_us,s_mid_us,h_ms[,status]``; only confirmed windows count. The live ``t_mid`` is RAW µs,
+the capture's clock is the kernel's REALTIME stamp, so the offset between them is fitted: the
+capture runs through the real ``AirLinkTracker`` (as ``--anchor count``), and the offset that puts
+every live ``t_mid`` on its air-time lattice (to µs) is taken, the one nearest the coarse offset from
+the log lines' wall times (``--log-tz``) or ``--raw-offset``. Offsets whole cells apart fit as well;
+a whole-cell shift moves the matched cell and its offline air time together, and the summary
+prints the worst p95 over them. Per window ``H_offline = t_air − s_mid − (d_enc − d_comb)``, with
+``t_air`` the local-anchor air time of the matched cell (as above, independent of the live running
+median) and the daemon's own ``s_mid`` and ``d_enc − d_comb`` (the offline side cannot recompute
+``s``); pass: p95 ``|H_live − H_offline|`` ≤ 2 ms. The match identifies the cell by time, not by
+content: it checks the live air times against the local anchor, not which PCM a window matched.
+
 Making a capture (the morning one is copyrighted music and stays private): on the speaker
 host run ``btmon -w capture.btsnoop`` (needs root), play a known local WAV through the bridge
 to one SBC speaker for a minute or two, stop btmon, then::
@@ -42,6 +56,7 @@ to one SBC speaker for a minute or two, stop btmon, then::
     uv run python scripts/air_envelope_corr.py capture.btsnoop source.wav [--index N] [--handle H]
         [--definition legacy|impl|both] [--window-frames 1034] [--hop-frames 344] [--search 20]
         [--envelope comb|bandpass] [--offline-h] [--anchor media|count] [--csv out.csv]
+    uv run python scripts/air_envelope_corr.py capture.btsnoop --offline-h bridge.log --player NAME [--log-tz 3]
 
 The WAV must be 16- or 24-bit PCM at the capture's SBC sampling rate and start where the
 playback started (a constant offset is found by a coarse search, ``--offset-frames`` overrides
@@ -57,12 +72,14 @@ import csv
 import itertools
 import math
 import random
+import re
 import statistics
 import struct
 import sys
 import wave
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from operator import mul
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -99,6 +116,10 @@ ANCHOR_SPAN_S = 1.0
 BATCH_S = 0.25  # the parent takes the tracker's batches this often
 BANDPASS_LEAD = 2  # cells of filter lead-in before each band-pass cell
 RTP_MOD = 1 << 32
+LOG_LATENCY_S = 2.0  # a window is logged ≈ half a window (1.5 s) + half a hop after its middle
+COARSE_SPAN_S = 1.5  # the clock offset is searched this far either side of the coarse one
+TIE_S = 20e-6  # offsets fitting within this of the best are equally good (whole cells apart)
+DH_PASS_MS = 2.0  # A17 Step 3: p95 |H_live - H_offline| ≤ 2 ms
 
 
 # -- air side ---------------------------------------------------------------------------------
@@ -281,6 +302,235 @@ def air_time_at(times: dict[int, float], keys: Sequence[int], cell: int) -> floa
         return None
     lo, hi = keys[j - 1], keys[j]
     return times[lo] + (cell - lo) / (hi - lo) * (times[hi] - times[lo])
+
+
+# -- live windows vs offline (--offline-h WINDOWS) ------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class LiveWindow:
+    """One confirmed window of the daemon: ``t_mid`` (RAW µs), ``s_mid`` (µs), ``H`` (ms)."""
+
+    t_mid_us: float
+    s_mid_us: float
+    h_ms: float
+    wall_s: float | None = None  # wall time of the log line (seconds since the epoch), when known
+
+
+@dataclass(frozen=True, slots=True)
+class ClockFit:
+    offset_s: float  # capture clock (btsnoop, REALTIME) minus RAW, in seconds
+    residual_us: float  # median |live t_mid - nearest live-tracker air time| at that offset
+    tied: tuple[float, ...]  # every offset in the search span that fits as well (whole cells apart)
+
+
+_WINDOW_RE = re.compile(
+    r"^(?P<wall>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3})?.*?(?:\[(?P<player>[^\]@]+?) @[^\]]*\])?\s*Air window: "
+    r"mode=\S+ status=(?P<status>\w+) t_mid=(?P<t>[\d.]+) s_mid=(?P<s>[-\d.]+) H=(?P<h>[-\d.]+)(?:ms)?"
+)
+
+
+def parse_live_windows(
+    path: str | Path, *, player: str | None = None, tz_hours: float | None = None
+) -> list[LiveWindow]:
+    """The confirmed live windows from the daemon's ``Air window:`` log lines or a CSV.
+
+    A CSV has the columns ``t_mid_us``, ``s_mid_us``, ``h_ms`` and optionally ``status`` (only
+    ``confirmed`` rows are kept). Log lines carry their wall time, read in ``tz_hours`` (default:
+    the local time zone of the machine running this script); ``player`` keeps one player's lines.
+    """
+    text = Path(path).read_text(errors="replace").lstrip()
+    out: list[LiveWindow] = []
+    if "t_mid_us" in text.split("\n", 1)[0]:
+        for row in csv.DictReader(text.splitlines()):
+            if (row.get("status") or "confirmed") == "confirmed":
+                out.append(LiveWindow(float(row["t_mid_us"]), float(row["s_mid_us"]), float(row["h_ms"])))
+        return out
+    tz = None if tz_hours is None else timezone(timedelta(hours=tz_hours))
+    for line in text.splitlines():
+        m = _WINDOW_RE.search(line)
+        if m is None or m["status"] != "confirmed" or m["s"] == "-" or m["h"] == "-":
+            continue
+        if player is not None and (m["player"] or "").strip() != player:
+            continue
+        wall = None
+        if m["wall"]:
+            dt = datetime.strptime(m["wall"], "%Y-%m-%d %H:%M:%S,%f")
+            wall = (dt.replace(tzinfo=tz) if tz is not None else dt).timestamp()
+        out.append(LiveWindow(float(m["t"]), float(m["s"]), float(m["h"]), wall))
+    return out
+
+
+def coarse_raw_offset(windows: Sequence[LiveWindow]) -> float | None:
+    """Capture clock minus RAW from the log lines' wall times: a window is logged about half a window
+    plus half a hop after its middle went out (:data:`LOG_LATENCY_S`); good to a second or so."""
+    vals = [w.wall_s - w.t_mid_us / 1e6 for w in windows if w.wall_s is not None]
+    return statistics.median(vals) - LOG_LATENCY_S if vals else None
+
+
+def _nearest(tarr: Sequence[float], x: float) -> int:
+    j = bisect.bisect_left(tarr, x)
+    return min((i for i in (j - 1, j) if 0 <= i < len(tarr)), key=lambda i: abs(tarr[i] - x))
+
+
+def fit_clock_offset(
+    windows: Sequence[LiveWindow], times: dict[int, float], coarse_s: float, span_s: float = COARSE_SPAN_S
+) -> ClockFit:
+    """The capture-clock offset that puts every live ``t_mid`` on the live tracker's air times.
+
+    The tracker run offline on the capture reproduces the live air-time lattice (same packets, same
+    kernel stamps, same anchor), so at the right offset the live ``t_mid`` land on it to µs. Offsets
+    whole cells apart fit about equally well: the one nearest ``coarse_s`` is taken (a whole-cell
+    shift moves the matched cell and its offline air time together, so ΔH hardly depends on it).
+    """
+    keys = sorted(times)
+    tarr = [times[k] for k in keys]
+    lo, hi = tarr[0], tarr[-1]
+    inside = [w for w in windows if lo + span_s <= w.t_mid_us / 1e6 + coarse_s <= hi - span_s]
+    if not inside:
+        raise ValueError("no live window falls inside the capture at the coarse clock offset")
+    pivot = inside[len(inside) // 2].t_mid_us / 1e6
+    first = bisect.bisect_left(tarr, pivot + coarse_s - span_s)
+    last = bisect.bisect_right(tarr, pivot + coarse_s + span_s)
+    scored: list[tuple[float, float]] = []
+    for t in tarr[first:last]:
+        offset = t - pivot
+        res = [abs(tarr[_nearest(tarr, x)] - x) for w in windows if lo <= (x := w.t_mid_us / 1e6 + offset) <= hi]
+        if len(res) >= max(1, len(inside) // 2):
+            scored.append((statistics.median(res), offset))
+    if not scored:
+        raise ValueError("no clock offset puts the live windows inside the capture")
+    best = min(s for s, _ in scored)
+    tied = tuple(o for s, o in scored if s <= best + TIE_S)
+    return ClockFit(min(tied, key=lambda o: abs(o - coarse_s)), best * 1e6, tied)
+
+
+def offline_air_time(meta: CellMeta, cell: int, cache: dict[int, float | None] | None = None) -> float | None:
+    """Air time of air cell ``cell`` from the **local** anchor (``α_local + u``, :func:`local_anchor`);
+    a skipped cell is placed proportionally between the held cells either side."""
+    memo: dict[int, float | None] = {} if cache is None else cache
+
+    def held(c: int) -> float | None:
+        p = meta.packet_of[c]
+        if p not in memo:
+            memo[p] = local_anchor(meta.packets, p)
+        alpha = memo[p]
+        return None if alpha is None else alpha + (meta.cell0_ticks + c * CELL) / meta.rate
+
+    if not 0 <= cell < len(meta.packet_of):
+        return None
+    if meta.packet_of[cell] >= 0:
+        return held(cell)
+    left = next((c for c in range(cell - 1, -1, -1) if meta.packet_of[c] >= 0), None)
+    right = next((c for c in range(cell + 1, len(meta.packet_of)) if meta.packet_of[c] >= 0), None)
+    if left is None or right is None:
+        return None
+    t_lo, t_hi = held(left), held(right)
+    if t_lo is None or t_hi is None:
+        return None
+    return t_lo + (cell - left) / (right - left) * (t_hi - t_lo)
+
+
+def compare_at_offset(
+    windows: Sequence[LiveWindow], times: dict[int, float], meta: CellMeta, offset_s: float
+) -> list[dict]:
+    """Per live window: the matched air cell, ``H_offline = t_air − s_mid − (d_enc − d_comb)`` with
+    ``t_air`` the local-anchor air time of that cell (the daemon's own ``d_enc − d_comb``, read off
+    its ``H − (t_mid − s_mid)``), and ``ΔH = H_live − H_offline``."""
+    keys = sorted(times)
+    tarr = [times[k] for k in keys]
+    cache: dict[int, float | None] = {}
+    rows: list[dict] = []
+    for w in windows:
+        x = w.t_mid_us / 1e6 + offset_s
+        if not tarr[0] <= x <= tarr[-1]:
+            continue
+        i = _nearest(tarr, x)
+        t_air = offline_air_time(meta, keys[i], cache)
+        if t_air is None:
+            continue
+        credit_ms = w.h_ms - (w.t_mid_us - w.s_mid_us) / 1000.0
+        h_off = ((t_air - offset_s) * 1e6 - w.s_mid_us) / 1000.0 + credit_ms
+        rows.append(
+            {
+                "t_mid_us": w.t_mid_us,
+                "s_mid_us": w.s_mid_us,
+                "h_live_ms": w.h_ms,
+                "cell": keys[i],
+                "fit_us": (x - tarr[i]) * 1e6,
+                "h_offline_ms": h_off,
+                "dh_ms": w.h_ms - h_off,
+            }
+        )
+    return rows
+
+
+def live_vs_offline(
+    windows: Sequence[LiveWindow], packets: Sequence[MediaPacket], *, coarse_offset_s: float
+) -> tuple[list[dict], ClockFit]:
+    """A17 Step 3: the live windows' ``H`` against the offline local-anchor ``H`` of the same air cells."""
+    times = live_air_times(packets, "count")
+    _, meta = air_cells(packets, lambda _f: 0.0)
+    fit = fit_clock_offset(windows, times, coarse_offset_s)
+    return compare_at_offset(windows, times, meta, fit.offset_s), fit
+
+
+def dh_summary(rows: Sequence[dict]) -> dict[str, float]:
+    """``n``, median ΔH, p95 and max of ``|ΔH|`` (ms), and the median ``|fit residual|`` (µs)."""
+    dh = [r["dh_ms"] for r in rows]
+    absdh = [abs(v) for v in dh]
+    return {
+        "n": len(dh),
+        "median_ms": percentile(dh, 50),
+        "p95_abs_ms": percentile(absdh, 95),
+        "max_abs_ms": max(absdh) if absdh else float("nan"),
+        "fit_median_us": percentile([abs(r["fit_us"]) for r in rows], 50),
+    }
+
+
+def run_offline_h_windows(args: argparse.Namespace) -> int:
+    try:
+        windows = parse_live_windows(args.offline_h, player=args.player, tz_hours=args.log_tz)
+        if not windows:
+            print(f"error: no confirmed live windows in {args.offline_h}", file=sys.stderr)
+            return 2
+        coarse = args.raw_offset if args.raw_offset is not None else coarse_raw_offset(windows)
+        if coarse is None:
+            print("error: the windows carry no wall time: pass --raw-offset", file=sys.stderr)
+            return 2
+        packets = select_packets(args.capture, args.index, args.handle)
+        times = live_air_times(packets, "count")
+        _, meta = air_cells(packets, lambda _f: 0.0)
+        fit = fit_clock_offset(windows, times, coarse)
+    except (ValueError, OSError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    rows = compare_at_offset(windows, times, meta, fit.offset_s)
+    for r in rows:
+        print(
+            f"window t_mid {r['t_mid_us']:.1f} cell {r['cell']:6d} fit {r['fit_us']:+8.1f} us | "
+            f"H live {r['h_live_ms']:8.3f} offline {r['h_offline_ms']:8.3f} dH {r['dh_ms']:+.3f} ms"
+        )
+    st = dh_summary(rows)
+    step = max(1, len(fit.tied) // 50)
+    worst = max(dh_summary(compare_at_offset(windows, times, meta, o))["p95_abs_ms"] for o in fit.tied[::step])
+    verdict = "PASS" if st["p95_abs_ms"] <= DH_PASS_MS else "FAIL"
+    print(
+        f"clock offset {fit.offset_s:.6f} s (coarse {coarse:.3f}; {len(fit.tied)} offsets whole cells apart fit "
+        f"as well, worst p95 over them {worst:.3f} ms); fit residual median {st['fit_median_us']:.1f} us"
+    )
+    print(
+        f"live vs offline H over {st['n']} of {len(windows)} windows: median dH {st['median_ms']:+.3f} ms, "
+        f"p95 |dH| {st['p95_abs_ms']:.3f} ms, max {st['max_abs_ms']:.3f} ms -> {verdict} (<= {DH_PASS_MS} ms)"
+    )
+    if args.csv:
+        cols = ["t_mid_us", "s_mid_us", "h_live_ms", "cell", "fit_us", "h_offline_ms", "dh_ms"]
+        with open(args.csv, "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(cols)
+            for r in rows:
+                w.writerow([r[c] for c in cols])
+    return 0
 
 
 # -- source side ------------------------------------------------------------------------------
@@ -609,7 +859,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--offset-frames", type=int, default=None, help="source cell of air cell 0 (default: coarse search)"
     )
-    ap.add_argument("--offline-h", action="store_true", help="add the local-anchor offline H per window")
+    ap.add_argument(
+        "--offline-h",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="WINDOWS",
+        help="without a value: add the local-anchor offline H per window; with the daemon's "
+        "'Air window:' log lines or a CSV (t_mid_us,s_mid_us,h_ms[,status]): compare the live H of every "
+        "confirmed window with the offline H of the same air cell (no WAV needed)",
+    )
+    ap.add_argument("--player", default=None, help="--offline-h WINDOWS: keep this player's log lines")
+    ap.add_argument(
+        "--raw-offset",
+        type=float,
+        default=None,
+        help="--offline-h WINDOWS: approximate capture clock minus RAW, seconds (default: from the log wall times)",
+    )
+    ap.add_argument(
+        "--log-tz", type=float, default=None, help="--offline-h WINDOWS: UTC offset of the log's wall times, hours"
+    )
     ap.add_argument(
         "--anchor",
         choices=("media", "count"),
@@ -621,6 +890,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.selftest:
         return run_selftest()
+    if isinstance(args.offline_h, str):
+        if args.capture is None:
+            ap.error("--offline-h WINDOWS needs the capture")
+        return run_offline_h_windows(args)
+    args.offline_h = bool(args.offline_h)
     if args.capture is None or args.wav is None:
         ap.error("capture and wav are required (or --selftest)")
 

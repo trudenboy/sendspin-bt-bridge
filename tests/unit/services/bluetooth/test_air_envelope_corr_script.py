@@ -334,3 +334,118 @@ def test_cli_anchor_prints_the_h_stability(capsys, tool, click_wav):
     )
     out = capsys.readouterr().out
     assert rc == 0 and "anchor count" in out and "max jump" in out
+
+
+# ── --offline-h WINDOWS: the live windows against the offline local anchor (A17 Step 3) ─────
+
+RAW_OFFSET = 1792080000.25  # REALTIME (btsnoop) seconds minus RAW seconds on the fixture's "host"
+WINDOW_LINE = (
+    "2026-10-28 21:46:16,591 - sendspin_bridge.bridge.client - INFO - [{name} @ addon/proc] Air window: "
+    "mode=track status={status} t_mid={t_mid:.1f} s_mid={s_mid} H={h} psr=2.020 rho=0.661 lag=-90727.484"
+)
+
+
+def _live_windows(tool, cells, err_us=None):
+    """Live windows as the daemon would log them for the click capture: ``t_mid`` is the live
+    tracker's air time of ``cells[i]`` on a RAW clock ``RAW_OFFSET`` behind the capture's clock."""
+    pk = tool.select_packets(CLICKS, 1, None)
+    times = tool.live_air_times(pk, "count")
+    out = []
+    for i, c in enumerate(cells):
+        t_mid = (times[c] - RAW_OFFSET) * 1e6 + (err_us or {}).get(i, 0.0)
+        s_mid = t_mid + 45_000.0
+        out.append(tool.LiveWindow(t_mid_us=t_mid, s_mid_us=s_mid, h_ms=(t_mid - s_mid) / 1000.0 + 0.027))
+    return pk, times, out
+
+
+def test_live_windows_parse_from_the_daemon_log_for_one_player(tmp_path, tool):
+    log = tmp_path / "bridge.log"
+    log.write_text(
+        "\n".join(
+            [
+                WINDOW_LINE.format(name="ENEBY20", status="confirmed", t_mid=1000.4, s_mid="46000.7", h="-45.253ms"),
+                WINDOW_LINE.format(name="ENEBY20", status="rejected", t_mid=2000.0, s_mid="-", h="-"),
+                WINDOW_LINE.format(name="Lenco", status="confirmed", t_mid=3000.0, s_mid="48000.0", h="-45.0ms"),
+                "2026-10-28 21:46:17,000 - something else entirely",
+            ]
+        )
+    )
+    eneby = tool.parse_live_windows(log, player="ENEBY20")
+    assert [(w.t_mid_us, w.s_mid_us, w.h_ms) for w in eneby] == [(1000.4, 46000.7, -45.253)]
+    assert eneby[0].wall_s is not None
+    assert len(tool.parse_live_windows(log)) == 2  # every player's confirmed windows
+
+
+def test_live_windows_parse_from_a_csv(tmp_path, tool):
+    path = tmp_path / "w.csv"
+    path.write_text("t_mid_us,s_mid_us,h_ms,status\n1000.5,46000.5,-45.0,confirmed\n2000,47000,-45,rejected\n")
+    ws = tool.parse_live_windows(path)
+    assert [(w.t_mid_us, w.s_mid_us, w.h_ms, w.wall_s) for w in ws] == [(1000.5, 46000.5, -45.0, None)]
+
+
+def test_offline_air_time_is_the_local_anchor_and_spans_a_skip(tool):
+    rate = 44100
+    f = 128 / rate
+    pk = tuple(tool.PacketTime(seg=0, u_s=k * 7 * f, t_send=100.0 + k * 7 * f + 0.001 * (k % 3)) for k in range(30))
+    owner = tuple(i // 7 if not 70 <= i < 84 else -1 for i in range(210))  # packets 10 and 11 skipped
+    meta = tool.CellMeta(rate=rate, subbands=8, cell0_ticks=0, packet_of=owner, packets=pk)
+    assert tool.offline_air_time(meta, 15) == pytest.approx(tool.local_anchor(pk, 2) + 15 * f, abs=1e-12)
+    lo, hi = tool.offline_air_time(meta, 69), tool.offline_air_time(meta, 84)
+    assert tool.offline_air_time(meta, 76) == pytest.approx(lo + (76 - 69) / (84 - 69) * (hi - lo), abs=1e-12)
+
+
+def test_live_vs_offline_finds_the_clock_offset_and_agrees_on_the_click_capture(tool):
+    cells = [600, 944, 1288, 1632]
+    pk, _, windows = _live_windows(tool, cells)
+    rows, fit = tool.live_vs_offline(windows, pk, coarse_offset_s=RAW_OFFSET + 0.3)
+    frame = 128 / 44100
+    shift = (fit.offset_s - RAW_OFFSET) / frame
+    assert abs(shift - round(shift)) < 0.01  # the offset is found up to whole cells (the lattice)
+    assert all(abs(r["fit_us"]) <= 1e6 * tool.TIE_S for r in rows)  # on the live lattice, not between cells
+    assert [r["cell"] for r in rows] == [c + round(shift) for c in cells]
+    for r, w in zip(rows, windows, strict=True):
+        assert r["h_offline_ms"] == pytest.approx(w.h_ms - r["dh_ms"], abs=1e-9)
+    summary = tool.dh_summary(rows)
+    assert summary["n"] == 4 and summary["p95_abs_ms"] < 1.0
+
+
+def test_live_vs_offline_shows_a_live_air_time_error(tool):
+    """A live window 1 ms off the live tracker's air time moves its ΔH by that 1 ms."""
+    cells = [600, 944, 1288, 1632]
+    pk, _, clean = _live_windows(tool, cells)
+    _, _, bad = _live_windows(tool, cells, err_us={2: 1000.0})
+    good_rows, _ = tool.live_vs_offline(clean, pk, coarse_offset_s=RAW_OFFSET)
+    bad_rows, _ = tool.live_vs_offline(bad, pk, coarse_offset_s=RAW_OFFSET)
+    assert bad_rows[2]["dh_ms"] - good_rows[2]["dh_ms"] == pytest.approx(1.0, abs=0.05)
+    assert tool.dh_summary(bad_rows)["max_abs_ms"] > 0.9
+
+
+def test_cli_offline_h_from_a_log_needs_no_wav(tmp_path, capsys, tool):
+    _, _, windows = _live_windows(tool, [600, 944, 1288, 1632])
+    lines = [
+        WINDOW_LINE.format(
+            name="ENEBY20", status="confirmed", t_mid=w.t_mid_us, s_mid=f"{w.s_mid_us:.1f}", h=f"{w.h_ms:.3f}ms"
+        )
+        for w in windows
+    ]
+    lines.append(WINDOW_LINE.format(name="Lenco", status="confirmed", t_mid=5.0, s_mid="9.0", h="-1.0ms"))
+    log = tmp_path / "bridge.log"
+    log.write_text("\n".join(lines))
+    csv_path = tmp_path / "dh.csv"
+    rc = tool.main(
+        [
+            str(CLICKS),
+            "--offline-h",
+            str(log),
+            "--player",
+            "ENEBY20",
+            "--raw-offset",
+            str(RAW_OFFSET - 0.4),
+            "--csv",
+            str(csv_path),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0 and "p95 |dH|" in out and "PASS" in out
+    head, *rows = csv_path.read_text().splitlines()
+    assert head.split(",")[:3] == ["t_mid_us", "s_mid_us", "h_live_ms"] and "dh_ms" in head and len(rows) == 4
