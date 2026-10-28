@@ -2508,7 +2508,8 @@ class SendspinClient:
         await self._command_service.send(self._daemon_proc, payload)
 
     #: Above this many bytes buffered on the daemon's stdin an air command is skipped, not queued.
-    AIR_WRITE_BUFFER_LIMIT = 64 * 1024
+    #: 32 KiB keeps control commands (volume, stop, ...) well below the pipe's high-water mark.
+    AIR_WRITE_BUFFER_LIMIT = 32 * 1024
 
     @property
     def air_accepts(self) -> tuple[int, ...]:

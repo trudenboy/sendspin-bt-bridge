@@ -347,11 +347,12 @@ async def test_client_refuses_without_accepts():
 
 
 async def test_client_refuses_when_the_write_buffer_is_full():
-    stdin = _Stdin(buffered=64 * 1024 + 1)
+    # 32 KiB, well below the pipe high-water mark: control commands keep headroom.
+    stdin = _Stdin(buffered=32 * 1024 + 1)
     client = _client_with_stdin(stdin, [1])
     assert client.send_air_command(_source()) is False
     assert stdin.writes == []
-    stdin.transport.buffered = 64 * 1024
+    stdin.transport.buffered = 32 * 1024
     assert client.send_air_command(_source()) is True
 
 
