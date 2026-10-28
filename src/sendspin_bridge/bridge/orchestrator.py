@@ -294,6 +294,35 @@ def _hci_monitor_for(config: dict[str, Any]) -> Any:
     return hci_monitor_hub.get_avrcp_hub_lifecycle()
 
 
+def _start_air_sensor_service(config: dict[str, Any], hci_monitor: Any) -> tuple[Any, asyncio.Task[None]] | None:
+    """Switch on only: the air sensor service on the hub, running on the bridge loop."""
+    if not bool(config.get("EXPERIMENTAL_AIR_SENSOR", False)):
+        return None
+    hub = getattr(hci_monitor, "hub", None)
+    if hub is None:
+        return None
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    service = air_sensor_service.AirSensorService(
+        hub=hub,
+        loop=asyncio.get_running_loop(),
+        resolve_client=lambda mac: get_device_registry_snapshot().find_client_by_mac(mac),
+    )
+    task = asyncio.create_task(service.run(), name="air-sensor-service")
+    return service, task
+
+
+async def _stop_air_sensor_service(started: tuple[Any, asyncio.Task[None]] | None) -> None:
+    if started is None:
+        return
+    service, task = started
+    with contextlib.suppress(Exception):
+        await service.stop()
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
+
+
 @dataclass
 class DeviceBootstrap:
     bt_devices: list[dict[str, Any]]
@@ -314,6 +343,7 @@ class BridgeOrchestrator:
     ):
         self.startup_steps = startup_steps
         self._suspend_probe_task: asyncio.Task[None] | None = None
+        self._air_sensor: tuple[Any, asyncio.Task[None]] | None = None
         self.breadcrumbs = breadcrumbs or BreadcrumbStore(_resolve_config_dir())
         self.lifecycle_state = lifecycle_state or BridgeLifecycleState(
             startup_steps=startup_steps,
@@ -499,6 +529,11 @@ class BridgeOrchestrator:
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
+    async def _stop_air_sensor(self) -> None:
+        started = getattr(self, "_air_sensor", None)
+        self._air_sensor = None
+        await _stop_air_sensor_service(started)
+
     async def graceful_shutdown(
         self,
         *,
@@ -558,6 +593,7 @@ class BridgeOrchestrator:
         await self._stop_suspend_probe()
         if sink_monitor is not None:
             await sink_monitor.stop()
+        await self._stop_air_sensor()
         if hci_monitor is not None:
             await hci_monitor.stop()
 
@@ -1150,6 +1186,7 @@ class BridgeOrchestrator:
             # Without sink events (no pulsectl, PA unreachable) local outputs are polled.
             sink_monitor.start_presence_polling(float(getattr(bootstrap, "bt_check_interval", 15) or 15))
             await hci_monitor.start()
+            self._air_sensor = _start_air_sensor_service(bootstrap.config, hci_monitor)
             startup_phase = "web"
             loop = asyncio.get_running_loop()
             await self.configure_executor(len(clients))
@@ -1178,6 +1215,7 @@ class BridgeOrchestrator:
             set_sink_monitor(None)
             await self._stop_suspend_probe()
             await sink_monitor.stop()
+            await self._stop_air_sensor()
             await hci_monitor.stop()
             raise
         try:
@@ -1191,4 +1229,5 @@ class BridgeOrchestrator:
             set_sink_monitor(None)
             await self._stop_suspend_probe()
             await sink_monitor.stop()
+            await self._stop_air_sensor()
             await hci_monitor.stop()

@@ -181,3 +181,50 @@ def test_selecting_the_monitor_twice_registers_one_avrcp_consumer(monkeypatch):
 
     asyncio.run(run())
     assert [type(c).__name__ for c in hub.consumers] == ["AvrcpConsumer"]
+
+
+class FakeAirService:
+    instances: list[FakeAirService] = []
+
+    def __init__(self, *, hub, loop, resolve_client, **_kwargs):
+        self.hub = hub
+        self.resolve_client = resolve_client
+        self.ran = False
+        self.stopped = False
+        self.hub_stopped_at_stop: bool | None = None
+        FakeAirService.instances.append(self)
+
+    def run(self):
+        self.ran = True  # the coroutine was handed to the loop
+        return asyncio.Event().wait()
+
+    async def stop(self):
+        self.stopped = True
+        self.hub_stopped_at_stop = self.hub.stopped
+
+
+@pytest.fixture
+def fake_air_service(monkeypatch):
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    FakeAirService.instances = []
+    monkeypatch.setattr(air_sensor_service, "AirSensorService", FakeAirService)
+    return FakeAirService
+
+
+def test_switch_off_creates_no_air_sensor_service(orchestrator_with_fakes, fake_air_service):
+    env = orchestrator_with_fakes(EXPERIMENTAL_AIR_SENSOR=False)
+    env.start()
+    assert fake_air_service.instances == []
+
+
+def test_switch_on_runs_the_air_sensor_service_on_the_hub_and_stops_it_before_the_hub(
+    orchestrator_with_fakes, fake_air_service
+):
+    env = orchestrator_with_fakes(EXPERIMENTAL_AIR_SENSOR=True)
+    env.start()
+    (service,) = fake_air_service.instances
+    assert service.hub is env.hub
+    assert service.ran and service.stopped
+    assert service.hub_stopped_at_stop is False
+    assert service.resolve_client("FC:58:FA:EB:08:6C") is None  # no clients registered
