@@ -46,6 +46,7 @@ from sendspin_bridge.services.bluetooth.hci_socket import (  # noqa: E402
     MONITOR_ACL_TX_PKT,
     MONITOR_EVENT_PKT,
     SCM_TIMESTAMPNS,
+    SO_RXQ_OVFL,
     DropCounter,
 )
 
@@ -123,6 +124,8 @@ class _ReplaySocket:
     """
 
     def __init__(self, records: list[MonitorRecord], clock: _ReplayClock) -> None:
+        # A capture that records monitor drops replays them as SO_RXQ_OVFL cmsgs (the hub's drops).
+        with_drops = any(r.drops for r in records)
         self._items = [
             (
                 r.t,
@@ -132,7 +135,8 @@ class _ReplaySocket:
                         socket.SOL_SOCKET,
                         SCM_TIMESTAMPNS,
                         struct.pack("qq", *divmod(int(r.t * 1e9) + _REALTIME_OFFSET_NS, 1_000_000_000)),
-                    )
+                    ),
+                    *([(socket.SOL_SOCKET, SO_RXQ_OVFL, struct.pack("I", r.drops))] if with_drops else []),
                 ],
             )
             for r in records

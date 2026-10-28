@@ -9,6 +9,7 @@ so any change in an energy cell, a time, a flag or a batch boundary changes them
 from __future__ import annotations
 
 import hashlib
+import random
 import struct
 from dataclasses import replace
 from pathlib import Path
@@ -63,6 +64,38 @@ def _noise(records: list[MonitorRecord]) -> list[MonitorRecord]:
     return out
 
 
+def _drop_on_skipped(records: list[MonitorRecord]) -> list[MonitorRecord]:
+    """After the capture's last record (its link drained, completions held): an LE advertising
+    report carrying a monitor drop 0.1 s later, then nothing the air path reads until a stray NOCP
+    2 s later — past the 1 s hold. The drop must still take the link out of step before the held
+    completions are released (a feeder that skips the advert must still pass its drop on)."""
+    last = records[-1]
+    return [
+        *records,
+        MonitorRecord(last.t + 0.1, last.index, MONITOR_EVENT_PKT, bytes([0x3E, 12, 0x02, 0x01]) + bytes(10), 1),
+        MonitorRecord(last.t + 2.0, last.index, MONITOR_EVENT_PKT, bytes([0x13, 5, 1, 0xFF, 0x0F, 1, 0]), 1),
+    ]
+
+
+def _undeclared(records: list[MonitorRecord]) -> list[MonitorRecord]:
+    """Between the records (never first), one random record of each monitor opcode and each HCI
+    event code the air service does not declare (the hub skips them for it), at the same time and
+    drop count as the record before: the batches must not change."""
+    rng = random.Random(1904)
+    kinds = [(op, None) for op in range(5, 18)] + [
+        (MONITOR_EVENT_PKT, code) for code in range(256) if code not in (0x03, 0x05, 0x10, 0x13)
+    ]
+    out: list[MonitorRecord] = []
+    for i, rec in enumerate(records):
+        out.append(rec)
+        if i + 1 < len(records):
+            opcode, code = kinds[i % len(kinds)]
+            body = bytes(rng.randrange(256) for _ in range(rng.randrange(0, 24)))
+            payload = bytes([code, len(body)]) + body if code is not None else body
+            out.append(MonitorRecord(rec.t, rec.index, opcode, payload, rec.drops))
+    return out
+
+
 def _variant(name: str) -> list[MonitorRecord]:
     fixture, _, kind = name.partition(":")
     records = list(read_btsnoop(FIX / f"{fixture}.btsnoop.gz"))
@@ -70,6 +103,10 @@ def _variant(name: str) -> list[MonitorRecord]:
         return _corrupt(records, 3, 37)
     if kind == "corrupt_b":
         return _corrupt(records, 5, 11)
+    if kind == "undeclared":
+        return _undeclared(records)
+    if kind == "drop_on_skipped":
+        return _drop_on_skipped(records)
     if kind == "noise":
         return _noise(records)
     if kind == "drop":
@@ -115,6 +152,10 @@ GOLDEN: dict[str, tuple[int, str]] = {
         "5c4a8e5668ba7e679a32c78e09762793cb3b42e59e68b62a4a17eb96556464d2",
     ),  # = clean: the air path ignores the noise
     "eneby_clicks:drop": (19, "2666afb3749f5fbb527679041bf237fabeced90391f5e0644f563894243df408"),
+    "eneby_clicks:undeclared": (19, "5c4a8e5668ba7e679a32c78e09762793cb3b42e59e68b62a4a17eb96556464d2"),  # = clean
+    "eneby_clicks:drop_on_skipped": (19, "2666afb3749f5fbb527679041bf237fabeced90391f5e0644f563894243df408"),
+    "air_music:undeclared": (58, "4dbff0ab79fab326c4c7d07bad47c777cce3cf67a7f976616f437c47dca51279"),  # = clean
+    "air_music:drop_on_skipped": (58, "482dd473449dbe2917a2c4d842fcd07cbe594147210cf82ded29308071a70827"),
     "air_music": (58, "4dbff0ab79fab326c4c7d07bad47c777cce3cf67a7f976616f437c47dca51279"),
     "air_music:corrupt_a": (37, "5afa4c0e6bcb844a3b1a55bb38adff2e6cfb9b4903113a6fba0aa051c9cd3247"),
     "air_music:corrupt_b": (32, "b1ee57b36f6b82d4622807868379e3d6b28d28c5526bbb203caeb4eab04dca6b"),

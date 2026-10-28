@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from test_air_live_path_equivalence import _variant  # the fixture variants (this directory is on sys.path)
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / "scripts" / "air_sensor_bench.py"
@@ -60,11 +61,17 @@ def test_hub_replay_follows_a_connection_complete_in_the_capture(bench):
     [
         ("eneby_clicks", (18, "c8a760b37c8d8b79")),
         ("air_music", (34, "5f9f23471a1d5db5")),
+        # records the air service does not declare: skipped by the hub, same batches as clean
+        ("eneby_clicks:undeclared", (18, "c8a760b37c8d8b79")),
+        ("air_music:undeclared", (34, "5f9f23471a1d5db5")),
+        # a monitor drop carried on a skipped record inside the hold window (recorded at 4e6c4469)
+        ("air_music:drop_on_skipped", (34, "8169099f53786101")),
+        ("eneby_clicks:drop_on_skipped", (18, "ef7e256d49ce88d2")),
     ],
 )
 def test_hub_replay_batches_match_the_recorded_output(bench, monkeypatch, capture, golden):
-    """The hub + service path gives the batches it gave before the hub's R-19 changes (recorded
-    at 739d19cf): routing, the clock-map fast path and the bookkeeping changed nothing."""
+    """The hub + service path gives the batches the pre-R-19 hub gave (recorded at 739d19cf, the
+    noise variants at 4e6c4469): routing, the clock-map fast path and the bookkeeping changed nothing."""
     import hashlib
 
     from sendspin_bridge.services.bluetooth import air_sensor_service
@@ -77,7 +84,7 @@ def test_hub_replay_batches_match_the_recorded_output(bench, monkeypatch, captur
             trackers.append(self)
 
     monkeypatch.setattr(air_sensor_service, "AirLinkTracker", Recording)
-    bench.run_hub_once(bench.load(FIXTURE.parent / f"{capture}.btsnoop.gz"))
+    bench.run_hub_once(_variant(capture))
     lines = []
     for tr in trackers:
         lines += [repr(b) for b in tr.take_batches(float("inf"), force=True)]

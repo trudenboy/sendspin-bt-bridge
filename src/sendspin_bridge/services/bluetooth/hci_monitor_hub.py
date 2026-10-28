@@ -99,6 +99,10 @@ class HubConsumer(Protocol):
     Optional ``opcodes`` / ``event_codes`` (frozensets) name the monitor opcodes and, for event
     records, the HCI event codes the consumer reads; the hub skips other records for it without
     building anything (R-19). Absent means every record (ACL TX still only with ``wants_acl_tx``).
+    They are read when the consumer is added (``add_consumer``); changing them later has no effect.
+    A record whose ``drops`` differs from the record before it reaches every consumer regardless of
+    these filters (``wants_acl_tx`` still applies), so a drop carried on a skipped record is never
+    seen late.
     """
 
     wants_acl_tx: bool
@@ -139,9 +143,14 @@ def _mac(bdaddr_le: bytes) -> str:
     return ":".join(f"{b:02X}" for b in reversed(bdaddr_le))
 
 
+_ANY_EVENT = -2  # route key "event code" of a record that changes the drop count: filters do not apply
+
+
 def _wants(c: HubConsumer, opcode: int, event_code: int) -> bool:
     if opcode == MONITOR_ACL_TX_PKT and not c.wants_acl_tx:
         return False
+    if event_code == _ANY_EVENT:
+        return True
     opcodes = getattr(c, "opcodes", None)
     if opcodes is not None and opcode not in opcodes:
         return False
@@ -206,6 +215,7 @@ class HciMonitorHub:
         self._drop_counter: DropCounter | None = None
         self._drop_source: str = "none"
         self._drops: int | None = None
+        self._last_record_drops: int | None = None  # drops of the previous record (routing)
         self._records = 0
         self._recv_stamped = 0
         self._clock_epoch0 = self._clock_map.epoch
@@ -519,6 +529,10 @@ class HciMonitorHub:
         self._records += 1
         drops = self._drops
         key = (opcode, payload[0] if opcode == MONITOR_EVENT_PKT and payload else -1)
+        if drops != self._last_record_drops:
+            # A drop count change goes to every consumer, also one that skips this kind of record.
+            self._last_record_drops = drops
+            key = (opcode, _ANY_EVENT)
         immediate, timed = self._route(key)
         if immediate:
             rec = HubRecord(t_recv_us, index, opcode, payload, drops, "recv", self._clock_map.epoch)

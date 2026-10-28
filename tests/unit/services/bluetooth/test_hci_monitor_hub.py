@@ -798,3 +798,30 @@ def test_avrcp_consumer_declares_what_it_reads():
     c = m.AvrcpConsumer(tracker=object())
     assert c.opcodes == frozenset({hs.MONITOR_EVENT_PKT, hs.MONITOR_ACL_RX_PKT, hs.MONITOR_DEL_INDEX})
     assert c.event_codes == frozenset({0x03, 0x05})  # Connection / Disconnection Complete
+
+
+def _rxq(drops):
+    return (socket.SOL_SOCKET, hs.SO_RXQ_OVFL, struct.pack("I", drops))
+
+
+@pytest.mark.parametrize("timed", [False, True])
+def test_a_drop_change_reaches_a_consumer_that_skips_the_record_carrying_it(fake_hub_socket, timed):
+    picky = kernel_consumer() if timed else consumer(True)
+    picky.opcodes = frozenset({hs.MONITOR_ACL_TX_PKT})
+    advert = frame(hs.MONITOR_EVENT_PKT, 0, b"\x3e\x02\x02\x00")
+    recs = [
+        (frame(hs.MONITOR_ACL_TX_PKT, 0, b"\x46\x20\x00\x00"), [_rxq(0)]),
+        (advert, [_rxq(0)]),  # skipped
+        (advert, [_rxq(1)]),  # carries the drop: delivered
+        (advert, [_rxq(1)]),  # skipped again
+        (frame(hs.MONITOR_ACL_RX_PKT, 0, b"\x46\x00\x04\x00abcd"), [_rxq(2)]),  # delivered
+    ]
+    hub = HciMonitorHub(open_socket=fake_hub_socket(recs), seed=lambda m: None)
+    hub.add_consumer(picky)
+    hub.start()
+    hub.stop()
+    assert [(r.opcode, r.drops) for r in picky.seen] == [
+        (hs.MONITOR_ACL_TX_PKT, 0),
+        (hs.MONITOR_EVENT_PKT, 1),
+        (hs.MONITOR_ACL_RX_PKT, 2),
+    ]
