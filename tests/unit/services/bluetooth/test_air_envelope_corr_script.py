@@ -180,3 +180,12 @@ def test_cli_finds_the_click_alignment_with_both_definitions(tmp_path, tool, cli
     for definition in ("legacy", "impl"):
         lags = [float(r[6]) for r in rows if r[0] == definition and r[3] == "confirmed"]
         assert len(lags) >= 3 and max(lags) - min(lags) < 0.5  # one constant clock offset, no jumps
+
+
+def test_impl_cells_span_the_sbc_look_back_like_the_daemon_tap(tool):
+    """The offline written cells must be the daemon's: each spans its 128 frames and the 72 before."""
+    frames = [0] * 640
+    frames[3 * 128 - 60] = 4000
+    data = [v for f in frames for v in (f, f)]
+    cells = tool.impl_source_cells(data, 2, 44100, 2, "comb")
+    assert cells[3] == pytest.approx(math.log2(4001), abs=1e-4) and cells[4] == 0.0

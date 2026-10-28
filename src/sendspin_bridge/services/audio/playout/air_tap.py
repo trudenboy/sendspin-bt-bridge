@@ -8,7 +8,8 @@ records nothing and reports ``unsupported`` (``input:<rate>/<bits>``).
 Each sample is reduced to its top 16 bits at C speed, the comb high-pass
 ``y[n] = x[n] − x[n−d]`` (``d = comb_lag(rate)``, 3 at 44.1/48 kHz) runs on each channel,
 and every cell of ``CELL_FRAMES`` input frames gets ``w = log2(1 + max|y|)`` over both
-channels, the scheduled port time ``s`` of its first frame (``ScheduleMap.at``), ``T = s + D_out``
+channels and over the cell plus the ``LOOKBACK_FRAMES`` before it (the span an SBC frame's
+scale factors see), the scheduled port time ``s`` of its first frame (``ScheduleMap.at``), ``T = s + D_out``
 with the output delay at write time and the map's kind (``program``/``silence``). Silence cells
 have ``w = 0``. Whether a cell is muted is decided when it is read, from a RAW-timed mute
 timeline at the cell's port time ``s`` (a mute applied after the push still covers audio that
@@ -38,6 +39,11 @@ if TYPE_CHECKING:
 SUPPORTED_RATES = (44100, 48000)
 SUPPORTED_SAMPLE_BYTES = (2, 3, 4)
 CELL_FRAMES = 128
+# An SBC frame's scale factors see its own B·M samples and the 9·M before them (its 10·M-tap
+# analysis window; libsbc 1.3.1: an impulse shows up in frame k for input samples 128k - 72 …
+# 128k + 126). A written cell takes its peak over the same span for M = 8, so the two envelopes
+# rise and fall on the same samples whatever the attack and decay of the sound.
+LOOKBACK_FRAMES = 72
 MUTE_KEEP_US = 30_000_000.0  # mute transitions older than this are forgotten (the state before them stays)
 INTERNAL_ERROR = "internal_error"
 
@@ -132,9 +138,9 @@ class WrittenEnvelope:
         # Feeder-only carry: the comb history and the partial cell at the end of the last block.
         self._carry_gen = -1
         self._hist = b""
-        self._carry_frames = 0
-        self._carry_peak = 0
-        self._carry_x_ns = 0
+        self._fp: list[int] = []  # per-frame comb peaks: the look-back, then the partial cell
+        self._fp_back = 0  # look-back frames at the start of _fp (at most LOOKBACK_FRAMES)
+        self._carry_x_ns = 0  # x of the partial cell's first frame
 
     # -- feeder side ------------------------------------------------------------------------
 
@@ -162,8 +168,8 @@ class WrittenEnvelope:
         if gen != self._carry_gen:
             self._carry_gen = gen
             self._hist = bytes(2 * hist_len)
-            self._carry_frames = 0
-            self._carry_peak = 0
+            self._fp = []
+            self._fp_back = 0
             self._carry_x_ns = 0
 
         samples = to_s16(block.pcm, width)
@@ -175,26 +181,24 @@ class WrittenEnvelope:
         view = memoryview(buf).cast("h")
         peaks = _comb_abs(view, hist_len)
         self._hist = view[-hist_len:].tobytes()
+        frame_peaks = peaks if channels == 1 else list(map(max, *(peaks[c::channels] for c in range(channels))))
 
+        # A cell's peak spans its CELL_FRAMES frames and the LOOKBACK_FRAMES before them.
+        held = len(self._fp)  # frames carried from earlier blocks (look-back and partial cell)
+        fp = self._fp + frame_peaks
         cells: list[tuple[int, int]] = []  # (x of the first frame, comb peak)
         x0 = block.x0_ns
-        f = 0
-        need = CELL_FRAMES - self._carry_frames
-        while f + need <= frames:
-            peak = max(peaks[f * channels : (f + need) * channels])
-            if self._carry_frames:
-                cells.append((self._carry_x_ns, max(peak, self._carry_peak)))
-                self._carry_frames = 0
-            else:
-                cells.append((x0 + round(f * 1e9 / rate), peak))
-            f += need
-            need = CELL_FRAMES
-        if f < frames:
-            if not self._carry_frames:
-                self._carry_x_ns = x0 + round(f * 1e9 / rate)
-                self._carry_peak = 0
-            self._carry_peak = max(self._carry_peak, max(peaks[f * channels :]))
-            self._carry_frames += frames - f
+        pos = self._fp_back  # index in fp of the next cell's first frame
+        while len(fp) - pos >= CELL_FRAMES:
+            peak = max(fp[max(0, pos - LOOKBACK_FRAMES) : pos + CELL_FRAMES])
+            x = self._carry_x_ns if pos < held else x0 + round((pos - held) * 1e9 / rate)
+            cells.append((x, peak))
+            pos += CELL_FRAMES
+        if pos < len(fp) and pos >= held:  # a partial cell starts in this block
+            self._carry_x_ns = x0 + round((pos - held) * 1e9 / rate)
+        keep = max(0, pos - LOOKBACK_FRAMES)
+        self._fp = fp[keep:]
+        self._fp_back = pos - keep
         if not cells:
             return
 

@@ -63,7 +63,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from sendspin_bridge.services.audio.playout.air_correlator import PSR_GATE, SIDE_SCAN, WindowResult, correlate_window
-from sendspin_bridge.services.audio.playout.air_tap import CELL_FRAMES, INTERNAL_ERROR, comb_lag
+from sendspin_bridge.services.audio.playout.air_tap import CELL_FRAMES, INTERNAL_ERROR, LOOKBACK_FRAMES, comb_lag
 from sendspin_bridge.services.ipc.commands import AirEnvelope, AirSource, SetAirCalibration
 
 if TYPE_CHECKING:
@@ -114,6 +114,13 @@ def enc_delay_us(subbands: int, rate: int) -> float:
 def comb_delay_us(rate: int) -> float:
     """``d_comb``: the written comb ``x[n] − x[n−d]`` is centred ``d/2`` samples back."""
     return comb_lag(rate) / 2.0 / rate * 1e6
+
+
+def lookback_delay_us(rate: int) -> float:
+    """A written cell's span reaches ``LOOKBACK_FRAMES`` back, so its energy is centred half of
+    that earlier than the cell; credited back with ``d_comb`` (with M = 8 at 44.1 kHz it cancels
+    ``d_enc``)."""
+    return LOOKBACK_FRAMES / 2.0 / rate * 1e6
 
 
 class AirStream:
@@ -435,7 +442,7 @@ class AirSensor:
         n = round(WINDOW_S * 1e6 / cell)
         in_rate = round(CELL_FRAMES / cell * 1e6)
         d_enc = enc_delay_us(self._air.subbands, self._air.rate)
-        d_comb = comb_delay_us(in_rate)
+        d_comb = comb_delay_us(in_rate) + lookback_delay_us(in_rate)  # the written cells' centre
         mode, half = self._search(now, cell)
         margin = SIDE_SCAN
         u_end: float | None = u_new

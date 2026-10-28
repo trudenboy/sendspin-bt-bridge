@@ -24,8 +24,9 @@ can decide on real music:
 with ``α_local`` the median of ``t_send − u`` over the packets within ±1 s of the window, taken
 inside the window's anchor segment only (segments end at an RTP skip, sequence gap, SSRC change
 or a send gap over 1 s) and independent of the live sensor's running median;
-``d_enc = 4.5·M/rate``, ``d_comb = (comb lag / 2)/rate`` (0 for ``legacy`` rows and the
-band-pass reference). ``src_mid`` is the source time of the matched cell.
+``d_enc = 4.5·M/rate``, ``d_comb = ((comb lag + LOOKBACK_FRAMES) / 2)/rate`` (the comb cells
+span the cell and the ``LOOKBACK_FRAMES`` before it, as the daemon's tap does; 0 for ``legacy``
+rows and the band-pass reference). ``src_mid`` is the source time of the matched cell.
 
 Making a capture (the morning one is copyrighted music and stays private): on the speaker
 host run ``btmon -w capture.btsnoop`` (needs root), play a known local WAV through the bridge
@@ -62,7 +63,12 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from sendspin_bridge.services.audio.playout import air_correlator  # noqa: E402
-from sendspin_bridge.services.audio.playout.air_tap import comb_lag, comb_peak_log2, to_s16  # noqa: E402
+from sendspin_bridge.services.audio.playout.air_tap import (  # noqa: E402
+    LOOKBACK_FRAMES,
+    comb_lag,
+    comb_peak_log2,
+    to_s16,
+)
 from sendspin_bridge.services.bluetooth import a2dp_air  # noqa: E402
 from sendspin_bridge.services.bluetooth.a2dp_air_envelope import envelope_subbands, frame_envelope  # noqa: E402
 
@@ -216,7 +222,8 @@ def legacy_source_cells(data: Sequence[int], ch: int, rate: int, width: int) -> 
 
 
 def impl_source_cells(data: Sequence[int], ch: int, rate: int, width: int, envelope: str) -> list[float]:
-    """The daemon's written cells: comb envelope (or the reference band-pass) per 128 input frames."""
+    """The daemon's written cells: comb envelope over each 128 input frames and the LOOKBACK_FRAMES
+    before them (or the reference band-pass) per 128 input frames."""
     s16 = to_s16(b"".join(v.to_bytes(width, "little", signed=True) for v in data), width)
     frames = len(s16) // ch
     out = []
@@ -224,8 +231,9 @@ def impl_source_cells(data: Sequence[int], ch: int, rate: int, width: int, envel
         lag = comb_lag(rate)
         zeros = (0,) * (lag * ch)
         for start in range(0, frames - CELL + 1, CELL):
-            prev = tuple(s16[(start - lag) * ch : start * ch]) if start >= lag else zeros
-            out.append(comb_peak_log2(s16, ch, start, start + CELL, prev, lag))
+            lo = max(0, start - LOOKBACK_FRAMES)  # the span an SBC frame's scale factors see
+            prev = tuple(s16[(lo - lag) * ch : lo * ch]) if lo >= lag else zeros
+            out.append(comb_peak_log2(s16, ch, lo, start + CELL, prev, lag))
     else:
         lead = BANDPASS_LEAD * CELL
         for start in range(0, frames - CELL + 1, CELL):
@@ -397,7 +405,7 @@ def annotate(
     rate = meta.rate
     alpha_global = statistics.median(q.t_send - q.u_s for q in meta.packets)
     d_enc = 4.5 * meta.subbands / rate
-    d_comb = (comb_lag(rate) / 2.0) / rate if comb and definition == "impl" else 0.0
+    d_comb = ((comb_lag(rate) + LOOKBACK_FRAMES) / 2.0) / rate if comb and definition == "impl" else 0.0
     for r in rows:
         r["t_minus_src_s"] = r["offline_h_s"] = None
         if r["lag"] is None:

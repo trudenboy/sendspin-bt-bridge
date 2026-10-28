@@ -8,9 +8,11 @@ clock. Its air side is built at the PCM instant, independently of the sensor's f
   envelope comes from the real tap on that PCM (so ``d_comb`` comes from the comb itself);
 * PulseAudio plays the PCM sample ``x`` over the air at ``t_air(x) = s0 + x/rate + H_true``
   (engine shifts move ``s``, not the air), with RTP media position ``m = x + C``;
-* the SBC energy of the air frame starting at media ``m`` describes the PCM ``D_ENC_SAMPLES``
-  earlier (the analysis-filter delay, 4.5·M samples) and carries that frame's air time
-  ``t_air(m − C)``; the energy is a zero-phase measure (``|p[n+1] − p[n−1]|``) of that PCM.
+* the SBC energy of the air frame starting at media ``m`` describes the PCM it sees, its own
+  128 samples and the ``SBC_LOOK_BACK`` before them (the 10·M-tap analysis window; libsbc 1.3.1
+  responds to an impulse at ``m − 72 … m + 126``), so it is centred 4.5·M samples before the
+  frame's centre; it carries that frame's air time ``t_air(m − C)`` and is a zero-phase measure
+  (``|p[n+1] − p[n−1]|``) of that PCM.
 
 Air batches arrive every ``BATCH_US`` with whatever went over the air until then.
 """
@@ -44,12 +46,12 @@ SBC_SUBBANDS = 8
 SBC_BLOCKS = 16
 FRAME_SAMPLES = SBC_SUBBANDS * SBC_BLOCKS
 FRAME_US = FRAME_SAMPLES * 1e6 / AIR_RATE
-D_ENC_SAMPLES = 36  # SBC analysis filter: the energy of a frame lags its PCM by 4.5·M samples (M = 8)
+SBC_LOOK_BACK = 72  # an SBC frame's scale factors also see the 9·M samples before it (M = 8)
 PA_LATENCY_US = 800_000.0
 BATCH_US = 250_000.0
 TICK_US = 50_000.0
 START_US = 5_000_000_000.0
-FIRST_MEDIA = 4 * FRAME_SAMPLES - 35  # media sample of the first output's x = 0
+FIRST_MEDIA = 4 * FRAME_SAMPLES - 2  # media sample of the first output's x = 0 (whole-cell lag: the comb's 1.5)
 CARRIER_HZ = 7000.0
 PROGRAM_SAMPLES = 1 << 20
 
@@ -193,9 +195,9 @@ class World:
         return list(out.pcm[x_lo:x_hi])
 
     def _energy(self, m: int) -> int:
-        q = m - D_ENC_SAMPLES
-        p = self._fast_air_pcm(q - 1, q + FRAME_SAMPLES + 1)
-        peak = max(abs(p[k + 2] - p[k]) for k in range(FRAME_SAMPLES))
+        q = m - SBC_LOOK_BACK
+        p = self._fast_air_pcm(q - 1, m + FRAME_SAMPLES + 1)
+        peak = max(abs(p[k + 2] - p[k]) for k in range(SBC_LOOK_BACK + FRAME_SAMPLES))
         return min(254, round(8.0 * math.log2(1.0 + peak / 2.0)))
 
     def _write_due_blocks(self) -> None:
@@ -761,3 +763,13 @@ async def test_a_window_reports_the_schedule_segment_at_its_middle(air_world, mo
         await b.run(seconds=3)
     h = next(h for t, h in _window_lines(caplog) if abs(t - tau) < 1.0)
     assert h == pytest.approx(30.0, abs=0.5)
+
+
+async def test_the_written_look_back_is_credited_back_like_the_comb():
+    """A written cell's span reaches LOOKBACK_FRAMES back, so its energy is centred half of that
+    earlier; with M = 8 at 44.1 kHz that cancels the SBC analysis delay exactly."""
+    from sendspin_bridge.services.audio.playout.air_sensor import lookback_delay_us
+
+    assert lookback_delay_us(44100) == pytest.approx(36 / 44100 * 1e6)
+    assert lookback_delay_us(48000) == pytest.approx(36 / 48000 * 1e6)
+    assert enc_delay_us(8, 44100) - lookback_delay_us(44100) == pytest.approx(0.0, abs=1e-9)

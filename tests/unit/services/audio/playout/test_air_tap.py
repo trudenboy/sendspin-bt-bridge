@@ -8,6 +8,7 @@ import struct
 import pytest
 
 from sendspin_bridge.services.audio.playout.air_tap import (
+    LOOKBACK_FRAMES,
     WrittenEnvelope,
     comb_lag,
     comb_peak_log2,
@@ -465,3 +466,54 @@ def test_the_generation_changes_on_reset_and_on_a_format_change():
     assert g1 != g0 and tap.slice(0, 2).gen == g1  # cell indexes restarted
     tap.reset()
     assert tap.gen not in (g0, g1)
+
+
+def _impulse_tap(at_frame: int, frames: int = 640, value: int = 4000) -> WrittenEnvelope:
+    xs = [0] * frames
+    xs[at_frame] = value
+    tap = WrittenEnvelope()
+    blk = Block(
+        pcm=s16(interleave(xs)),
+        x0_ns=0,
+        duration_ns=round(frames * 1e9 / 44100),
+        program=True,
+        dropped=0,
+        inserted=0,
+        late_drop_us=0.0,
+    )
+    tap.add_block(blk, F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
+    return tap
+
+
+def test_a_cell_also_sees_the_frames_an_sbc_frame_looks_back_on():
+    """An SBC frame's scale factors see its 128 samples and the 72 before them (the 10·M-tap
+    analysis window, M = 8); a written cell covers the same span, so both envelopes rise and fall
+    on the same samples whatever the attack and decay of the sound."""
+    assert LOOKBACK_FRAMES == 72
+    inside = _impulse_tap(3 * 128 - 60).slice(0, 5)  # the comb peaks at -60 and -57 frames before cell 3
+    assert inside.w[3] == pytest.approx(math.log2(4001), abs=1e-4)
+    assert inside.w[4] == 0.0
+    outside = _impulse_tap(3 * 128 - 76).slice(0, 5)  # peaks at -76 and -73: beyond the look-back
+    assert outside.w[3] == 0.0 and outside.w[2] == pytest.approx(math.log2(4001), abs=1e-4)
+
+
+def test_the_look_back_is_continuous_across_blocks():
+    xs = [0] * 640
+    xs[3 * 128 - 10] = 4000
+    pcm = s16(interleave(xs))
+
+    def mk(a, b):
+        return Block(
+            pcm=pcm[a * 4 : b * 4],
+            x0_ns=round(a * 1e9 / 44100),
+            duration_ns=round((b - a) * 1e9 / 44100),
+            program=True,
+            dropped=0,
+            inserted=0,
+            late_drop_us=0.0,
+        )
+
+    split = WrittenEnvelope()
+    for a, b in ((0, 380), (380, 383), (383, 640)):
+        split.add_block(mk(a, b), F16, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
+    assert list(split.slice(0, 5).w) == list(_impulse_tap(3 * 128 - 10).slice(0, 5).w)
