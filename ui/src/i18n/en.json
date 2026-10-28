@@ -911,6 +911,10 @@
         "label": "Reset a stuck adapter",
         "help": "Experimental. After the reconnect attempts run out, power-cycle or reset the Bluetooth adapter."
       },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "Air sensor (SBC speakers)",
+        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure mode, a Bluetooth SBC speaker and CAP_NET_RAW."
+      },
       "HA_INTEGRATION": {
         "mode": {
           "label": "Connection to Home Assistant",
@@ -1273,6 +1277,48 @@
         "sinkRate": "Sink rate",
         "clockSlew": "Clock slew",
         "warm": "Warm"
+      }
+    },
+    "air": {
+      "title": "Air sensor",
+      "chip": "air: {state}, H {h} ms",
+      "chipNoH": "air: {state}",
+      "states": {
+        "off": "Off",
+        "unavailable": "Unavailable",
+        "unsupported_codec": "Unsupported codec",
+        "unsupported_input": "Unsupported input",
+        "no_signal": "No signal",
+        "acquiring": "Acquiring",
+        "locked": "Locked",
+        "holding": "Holding",
+        "no_lock": "Lock lost"
+      },
+      "rows": {
+        "state": "State",
+        "reason": "Reason",
+        "host": "Host placement",
+        "air": "Air error",
+        "confidence": "Confidence",
+        "psr": "Peak ratio (PSR)",
+        "lock": "Last confirmed"
+      },
+      "needsCalibration": "Needs calibration",
+      "agoSeconds": "{s} s ago",
+      "reasons": {
+        "needs_measure": "Needs playout sync in measure mode.",
+        "loop_not_supported_yet": "Not supported with playout sync in loop mode yet.",
+        "not_bluetooth": "Only Bluetooth speakers are supported.",
+        "cpu_budget": "Stopped: the sensor used too much processor time.",
+        "internal_error": "Stopped after an internal error; it restarts with the next stream.",
+        "playout_fallback": "Playout sync fell back to the plain output.",
+        "unsupported_input": "The audio format is not supported (44.1 and 48 kHz, 16 to 32 bit).",
+        "no_monitor": "The Bluetooth monitor is not available (needs CAP_NET_RAW).",
+        "monitor_error": "The Bluetooth monitor failed.",
+        "sbc_params": "The SBC stream parameters are not supported.",
+        "sbc_fragmented": "The speaker splits SBC frames over several packets.",
+        "codec": "The speaker uses {codec}; only SBC is supported.",
+        "unknown": "Reason: {reason}"
       }
     }
   },

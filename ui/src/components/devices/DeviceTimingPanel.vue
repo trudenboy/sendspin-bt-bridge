@@ -14,11 +14,12 @@ import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS } from '@/settings/device'
 import { microphoneAvailable, openMicrophone, recordClick } from '@/calibration/capture'
 import { planCorrection } from '@/calibration/plan'
+import { signedMs } from '@/utils/deviceChips'
 import type { Device } from '@/api/types'
 
 const props = defineProps<{ device: Device }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const bridge = useBridgeStore()
 const notifications = useNotificationStore()
 
@@ -163,6 +164,30 @@ const playoutRows = computed(() => {
     ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.warming', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
   ] as [string, string][]
 })
+/* Air sensor: null (switch off) shows nothing. */
+const air = computed(() => props.device.timing.air_sensor ?? null)
+const airReason = computed(() => {
+  const reason = air.value?.reason
+  if (!reason) return null
+  if (reason.startsWith('codec:')) return t('timing.air.reasons.codec', { codec: reason.slice(6).toUpperCase() })
+  const key = `timing.air.reasons.${reason}`
+  return te(key) ? t(key) : t('timing.air.reasons.unknown', { reason })
+})
+const airHasValues = computed(() => air.value != null && air.value.host_placement_ms != null)
+const airRows = computed(() => {
+  const a = air.value
+  if (!a || !airHasValues.value) return []
+  const jitter = a.jitter_ms == null ? '' : ` (±${a.jitter_ms.toFixed(1)})`
+  const rows: [string, string][] = [['host', `${signedMs(a.host_placement_ms!)} ms${jitter}`]]
+  rows.push(['air', a.air_error_ms != null && a.calibrated ? `${signedMs(a.air_error_ms)} ms` : t('timing.air.needsCalibration')])
+  if (a.confidence != null) rows.push(['confidence', `${Math.round(a.confidence * 100)} %`])
+  if (a.psr != null) rows.push(['psr', a.psr.toFixed(2)])
+  if (a.last_confirmed_at) {
+    const ageS = Math.max(0, Math.round((Date.now() - Date.parse(a.last_confirmed_at)) / 1000))
+    if (Number.isFinite(ageS)) rows.push(['lock', t('timing.air.agoSeconds', { s: ageS })])
+  }
+  return rows
+})
 const syncError = computed(() => props.device.timing.sync_error_ms)
 </script>
 
@@ -234,6 +259,19 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
           <dd class="tabular-nums text-text-primary">{{ value }}</dd>
         </template>
       </dl>
+    </section>
+
+    <section v-if="air" class="mt-4" data-testid="air-sensor-block">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.air.title') }}</h3>
+      <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+        <dt class="text-text-secondary">{{ t('timing.air.rows.state') }}</dt>
+        <dd class="text-text-primary">{{ te(`timing.air.states.${air.state}`) ? t(`timing.air.states.${air.state}`) : air.state }}</dd>
+        <template v-for="[key, value] in airRows" :key="key">
+          <dt class="text-text-secondary">{{ t(`timing.air.rows.${key}`) }}</dt>
+          <dd class="tabular-nums text-text-primary">{{ value }}</dd>
+        </template>
+      </dl>
+      <p v-if="airReason" class="mt-1 text-sm text-text-secondary" data-testid="air-sensor-reason">{{ airReason }}</p>
     </section>
 
     <section class="mt-4">

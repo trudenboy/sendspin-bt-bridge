@@ -133,6 +133,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'PULSE_SINK_RESET_ON_START', kind: 'toggle', advanced: true },
       { key: 'COMPENSATE_OUTPUT_LATENCY', kind: 'toggle', advanced: true },
       { key: 'PLAYOUT_DIAG', kind: 'toggle', advanced: true },
+      { key: 'EXPERIMENTAL_AIR_SENSOR', kind: 'toggle', advanced: true },
       { key: 'PLAYOUT_SYNC', kind: 'select', options: ['off', 'measure', 'loop'], offered: ['off', 'measure'], advanced: true },
     ],
     after: ['latencyAssistant'],

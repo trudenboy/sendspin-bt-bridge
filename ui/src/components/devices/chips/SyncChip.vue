@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge } from '@/kit'
-import { syncBadge } from '@/utils/deviceChips'
+import { airChipSummary, signedMs, syncBadge } from '@/utils/deviceChips'
 import { observeReanchor, retainReanchor } from '@/utils/reanchorHold'
 import type { Device } from '@/api/types'
 
@@ -41,12 +41,20 @@ onBeforeUnmount(() => {
 })
 
 const badge = computed(() => syncBadge(props.device, holdUntil.value != null))
-const titleKey = computed(() => {
+const baseTitle = computed(() => {
   const kind = badge.value?.kind
   if (kind === 'reanchoring') return t('device.chips.sync.reanchoringTitle')
   if (kind === 'playout') return t('device.chips.sync.playoutTitle')
   if (kind === 'warming') return t('device.chips.sync.warmingTitle', { s: badge.value?.warmInS ?? 0 })
   return t('device.chips.sync.title')
+})
+/* One extra line when the air sensor is on and not "off". */
+const titleKey = computed(() => {
+  const air = airChipSummary(props.device)
+  if (!air) return baseTitle.value
+  const state = t(`timing.air.states.${air.state}`).toLowerCase()
+  const line = air.hMs == null ? t('timing.air.chipNoH', { state }) : t('timing.air.chip', { state, h: signedMs(air.hMs) })
+  return `${baseTitle.value}\n${line}`
 })
 const labelText = computed(() => {
   const kind = badge.value?.kind
