@@ -267,3 +267,42 @@ def test_the_running_service_is_published_and_withdrawn(orchestrator_with_fakes,
     (service,) = fake_air_service.instances
     assert seen == [service, None]  # withdrawn before it stops: no client subscribes to a stopping service
     assert air_sensor_service.get_air_sensor_service() is None
+
+
+def test_a_service_that_fails_to_start_leaves_a_stand_in_that_reports_unavailable(monkeypatch):
+    """A12 deferred: effective speakers must show unavailable, not a misleading no_signal."""
+    from sendspin_bridge.bridge import orchestrator as orch
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    class Exploding:
+        def __init__(self, **_kw):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(air_sensor_service, "AirSensorService", Exploding)
+    synced: list[str] = []
+    client = SimpleNamespace(sync_air_subscription=lambda: synced.append("x"))
+    monkeypatch.setattr(
+        orch, "get_device_registry_snapshot", lambda: SimpleNamespace(active_clients=[client], find_client_by_mac=None)
+    )
+    hub = FakeHub()
+    hub.unavailable_reason = None
+
+    async def go():
+        started = orch._start_air_sensor_service({"EXPERIMENTAL_AIR_SENSOR": True}, SimpleNamespace(hub=hub))
+        try:
+            assert started is not None
+            service, _task = started
+            assert air_sensor_service.get_air_sensor_service() is service
+            assert service.status() == {"state": "failed", "reason": "internal_error"}
+            assert synced == ["x"]
+        finally:
+            await orch._stop_air_sensor_service(started)
+        assert air_sensor_service.get_air_sensor_service() is None
+
+    asyncio.run(go())
+
+
+def test_switch_off_starts_no_air_service_at_all():
+    from sendspin_bridge.bridge import orchestrator as orch
+
+    assert orch._start_air_sensor_service({"EXPERIMENTAL_AIR_SENSOR": False}, SimpleNamespace(hub=FakeHub())) is None

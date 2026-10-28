@@ -378,3 +378,87 @@ async def test_the_service_declares_the_monitor_records_its_parser_reads():
     # skips everything else for it (R-19).
     assert AirSensorService.opcodes == frozenset({0, 1, 2, 3, 4})
     assert AirSensorService.event_codes == frozenset({0x03, 0x05, 0x10, 0x13})
+
+
+# ── the stand-in when the service could not start (A13) ──────────────────
+
+
+async def _settle():
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+
+async def test_a_service_that_never_started_tells_every_subscribed_daemon_unavailable():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import UnavailableAirSensorService
+
+    clients = {ENEBY: FakeClient([1]), OTHER: FakeClient([1])}
+    stub = UnavailableAirSensorService(
+        loop=asyncio.get_running_loop(), resolve_client=clients.get, reason="internal_error"
+    )
+    stub.subscribe(ENEBY)
+    await _settle()
+    (src,) = clients[ENEBY].sent
+    assert isinstance(src, AirSource) and (src.state, src.reason) == ("unavailable", "internal_error")
+    assert clients[OTHER].sent == []  # only subscribed speakers
+    assert stub.status() == {"state": "failed", "reason": "internal_error"}
+
+
+async def test_the_stand_in_prefers_the_hubs_own_reason():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import UnavailableAirSensorService
+
+    client = FakeClient([1])
+    hub = FakeHub({}, reason="no_cap_net_raw")
+    stub = UnavailableAirSensorService(
+        loop=asyncio.get_running_loop(), resolve_client=lambda mac: client, reason="internal_error", hub=hub
+    )
+    stub.subscribe(ENEBY)
+    await _settle()
+    assert client.sent[-1].reason == "no_cap_net_raw"
+
+
+async def test_the_stand_in_repeats_and_retries_a_refused_write():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import UnavailableAirSensorService
+
+    client = FakeClient([1], stalled=True)
+    stub = UnavailableAirSensorService(
+        loop=asyncio.get_running_loop(), resolve_client=lambda mac: client, reason="internal_error"
+    )
+    stub.subscribe(ENEBY)
+    await _settle()
+    assert client.sent == [] and len(client.sent_attempts) == 1
+    client.stalled = False
+    stub.tick()
+    assert len(client.sent) == 1
+    stub.unsubscribe(ENEBY)
+    stub.tick()
+    assert len(client.sent) == 1 and not stub.is_subscribed(ENEBY)
+
+
+async def test_the_stand_in_sends_nothing_to_a_daemon_without_accepts():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import UnavailableAirSensorService
+
+    client = FakeClient([])
+    stub = UnavailableAirSensorService(
+        loop=asyncio.get_running_loop(), resolve_client=lambda mac: client, reason="internal_error"
+    )
+    stub.subscribe(ENEBY)
+    await _settle()
+    stub.tick()
+    assert client.sent_attempts == []
+
+
+async def test_the_stand_in_runs_until_cancelled():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import UnavailableAirSensorService
+
+    client = FakeClient([1])
+    stub = UnavailableAirSensorService(
+        loop=asyncio.get_running_loop(), resolve_client=lambda mac: client, reason="internal_error", repeat_s=0.01
+    )
+    stub.subscribe(ENEBY)
+    task = asyncio.create_task(stub.run())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await stub.stop()
+    assert len(client.sent) >= 2

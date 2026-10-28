@@ -66,15 +66,15 @@ CPU_OVER_WINDOWS = 2
 _LOG_INTERVAL_S = 600.0
 
 
-_current: AirSensorService | None = None
+_current: AirSensorService | UnavailableAirSensorService | None = None
 
 
-def get_air_sensor_service() -> AirSensorService | None:
-    """The running service (switch on and started), else ``None``."""
+def get_air_sensor_service() -> AirSensorService | UnavailableAirSensorService | None:
+    """The running service (switch on and started; the stand-in if it failed to start), else ``None``."""
     return _current
 
 
-def set_air_sensor_service(service: AirSensorService | None) -> None:
+def set_air_sensor_service(service: AirSensorService | UnavailableAirSensorService | None) -> None:
     global _current
     _current = service
 
@@ -359,15 +359,7 @@ class AirSensorService:
                 dev.queue.popleft()
 
     def _call_on_loop(self, fn: Callable[[], Any]) -> None:
-        try:
-            running = asyncio.get_running_loop()
-        except RuntimeError:
-            running = None
-        if running is self._loop:
-            fn()
-            return
-        with contextlib.suppress(RuntimeError):  # loop closed at shutdown
-            self._loop.call_soon_threadsafe(fn)
+        _call_on_loop(self._loop, fn)
 
     def _send(self, client: Any, cmd: Any) -> bool:
         try:
@@ -478,3 +470,105 @@ class AirSensorService:
             return
         self._logged_at[kind] = now
         logger.warning(msg, exc_info=exc_info)
+
+
+class UnavailableAirSensorService:
+    """Stands in for the service when it could not start (switch on, start failed).
+
+    Subscribes like the service, so the clients' subscription logic is unchanged, and tells every
+    subscribed daemon ``air_source unavailable`` (the hub's own reason when it has one, else
+    *reason*) at once and every ``repeat_s``. Without it an effective speaker would report its
+    own ``no_signal`` and hide that the bridge never read the air.
+    """
+
+    def __init__(
+        self,
+        *,
+        loop: asyncio.AbstractEventLoop,
+        resolve_client: Callable[[str], Any | None],
+        reason: str,
+        hub: Any = None,
+        repeat_s: float = SOURCE_REPEAT_S,
+    ) -> None:
+        self._loop = loop
+        self._resolve_client = resolve_client
+        self._reason = reason
+        self._hub = hub
+        self._repeat_s = repeat_s
+        self._lock = threading.Lock()
+        self._macs: set[str] = set()
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        return self._loop
+
+    @property
+    def reason(self) -> str:
+        hub_reason = getattr(self._hub, "unavailable_reason", None) if self._hub is not None else None
+        return str(hub_reason) if hub_reason else self._reason
+
+    def status(self) -> dict[str, str | None]:
+        return {"state": "failed", "reason": self.reason}
+
+    def subscribe(self, mac: str) -> None:
+        key = mac.upper()
+        with self._lock:
+            self._macs.add(key)
+        _call_on_loop(self._loop, lambda: self._send(key))
+
+    def unsubscribe(self, mac: str) -> None:
+        with self._lock:
+            self._macs.discard(mac.upper())
+
+    def is_subscribed(self, mac: str) -> bool:
+        with self._lock:
+            return mac.upper() in self._macs
+
+    def tick(self) -> None:
+        """Loop only: the source to every subscribed daemon (a refused write is retried next time)."""
+        with self._lock:
+            macs = sorted(self._macs)
+        for mac in macs:
+            self._send(mac)
+
+    async def run(self) -> None:
+        while True:
+            await asyncio.sleep(self._repeat_s)
+            self.tick()
+
+    async def stop(self) -> None:
+        with self._lock:
+            self._macs.clear()
+
+    def _send(self, mac: str) -> None:
+        if not self.is_subscribed(mac):
+            return
+        client = self._resolve_client(mac)
+        if client is None or not air_accepts(client):
+            return
+        src = AirSource(
+            state="unavailable",
+            reason=self.reason,
+            codec=None,
+            adapter=None,
+            index=None,
+            handle=None,
+            in_step=False,
+            monitor_drops=None,
+            ipc_dropped=0,
+        )
+        with contextlib.suppress(Exception):
+            client.send_air_command(src)
+
+
+def _call_on_loop(loop: asyncio.AbstractEventLoop, fn: Callable[[], Any]) -> None:
+    """Run *fn* now when called on *loop*, else schedule it there (a closed loop is ignored)."""
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        fn()
+        return
+    with contextlib.suppress(RuntimeError):  # loop closed at shutdown
+        loop.call_soon_threadsafe(fn)
