@@ -129,6 +129,18 @@ def _fold_score(rows: Sequence[tuple[float, float]], frame_s: float, epoch_s: fl
     return score
 
 
+def click_fold_quality(rows: Sequence[tuple[float, float]], frame_s: float, epoch_s: float = 0.0) -> float | None:
+    """The pattern score's peak over its median (``inf`` with a zero median), ``None`` without a
+    peak: how clearly the clicks stand out (:func:`click_fold_found` needs ``FOUND_PEAK_RATIO``)."""
+    score = _fold_score(rows, frame_s, epoch_s)
+    if score is None:
+        return None
+    peak, med = max(score), statistics.median(score)
+    if peak <= 0:
+        return None
+    return math.inf if med <= 0 else peak / med
+
+
 def click_fold_found(
     rows: Sequence[tuple[float, float]], frame_s: float, epoch_s: float = 0.0, encoder_delay_s: float = 0.0
 ) -> bool:

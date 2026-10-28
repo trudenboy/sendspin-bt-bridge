@@ -73,3 +73,11 @@ def test_libsbc_click_track_cut_to_wizard_spans(subbands, lead, span_s):
         assert abs(err) < 1.0, (offset_s, err)
         checked += 1
     assert checked == 4
+
+
+def test_fold_quality_matches_the_found_criterion():
+    from sendspin_bridge.services.bluetooth.a2dp_air_fold import FOUND_PEAK_RATIO, click_fold_quality
+
+    clicks = click_rows(3210.0, 0.3, 7.0)
+    assert click_fold_quality(clicks, FRAME_S) >= FOUND_PEAK_RATIO
+    assert click_fold_quality([(i * 0.0029, 1.0) for i in range(2000)], 0.0029) is None

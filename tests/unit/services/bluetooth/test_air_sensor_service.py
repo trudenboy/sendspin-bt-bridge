@@ -140,9 +140,11 @@ async def air_env():
                 env.service.tick()
                 await settle()
 
-        async def replay_fixture(both_links=False):
+        async def replay_fixture(both_links=False, mid_replay=None):
             next_tick = recs[0].t * 1e6 - OFFSET_US + TICK_S * 1e6
-            for r in recs:
+            for i, r in enumerate(recs):
+                if mid_replay is not None and i == len(recs) // 2:
+                    mid_replay(env)
                 t_raw = r.t * 1e6 - OFFSET_US
                 while t_raw >= next_tick:
                     env.now_us = next_tick
@@ -483,3 +485,176 @@ async def test_monitor_drops_warn_once_per_ten_minutes(air_env, caplog):
         drop(6)
     assert len(warnings()) == 2
     assert all("\\x" not in r.getMessage() for r in warnings())  # counts only, never record bytes
+
+
+# ── calibration air fold (A16b) ──────────────────────────────────────────
+
+
+def _tool_phase_ms() -> float:
+    """What ``scripts/a2dp_air_phase.py`` reports for the fixture (send anchor, unix axis)."""
+    import importlib.util
+    import sys
+
+    path = Path(__file__).resolve().parents[4] / "scripts" / "a2dp_air_phase.py"
+    spec = importlib.util.spec_from_file_location("a2dp_air_phase_a16b", path)
+    assert spec and spec.loader
+    tool = importlib.util.module_from_spec(spec)
+    sys.modules["a2dp_air_phase_a16b"] = tool
+    spec.loader.exec_module(tool)
+    (rep,), _ = tool.analyze(FIX)
+    return rep.phase_send_ms
+
+
+TOOL_PHASE_MS = _tool_phase_ms()
+
+
+async def fold_fixture(air_env, *, offset_us=OFFSET_US, mid_replay=None):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    await env.replay_fixture(mid_replay=mid_replay)
+    return env, env.service.finish_fold(fold_id, to_us=env.now_us + 1e6)
+
+
+async def test_air_fold_on_the_fixture_equals_the_phase_tool(air_env):
+    # the fixture's frames at RAW = unix·1e6 - OFFSET_US through the tracker's anchor give the tool's
+    # phase - OFFSET mod cycle
+    _env, res = await fold_fixture(air_env, offset_us=OFFSET_US)
+    assert res.found and res.epochs == 1 and res.reason is None
+    assert res.phase_ms == pytest.approx((TOOL_PHASE_MS - OFFSET_US / 1000.0) % 10_000.0, abs=0.5)
+    assert (res.codec, res.rate, res.adapter) == ("sbc", 44100, "C0:FB:F9:62:D7:D6")
+    assert res.frames == 2065 and res.clicks >= 2 and res.quality is not None and res.quality >= 3.0
+
+
+async def test_air_fold_without_sbc_frames_is_not_found():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import AirClickFold
+
+    f = AirClickFold(from_us=0.0)
+    res = f.result(6e6)
+    assert not res.found
+    assert (res.phase_ms, res.reason, res.epochs, res.frames) == (None, "not_sbc", 0, 0)
+
+
+def _flat_frame(sf=3):
+    from sendspin_bridge.services.bluetooth.a2dp_air import ChannelMode, SbcFrame
+
+    return SbcFrame(
+        sampling_rate=44100,
+        blocks=16,
+        subbands=8,
+        channel_mode=ChannelMode.JOINT_STEREO,
+        allocation_snr=False,
+        bitpool=53,
+        length=119,
+        join=(False,) * 8,
+        scale_factors=((sf,) * 8, (sf,) * 8),
+    )
+
+
+async def test_air_fold_of_a_stream_without_clicks_is_no_air_clicks():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import AirClickFold
+
+    f = AirClickFold(from_us=0.0)
+    frame_us = 128 / 44100 * 1e6
+    for k in range(round(8e6 / frame_us)):
+        f.add_frame(k * frame_us, _flat_frame(), epoch=0)
+    res = f.result(8e6)
+    assert (res.found, res.phase_ms, res.reason, res.epochs, res.codec, res.rate) == (
+        False,
+        None,
+        "no_air_clicks",
+        1,
+        "sbc",
+        44100,
+    )
+
+
+async def test_air_fold_across_two_epochs_is_refused():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import AirClickFold
+
+    f = AirClickFold(from_us=0.0)
+    frame_us = 128 / 44100 * 1e6
+    n = round(8e6 / frame_us)
+    for k in range(n):
+        f.add_frame(k * frame_us, _flat_frame(), epoch=0 if k < n // 2 else 1)
+    res = f.result(8e6)
+    assert (res.found, res.phase_ms, res.reason, res.epochs) == (False, None, "air_epoch_changed", 2)
+
+
+async def test_air_fold_takes_only_frames_inside_its_span():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import AirClickFold
+
+    f = AirClickFold(from_us=2e6, max_s=30.0)
+    frame_us = 128 / 44100 * 1e6
+    for k in range(round(10e6 / frame_us)):
+        f.add_frame(k * frame_us, _flat_frame(), epoch=0 if k * frame_us < 1e6 else 1)
+    res = f.result(9e6)
+    assert res.epochs == 1  # the epoch-0 second lies before from_us
+    assert res.frames == pytest.approx(7e6 / frame_us, abs=2)
+
+
+async def test_air_fold_keeps_at_most_max_s():
+    from sendspin_bridge.services.bluetooth.air_sensor_service import AirClickFold
+
+    f = AirClickFold(from_us=0.0, max_s=5.0)
+    frame_us = 128 / 44100 * 1e6
+    for k in range(round(20e6 / frame_us)):
+        f.add_frame(k * frame_us, _flat_frame(), epoch=0)
+    assert f.held_s() <= 5.0 + 1e-3
+
+
+async def test_an_epoch_change_inside_the_air_span_is_air_epoch_changed(air_env):
+    def reopen_hub(env):
+        env.service.on_hub_state("error", "monitor_error")
+        env.service.on_hub_state("open", None)
+
+    _env, res = await fold_fixture(air_env, mid_replay=reopen_hub)
+    assert (res.found, res.phase_ms, res.reason) == (False, None, "air_epoch_changed")
+    assert res.epochs == 2
+
+
+async def test_the_hub_thread_never_folds(air_env, monkeypatch):
+    import threading
+
+    from sendspin_bridge.services.bluetooth import air_sensor_service as svc
+
+    calls = []
+    real = svc.click_phase_ms
+
+    def spy(*a, **kw):
+        calls.append(threading.get_ident())
+        return real(*a, **kw)
+
+    monkeypatch.setattr(svc, "click_phase_ms", spy)
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    await env.replay_fixture()  # every record is the hub thread's work
+    assert calls == []
+    res = env.service.finish_fold(fold_id, to_us=env.now_us + 1e6)
+    assert res.found and len(calls) == 1
+
+
+async def test_a_fold_of_an_unknown_id_is_not_armed(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    res = env.service.finish_fold("nope", to_us=1e6)
+    assert (res.found, res.reason) == (False, "not_armed")
+
+
+async def test_a_finished_fold_stops_collecting(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    env.service.finish_fold(fold_id, to_us=env.now_us)
+    assert env.service.finish_fold(fold_id, to_us=env.now_us).reason == "not_armed"
+    await env.replay_fixture()  # nothing is collected for a finished fold (no error either)
+
+
+async def test_arming_again_replaces_the_devices_fold(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    first = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    second = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    await env.replay_fixture()
+    assert env.service.finish_fold(first, to_us=env.now_us + 1e6).reason == "not_armed"
+    assert env.service.finish_fold(second, to_us=env.now_us + 1e6).found

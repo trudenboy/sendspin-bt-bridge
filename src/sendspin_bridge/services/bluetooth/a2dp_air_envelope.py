@@ -253,6 +253,7 @@ class AirLinkTracker:
         self._timestamp = "kernel"
         self._non_sbc_since: float | None = None
         self._unsupported: str | None = None
+        self._last_cells: tuple[int, int, float] | None = None
 
     # -- input ----------------------------------------------------------------
 
@@ -266,6 +267,7 @@ class AirLinkTracker:
         """One media packet of this link in send order; ``p.t_send``/``p.t_complete`` are RAW seconds."""
         t = p.t_send
         self._last_t = t
+        self._last_cells = None
         self._in_step = in_step
         self._timestamp = timestamp
         if p.codec != "sbc":
@@ -337,6 +339,7 @@ class AirLinkTracker:
         if unparsed > 0:
             cells += [MISSING] * unparsed
         if cells:
+            self._last_cells = (self._epoch, self._sent, frame_us)
             self._append(u_us, cells, frame_us)
         self._epoch_packets += 1
         self._prev = _Prev(p.seq, p.ssrc, t, p.rtp_ts, u, len(cells), timestamp, clock_epoch)
@@ -433,6 +436,16 @@ class AirLinkTracker:
         self._anchor.reset()
 
     # -- output ---------------------------------------------------------------
+
+    @property
+    def last_cells(self) -> tuple[int, int, float] | None:
+        """``(epoch, count of its first frame, frame_us)`` of the cells the last :meth:`on_packet`
+        appended (its parsed frames first, in order), None when it appended none."""
+        return self._last_cells
+
+    def anchor_us(self) -> float | None:
+        """The send anchor ``β`` now: a frame's cell time is ``count·frame_us + β`` (RAW µs)."""
+        return self._anchor.value()
 
     def _complete_lag_us(self) -> float | None:
         return statistics.median(lag for _, lag in self._lags) if self._lags else None

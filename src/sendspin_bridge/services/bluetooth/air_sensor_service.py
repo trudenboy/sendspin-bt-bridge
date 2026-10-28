@@ -29,6 +29,15 @@ plus any record that changes the drop count). The parser's time-based release of
 record rather than the next record of any kind; it is not driven from the hub's 250 ms tick, whose
 RAW "now" can run ahead of records still waiting for a clock pair and would release them early.
 
+Calibration (the sync wizard): :meth:`AirSensorService.arm_fold` attaches an :class:`AirClickFold`
+to a speaker for its solo; on the hub thread every parsed SBC frame of that speaker's link is added
+with its cell time from the tracker's send anchor (``count·frame_us + β``) and its chirp-band energy
+(the phase tool's ``frame_energy``), nothing else. :meth:`AirSensorService.finish_fold` detaches it
+under the lock and folds on the caller's thread (never the hub thread; the wizard runs it off the
+bridge loop). The phase is on the RAW axis (epoch 0, chirp start, the SBC encoder delay removed);
+the fold must hold SBC frames (``not_sbc``) of one epoch (``air_epoch_changed``) with the click
+pattern (``no_air_clicks``).
+
 Monitor records are never logged.
 """
 
@@ -37,13 +46,22 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import math
 import threading
+import uuid
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.bluetooth.a2dp_air import AIR_EVENT_CODES, AIR_MONITOR_OPCODES, A2dpAirParser
 from sendspin_bridge.services.bluetooth.a2dp_air_envelope import AirLinkTracker, TrackerState
+from sendspin_bridge.services.bluetooth.a2dp_air_fold import (
+    click_fold_found,
+    click_fold_quality,
+    click_phase_ms,
+    frame_energy,
+    sbc_encoder_delay_samples,
+)
 from sendspin_bridge.services.bluetooth.hci_clock import _raw_ns
 from sendspin_bridge.services.ipc.commands import (
     AIR_CODEC_MAX,
@@ -56,6 +74,7 @@ from sendspin_bridge.services.ipc.commands import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from sendspin_bridge.services.bluetooth.a2dp_air import MediaPacket, SbcFrame
     from sendspin_bridge.services.bluetooth.hci_monitor_hub import HubRecord
 
 logger = logging.getLogger(__name__)
@@ -90,6 +109,87 @@ def air_accepts(client: Any) -> bool:
         return AIR_ENVELOPE_VERSION in (accepts or ())
     except TypeError:
         return False
+
+
+FOLD_MAX_S = 30.0
+
+
+@dataclass(frozen=True, slots=True)
+class AirFoldResult:
+    """The air side of a calibration fold."""
+
+    phase_ms: float | None  # RAW axis, epoch 0, PCM instant (d_enc removed); None unless found
+    found: bool
+    epochs: int  # epochs seen inside the span (must be 1 for a calibration)
+    codec: str | None
+    rate: int | None
+    adapter: str | None
+    reason: str | None = None  # not_sbc | air_epoch_changed | no_air_clicks | not_armed; None when found
+    frames: int = 0  # SBC frames folded
+    clicks: int = 0  # click instants (at the found phase) inside the span
+    quality: float | None = None  # pattern score peak / median (found needs ≥ 3)
+
+
+class AirClickFold:
+    """One speaker's SBC frames over a calibration span, folded over the click cycle on demand.
+
+    ``add_frame`` (hub thread, under the service's lock) only records ``(t_cell, energy, epoch)``;
+    ``result`` does the fold (on the caller's thread). At most ``max_s`` of frames are kept.
+    """
+
+    def __init__(self, *, from_us: float, max_s: float = FOLD_MAX_S) -> None:
+        self._from_us = from_us
+        self._max_us = max_s * 1e6
+        self._rows: deque[tuple[float, float, int]] = deque()  # (t_cell_us, energy, epoch)
+        self._formats: dict[int, tuple[int, int, int]] = {}  # epoch -> (rate, sub-bands, samples per frame)
+
+    def add_frame(self, t_cell_us: float, frame: SbcFrame, epoch: int) -> None:
+        if t_cell_us < self._from_us:
+            return
+        rows = self._rows
+        rows.append((t_cell_us, frame_energy(frame), epoch))
+        self._formats.setdefault(epoch, (frame.sampling_rate, frame.subbands, frame.samples))
+        while rows and rows[-1][0] - rows[0][0] > self._max_us:
+            rows.popleft()
+
+    def held_s(self) -> float:
+        rows = self._rows
+        return (rows[-1][0] - rows[0][0]) / 1e6 if rows else 0.0
+
+    def result(self, to_us: float) -> AirFoldResult:
+        rows = [r for r in self._rows if r[0] <= to_us]
+        if not rows:
+            return AirFoldResult(None, False, 0, None, None, None, reason="not_sbc")
+        epochs = len({r[2] for r in rows})
+        rate, subbands, samples = self._formats[rows[-1][2]]
+
+        def out(
+            phase: float | None, reason: str | None, clicks: int = 0, quality: float | None = None
+        ) -> AirFoldResult:
+            return AirFoldResult(
+                phase, phase is not None, epochs, "sbc", rate, None, reason, len(rows), clicks, quality
+            )
+
+        if epochs > 1:
+            return out(None, "air_epoch_changed")
+        frame_s = samples / rate
+        pts = [(t / 1e6, e) for t, e, _ in rows]
+        quality = click_fold_quality(pts, frame_s)
+        d_enc = sbc_encoder_delay_samples(subbands) / rate
+        phase = click_phase_ms(pts, frame_s, 0.0, d_enc) if click_fold_found(pts, frame_s, 0.0, d_enc) else None
+        if phase is None:
+            return out(None, "no_air_clicks", quality=quality)
+        return out(phase, None, _clicks_inside(phase, pts[0][0], pts[-1][0] + frame_s), quality)
+
+
+def _clicks_inside(phase_ms: float, lo_s: float, hi_s: float) -> int:
+    """Click instants ``phase + LEAD_IN + k·PERIOD`` (the cycle's every click) between two times."""
+    from sendspin_sync import click_track as ct
+
+    first = phase_ms / 1000.0 + ct.LEAD_IN_S
+    k0 = math.ceil((lo_s - first) / ct.PERIOD_S)
+    k1 = math.floor((hi_s - first) / ct.PERIOD_S)
+    return max(0, k1 - k0 + 1)
 
 
 @dataclass(eq=False)
@@ -153,6 +253,9 @@ class AirSensorService:
         self._cpu_checked_at: float | None = None
         self._logged_at: dict[str, float] = {}
         self._stopped = False
+        # Calibration folds (guarded by self._lock): id -> (mac, fold), and each mac's armed id.
+        self._folds: dict[str, tuple[str, AirClickFold]] = {}
+        self._fold_of: dict[str, str] = {}
 
     # ------------------------------------------------------------------ subscriptions
 
@@ -255,6 +358,54 @@ class AirSensorService:
                 dev.tracker.on_packet(
                     p, timestamp=rec.timestamp, in_step=self._parser.link_in_step(key), clock_epoch=rec.clock_epoch
                 )
+                fold_id = self._fold_of.get(dev.mac)
+                if fold_id is not None:
+                    self._feed_fold(self._folds[fold_id][1], dev.tracker, p)
+
+    @staticmethod
+    def _feed_fold(fold: AirClickFold, tracker: AirLinkTracker, p: MediaPacket) -> None:
+        """Hub thread, under the lock: the packet's parsed frames at their cell times (no folding)."""
+        cells = tracker.last_cells
+        beta = tracker.anchor_us()
+        if cells is None or beta is None:
+            return
+        epoch, seq0, frame_us = cells
+        try:
+            frames = p.frames or (p.sbc.decode() if p.sbc is not None else ())
+        except Exception:
+            return
+        for k, frame in enumerate(frames):
+            fold.add_frame((seq0 + k) * frame_us + beta, frame, epoch)
+
+    # ------------------------------------------------------------------ calibration folds
+
+    def arm_fold(self, mac: str, from_us: float) -> str:
+        """Any thread: start collecting *mac*'s air frames from RAW ``from_us``; returns the fold id.
+        Arming the speaker again replaces its previous fold."""
+        key = mac.upper()
+        fold_id = uuid.uuid4().hex
+        with self._lock:
+            old = self._fold_of.pop(key, None)
+            if old is not None:
+                self._folds.pop(old, None)
+            self._folds[fold_id] = (key, AirClickFold(from_us=from_us))
+            self._fold_of[key] = fold_id
+        return fold_id
+
+    def finish_fold(self, fold_id: str, to_us: float) -> AirFoldResult:
+        """Detach the fold and fold its frames up to RAW ``to_us`` on the caller's thread (call it
+        off the bridge loop; never from the hub thread)."""
+        with self._lock:
+            entry = self._folds.pop(fold_id, None)
+            if entry is not None and self._fold_of.get(entry[0]) == fold_id:
+                del self._fold_of[entry[0]]
+            dev = self._devices.get(entry[0]) if entry is not None else None
+            link = dev.link if dev is not None else None
+        if entry is None:
+            return AirFoldResult(None, False, 0, None, None, None, reason="not_armed")
+        adapters = self._safe(self._hub.adapters, {})
+        res = entry[1].result(to_us)
+        return replace(res, adapter=adapters.get(link[0]) if link is not None else None)
 
     def on_hub_state(self, state: str, reason: str | None) -> None:
         reopened = False
