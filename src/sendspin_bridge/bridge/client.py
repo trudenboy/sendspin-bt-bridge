@@ -50,6 +50,7 @@ from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_SCHEMA_VERSION,
     _player_id_from_mac,
+    air_sensor_effective,
     effective_playout_mode,
     get_runtime_version,
     load_config,
@@ -289,6 +290,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "declared_lead_time_ms",
         "effective_required_lead_time_ms",
         "playout",
+        "air_sensor",
         "pairing_pin",
         "pairing_window_open",
         "pairing_state",
@@ -2184,6 +2186,13 @@ class SendspinClient:
                             # PLAYOUT_SYNC: off (legacy player) / measure / loop.
                             # A speaker that opted out (playout_sync_enabled=false) always runs "off".
                             "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
+                            # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for
+                            # gets the key; without it the daemon builds nothing (switch off).
+                            **(
+                                {"air_sensor": {"enabled": True, "latency_ms": None}}
+                                if air_sensor_effective(player_cfg, spawn_config)[0]
+                                else {}
+                            ),
                         }
                     )
                 )

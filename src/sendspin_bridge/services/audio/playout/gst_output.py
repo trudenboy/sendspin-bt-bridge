@@ -151,6 +151,15 @@ class _Counters:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _EngineMarks:
+    """The engine counters the air listener has already been told about."""
+
+    underruns: int = 0
+    pa_steps: int = 0
+    suspended: bool = False
+
+
 class _WatchedPort:
     """The port clock the engine reads, remembering the last reading for the player."""
 
@@ -181,6 +190,7 @@ class PlayoutPlayer:
         thread_factory: Callable[..., Any] = threading.Thread,
         air_tap: WrittenEnvelope | None = None,
         output_delay_us: Callable[[], float] | None = None,
+        on_engine_event: Callable[[str], None] | None = None,
     ) -> None:
         self._sink_factory = sink_factory
         self._settings = settings
@@ -191,6 +201,9 @@ class PlayoutPlayer:
         # The air sensor's tap on the written PCM; None (switch off) = no hook at all.
         self._air_tap = air_tap
         self._output_delay_us = output_delay_us
+        # The air sensor's listener for output reopens and engine events (feeder or caller
+        # thread); None (switch off) = the engine's counters are never even compared.
+        self._on_engine_event = on_engine_event
 
         # Caller-thread state (set by start/adopt/stop only).
         self._out: PlayoutOutput | None = None
@@ -221,6 +234,7 @@ class PlayoutPlayer:
         self._tail_until_ns: int | None = None  # muted until the port passes this x
         self._input_format: InputFormat | None = None
         self._air_muted: bool | None = None  # effective mute last handed to the air tap
+        self._air_seen = _EngineMarks()  # engine counters last forwarded to the listener
 
         # Published for metrics()/resync()/is_drained().
         self._pub_lock = threading.Lock()
@@ -309,6 +323,7 @@ class PlayoutPlayer:
         self._tail_until_ns = None
         self._input_format = None
         self._air_muted = None
+        self._air_seen = _EngineMarks()
         self._generation += 1
         self._first_lead_us = None
         self._stream_closed = False
@@ -319,6 +334,7 @@ class PlayoutPlayer:
             self._queued = False
         with self._cmd_lock:
             self._commands.clear()
+        self._reopen_air_tap()
         self._enqueue_format(audio_format)
         if self._volume is not None:
             self._enqueue(("volume", *self._volume))
@@ -332,6 +348,43 @@ class PlayoutPlayer:
         self._stop_evt = stop_evt
         self._thread = self._thread_factory(target=self._run, args=(stop_evt,), name="playout-feeder", daemon=True)
         self._thread.start()
+
+    def _reopen_air_tap(self) -> None:
+        """Every adopted output restarts ``x`` at 0: forget the tap's cells, tell the listener."""
+        tap = self._air_tap
+        if tap is not None:
+            try:
+                tap.reset()
+            except Exception:
+                self._air_tap_failed(tap)
+        self._emit_engine_event("reopen")
+
+    def _emit_engine_event(self, kind: str) -> None:
+        """Hand one event to the listener; nothing it does reaches the caller (or the feeder)."""
+        listener = self._on_engine_event
+        if listener is None:
+            return
+        try:
+            listener(kind)
+        except Exception:
+            logger.debug("playout: engine event listener failed", exc_info=True)
+
+    def _forward_engine_events(self, snap: dict[str, object]) -> None:
+        """New underruns, PA steps and the start of a stall since the last snapshot, as events."""
+        seen = self._air_seen
+        underruns, pa_steps = snap.get("underruns"), snap.get("pa_steps")
+        suspended = snap.get("state") == "suspended"
+        if isinstance(underruns, int) and underruns > seen.underruns:
+            self._emit_engine_event("underrun")
+        if isinstance(pa_steps, int) and pa_steps > seen.pa_steps:
+            self._emit_engine_event("pa_step")
+        if suspended and not seen.suspended:
+            self._emit_engine_event("stall")
+        self._air_seen = _EngineMarks(
+            underruns if isinstance(underruns, int) else seen.underruns,
+            pa_steps if isinstance(pa_steps, int) else seen.pa_steps,
+            suspended,
+        )
 
     @staticmethod
     def discard_output(output: PlayoutOutput) -> None:
@@ -617,6 +670,8 @@ class PlayoutPlayer:
 
     def _publish_snapshot(self, engine: PlayoutEngine) -> None:
         snap = engine.snapshot()
+        if self._on_engine_event is not None:
+            self._forward_engine_events(snap)
         port = self._port
         sample = port.last if port is not None else None
         k_ns = snap.get("k_ns")

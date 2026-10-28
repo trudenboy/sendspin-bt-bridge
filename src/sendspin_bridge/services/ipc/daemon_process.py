@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -365,6 +366,42 @@ def _read_playout(audio_handler: object) -> dict | None:
     return dict(playout) if isinstance(playout, dict) else None
 
 
+# Calibration latency bounds (R-12); the parent clamps too, the daemon never trusts it.
+_AIR_LATENCY_MAX_MS = 2000.0
+
+
+def _air_sensor_args(raw: object) -> dict | None:
+    """The spawn's ``air_sensor`` param, validated: None unless it asks for the sensor."""
+    if not isinstance(raw, dict) or raw.get("enabled") is not True:
+        return None
+    latency = raw.get("latency_ms")
+    latency_ms: float | None = None
+    if isinstance(latency, int | float) and not isinstance(latency, bool) and math.isfinite(latency):
+        latency_ms = min(_AIR_LATENCY_MAX_MS, max(0.0, float(latency)))
+    return {"enabled": True, "latency_ms": latency_ms}
+
+
+async def _air_status_tick(daemon, status: StatusStore | dict, last: dict | None) -> dict | None:
+    """Step the air sensor once and patch ``status["air_sensor"]`` if its snapshot changed.
+
+    Returns the snapshot now published (``last`` when nothing changed). A daemon without a
+    sensor has no ``air_snapshot`` value, and the key is never written.
+    """
+    air_step = getattr(daemon, "air_step", None)
+    air_snapshot = getattr(daemon, "air_snapshot", None)
+    if not callable(air_step) or not callable(air_snapshot):
+        return last
+    try:
+        await air_step()
+    except Exception as exc:  # the daemon contains its own; never let one stop the watcher
+        logger.debug("air sensor step failed: %s", exc)
+    snap = air_snapshot()
+    if snap is None or snap == last:
+        return last
+    _patch_status(status, {"air_sensor": snap})
+    return snap
+
+
 async def _timing_telemetry_watcher(
     daemon,
     status: StatusStore | dict,
@@ -384,6 +421,7 @@ async def _timing_telemetry_watcher(
     next_playout_at = 0.0
     fell_back = False
     playout_error_ms: float | None = None
+    air_published: dict | None = None
     while not stop_event.is_set():
         try:
             try:
@@ -432,6 +470,15 @@ async def _timing_telemetry_watcher(
                 next_pa_latency_at = time.monotonic() + 1.0
                 pa_latency_ms = await _pa_latency_or_none()
             changed = playout_changed
+            # The air sensor: one step per tick (1 s) on this loop, its snapshot published on change.
+            try:
+                air_now = await _air_status_tick(daemon, status, air_published)
+            except Exception as exc:
+                logger.debug("air sensor status update failed: %s", exc)
+                air_now = air_published
+            if air_now is not air_published:
+                air_published = air_now
+                changed = True
             if audio_handler is not None:
                 changed = _observe_structured_reanchor(audio_handler, status) or changed
             now = time.monotonic()
@@ -882,6 +929,7 @@ async def _run(params: dict) -> None:
         playout_diag=_env_flag("SENDSPIN_PLAYOUT_DIAG", default=bool(params.get("playout_diag", False))),
         playout_mode=playout_mode,
         playout=playout_params,
+        air_sensor=_air_sensor_args(params.get("air_sensor")),
     )
 
     status = StatusStore(

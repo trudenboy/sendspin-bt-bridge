@@ -32,9 +32,13 @@ from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
 from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory, playout_pulsesink_factory
 from sendspin_bridge.services.audio.player.player import InPlaceShift, PcmFormat, StreamPlayer
+from sendspin_bridge.services.audio.playout.air_sensor import AirSensor
+from sendspin_bridge.services.audio.playout.air_tap import INTERNAL_ERROR as _AIR_INTERNAL_ERROR
+from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
 from sendspin_bridge.services.audio.playout.engine import PlayoutSettings
 from sendspin_bridge.services.audio.playout.gst_output import LEAD_MS as _PLAYOUT_LEAD_MS
 from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer
+from sendspin_bridge.services.audio.playout.gst_output import _raw_now_us as _air_raw_now_us
 from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
 from sendspin_bridge.services.ipc.commands import AIR_ENVELOPE_VERSION
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
@@ -127,6 +131,9 @@ class DaemonArgs:
     playout_mode: str = "off"
     # The spawn's ``playout`` dict: PlayoutSettings fields beyond the mode.
     playout: dict | None = None
+    # The spawn's ``air_sensor`` dict ({"enabled": True, "latency_ms": …}), sent only when the
+    # sensor is effective for this speaker; None (switch off) = no sensor, no tap, no air commands.
+    air_sensor: dict | None = None
 
 
 class AirSink(Protocol):
@@ -235,6 +242,84 @@ class BridgeDaemon:
         self._air_sink: AirSink | None = None
         self.air_counters: dict[str, int] = {"accepted": 0, "ignored": 0, "invalid": 0, "errors": 0}
         self.air_log = RateLimitedLog(logger, clock=time.monotonic)
+        # The air sensor (built only when the parent asked for it in measure mode), the tap
+        # every playout player of this daemon writes into, and the loop its events run on.
+        self._air_tap: WrittenEnvelope | None = None
+        self._air_sensor: AirSensor | None = None
+        self._air_loop: asyncio.AbstractEventLoop | None = None
+        self._build_air_sensor()
+
+    def _build_air_sensor(self) -> None:
+        """Build the sensor and take air commands, if the spawn asked for it (measure mode only)."""
+        params = self._args.air_sensor
+        if not isinstance(params, dict) or params.get("enabled") is not True:
+            return
+        if self._args.playout_mode != "measure":
+            return
+        self._air_tap = WrittenEnvelope()
+        self._air_sensor = AirSensor(
+            tap=self._air_tap, now_us=_air_raw_now_us, output_delay_ms=self._air_output_delay_ms
+        )
+        latency = params.get("latency_ms")
+        if isinstance(latency, int | float) and not isinstance(latency, bool):
+            self._air_sensor.set_calibration(float(latency))
+        self.attach_air_sink(self._air_sensor)
+
+    def _air_output_delay_ms(self) -> float:
+        """``D_out``: the output delay the queued audio is timed with (the static delay before the client runs)."""
+        delay = self._player_delay_ms
+        return float(self._static_delay_ms if delay is None else delay)
+
+    def _air_output_delay_us(self) -> float:
+        return self._air_output_delay_ms() * 1000.0
+
+    def _air_engine_event(self, kind: str) -> None:
+        """The player's listener (feeder or caller thread): the sensor sees the event on the loop."""
+        sensor = self._air_sensor
+        if sensor is None:
+            return
+        loop = self._air_loop
+        try:
+            if loop is not None and not loop.is_closed():
+                loop.call_soon_threadsafe(self._air_on_loop, kind)
+            else:
+                self._air_on_loop(kind)
+        except Exception:
+            logger.debug("air sensor: engine event %s not delivered", kind, exc_info=True)
+
+    def _air_on_loop(self, kind: Any) -> None:
+        sensor = self._air_sensor
+        if sensor is None:
+            return
+        try:
+            sensor.on_engine_event(kind)
+        except Exception:
+            logger.debug("air sensor: engine event %s failed", kind, exc_info=True)
+
+    async def air_step(self) -> None:
+        """One sensor step (daemon loop); whatever it raises disables only the sensor."""
+        sensor = self._air_sensor
+        if sensor is None:
+            return
+        try:
+            await sensor.step()
+        except Exception:
+            with contextlib.suppress(Exception):
+                sensor.fail()
+
+    def air_snapshot(self) -> dict[str, object] | None:
+        """The ``air_sensor`` status (daemon loop); None when no sensor was built (no status key)."""
+        sensor = self._air_sensor
+        if sensor is None:
+            return None
+        try:
+            snap = dict(sensor.snapshot())
+        except Exception:
+            with contextlib.suppress(Exception):
+                sensor.fail()
+            snap = {"state": "unavailable", "reason": _AIR_INTERNAL_ERROR}
+        snap["accepts"] = self.air_accepts()
+        return snap
 
     def attach_air_sink(self, sink: AirSink) -> None:
         self._air_sink = sink
@@ -281,6 +366,8 @@ class BridgeDaemon:
     async def run(self) -> int:
         logger.info("Starting daemon: %s", self._args.client_id)
         loop = asyncio.get_running_loop()
+        if self._air_sensor is not None:
+            self._air_loop = loop  # engine events from the feeder threads are handed to this loop
         main_task = asyncio.current_task()
         assert main_task is not None
 
@@ -528,6 +615,15 @@ class BridgeDaemon:
 
     def _new_playout_player(self, sink_name: str | None) -> PlayoutPlayer:
         buffer_time_us = max(1, int(self._args.pulse_latency_msec)) * 1000
+        air: dict[str, Any] = {}
+        if self._air_sensor is not None:
+            with contextlib.suppress(RuntimeError):
+                self._air_loop = asyncio.get_running_loop()
+            air = {
+                "air_tap": self._air_tap,
+                "output_delay_us": self._air_output_delay_us,
+                "on_engine_event": self._air_engine_event,
+            }
         return PlayoutPlayer(
             sink_factory=playout_pulsesink_factory(
                 device=sink_name,
@@ -535,6 +631,7 @@ class BridgeDaemon:
                 buffer_time_us=buffer_time_us,
             ),
             settings=self._playout_settings(),
+            **air,
         )
 
     def _retire_player(self, player: Any) -> None:
@@ -577,6 +674,12 @@ class BridgeDaemon:
         playout = dict(previous) if isinstance(previous, dict) else {}
         playout.update(state="fallback", fallback_reason=reason)
         self._bridge_status["playout"] = playout
+        sensor = self._air_sensor
+        if sensor is not None:
+            # R-6: unavailable/playout_fallback, and the parent stops sending (accepts = []).
+            self.detach_air_sink()
+            with contextlib.suppress(Exception):
+                sensor.on_engine_event("fallback")
         old = self._player
         # An open in flight belongs to the engine: its output is closed when it finishes.
         self._forget_open()

@@ -64,7 +64,7 @@ from typing import TYPE_CHECKING, Literal
 
 from sendspin_bridge.services.audio.playout.air_correlator import PSR_GATE, SIDE_SCAN, WindowResult, correlate_window
 from sendspin_bridge.services.audio.playout.air_tap import CELL_FRAMES, INTERNAL_ERROR, LOOKBACK_FRAMES, comb_lag
-from sendspin_bridge.services.ipc.commands import AirEnvelope, AirSource, SetAirCalibration
+from sendspin_bridge.services.ipc.commands import AirEnvelope, AirFold, AirSource, SetAirCalibration
 
 if TYPE_CHECKING:
     from array import array
@@ -304,6 +304,7 @@ class AirSensor:
         self._tap_gen = tap.gen
         self._source: AirSource | None = None
         self._latency_ms: float | None = None
+        self._fold: dict[str, object] | None = None  # status ``fold``: the answer to the last air_fold
         self._fallback = False
         self._error: str | None = None
         self._busy = False
@@ -345,7 +346,10 @@ class AirSensor:
             self.on_source(command)
         elif isinstance(command, SetAirCalibration):
             self.set_calibration(command.latency_ms)
-        # AirFold: the written fold arrives with the calibration task (A16b).
+        elif isinstance(command, AirFold):
+            # The written fold arrives with the calibration task (A16b); until then every fold is
+            # answered, so the parent never waits for one.
+            self._fold = {"id": command.id, "phase_ms": None, "ok": False, "reason": "not_implemented"}
 
     def on_envelope(self, env: AirEnvelope) -> None:
         try:
@@ -655,6 +659,10 @@ class AirSensor:
         if self._tap.gen != self._tap_gen:
             self._reopen()
 
+    def fail(self) -> None:
+        """Something around the sensor failed (the daemon's containment): ``unavailable``/``internal_error``."""
+        self._fail()
+
     def _fail(self) -> None:
         if self._error is None:
             self._log.exception("Air sensor failed; disabled until the output reopens")
@@ -761,7 +769,7 @@ class AirSensor:
             "ipc_dropped": src.ipc_dropped if src else 0,
             "dropped_messages": self._dropped,
             "accepts": [] if self._fallback else [1],
-            "fold": None,
+            "fold": None if self._fold is None else dict(self._fold),
         }
 
     # -- logging ----------------------------------------------------------------------------
