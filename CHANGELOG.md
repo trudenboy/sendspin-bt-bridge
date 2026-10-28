@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for SBC Bluetooth speakers in playout sync `measure` mode the bridge
   measures when the audio it wrote actually leaves over the air, shows
   this host placement in the device's timing panel, and the group sync
-  wizard can calibrate each speaker's air-to-sound latency. It does not
-  change playback and needs the `CAP_NET_RAW` capability.
+  wizard can calibrate each speaker's air-to-sound latency against an
+  on-schedule reference (the panel lists it, with Forget). It does not
+  change playback, needs the `CAP_NET_RAW` capability, and takes effect
+  after a bridge restart.
 
 ## [3.1.0-beta.17] - 2026-10-28
 
