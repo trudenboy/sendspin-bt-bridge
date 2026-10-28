@@ -566,9 +566,11 @@ async def _spawned(monkeypatch, config: dict) -> dict:
     from unittest.mock import patch
 
     from sendspin_bridge.bridge.client import SendspinClient
+    from tests.support.air_service import bridge_started_with
 
     monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8930)
     monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: json.loads(json.dumps(config)))
+    bridge_started_with(monkeypatch, config)
     client = SendspinClient("Speaker", "localhost", 9000)
     client.config_id = "p1"
     client._start_sendspin_lock = asyncio.Lock()

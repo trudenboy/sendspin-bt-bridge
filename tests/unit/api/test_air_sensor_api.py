@@ -14,6 +14,7 @@ import pytest
 import sendspin_bridge.application.status as status_uc
 from sendspin_bridge.bridge.client import SendspinClient
 from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+from tests.support.air_service import bridge_started_with
 
 MAC = "AA:BB:CC:DD:EE:01"
 PLAYER_ID = "kitchen-1"
@@ -223,6 +224,7 @@ def test_status_key_is_accepted_from_the_daemon():
 async def _spawn(monkeypatch, config: dict, *, preset: dict | None = None) -> SendspinClient:
     monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8930)
     monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: json.loads(json.dumps(config)))
+    bridge_started_with(monkeypatch, config)
     client = SendspinClient("Kitchen", "localhost", 9000)
     client.config_id = PLAYER_ID
     client._start_sendspin_lock = asyncio.Lock()
@@ -299,6 +301,7 @@ AIR_ENTRY = {
 async def _spawn_params(monkeypatch, config: dict, *, preset: dict | None = None) -> tuple[SendspinClient, dict]:
     monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8930)
     monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: json.loads(json.dumps(config)))
+    bridge_started_with(monkeypatch, config)
     client = SendspinClient("Kitchen", "localhost", 9000)
     client.config_id = PLAYER_ID
     client._start_sendspin_lock = asyncio.Lock()

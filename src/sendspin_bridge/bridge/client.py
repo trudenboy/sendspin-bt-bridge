@@ -2244,7 +2244,11 @@ class SendspinClient:
                 self._seen_server_delay_seq = 0
                 spawn_config = load_config()
                 player_cfg = self._config_entry(spawn_config)
-                air_effective, air_reason = air_sensor_effective(player_cfg, spawn_config)
+                # The switch needs a restart: what counts is whether the air sensor service runs
+                # now, not the saved value (toggled at runtime, nothing half-applies).
+                air_effective, air_reason = air_sensor_effective(
+                    player_cfg, {**spawn_config, "EXPERIMENTAL_AIR_SENSOR": get_air_sensor_service() is not None}
+                )
                 self.air_to_sound_latency = valid_air_latency_entries(player_cfg.get("air_to_sound_latency"))
                 if air_reason != "switch_off":
                     # Switch on: a speaker the sensor is not effective for reports why (its daemon
