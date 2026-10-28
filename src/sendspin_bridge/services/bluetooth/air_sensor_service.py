@@ -35,7 +35,12 @@ with its cell time from the tracker's send anchor (``count·frame_us + β``) and
 (the phase tool's ``frame_energy``), nothing else. :meth:`AirSensorService.finish_fold` detaches it
 under the lock and folds on the caller's thread (never the hub thread; the wizard runs it off the
 bridge loop). The phase is on the RAW axis (epoch 0, chirp start, the SBC encoder delay removed);
-the fold must hold SBC frames (``not_sbc``) of one epoch (``air_epoch_changed``) with the click
+An armed fold expires once a frame's cell time passes ``from_us + max_s +``
+:data:`FOLD_EXPIRY_SLACK_S`: the hub path then stops computing energies for it, and
+``finish_fold`` still answers with the frames collected until then. ``unsubscribe`` drops the
+speaker's fold and ``stop`` drops every fold (``finish_fold`` then answers ``not_armed``). The
+energies come from the undecoded frames in place (``sbc_chirp_energies``), never a decode.
+The fold must hold SBC frames (``not_sbc``) of one epoch (``air_epoch_changed``) with the click
 pattern (``no_air_clicks``).
 
 Monitor records are never logged.
@@ -60,6 +65,7 @@ from sendspin_bridge.services.bluetooth.a2dp_air_fold import (
     click_fold_quality,
     click_phase_ms,
     frame_energy,
+    sbc_chirp_energies,
     sbc_encoder_delay_samples,
 )
 from sendspin_bridge.services.bluetooth.hci_clock import _raw_ns
@@ -112,6 +118,7 @@ def air_accepts(client: Any) -> bool:
 
 
 FOLD_MAX_S = 30.0
+FOLD_EXPIRY_SLACK_S = 5.0  # an armed fold stops collecting this long after its max_s
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,15 +147,35 @@ class AirClickFold:
     def __init__(self, *, from_us: float, max_s: float = FOLD_MAX_S) -> None:
         self._from_us = from_us
         self._max_us = max_s * 1e6
+        self._expires_us = from_us + (max_s + FOLD_EXPIRY_SLACK_S) * 1e6
+        self.expired = False  # past max_s + slack: nothing more is collected
         self._rows: deque[tuple[float, float, int]] = deque()  # (t_cell_us, energy, epoch)
         self._formats: dict[int, tuple[int, int, int]] = {}  # epoch -> (rate, sub-bands, samples per frame)
 
     def add_frame(self, t_cell_us: float, frame: SbcFrame, epoch: int) -> None:
-        if t_cell_us < self._from_us:
+        self.add_energy(
+            t_cell_us,
+            frame_energy(frame),
+            epoch,
+            rate=frame.sampling_rate,
+            subbands=frame.subbands,
+            samples=frame.samples,
+        )
+
+    def accepts(self, t_cell_us: float) -> bool:
+        """False (and expired from now on) once ``t_cell_us`` is past ``from_us + max_s + slack``."""
+        if t_cell_us > self._expires_us:
+            self.expired = True
+        return not self.expired
+
+    def add_energy(
+        self, t_cell_us: float, energy: float, epoch: int, *, rate: int, subbands: int, samples: int
+    ) -> None:
+        if t_cell_us < self._from_us or not self.accepts(t_cell_us):
             return
         rows = self._rows
-        rows.append((t_cell_us, frame_energy(frame), epoch))
-        self._formats.setdefault(epoch, (frame.sampling_rate, frame.subbands, frame.samples))
+        rows.append((t_cell_us, energy, epoch))
+        self._formats.setdefault(epoch, (rate, subbands, samples))
         while rows and rows[-1][0] - rows[0][0] > self._max_us:
             rows.popleft()
 
@@ -281,6 +308,9 @@ class AirSensorService:
         """Any thread. The device leaves the map and its sender task is cancelled on the loop."""
         with self._lock:
             dev = self._devices.pop(mac.upper(), None)
+            fold_id = self._fold_of.pop(mac.upper(), None)
+            if fold_id is not None:
+                self._folds.pop(fold_id, None)
             # Read under the lock: tick() creates a task only for a device still in the map.
             task = dev.task if dev is not None else None
             if dev is not None:
@@ -367,28 +397,43 @@ class AirSensorService:
         """Hub thread, under the lock: the packet's parsed frames at their cell times (no folding)."""
         cells = tracker.last_cells
         beta = tracker.anchor_us()
-        if cells is None or beta is None:
+        if cells is None or beta is None or fold.expired:
             return
         epoch, seq0, frame_us = cells
-        try:
-            frames = p.frames or (p.sbc.decode() if p.sbc is not None else ())
-        except Exception:
+        if not fold.accepts(seq0 * frame_us + beta):
             return
-        for k, frame in enumerate(frames):
-            fold.add_frame((seq0 + k) * frame_us + beta, frame, epoch)
+        if p.frames:
+            for k, frame in enumerate(p.frames):
+                fold.add_frame((seq0 + k) * frame_us + beta, frame, epoch)
+            return
+        sbc = p.sbc
+        if sbc is None or not sbc.layouts:
+            return
+        lay = sbc.layouts[0]
+        samples = lay.blocks * lay.subbands
+        for k, energy in enumerate(sbc_chirp_energies(sbc)):
+            fold.add_energy(
+                (seq0 + k) * frame_us + beta,
+                energy,
+                epoch,
+                rate=lay.sampling_rate,
+                subbands=lay.subbands,
+                samples=samples,
+            )
 
     # ------------------------------------------------------------------ calibration folds
 
-    def arm_fold(self, mac: str, from_us: float) -> str:
-        """Any thread: start collecting *mac*'s air frames from RAW ``from_us``; returns the fold id.
-        Arming the speaker again replaces its previous fold."""
+    def arm_fold(self, mac: str, from_us: float, *, max_s: float = FOLD_MAX_S) -> str:
+        """Any thread: start collecting *mac*'s air frames from RAW ``from_us`` (at most ``max_s``;
+        expired after ``max_s`` + :data:`FOLD_EXPIRY_SLACK_S`); returns the fold id. Arming the
+        speaker again replaces its previous fold."""
         key = mac.upper()
         fold_id = uuid.uuid4().hex
         with self._lock:
             old = self._fold_of.pop(key, None)
             if old is not None:
                 self._folds.pop(old, None)
-            self._folds[fold_id] = (key, AirClickFold(from_us=from_us))
+            self._folds[fold_id] = (key, AirClickFold(from_us=from_us, max_s=max_s))
             self._fold_of[key] = fold_id
         return fold_id
 
@@ -448,6 +493,9 @@ class AirSensorService:
 
     async def stop(self) -> None:
         self._stopped = True
+        with self._lock:
+            self._folds.clear()
+            self._fold_of.clear()
         self._sync_registration()
         await self._cancel_senders()
 

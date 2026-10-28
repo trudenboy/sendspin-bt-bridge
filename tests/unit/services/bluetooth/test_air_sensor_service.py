@@ -658,3 +658,77 @@ async def test_arming_again_replaces_the_devices_fold(air_env):
     await env.replay_fixture()
     assert env.service.finish_fold(first, to_us=env.now_us + 1e6).reason == "not_armed"
     assert env.service.finish_fold(second, to_us=env.now_us + 1e6).found
+
+
+# ── fold bounds and the undecoded fast path (A16b fix round 1) ───────────
+
+
+async def test_the_fold_energy_comes_from_undecoded_frames(air_env, monkeypatch):
+    """The live parser leaves frames undecoded; an armed fold must not decode them on the hub thread."""
+    from sendspin_bridge.services.bluetooth.a2dp_air import SbcFrames
+
+    def no_decode(self):
+        raise AssertionError("decode() called on the hub thread")
+
+    monkeypatch.setattr(SbcFrames, "decode", no_decode)
+    _env, res = await fold_fixture(air_env)
+    assert res.found and res.frames == 2065
+
+
+async def test_the_undecoded_fold_equals_the_decoded_fold(air_env):
+    from sendspin_bridge.services.bluetooth.a2dp_air_fold import frame_energy, sbc_chirp_energies
+
+    recs = list(read_btsnoop(FIX))
+    undecoded = [p for p in parse_records(recs, A2dpAirParser(check_crc="first", decode_frames=False)) if p.sbc]
+    decoded = [p for p in parse_records(recs, A2dpAirParser(check_crc="first")) if p.frames]
+    assert [e for p in undecoded for e in sbc_chirp_energies(p.sbc)] == [
+        frame_energy(f) for p in decoded for f in p.frames
+    ]
+    _env, res_live = await fold_fixture(air_env)
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service._parser = A2dpAirParser(check_crc="first")  # the decoding parser: SbcFrame path
+    env.service.subscribe(ENEBY)
+    fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    await env.replay_fixture()
+    assert env.service.finish_fold(fold_id, to_us=env.now_us + 1e6) == res_live
+
+
+async def test_an_armed_fold_expires_and_stops_collecting(air_env, monkeypatch):
+    """Past max_s + slack after from_us the hub path stops computing energies; finish still answers
+    with the frames collected until then (documented choice)."""
+    from sendspin_bridge.services.bluetooth import air_sensor_service as svc
+
+    monkeypatch.setattr(svc, "FOLD_EXPIRY_SLACK_S", 0.5)
+    seen = []
+    real = svc.sbc_chirp_energies
+
+    def spy(frames):
+        seen.append(env.now_us)
+        return real(frames)
+
+    monkeypatch.setattr(svc, "sbc_chirp_energies", spy)
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    start = env.now_us
+    fold_id = env.service.arm_fold(ENEBY, from_us=start, max_s=1.0)
+    await env.replay_fixture()
+    assert seen and max(seen) - start <= 1.5e6 + 0.3e6  # the packet that crossed the limit, then nothing
+    assert len(seen) < 295 / 2
+    res = env.service.finish_fold(fold_id, to_us=env.now_us)
+    assert res.reason != "not_armed" and 0 < res.frames <= round(1.0 / (128 / 44100)) + 7
+
+
+async def test_unsubscribe_drops_the_speakers_fold(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    env.service.unsubscribe(ENEBY)
+    assert env.service.finish_fold(fold_id, to_us=env.now_us).reason == "not_armed"
+
+
+async def test_stop_drops_every_fold(air_env):
+    env = await air_env(peers={(1, 70): ENEBY}, accepts=[1])
+    env.service.subscribe(ENEBY)
+    fold_id = env.service.arm_fold(ENEBY, from_us=env.now_us)
+    await env.service.stop()
+    assert env.service.finish_fold(fold_id, to_us=env.now_us).reason == "not_armed"

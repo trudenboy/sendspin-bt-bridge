@@ -1111,3 +1111,15 @@ async def test_a_failing_fold_is_answered_and_leaves_the_sensor_running(click_wo
     snap = w.sensor.snapshot()
     assert snap["fold"] == {"id": "x", "phase_ms": None, "ok": False, "reason": "internal_error"}
     assert snap["reason"] != "internal_error"
+
+
+async def test_a_written_fold_longer_than_the_ring_is_clamped_to_it(click_world):
+    """AirFold allows 30 s; the tap holds 20 s: the span is clamped to the ring (documented)."""
+    from sendspin_bridge.services.audio.playout.air_sensor import written_fold_span_s
+
+    w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0)
+    assert written_fold_span_s(w.tap, 30.0) == 20.0
+    assert written_fold_span_s(w.tap, 12.0) == 12.0
+    w.write_seconds(14)
+    phase, reason = w.sensor.fold(w.t(13.0), span_s=30.0)
+    assert reason is None and abs(_cycle_err(phase, 0.0)) <= 0.5

@@ -44,7 +44,7 @@ window: ``locked`` ≤ :data:`LOCK_HOLD_S`, ``holding`` up to :data:`NO_LOCK_S`,
 whose heard time ``T`` lies in the requested span over the click cycle (``click_phase_ms`` with
 the full ``d_comb``, comb half-lag plus look-back half, removed), regardless of mute: mute acts
 after the tap, so the written PCM carries every click even while MA mutes the speaker. Only cells
-since the last reopen exist in the tap; fewer than :data:`FOLD_MIN_S` of program cells in the span,
+since the last reopen exist in the tap, and a span longer than its ring is clamped to it; fewer than :data:`FOLD_MIN_S` of program cells in the span,
 or no click pattern, is ``no_written_clicks``. The fold runs in ``run_fold`` (the default executor),
 never on the loop; the answer goes into the snapshot's ``fold`` slot, a newer id replacing a
 pending one.
@@ -117,6 +117,13 @@ _SOURCE_STATES = {"unavailable": "unavailable", "unsupported_codec": "unsupporte
 FOLD_SPAN_S = 12.0  # the written fold's default span: the last 12 s of heard time
 FOLD_MIN_S = 5.0  # fewer program cells than this in the span: no_written_clicks
 NO_WRITTEN_CLICKS = "no_written_clicks"
+
+
+def written_fold_span_s(tap: WrittenEnvelope, span_s: float) -> float:
+    """The written fold's span, clamped to what the tap's ring holds (AirFold allows 30 s, the ring
+    20 s): a longer span folds the whole ring rather than failing."""
+    return min(span_s, tap.seconds)
+
 
 EngineEvent = Literal["underrun", "pa_step", "stall", "reopen", "fallback"]
 AddStatus = Literal["ok", "new_epoch", "anchor_reset", "dropped"]
@@ -494,7 +501,7 @@ class AirSensor:
         in_rate = round(CELL_FRAMES / sl.cell_us * 1e6)
         d_comb_s = (comb_delay_us(in_rate) + lookback_delay_us(in_rate, tap.lookback_frames)) / 1e6
         cell_s = sl.cell_us / 1e6
-        lo = to_us - span_s * 1e6
+        lo = to_us - written_fold_span_s(tap, span_s) * 1e6
         # NaN T (no schedule) fails both comparisons; mute is deliberately not looked at.
         rows = [(t / 1e6, 2.0**w) for w, t, p in zip(sl.w, sl.t, sl.program, strict=True) if p and lo <= t <= to_us]
         if len(rows) * cell_s < FOLD_MIN_S - 1e-9 or not click_fold_found(rows, cell_s, 0.0, d_comb_s):

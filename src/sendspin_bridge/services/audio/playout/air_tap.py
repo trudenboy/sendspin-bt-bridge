@@ -271,6 +271,11 @@ class WrittenEnvelope:
     # -- reader side ------------------------------------------------------------------------
 
     @property
+    def seconds(self) -> float:
+        """How much the ring holds (s)."""
+        return self._seconds
+
+    @property
     def unsupported(self) -> str | None:
         with self._lock:
             return self._unsupported

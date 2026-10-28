@@ -13,15 +13,16 @@ import math
 import statistics
 from typing import TYPE_CHECKING
 
+from sendspin_bridge.services.bluetooth.a2dp_air_envelope import sbc_band_totals
 from sendspin_sync import click_track as ct
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from sendspin_bridge.services.bluetooth.a2dp_air import SbcFrame
+    from sendspin_bridge.services.bluetooth.a2dp_air import SbcFrame, SbcFrames, SbcLayout
 
 
-def chirp_subbands(frame: SbcFrame) -> range:
+def chirp_subbands(frame: SbcFrame | SbcLayout) -> range:
     """Sub-bands overlapping the chirp's 2–6 kHz sweep (a band starting at 6 kHz or above is out).
 
     The tool expects the click track alone on the stream: the energy proxy cannot tell a chirp
@@ -48,6 +49,15 @@ def chirp_subbands(frame: SbcFrame) -> range:
 def frame_energy(frame: SbcFrame) -> float:
     """Energy proxy: sum of 2**scale_factor over channels in the chirp sub-bands."""
     return float(sum(2 ** row[sb] for row in frame.scale_factors for sb in chirp_subbands(frame)))
+
+
+def _chirp_bands(layout: SbcLayout) -> tuple[int, ...]:
+    return tuple(chirp_subbands(layout))
+
+
+def sbc_chirp_energies(frames: SbcFrames) -> list[float]:
+    """:func:`frame_energy` of every undecoded frame, read in place from the scale factors (no decode)."""
+    return [float(total) for total in sbc_band_totals(frames, _chirp_bands)]
 
 
 def unwrap_rtp(timestamps: Sequence[int]) -> list[int]:

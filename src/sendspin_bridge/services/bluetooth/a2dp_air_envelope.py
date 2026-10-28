@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.services.bluetooth.a2dp_air import ChannelMode, MediaPacket, SbcFrame, SbcFrames
+    from sendspin_bridge.services.bluetooth.a2dp_air import ChannelMode, MediaPacket, SbcFrame, SbcFrames, SbcLayout
 
 __all__ = [
     "ANCHOR_PACKETS",
@@ -56,6 +56,7 @@ __all__ = [
     "TrackerState",
     "envelope_subbands",
     "frame_envelope",
+    "sbc_band_totals",
     "sbc_envelopes",
 ]
 
@@ -110,6 +111,24 @@ def _band_fields(
         nibbles = [join_bits // 4 + ch * subbands + b for ch in range(channels) for b in bands if b < subbands]
         fields = _BAND_FIELDS[key] = tuple((4 + n // 2, _POW_LO if n & 1 else _POW_HI) for n in nibbles)
     return fields
+
+
+def sbc_band_totals(frames: SbcFrames, bands_for: Callable[[SbcLayout], tuple[int, ...]]) -> list[int]:
+    """``Σ_ch Σ_b 2^sf`` of every undecoded frame over the sub-bands ``bands_for(layout)`` picks,
+    read straight from the scale factors (the fast path of :func:`sbc_envelopes`)."""
+    data = frames.data
+    out: list[int] = []
+    layout = None
+    fields: tuple[tuple[int, tuple[int, ...]], ...] = ()
+    for off, lay in zip(frames.offsets, frames.layouts, strict=True):
+        if lay is not layout:
+            layout = lay
+            fields = _band_fields(lay.subbands, lay.channels, lay.join_bits, bands_for(lay))
+        total = 0
+        for byte, pow2 in fields:
+            total += pow2[data[off + byte]]
+        out.append(total)
+    return out
 
 
 def sbc_envelopes(frames: SbcFrames, bands: tuple[int, ...]) -> list[int]:
