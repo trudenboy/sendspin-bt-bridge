@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Literal
 from sendspin_bridge.services.audio.playout.controller import JUMP_US, LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
 from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
-from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap
+from sendspin_bridge.services.audio.playout.timeline import PortObserver, ScheduleMap, SegmentKind
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -162,6 +162,14 @@ class PlayoutEngine:
     def port_x_ns(self) -> int | None:
         """``x_port`` at the last port reading (written-audio time, ns); None before one."""
         return None if self._reading is None else self._reading.x_port_ns
+
+    def schedule_at(self, x_ns: int) -> float | None:
+        """Scheduled RAW port time (µs) of written-audio time ``x_ns``, or None (read-only)."""
+        return self._map.at(x_ns)
+
+    def kind_at(self, x_ns: int) -> SegmentKind | None:
+        """Kind of the schedule segment containing ``x_ns``, or None (read-only)."""
+        return self._map.kind_at(x_ns)
 
     @property
     def queued(self) -> bool:

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from sendspin_bridge.services.audio.player.player import PcmFormat
+    from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
     from sendspin_bridge.services.audio.playout.scheduler import Block
     from sendspin_bridge.services.audio.playout.sensor import PortClock
 
@@ -178,6 +179,8 @@ class PlayoutPlayer:
         raw_now_us: Callable[[], float] = _raw_now_us,
         port_factory: Callable[[Any], PortClock] = GstPortClock,
         thread_factory: Callable[..., Any] = threading.Thread,
+        air_tap: WrittenEnvelope | None = None,
+        output_delay_us: Callable[[], float] | None = None,
     ) -> None:
         self._sink_factory = sink_factory
         self._settings = settings
@@ -185,6 +188,9 @@ class PlayoutPlayer:
         self._raw_now_us = raw_now_us
         self._port_factory = port_factory
         self._thread_factory = thread_factory
+        # The air sensor's tap on the written PCM; None (switch off) = no hook at all.
+        self._air_tap = air_tap
+        self._output_delay_us = output_delay_us
 
         # Caller-thread state (set by start/adopt/stop only).
         self._out: PlayoutOutput | None = None
@@ -213,6 +219,8 @@ class PlayoutPlayer:
         self._feeder_failed = False
         self._feeder_volume: tuple[float, bool] | None = None  # the user's, as last applied
         self._tail_until_ns: int | None = None  # muted until the port passes this x
+        self._input_format: InputFormat | None = None
+        self._air_muted: bool | None = None  # effective mute last handed to the air tap
 
         # Published for metrics()/resync()/is_drained().
         self._pub_lock = threading.Lock()
@@ -299,6 +307,8 @@ class PlayoutPlayer:
         self._feeder_failed = False
         self._feeder_volume = None
         self._tail_until_ns = None
+        self._input_format = None
+        self._air_muted = None
         self._generation += 1
         self._first_lead_us = None
         self._stream_closed = False
@@ -503,6 +513,15 @@ class PlayoutPlayer:
             _apply_mute_to(self._sink, tail)
         else:
             _apply_volume_to(self._sink, (user[0], user[1] or tail))
+        tap = self._air_tap
+        if tap is not None:
+            muted = tail or (user is not None and (user[1] or user[0] <= 0.0))
+            if muted != self._air_muted:
+                self._air_muted = muted
+                try:
+                    tap.mute_transition(float(self._raw_now_us()), muted)
+                except Exception:
+                    self._air_tap_failed(tap)
 
     def _apply(self, out: PlayoutOutput, engine: PlayoutEngine, cmd: tuple[Any, ...]) -> None:
         kind = cmd[0]
@@ -522,9 +541,10 @@ class PlayoutPlayer:
             out.appsrc.set_property(
                 "caps", pcm_caps(sample_rate=fmt.sample_rate, channels=fmt.channels, bit_depth=fmt.bit_depth)
             )
-            engine.set_format(
-                InputFormat(sample_rate=fmt.sample_rate, channels=fmt.channels, sample_bytes=fmt.bit_depth // 8)
+            self._input_format = InputFormat(
+                sample_rate=fmt.sample_rate, channels=fmt.channels, sample_bytes=fmt.bit_depth // 8
             )
+            engine.set_format(self._input_format)
             self._input_format_set = True
         elif kind == "volume":
             self._feeder_volume = (cmd[1], cmd[2])
@@ -561,6 +581,30 @@ class PlayoutPlayer:
         with self._pub_lock:
             self._counters.rendered += 1
             self._counters.overdue_dropped_us += block.late_drop_us
+        tap = self._air_tap
+        if tap is not None:
+            self._tap_block(tap, block)
+
+    def _tap_block(self, tap: WrittenEnvelope, block: Block) -> None:
+        """Hand a pushed block to the air tap; nothing it does reaches the feeder."""
+        engine, fmt = self._engine, self._input_format
+        if engine is None or fmt is None or tap.error is not None:
+            return
+        try:
+            d_out_us = self._output_delay_us() if self._output_delay_us is not None else 0.0
+            tap.add_block(block, fmt, engine.schedule_at, engine.kind_at, d_out_us)
+        except Exception:
+            self._air_tap_failed(tap)
+
+    @staticmethod
+    def _air_tap_failed(tap: WrittenEnvelope) -> None:
+        """Disable the tap for this stream (``internal_error``); logged once, the feeder carries on."""
+        if tap.error is None:
+            logger.exception("playout: air tap failed, disabled for this stream")
+        try:
+            tap.fail()
+        except Exception:
+            logger.debug("playout: air tap could not be marked failed", exc_info=True)
 
     def _sense(self, out: PlayoutOutput, engine: PlayoutEngine, port: _WatchedPort, now_us: float) -> None:
         level_ns = _level_time_ns(out.appsrc)
