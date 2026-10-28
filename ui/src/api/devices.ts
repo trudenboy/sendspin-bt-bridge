@@ -17,6 +17,15 @@ export function removeDevice(deviceId: string) {
   return unwrap(api().DELETE('/api/v1/devices/{device_id}', path(deviceId)))
 }
 
+/** Forget the speaker's air calibration for this codec, SBC rate and adapter; applied live. */
+export function forgetAirCalibration(deviceId: string, codec: string, rate: number, adapter: string) {
+  return unwrap(
+    api().DELETE('/api/v1/devices/{device_id}/air-calibrations/{codec}/{rate}/{adapter}', {
+      params: { path: { device_id: deviceId, codec, rate, adapter } },
+    }),
+  )
+}
+
 export function setManagement(deviceId: string, enabled: boolean) {
   return unwrap(api().PUT('/api/v1/devices/{device_id}/management', { ...path(deviceId), body: { enabled } }))
 }

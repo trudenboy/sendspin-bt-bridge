@@ -1319,6 +1319,13 @@
         "sbc_fragmented": "The speaker splits SBC frames over several packets.",
         "codec": "The speaker uses {codec}; only SBC is supported.",
         "unknown": "Reason: {reason}"
+      },
+      "calibration": {
+        "title": "Calibrations",
+        "line": "Speaker latency: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "Forget",
+        "forgetTitle": "Forget this calibration?",
+        "forgetConfirm": "{name} is reported uncalibrated for {codec} {rate} kHz on {adapter} until the sync wizard measures it again."
       }
     }
   },

@@ -1319,6 +1319,13 @@
         "sbc_fragmented": "Колонка делит SBC-кадры на несколько пакетов.",
         "codec": "Колонка использует {codec}; поддерживается только SBC.",
         "unknown": "Причина: {reason}"
+      },
+      "calibration": {
+        "title": "Калибровки",
+        "line": "Задержка колонки: {latency} мс · {codec} {rate} кГц · {adapter} · {age}",
+        "forget": "Забыть",
+        "forgetTitle": "Забыть эту калибровку?",
+        "forgetConfirm": "{name} будет без калибровки для {codec} {rate} кГц на {adapter}, пока мастер синхронизации не измерит её снова."
       }
     }
   },

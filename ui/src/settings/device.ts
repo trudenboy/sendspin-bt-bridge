@@ -97,6 +97,8 @@ export const DEVICE_MANAGED_KEYS: readonly string[] = [
   'static_delay_source',
   'static_delay_codec',
   'static_delay_calibrated_at',
+  // Written by the sync wizard; forgotten from the Timing panel.
+  'air_to_sound_latency',
 ]
 
 export const DEVICE_FIELDS: readonly DeviceField[] = DEVICE_GROUPS.flatMap((g) => g.fields)

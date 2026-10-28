@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected } from '@/utils/deviceBackend'
-import { setLatency } from '@/api/devices'
+import { forgetAirCalibration, setLatency } from '@/api/devices'
 import { createSession, endSession, getLatencyHistory, setMetronome, uploadRecording, type TimingSample } from '@/api/calibration'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton } from '@/kit'
@@ -19,7 +19,7 @@ import type { Device } from '@/api/types'
 
 const props = defineProps<{ device: Device }>()
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const bridge = useBridgeStore()
 const notifications = useNotificationStore()
 
@@ -188,6 +188,51 @@ const airRows = computed(() => {
   }
   return rows
 })
+/* Stored air-to-sound calibrations (one per codec, SBC rate and adapter), also with the sensor off. */
+type AirCalibration = Device['audio']['air_to_sound_latency'][number]
+const calibrations = computed(() => props.device.audio.air_to_sound_latency ?? [])
+const calibrationKey = (c: AirCalibration) => `${c.codec}/${c.rate}/${c.adapter}`
+const AGE_STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+]
+function calibrationAge(iso: string): string {
+  const at = Date.parse(iso)
+  if (Number.isNaN(at)) return '—'
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000))
+  const fmtAge = new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' })
+  for (const [unit, size] of AGE_STEPS) {
+    if (seconds >= size) return fmtAge.format(-Math.floor(seconds / size), unit)
+  }
+  return fmtAge.format(-seconds, 'second')
+}
+function calibrationParams(c: AirCalibration) {
+  const own = props.device.bluetooth?.adapter
+  const adapter = own?.hci && own.mac?.toUpperCase() === c.adapter.toUpperCase() ? own.hci : c.adapter
+  return { codec: c.codec.toUpperCase(), rate: String(Number((c.rate / 1000).toFixed(1))), adapter }
+}
+const calibrationLine = (c: AirCalibration) =>
+  t('timing.air.calibration.line', { ...calibrationParams(c), latency: c.latency_ms.toFixed(1), age: calibrationAge(c.measured_at) })
+const forgetting = ref('')
+async function forgetCalibration(c: AirCalibration) {
+  const ok = await confirmDialog({
+    title: t('timing.air.calibration.forgetTitle'),
+    message: t('timing.air.calibration.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
+    confirmLabel: t('timing.air.calibration.forget'),
+    danger: true,
+  })
+  if (!ok) return
+  forgetting.value = calibrationKey(c)
+  try {
+    await forgetAirCalibration(props.device.id, c.codec, c.rate, c.adapter)
+    await bridge.refresh()
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('common.error'))
+  } finally {
+    forgetting.value = ''
+  }
+}
 const syncError = computed(() => props.device.timing.sync_error_ms)
 </script>
 
@@ -272,6 +317,22 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
         </template>
       </dl>
       <p v-if="airReason" class="mt-1 text-sm text-text-secondary" data-testid="air-sensor-reason">{{ airReason }}</p>
+    </section>
+
+    <section v-if="calibrations.length" class="mt-4" data-testid="air-calibrations">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.air.calibration.title') }}</h3>
+      <ul class="mt-2 space-y-1 text-sm">
+        <li v-for="c in calibrations" :key="calibrationKey(c)" class="flex items-center justify-between gap-2">
+          <span class="tabular-nums text-text-primary">{{ calibrationLine(c) }}</span>
+          <SbButton
+            variant="outline"
+            size="sm"
+            data-testid="air-calibration-forget"
+            :loading="forgetting === calibrationKey(c)"
+            @click="forgetCalibration(c)"
+          >{{ t('timing.air.calibration.forget') }}</SbButton>
+        </li>
+      </ul>
     </section>
 
     <section class="mt-4">
