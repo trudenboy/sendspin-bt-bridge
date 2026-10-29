@@ -392,13 +392,15 @@
       "maToken": "Music Assistant token",
       "maTokenHint": "Create a long-lived token in Music Assistant → Settings → Profile, then paste it here.",
       "tokenSubmit": "Connect with token",
-      "tokenFailed": "Music Assistant did not accept the token."
+      "tokenFailed": "Music Assistant did not accept the token.",
+      "noServers": "No Music Assistant server was found on the network. Enter its address above."
     },
     "groups": {
       "members": "members",
       "empty": "No Sync Groups",
       "emptyDesc": "No Music Assistant sync groups found. Discover groups to get started.",
-      "discover": "Discover Groups"
+      "discover": "Discover Groups",
+      "create": "Create a group in Music Assistant"
     },
     "nowPlaying": {
       "artwork": "Album artwork",

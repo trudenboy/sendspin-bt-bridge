@@ -392,13 +392,15 @@
       "maToken": "Токен Music Assistant",
       "maTokenHint": "Создайте долгосрочный токен в Music Assistant → Настройки → Профиль и вставьте его сюда.",
       "tokenSubmit": "Подключить по токену",
-      "tokenFailed": "Music Assistant не принял токен."
+      "tokenFailed": "Music Assistant не принял токен.",
+      "noServers": "Сервер Music Assistant в сети не найден. Введите его адрес выше."
     },
     "groups": {
       "members": "участников",
       "empty": "Нет групп синхронизации",
       "emptyDesc": "Группы синхронизации Music Assistant не найдены. Запустите поиск групп.",
-      "discover": "Найти группы"
+      "discover": "Найти группы",
+      "create": "Создать группу в Music Assistant"
     },
     "nowPlaying": {
       "artwork": "Обложка альбома",

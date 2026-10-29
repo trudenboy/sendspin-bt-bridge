@@ -133,4 +133,22 @@ describe('MaGroupList', () => {
     expect(router.currentRoute.value.name).toBe('sync')
     expect(router.currentRoute.value.params.groupId).toBe('syncgroup_x')
   })
+
+  it('offers to create a group in Music Assistant on the empty page', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    useBridgeStore().snapshot = { devices: [], groups: [], bridge: { ma_web_url: 'http://ma:8095/' } } as never
+    const wrapper = mount(MaGroupList, { global: { plugins: [buildI18n()] } })
+    await flushPromises()
+    const btn = wrapper.findAll('button').find((b) => b.text().includes('Create a group in Music Assistant'))!
+    expect(btn).toBeTruthy()
+    await btn.trigger('click')
+    expect(open.mock.calls[0]![0]).toContain('http://ma:8095/#/')
+    open.mockRestore()
+  })
+
+  it('hides that action when the Music Assistant address is unknown', async () => {
+    const wrapper = mount(MaGroupList, { global: { plugins: [buildI18n()] } })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Create a group in Music Assistant')
+  })
 })

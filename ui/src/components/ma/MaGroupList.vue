@@ -27,6 +27,11 @@ function openInMA(groupId: string) {
   if (baseUrl) openExternal(`${baseUrl.replace(/\/$/, '')}/#/player/${encodeURIComponent(groupId)}`)
 }
 
+function createInMA() {
+  const baseUrl = bridge.bridge?.ma_web_url
+  if (baseUrl) openExternal(`${baseUrl.replace(/\/$/, '')}/#/settings/players`)
+}
+
 async function discoverGroups() {
   await ma.refresh()
 }
@@ -99,6 +104,9 @@ onUnmounted(() => pending && clearTimeout(pending))
       <template #action>
         <SbButton variant="primary" :loading="ma.discovering" @click="discoverGroups">
           {{ t('ma.groups.discover') }}
+        </SbButton>
+        <SbButton v-if="bridge.bridge?.ma_web_url" variant="outline" class="ml-2" @click="createInMA">
+          {{ t('ma.groups.create') }} ↗
         </SbButton>
       </template>
     </SbEmptyState>
