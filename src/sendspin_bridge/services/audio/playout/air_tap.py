@@ -113,6 +113,7 @@ class WrittenSlice:
     program: bytes  # 1 = ScheduleMap kind "program", 0 = "silence"
     muted: bytes  # 1 = the mute timeline is muted at the cell's port time s_i (resolved at slice time)
     gen: int = 0  # the ring generation the cells belong to (see WrittenEnvelope.gen)
+    x: array | None = None  # 'd' written stream time (ns) of each cell's first frame
 
 
 def _muted_at(times: Sequence[float], states: Sequence[bool], s_us: float) -> bool:
@@ -139,6 +140,7 @@ class WrittenEnvelope:
         self._w = array("f")
         self._s = array("d")
         self._t = array("d")
+        self._x = array("d")
         self._program = bytearray()
         self._gen = 0  # bumped by every reset/format change; a block computed across one is dropped
         # Mute timeline (guarded by _lock): RAW µs of each transition and the state it set.
@@ -217,17 +219,18 @@ class WrittenEnvelope:
             s = schedule_at(x)
             s_us = _NAN if s is None else float(s)
             program = kind_at(x) == "program"
-            rows.append((math.log2(1 + peak) if program else 0.0, s_us, s_us + d_out_us, program))
+            rows.append((math.log2(1 + peak) if program else 0.0, s_us, s_us + d_out_us, program, float(x)))
 
         with self._lock:
             if gen != self._gen:
                 return
             cap = self._cap
-            for w, s_us, t_us, program in rows:
+            for w, s_us, t_us, program, x_ns in rows:
                 k = self._n % cap
                 self._w[k] = w
                 self._s[k] = s_us
                 self._t[k] = t_us
+                self._x[k] = x_ns
                 self._program[k] = 1 if program else 0
                 self._n += 1
 
@@ -332,12 +335,13 @@ class WrittenEnvelope:
             w = self._take(self._w, i0, i1)
             s = self._take(self._s, i0, i1)
             t = self._take(self._t, i0, i1)
+            x = self._take(self._x, i0, i1)
             program = bytes(self._take(self._program, i0, i1))
             gen = self._gen
             times = list(self._mute_t)
             states = list(self._mute_v)
         muted = bytes(_muted_at(times, states, v) for v in s) if states else bytes(len(s))
-        return WrittenSlice(i0=i0, cell_us=cell_us, w=w, s=s, t=t, program=program, muted=muted, gen=gen)
+        return WrittenSlice(i0=i0, cell_us=cell_us, w=w, s=s, t=t, program=program, muted=muted, gen=gen, x=x)
 
     def cell_near(self, s_us: float, around: int, span_s: float = 2.0) -> int | None:
         """Newest cell within ±``span_s`` of cell ``around`` whose ``s`` is within half a cell of ``s_us``.
@@ -380,6 +384,7 @@ class WrittenEnvelope:
             self._w = array("f", [0.0]) * cap
             self._s = array("d", [_NAN]) * cap
             self._t = array("d", [_NAN]) * cap
+            self._x = array("d", [_NAN]) * cap
             self._program = bytearray(cap)
 
     def _take(self, ring: _Ring, i0: int, i1: int) -> _Ring:

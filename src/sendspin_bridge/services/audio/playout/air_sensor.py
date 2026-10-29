@@ -67,6 +67,7 @@ import logging
 import math
 import os
 import statistics
+from array import array
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
@@ -79,7 +80,6 @@ from sendspin_bridge.services.bluetooth.a2dp_air_fold import click_fold_found, c
 from sendspin_bridge.services.ipc.commands import AirEnvelope, AirFold, AirSource, SetAirCalibration
 
 if TYPE_CHECKING:
-    from array import array
     from collections.abc import Awaitable, Callable
 
     from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
@@ -291,6 +291,7 @@ class _Plan:
     t_mid: float
     s: array
     t: array
+    x: array
     n: int
     cell_us: float
     d_enc: float
@@ -310,6 +311,9 @@ class AirWindow:
     d_out_us: float
     psr: float
     s_mid: float
+    x_lo_ns: float = math.nan  # x of the first matched written cell
+    x_hi_ns: float = math.nan  # x of the end of the last matched written cell
+    gen: int = 0  # tap generation of the slice
 
 
 async def _run_in_executor[R](fn: Callable[[], R]) -> R:
@@ -334,6 +338,7 @@ class AirSensor:
         run_window: Callable[[Callable[[], WindowResult]], Awaitable[WindowResult]] | None = None,
         run_fold: Callable[[Callable[[], FoldOutcome]], Awaitable[FoldOutcome]] | None = None,
         wall_iso: Callable[[], str] = _iso_now,
+        on_window: Callable[[AirWindow, float | None], None] | None = None,
         log: logging.Logger = logger,
     ) -> None:
         self._tap = tap
@@ -342,6 +347,7 @@ class AirSensor:
         self._run_window = run_window or _run_in_executor
         self._run_fold = run_fold or _run_in_executor
         self._wall_iso = wall_iso
+        self._on_window = on_window
         self._log = log
         self._debug_windows = os.environ.get("SENDSPIN_AIR_DEBUG") == "1"
         self._air = AirStream()
@@ -622,6 +628,7 @@ class AirSensor:
             t_mid=t_mid,
             s=sl.s,
             t=sl.t,
+            x=sl.x if sl.x is not None else array("d", [math.nan]) * len(sl.s),
             n=n,
             cell_us=cell,
             d_enc=d_enc,
@@ -672,8 +679,8 @@ class AirSensor:
         if placed is None:
             self._skipped_n += 1
             return
-        h_us, d_out_us, s_mid = placed
-        win = AirWindow(plan.t_mid, res.lag - plan.frac, h_us, d_out_us, res.psr, s_mid)
+        h_us, d_out_us, s_mid, x_lo, x_hi = placed
+        win = AirWindow(plan.t_mid, res.lag - plan.frac, h_us, d_out_us, res.psr, s_mid, x_lo, x_hi, plan.gen)
         self._debug_window(plan, res, win)
         cand = self._candidate
         if self._lag is not None and abs(win.lag - self._lag) <= JUMP_CONFIRM_CELLS:
@@ -690,8 +697,11 @@ class AirSensor:
                 self._reject(cand.at_us)
             self._candidate = win
 
-    def _placement(self, plan: _Plan, lag: float) -> tuple[float, float, float] | None:
-        """``(H, D_out, s_mid)`` for a confirmed correlator lag; None without a schedule there."""
+    def _placement(self, plan: _Plan, lag: float) -> tuple[float, float, float, float, float] | None:
+        """``(H, D_out, s_mid, x_lo, x_hi)`` for a confirmed correlator lag; None without a schedule there.
+
+        ``x_lo``/``x_hi`` (ns) span the written cells the window matched: the first one's ``x`` and the
+        end of the last one."""
         s, t, cell = plan.s, plan.t, plan.cell_us
         off = lag - (plan.lag_lo - plan.margin)  # local index of the written partner of air cell 0
         lo = max(0, math.floor(off))
@@ -725,7 +735,9 @@ class AirSensor:
         d_out = t[k] - s[k]
         if math.isnan(d_out):
             d_out = self._output_delay_ms() * 1000.0
-        return plan.t_mid - s_mid - (plan.d_enc - plan.d_comb), d_out, s_mid
+        x_lo = plan.x[lo]
+        x_hi = plan.x[hi] + cell * 1e3
+        return plan.t_mid - s_mid - (plan.d_enc - plan.d_comb), d_out, s_mid, x_lo, x_hi
 
     def _accept(self, win: AirWindow) -> None:
         if self._last_at is not None and win.at_us - self._last_at > NO_LOCK_S * 1e6:
@@ -741,6 +753,11 @@ class AirSensor:
             self._last_psr = win.psr
         self._last_confirmed_iso = self._wall_iso()
         self._prune(win.at_us)
+        if self._on_window is not None:
+            try:
+                self._on_window(win, self._confidence("locked", self._now()))
+            except Exception:
+                self._log.debug("air sensor on_window hook failed", exc_info=True)
 
     def _reject(self, at_us: float) -> None:
         self._rejected_n += 1
@@ -838,6 +855,17 @@ class AirSensor:
             return None
         med = statistics.median(hs)
         return 1.4826 * statistics.median(abs(h - med) for h in hs) / 1000.0
+
+    def lock_state(self) -> tuple[str, float | None]:
+        """``(state, confidence)`` as the snapshot reports them (daemon loop)."""
+        now = self._now()
+        state, _reason = self._state(now)
+        return state, _round(self._confidence(state, now), 3)
+
+    def key(self) -> tuple[str | None, int | None, str | None]:
+        """``(codec, rate, adapter)`` of the air link, as the snapshot reports them."""
+        src = self._source
+        return (src.codec if src else None, self._rate, src.adapter if src else None)
 
     def accepted_windows(self) -> tuple[AirWindow, ...]:
         """The accepted windows behind the reported values (the last 30 s, at least 5), oldest first."""

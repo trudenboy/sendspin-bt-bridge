@@ -99,7 +99,9 @@ class Output:
 
 
 class World:
-    def __init__(self, *, H_true_ms: float, output_delay_ms: float = 0.0, input_rate: int = 44100) -> None:
+    def __init__(
+        self, *, H_true_ms: float, output_delay_ms: float = 0.0, input_rate: int = 44100, on_window=None
+    ) -> None:
         self.now = START_US
         self.tap = WrittenEnvelope()
         self.fmt = InputFormat(input_rate, 2, 2)
@@ -119,6 +121,7 @@ class World:
             output_delay_ms=lambda: output_delay_ms,
             run_window=self._runner,
             wall_iso=lambda: "2026-10-28T12:00:00+00:00",
+            on_window=on_window,
         )
         self.epoch = 0
         self.seq = 0
@@ -867,6 +870,56 @@ async def test_accepted_windows_are_readable(air_world):
     wins = w.sensor.accepted_windows()
     assert len(wins) >= 2 and all(abs(x.h_us / 1000.0 - 37.0) < 0.5 and x.psr > 1.0 for x in wins)
     assert wins == tuple(sorted(wins, key=lambda x: x.at_us))
+
+
+# -- windows carry the written stream time (B2) -------------------------------------------------
+
+
+async def test_a_window_carries_the_written_span_it_matched(air_world):
+    seen: list = []
+    w = air_world(H_true_ms=37.0, on_window=lambda win, conf: seen.append((win, conf)))
+    await w.run(seconds=10)
+    wins = w.sensor.accepted_windows()
+    assert wins
+    cell_ns = 128e9 / w.fmt.sample_rate
+    for win in wins:
+        assert win.gen == w.tap.gen
+        assert win.x_hi_ns - win.x_lo_ns == pytest.approx(3e9, abs=1.5 * cell_ns)
+        # no engine shift here: s(x) = s0 + x / rate, so the span's middle is where s_mid says
+        x_mid = (win.s_mid - w.out.s0) * 1e3
+        assert (win.x_lo_ns + win.x_hi_ns) / 2 == pytest.approx(x_mid, abs=2 * cell_ns)
+
+
+async def test_on_window_is_called_per_accepted_window_with_the_confidence(air_world):
+    seen: list = []
+    w = air_world(H_true_ms=37.0, on_window=lambda win, conf: seen.append((win, conf)))
+    await w.run(seconds=10)
+    assert len(seen) == w.sensor.snapshot()["windows_confirmed"] >= 2
+    # a candidate confirmed by its successor arrives first: both are reported, oldest first
+    assert [win for win, _ in seen] == sorted((win for win, _ in seen), key=lambda x: x.at_us)
+    assert seen[-1][1] == pytest.approx(w.sensor._confidence("locked", w.now))
+
+
+async def test_an_on_window_that_raises_changes_nothing(air_world, caplog):
+    def boom(win, conf):
+        raise RuntimeError("hook")
+
+    ref = air_world(H_true_ms=37.0)
+    await ref.run(seconds=10)
+    with caplog.at_level("DEBUG", logger=air_sensor_module.__name__):
+        w = air_world(H_true_ms=37.0, on_window=boom)
+        await w.run(seconds=10)
+    assert w.sensor.snapshot() == ref.sensor.snapshot()
+    assert any("hook" in r.getMessage() or r.exc_info for r in caplog.records if r.levelname == "DEBUG")
+
+
+async def test_lock_state_and_key_match_the_snapshot(air_world):
+    w = air_world(H_true_ms=37.0)
+    assert w.sensor.lock_state()[0] == w.sensor.snapshot()["state"]
+    await w.run(seconds=10)
+    s = w.sensor.snapshot()
+    assert w.sensor.lock_state() == (s["state"], s["confidence"]) and s["state"] == "locked"
+    assert w.sensor.key() == (s["codec"], s["rate"], s["adapter"]) and w.sensor.key()[1] is not None
 
 
 # -- INFO on state changes (A13) -----------------------------------------------------------------

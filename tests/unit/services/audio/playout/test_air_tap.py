@@ -550,3 +550,50 @@ def test_the_look_back_follows_the_sbc_sub_bands():
     scaled.set_sbc_format(8, 44100)
     scaled.add_block(block(F24, 0, 256), F24, lambda x: x / 1000.0, lambda x: "program", d_out_us=0.0)
     assert scaled.lookback_frames == round(72 * 48000 / 44100)
+
+
+# -- written stream time per cell (B2) -----------------------------------------------------
+
+
+def _expected_x(x0_ns, k):
+    return x0_ns + k * 128e9 / 48000
+
+
+def test_cells_carry_the_written_stream_time():
+    tap = WrittenEnvelope()
+    for b in range(2):
+        tap.add_block(block(F24, 5_000_000_000 + b * 10_000_000, 480), F24, lambda x: x / 1e3, lambda x: "program", 0.0)
+    n = tap.newest_cell() + 1
+    sl = tap.slice(0, n)
+    assert n == 7 and sl.x.typecode == "d"
+    for k in range(n):
+        assert sl.x[k] == pytest.approx(_expected_x(5e9, k), abs=1.0)
+
+
+def test_x_stays_aligned_with_s_when_the_ring_wraps():
+    tap = WrittenEnvelope(seconds=1.0)
+    for b in range(300):
+        tap.add_block(block(F24, b * 10_000_000, 480), F24, lambda x: x / 1e3, lambda x: "program", 0.0)
+    n = tap.newest_cell()
+    sl = tap.slice(n - 20, n + 1)
+    assert sl.i0 == n - 20
+    for k in range(21):
+        assert sl.x[k] == pytest.approx(_expected_x(0, n - 20 + k), abs=1.0)
+        assert sl.x[k] == pytest.approx(sl.s[k] * 1e3, abs=1.0)
+
+
+def test_x_restarts_from_the_new_block_after_a_reset():
+    tap = WrittenEnvelope()
+    tap.add_block(block(F24, 5_000_000_000, 960), F24, lambda x: x / 1e3, lambda x: "program", 0.0)
+    tap.reset()
+    tap.add_block(block(F24, 9_000_000_000, 960), F24, lambda x: x / 1e3, lambda x: "program", 0.0)
+    sl = tap.slice(0, 2)
+    assert list(sl.x) == pytest.approx([9e9, 9e9 + 128e9 / 48000], abs=1.0)
+
+
+def test_x_follows_the_block_across_a_format_change():
+    tap = WrittenEnvelope()
+    tap.add_block(block(F16, 0, 441), F16, lambda x: x / 1e3, lambda x: "program", 0.0)
+    tap.add_block(block(F24, 3_000_000_000, 480), F24, lambda x: x / 1e3, lambda x: "program", 0.0)
+    sl = tap.slice(0, 3)
+    assert list(sl.x) == pytest.approx([_expected_x(3e9, k) for k in range(3)], abs=1.0)
