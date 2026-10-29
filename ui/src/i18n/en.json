@@ -1,26 +1,12 @@
 {
   "app": {
     "title": "Sendspin Bridge",
-    "dashboard": "Dashboard",
-    "devices": "Devices",
-    "config": "Configuration",
-    "diagnostics": "Diagnostics",
     "ma": "Music Assistant"
   },
   "header": {
-    "viewRelease": "View release on GitHub",
-    "uptime": "Uptime",
-    "hourShort": "h",
-    "minShort": "m",
-    "secShort": "s",
-    "healthGood": "All systems OK",
-    "healthDegraded": "Some devices degraded",
-    "healthError": "Devices offline",
-    "healthUnknown": "No devices",
     "bugReport": "Bug report",
     "docs": "Documentation",
     "github": "GitHub repository",
-    "toggleMenu": "Toggle menu",
     "help": "Help",
     "preferences": "Preferences",
     "language": "Language",
@@ -94,7 +80,6 @@
       "more": "More actions for {name}"
     },
     "battery": "Battery {level}%",
-    "reanchored": "Reanchored ×{count}",
     "backend": {
       "bluetooth_a2dp": "Bluetooth A2DP",
       "local_sink": "Local Audio",
@@ -105,14 +90,7 @@
       "le_audio": "LE Audio"
     },
     "adapter": "Adapter {name}",
-    "released": "Released",
     "select": "Select {name}",
-    "signal": "Signal {dbm} dBm",
-    "signalLevel": {
-      "strong": "Strong",
-      "fair": "Fair",
-      "weak": "Weak"
-    },
     "chips": {
       "sync": {
         "label": "Sync",
@@ -222,78 +200,17 @@
     }
   },
   "config": {
-    "general": "General",
-    "audio": "Audio",
-    "bluetooth": "Bluetooth",
     "ma": "Music Assistant",
-    "security": "Security",
-    "advanced": "Advanced",
     "save": "Save",
-    "saving": "Saving…",
     "saved": "Configuration saved",
-    "unsaved": "Unsaved changes",
-    "reset": "Reset",
-    "validate": "Validate",
-    "validateConfig": "Validate Configuration",
-    "validationOk": "Configuration is valid",
-    "validationResults": "Validation Results",
-    "configValid": "Configuration is valid",
-    "bridgeName": "Bridge Name",
-    "bridgeNameHint": "Auto-populated from hostname if left empty",
-    "timezone": "Timezone",
-    "webPort": "Web Port",
-    "logLevel": "Log Level",
-    "pulseLatency": "Pulse Latency",
-    "pulseLatencyHint": "PulseAudio buffer latency in milliseconds",
-    "pulseLatencyUnit": "ms",
-    "preferSbc": "Prefer SBC Codec",
-    "preferSbcHint": "Use SBC codec instead of higher quality codecs for better compatibility",
-    "staticDelay": "Static Audio Delay",
-    "staticDelayHint": "Negative delay in milliseconds to compensate for Bluetooth latency",
-    "btCheckInterval": "BT Check Interval",
-    "btCheckIntervalHint": "How often to check Bluetooth connection status",
-    "btCheckIntervalUnit": "seconds",
-    "btMaxReconnect": "Max Reconnect Failures",
-    "btMaxReconnectHint": "Stop reconnecting after this many consecutive failures",
-    "managementMode": "Management Mode",
-    "adapterList": "Bluetooth Adapters",
     "adapterPowered": "Powered",
     "adapterOff": "Off",
     "noAdapters": "No adapters detected",
-    "maServer": "MA Server URL",
-    "maServerHint": "Use 'auto' for mDNS discovery",
-    "maPort": "MA Port",
-    "autoDiscovery": "Auto-Discovery",
-    "autoDiscoveryHint": "Automatically discover Music Assistant server via mDNS",
-    "connectionStatus": "Connection Status",
-    "maConnected": "Connected",
-    "maDisconnected": "Disconnected",
-    "enablePassword": "Enable Password Protection",
-    "currentPassword": "Current Password",
-    "newPassword": "New Password",
-    "confirmPassword": "Confirm Password",
-    "changePassword": "Change Password",
     "passwordMismatch": "Passwords do not match",
-    "haAuthInfo": "When running as a Home Assistant addon, authentication is handled by HA",
-    "rawJson": "Raw JSON",
-    "rawJsonWarning": "Editing raw JSON can break your configuration. Proceed with caution.",
-    "invalidJson": "Invalid JSON",
-    "uploadConfig": "Upload Config",
-    "downloadConfig": "Download Config",
-    "saveAndRestart": "Save & Restart",
-    "editAdapterName": "Edit adapter name",
-    "latencyPresets": "Latency Presets",
-    "latencyLow": "Low (200ms)",
-    "latencyStandard": "Standard (500ms)",
-    "latencyHigh": "High (800ms)",
-    "latencyCustom": "Custom"
+    "invalidJson": "Invalid JSON"
   },
   "diagnostics": {
     "tabs": {
-      "health": "Health",
-      "events": "Events",
-      "recovery": "Recovery",
-      "bugreport": "Bug Report",
       "logs": "Logs",
       "system": "System",
       "overview": "Overview"
@@ -335,20 +252,6 @@
     "codec": "Codec",
     "sampleRate": "Sample Rate",
     "reanchorCount": "Routing Corrections",
-    "bugreport": {
-      "systemInfo": "System Information",
-      "version": "Version",
-      "buildDate": "Build Date",
-      "adapters": "Adapters",
-      "devices": "Devices",
-      "maConnected": "MA Connected",
-      "download": "Download Bug Report",
-      "copy": "Copy to Clipboard",
-      "howToFile": "How to File a Bug Report",
-      "step1": "Download the bug report using the button above.",
-      "step2": "Describe the issue and steps to reproduce.",
-      "step3": "Open a new issue on"
-    },
     "logs": {
       "title": "Application Logs",
       "logLevel": "Log Level",
@@ -369,9 +272,7 @@
   },
   "ma": {
     "connection": {
-      "title": "Connection Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected"
+      "connected": "Connected"
     },
     "login": {
       "title": "Connect to Music Assistant",
@@ -381,7 +282,6 @@
       "serverUrlPlaceholder": "http://192.168.1.100:8095",
       "discover": "Auto-Discover",
       "token": "Token",
-      "tokenPlaceholder": "Enter HA token or MA API key",
       "submit": "Connect",
       "failed": "Connection failed. Check your credentials.",
       "username": "Username",
@@ -422,7 +322,6 @@
     "passwordPlaceholder": "Enter your password",
     "submit": "Sign In",
     "failed": "Invalid password. Please try again.",
-    "haAuthenticated": "Authenticated via Home Assistant",
     "username": "Username",
     "code": "Authentication code",
     "codePrompt": "Enter the code from {module}",
@@ -435,23 +334,8 @@
     }
   },
   "dashboard": {
-    "bridge": "Bridge",
-    "adapters": "Adapters",
-    "devices": "Devices",
-    "maStatus": "Music Assistant",
     "maConnected": "Connected",
-    "maDisconnected": "Disconnected",
-    "empty": {
-      "title": "No devices configured",
-      "description": "Add a Bluetooth speaker or audio device to get started."
-    },
-    "onboarding": {
-      "title": "Getting Started",
-      "addSpeaker": "Add your first Bluetooth speaker",
-      "connectMA": "Connect to Music Assistant",
-      "configure": "Configure settings",
-      "dismiss": "Dismiss"
-    }
+    "maDisconnected": "Disconnected"
   },
   "devices": {
     "addDevice": "Add speaker",
@@ -470,7 +354,6 @@
     "muteAll": "Mute all",
     "pauseAll": "Pause all",
     "reconnectAll": "Reconnect all",
-    "actionFailed": "Action failed",
     "list": {
       "name": "Name",
       "status": "Status",
@@ -534,7 +417,6 @@
     },
     "status": {
       "playerState": "State",
-      "backendType": "Backend",
       "audioSink": "Audio Sink",
       "connected": "Connected",
       "codec": "Codec",
@@ -549,12 +431,9 @@
       "port": "Listen Port",
       "delay": "Static Delay",
       "enabled": "Enabled",
-      "edit": "Edit",
       "save": "Save",
       "saved": "Device configuration saved",
       "saveFailed": "Failed to save configuration",
-      "autoAdapter": "Auto (default)",
-      "autoPort": "Auto",
       "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
       "playoutSync": "Playout sync",
       "playoutSyncHelp": "Turn off to run this speaker the way it worked before playout sync: the plain audio output, with no playout measurement.",
@@ -603,42 +482,26 @@
   },
   "bluetooth": {
     "scan": {
-      "title": "Bluetooth Scan",
-      "description": "Scan for nearby Bluetooth audio devices.",
-      "start": "Start Scan",
       "scanning": "Scanning…",
       "pair": "Pair",
-      "paired": "Paired",
-      "audio": "Audio",
       "unknown": "Unknown Device",
       "noDevices": "No devices found",
       "adapter": "Adapter",
-      "pairAndAdd": "Pair & add",
       "add": "Add",
       "added": "On this bridge",
       "addedToast": "{name} added — the player starts in a moment",
       "pairFailed": "Pairing failed: {reason}",
-      "advanced": "Compatibility options",
       "quiesce": "Temporarily disconnect other speakers on this adapter while pairing",
       "noIo": "Pair without a PIN prompt (Just Works) — for speakers that cancel pairing",
-      "hfp": "Also allow the hands-free profile (calls)",
-      "hint": "Put the speaker in pairing mode first."
+      "hfp": "Also allow the hands-free profile (calls)"
     },
-    "signal": {
-      "strong": "Strong",
-      "medium": "Medium",
-      "weak": "Weak"
-    },
-    "paired": "Paired Devices",
     "audioOnly": "Audio only",
-    "allDevices": "All devices",
     "audioCount": "{audio} audio · {total} total",
     "addToFleet": "Add to fleet",
     "info": "Device Info",
     "release": "Hand over to other devices",
     "reclaim": "Take back",
     "released": "Handed over",
-    "resetReconnect": "Reset & Reconnect",
     "deviceInfo": "Bluetooth Device Info",
     "noDevices": "No paired devices found"
   },
@@ -681,7 +544,6 @@
     "next": "Next track",
     "previous": "Previous track",
     "failed": "Transport command failed",
-    "progress": "Playback progress",
     "position": "Track position",
     "shuffleOn": "Shuffle on — turn off",
     "shuffleOff": "Shuffle off — turn on",
@@ -695,7 +557,6 @@
   },
   "adapter": {
     "management": "Adapter Management",
-    "togglePower": "Power",
     "turnOff": "Turn off",
     "turnOn": "Turn on",
     "confirmOffTitle": "Turn off adapter {adapter}?",
@@ -781,7 +642,6 @@
     "save": "Save",
     "discard": "Discard",
     "saved": "Settings saved",
-    "appliedLive": "Applied without a restart",
     "restartNeeded": "Restart the bridge to apply some changes",
     "restartNow": "Restart now",
     "restartConfirmTitle": "Restart the bridge now?",
@@ -794,7 +654,6 @@
       "h": "h"
     },
     "auto": "Automatic",
-    "notSet": "Not set",
     "sections": {
       "general": {
         "title": "General",
@@ -1287,7 +1146,6 @@
     "retry": "Try again"
   },
   "timing": {
-    "applied": "Applied: {value} ms",
     "suggestion": "Suggested delay: {value} ms",
     "applySuggestion": "Apply",
     "clicks": {
@@ -1543,8 +1401,6 @@
     "remove": "Remove speaker",
     "removeTitle": "Remove {name}?",
     "removeMessage": "Its player disappears from Music Assistant and its Bluetooth pairing is removed. To use it again, add it as a new speaker.",
-    "suspendOutput": "Suspend audio output",
-    "resumeOutput": "Resume audio output",
     "settings": "Settings"
   },
   "sync": {
