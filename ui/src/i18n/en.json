@@ -358,7 +358,10 @@
       "apply": "Apply",
       "search": "Search logs…",
       "showingLines": "Showing {shown} of {total} lines",
-      "noLogs": "No log entries"
+      "noLogs": "No log entries",
+      "loadFailed": "Could not load the logs.",
+      "levelApplied": "Now logging at {level}",
+      "levelFailed": "Could not change the log level"
     },
     "timeline": {
       "title": "Recent events"

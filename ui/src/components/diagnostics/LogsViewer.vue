@@ -5,6 +5,8 @@ import { SbButton, SbBadge, SbSpinner, SbEmptyState } from '@/kit'
 import { RefreshCw, Download, Search, ArrowDownToLine } from 'lucide-vue-next'
 import { getLogs, downloadLogs, setLogLevel } from '@/api/diagnostics'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
+import { ApiError } from '@/api/client'
 
 type LogLevel = 'ERROR' | 'WARNING' | 'INFO' | 'DEBUG'
 
@@ -17,8 +19,10 @@ interface ParsedLine {
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const notifications = useNotificationStore()
 
 const loading = ref(false)
+const loadError = ref(false)
 const lines = ref<ParsedLine[]>([])
 const searchQuery = ref('')
 const autoScroll = ref(true)
@@ -87,6 +91,7 @@ function toggleLevel(level: LogLevel) {
 
 async function fetchLogs() {
   loading.value = true
+  loadError.value = false
   try {
     const data = await getLogs(200)
     lines.value = (data.logs ?? []).map(parseLine)
@@ -96,6 +101,7 @@ async function fetchLogs() {
     }
   } catch {
     lines.value = []
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -110,7 +116,11 @@ function scrollToBottom() {
 async function applyLogLevel() {
   applyingLevel.value = true
   try {
-    await setLogLevel(selectedLevel.value.toUpperCase() as 'INFO' | 'DEBUG')
+    const level = selectedLevel.value.toUpperCase()
+    await setLogLevel(level as 'INFO' | 'DEBUG')
+    notifications.success(t('diagnostics.logs.levelApplied', { level }))
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('diagnostics.logs.levelFailed'))
   } finally {
     applyingLevel.value = false
   }
@@ -217,6 +227,16 @@ onMounted(fetchLogs)
     <!-- Loading -->
     <div v-if="loading && lines.length === 0" class="flex justify-center py-12">
       <SbSpinner size="lg" />
+    </div>
+
+    <div
+      v-else-if="loadError"
+      data-logs-error
+      role="alert"
+      class="flex flex-wrap items-center gap-3 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-text-primary"
+    >
+      <span class="flex-1">{{ t('diagnostics.logs.loadFailed') }}</span>
+      <SbButton variant="outline" size="sm" @click="fetchLogs">{{ t('common.retry') }}</SbButton>
     </div>
 
     <!-- Empty -->
