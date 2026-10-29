@@ -8,7 +8,7 @@ Speakers in one Music Assistant sync group can play slightly apart when their ha
 ## Open the screen
 
 - **Music Assistant tab**: the **Sync** button on a group row.
-- **Device card or row**, timing section: **Tune the whole group** (shown for players that belong to a sync group).
+- **A speaker's Timing tab**: **Tune with your group →** (for a player that belongs to a sync group). A player in no sync group gets an explanation of how to make one and a link to the Groups page.
 
 Both open `/sync/<group id>`. Groups are Music Assistant's persistent sync groups, the ones the Groups page lists.
 
@@ -44,11 +44,11 @@ Since 3.1.0-beta.7 the bridge takes the audio buffer's latency out of the schedu
 | **Manual tuning** | No microphone needed. Best for small fixes you can hear. |
 | **Measure with a microphone** | About a minute per speaker. You hear and adjust the measured delays before you finish. |
 
-The **Manual** and **Measure** tabs link to each other.
+The **Group** tab's **Manual tuning** and **Measure with a microphone** buttons are the way in; the **Manual** and **Measure** tabs link to each other. Opening a tab never starts anything: **Manual tuning** on the Group tab, or **Start tuning by ear** on the Manual tab, starts a tuning session, and the measurement wizard starts only from its own button.
 
 ### Manual tuning
 
-Before you listen, the tab walks three preparation steps (*Before you listen (n/3)*): **Stop the music**, **Start the clicks** and **Set the volume** (see below). It skips a step that has nothing to do: a group that is not playing goes straight to the clicks, and clicks that already play go straight to listening.
+Before you listen, the tab walks two preparation steps (*Before you listen (n/2)*): **Stop the music, start the clicks** and **Set the volume** (see below). Clicks that already play go straight to listening.
 
 Listening controls:
 
@@ -75,12 +75,11 @@ Leaving the tab finishes the tuning: the delays stay; the clicks stop, every spe
 
 ### Measure with a microphone
 
-The wizard has four stages; the heading says where you are, for example *Prepare (1/4) · Stop the music*.
+The wizard has four stages; the heading says where you are, for example *Prepare (1/4) · Stop the music, start the clicks*.
 
 1. **Prepare**
    - **Where and how**: what would stop the measurement (see *Before you start*), where you measure (see below) and what records: **This device’s microphone** or **A phone (scan a QR code)**. *Takes about N minutes.* **Allow microphone and start** opens the microphone and starts the session (with a phone: **Start**). If the microphone cannot be used, the page offers **Manual tuning** or the phone.
-   - **Stop the music**: the page shows whether the group plays; **Stop the music** stops it. When the group is not playing, the step is skipped (*The group is not playing — moving on.*).
-   - **Start the clicks**: **Start the clicks** plays the click track on every speaker of the group through Music Assistant, with a countdown. **Next** waits until the bridge sees the clicks playing and says so.
+   - **Stop the music, start the clicks**: one step. When the group plays something, the button reads **Stop the music and start the clicks**; a confirmation says that playback stops and the group's queue is replaced by the click track, and nothing is stopped before you agree. When the group is silent the button reads **Start the clicks**. The click track plays on every speaker of the group through Music Assistant, with a countdown. **Next** waits until the bridge sees the clicks playing and says so.
    - **Set the volume**: a volume slider per speaker, and the **Microphone** meter, which should jump with each click. A speaker at 0 % is flagged *Silent: turn it up to measure it*. *Volumes go back to what they were when you finish.*
 2. **Measure: Speaker by speaker.** Each speaker plays alone while you record it (6 s at the speakers, 12 s from the listening position); the others are muted. A speaker shows **Heard**, **Not heard** or **Unstable**, with what to do: *Not heard: turn it up or move closer, then Repeat — or Skip it.* The order is only for your convenience; it does not change the result. If the clicks stopped, **Start the clicks again**; every speaker is then recorded once more. **Apply the measured delays and listen** opens once every speaker is recorded or skipped (the page says how many are left).
 3. **Tune: Listen and adjust.** The measured delays are applied and the clicks keep playing. This is the same screen as Manual tuning: listen to each speaker alone or compare two, pick the **Sound** (the clicks change to the listening clicks here), and adjust any delay by hand. Each measured speaker shows *Measured: X ms (+Δ)* and **Reset to measured**; speakers not heard or skipped keep their delay. The page shows the largest gap between speakers as measured and what remains. **Finish** keeps the delays; **Finish and save as profile…** saves them first, with the gap in the notes. **Cancel** asks first, then puts back the delays from before the measurement.
@@ -112,17 +111,17 @@ The link carries a random token that only lets the phone see which speaker plays
 
 ## What you hear during a measurement
 
-No music plays during a session. You stop the group first; then the click track replaces the group's queue and plays on every speaker of the group (it shows as **Sendspin sync clicks**). When it ends the queue ends and the group stops, so no music comes back by itself. Calibration replaces the group's queue; start your music again afterwards. While one speaker is measured, the others are muted.
+No music plays during a session. The group is stopped first (after you confirm); then the click track replaces the group's queue and plays on every speaker of the group (it shows as **Sendspin sync clicks**). When it ends the queue ends and the group stops, so no music comes back by itself. Calibration replaces the group's queue; start your music again afterwards. While one speaker is measured, the others are muted.
 
 When the session ends (finished, cancelled, failed or timed out) the bridge puts the volumes it changed back to what they were (while the clicks still play), stops the click track, then unmutes every speaker it muted. Your music does not come back by itself: start it again in Music Assistant. The bridge never touches a speaker you muted yourself; a speaker you unmute yourself during the session is muted again by the next solo. Keep the room quiet and hold the phone still while it records.
 
 ## Speaker latency (air sensor)
 
-With the experimental air sensor on (`EXPERIMENTAL_AIR_SENSOR`, a speaker with Playout sync set to `measure` playing SBC), a phone measurement also calibrates each bridge speaker's air-to-sound latency: how long the speaker takes from receiving the audio over Bluetooth to playing it. While a speaker plays alone in the sequence, the bridge records when its clicks left over the air; after the upload it subtracts that from the speaker's measured lateness. The result is stored per speaker, codec, sampling rate and Bluetooth adapter, applied at once, and shown in the device's **Timing** panel (with **Forget**).
+With the experimental air sensor on (`EXPERIMENTAL_AIR_SENSOR`, a speaker with Playout sync set to `measure` playing SBC), a phone measurement also measures each bridge speaker's Bluetooth latency: how long the speaker takes from receiving the audio over Bluetooth to playing it. While a speaker plays alone in the sequence, the bridge records when its clicks left over the air; after the upload it subtracts that from the speaker's measured lateness. The result is stored per speaker, codec, sampling rate and Bluetooth adapter, applied at once, and shown in the device's **Timing** panel (with **Forget**). The wizard presents it as a result, not as a second delay: **Bluetooth latency measured: … ms**, and after saving **Bluetooth latency measured: … ms, saved**; it does not change the speaker's delay by itself.
 
 It needs a reference: a member whose sound is on the Sendspin schedule, typically a Sendspin web player on a headset or a wired output. A phone recording has no clock link to the bridge, so a speaker's lateness can only be measured against another member; a reference that adds its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much. Pick it on the tuning step (**Reference**); without one no latency is offered.
 
-With the air sensor switched off the tuning step shows none of this. With it on, every bridge speaker of the sequence shows either **Air-to-sound latency** with the value, the speaker's own delay report as a hint, and **Save as this speaker's air-to-sound latency**, or the reason there is none: the air sensor was not effective for it (for example Playout sync not set to `measure`), no reference, the speaker or the reference was not heard, it does not play SBC, its Bluetooth stream restarted during its turn, or its clicks were not found on the air or in what the bridge wrote. Measuring again and saving replaces the value for the same codec, rate and adapter. The live lock of the air sensor is not needed.
+With the air sensor switched off the tuning step shows none of this. With it on, every bridge speaker of the sequence shows either **Bluetooth latency measured: … ms** with the speaker's own delay report as a hint and **Save this Bluetooth latency** (then **Save**), or the reason there is none: the air sensor was not effective for it (for example Playout sync not set to `measure`), no reference, the speaker or the reference was not heard, it does not play SBC, its Bluetooth stream restarted during its turn, or its clicks were not found on the air or in what the bridge wrote. Measuring again and saving replaces the value for the same codec, rate and adapter. The live lock of the air sensor is not needed.
 
 ## Profiles
 
@@ -163,7 +162,7 @@ If the bridge restarts during a session, it puts the volumes back, unmutes the s
 | Delays are not written, `ma_forbidden` | The Music Assistant token lacks administrator rights. |
 | **Not heard** | Level too low, or phone too far; turn the speaker up or move closer and **Repeat**. |
 | *… cannot be muted* | That player offers no mute in Music Assistant; skip the others or use Manual tuning, or take it out of the group. |
-| **Start the clicks** is refused | The group plays something else; stop it first. |
+| **Stop the music and start the clicks** is refused | The group started playing something else meanwhile; press it again and confirm. |
 | **Unstable** | Noise during the recording; repeat it in a quiet room. |
 | This device cannot record | The page is not on HTTPS or `localhost`; measure with a phone, or see Microphone requirements. |
 | The phone page says the link does not work | The link expired (30 min), a new link replaced it, or the measurement ended; open a **New link**. |
