@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import RecoveryPanel from '@/components/diagnostics/RecoveryPanel.vue'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
 import en from '@/i18n/en.json'
+import ru from '@/i18n/ru.json'
 
 vi.mock('@/api/diagnostics', () => ({
   getDiagnostics: vi.fn().mockResolvedValue({}),
@@ -88,5 +89,27 @@ describe('RecoveryPanel', () => {
       global: { plugins: [buildI18n()] },
     })
     expect(wrapper.find('[role="status"]').exists()).toBe(true)
+  })
+
+  it('wraps its toolbar so phones do not scroll horizontally', () => {
+    const store = useDiagnosticsStore()
+    store.loading = false
+    store.recovery = { issues: [] }
+    const wrapper = mount(RecoveryPanel, { global: { plugins: [buildI18n()] } })
+    const header = wrapper.find('h3').element.parentElement!
+    expect(header.classList.contains('flex-wrap')).toBe(true)
+    expect(wrapper.find('h3 + div').classes()).toContain('flex-wrap')
+  })
+
+  it('copy label follows the UI language', async () => {
+    const store = useDiagnosticsStore()
+    store.loading = false
+    store.recovery = { issues: [{ key: 'k', severity: 'info', title: 'T' }] }
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en, ru } })
+    const wrapper = mount(RecoveryPanel, { global: { plugins: [i18n] } })
+    expect(wrapper.text()).toContain(en.diagnostics.copy)
+    i18n.global.locale.value = 'ru'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain(ru.diagnostics.copy)
   })
 })

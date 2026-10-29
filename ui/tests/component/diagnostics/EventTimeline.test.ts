@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import EventTimeline from '@/components/diagnostics/EventTimeline.vue'
 import en from '@/i18n/en.json'
+import ru from '@/i18n/ru.json'
 
 const mockTimeline = vi.fn()
 
@@ -64,5 +65,16 @@ describe('EventTimeline', () => {
     expect(chips.map((c) => c.text())).toEqual(['error', 'warning'])
     await chips[0]!.trigger('click')
     expect(wrapper.findAll('[role="listitem"]').length).toBe(2)
+  })
+
+  it('copy label follows the UI language', async () => {
+    mockTimeline.mockResolvedValue({ entries: [entry('A', 'info', 's')] })
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en, ru } })
+    const wrapper = mount(EventTimeline, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.text()).toContain(en.diagnostics.copy)
+    i18n.global.locale.value = 'ru'
+    await flushPromises()
+    expect(wrapper.text()).toContain(ru.diagnostics.copy)
   })
 })

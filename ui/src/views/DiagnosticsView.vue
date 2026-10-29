@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
 import { SbButton, SbTabs } from '@/kit'
@@ -18,11 +18,11 @@ const bugReportOpen = ref(false)
 
 // Overview answers "is everything fine, and if not, what happened"; the
 // log and the machine details are one step further.
-const tabs = [
+const tabs = computed(() => [
   { id: 'overview', label: t('diagnostics.tabs.overview') },
   { id: 'logs', label: t('diagnostics.tabs.logs') },
   { id: 'system', label: t('diagnostics.tabs.system') },
-]
+])
 
 onMounted(async () => {
   await diagnostics.fetchDiagnostics()

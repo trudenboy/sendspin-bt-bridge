@@ -8,14 +8,17 @@ import { copyToClipboard } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const eventStore = useEventStore()
-const copyLabel = ref(t('diagnostics.copy'))
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+const copyLabel = computed(() =>
+  t(copyState.value === 'copied' ? 'diagnostics.copied' : copyState.value === 'failed' ? 'diagnostics.copyFailed' : 'diagnostics.copy'),
+)
 
 async function copyEvents() {
   const header = 'Timestamp\tLevel\tSource\tEvent\tSummary'
   const rows = eventStore.events.map((e) => [e.at, e.level, e.source, e.label, e.summary].join('\t'))
   const ok = await copyToClipboard([header, ...rows].join('\n'))
-  copyLabel.value = ok ? t('diagnostics.copied') : t('diagnostics.copyFailed')
-  setTimeout(() => { copyLabel.value = t('diagnostics.copy') }, 2000)
+  copyState.value = ok ? 'copied' : 'failed'
+  setTimeout(() => { copyState.value = 'idle' }, 2000)
 }
 
 const searchQuery = ref('')

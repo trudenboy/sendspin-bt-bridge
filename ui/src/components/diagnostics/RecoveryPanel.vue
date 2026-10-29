@@ -9,7 +9,10 @@ import { downloadTimelineCsv } from '@/api/diagnostics'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
-const copyLabel = ref(t('diagnostics.copy'))
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+const copyLabel = computed(() =>
+  t(copyState.value === 'copied' ? 'diagnostics.copied' : copyState.value === 'failed' ? 'diagnostics.copyFailed' : 'diagnostics.copy'),
+)
 
 interface RecoveryIssue {
   key: string
@@ -36,8 +39,8 @@ async function copyIssues() {
     (i) => `[${i.severity}] ${i.title}: ${i.summary ?? ''}`,
   )
   const ok = await copyToClipboard(lines.join('\n'))
-  copyLabel.value = ok ? t('diagnostics.copied') : t('diagnostics.copyFailed')
-  setTimeout(() => { copyLabel.value = t('diagnostics.copy') }, 2000)
+  copyState.value = ok ? 'copied' : 'failed'
+  setTimeout(() => { copyState.value = 'idle' }, 2000)
 }
 
 async function runChecks() {
@@ -48,11 +51,11 @@ async function runChecks() {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-2">
       <h3 class="text-lg font-semibold text-text-primary">
         {{ t('diagnostics.recovery.title') }}
       </h3>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <SbButton variant="outline" size="sm" :loading="diagnostics.loading" @click="runChecks">
           <template #icon-left>
             <RefreshCw class="h-4 w-4" aria-hidden="true" />
