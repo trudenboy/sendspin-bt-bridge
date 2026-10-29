@@ -39,7 +39,7 @@ async function doLogin() {
   loading.value = true
   try {
     const result = await auth.login(method.value, password.value, username.value)
-    if (result.status === 'signed_in') await router.push({ name: 'dashboard' })
+    if (result.status === 'signed_in') await router.push({ name: 'home' })
   } catch (e) {
     error.value = explain(e)
   } finally {
@@ -52,7 +52,7 @@ async function doCode() {
   loading.value = true
   try {
     const result = await auth.submitCode(code.value)
-    if (result.status === 'signed_in') await router.push({ name: 'dashboard' })
+    if (result.status === 'signed_in') await router.push({ name: 'home' })
     else error.value = result.message || t('login.failed')
   } catch (e) {
     error.value = explain(e)

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Signing in with a correct password now takes you to the home page
+  instead of leaving you on the sign-in page with an error, and opening
+  the sign-in page while no sign-in is required goes to the home page
+  instead of showing a blank screen.
+
 ## [3.1.0-beta.18] - 2026-10-29
 
 ### Added

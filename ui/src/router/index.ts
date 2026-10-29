@@ -70,7 +70,7 @@ router.beforeEach(async (to) => {
   }
   const needsSignIn = auth.authEnabled && !auth.authenticated
   if (needsSignIn && to.name !== 'login') return { name: 'login' }
-  if (!needsSignIn && to.name === 'login') return { name: 'dashboard' }
+  if (!needsSignIn && to.name === 'login') return { name: 'home' }
   if (!needsSignIn) {
     const bridge = useBridgeStore()
     if (!bridge.sseConnected && !bridge.snapshot) bridge.connectSSE()
