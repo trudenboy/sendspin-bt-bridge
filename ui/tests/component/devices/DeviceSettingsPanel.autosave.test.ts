@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceSettingsPanel from '@/components/devices/DeviceSettingsPanel.vue'
 import en from '@/i18n/en.json'
-import { saveConfig } from '@/api/config'
+import { getConfig, saveConfig } from '@/api/config'
 import { ApiError } from '@/api/client'
 import { makeDevice } from '../../fixtures/device'
 
@@ -103,5 +103,21 @@ describe('DeviceSettingsPanel auto-save', () => {
     w.unmount()
     await flushPromises()
     expect(saveConfig).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps what the bridge wrote after the panel opened (learned latencies, volumes) when a field saves', async () => {
+    const w = await mountPanel()
+    const current = stored() as Record<string, unknown>
+    ;(current.players as Record<string, unknown>[])[0]!.air_learned_latency = [{ codec: 'sbc', latency_ms: 140 }]
+    current.LAST_VOLUMES = { 'AA:BB:CC:DD:EE:FF': 42 }
+    vi.mocked(getConfig).mockResolvedValue(current as never)
+    await nameInput(w).setValue('Kitchen 2')
+    await nameInput(w).trigger('change')
+    await vi.advanceTimersByTimeAsync(800)
+    await flushPromises()
+    const saved = vi.mocked(saveConfig).mock.calls[0]![0] as Record<string, any>
+    expect(saved.players[0].name).toBe('Kitchen 2')
+    expect(saved.players[0].air_learned_latency).toEqual([{ codec: 'sbc', latency_ms: 140 }])
+    expect(saved.LAST_VOLUMES).toEqual({ 'AA:BB:CC:DD:EE:FF': 42 })
   })
 })

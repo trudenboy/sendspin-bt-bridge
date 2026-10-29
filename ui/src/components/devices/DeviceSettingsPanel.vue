@@ -133,10 +133,24 @@ function flush() {
 async function persist(batch: Map<string, unknown>, undoable: boolean) {
   if (!config.value || !entry.value) return
   try {
-    // ``_effective_*`` is read-only display data; it is kept for display and dropped here.
-    const mine = Object.fromEntries(Object.entries(entry.value).filter(([k]) => !k.startsWith('_')))
-    const players = ((config.value.players as Entry[] | undefined) ?? []).map((p) => (p.id === configId.value ? mine : p))
-    const doc = { ...config.value, players }
+    /*
+     * The bridge writes into the configuration while it runs (learned air
+     * latencies, calibrations, volumes). Saving the copy loaded when the panel
+     * opened would revert those, so the current document is fetched and only
+     * the fields changed here are applied to this speaker's entry.
+     */
+    const fresh = (await getConfig()) as Record<string, unknown>
+    // ``_effective_*`` is read-only display data and is dropped on save.
+    const players = ((fresh.players as Entry[] | undefined) ?? []).map((p) =>
+      p.id === configId.value ? (Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith('_'))) as Entry) : p,
+    )
+    const target = players.find((p) => p.id === configId.value)
+    if (!target) throw new Error(t('drawer.config.notConfigured'))
+    for (const key of batch.keys()) {
+      const v = getPath(entry.value, key)
+      setPath(target, key, v === null || v === '' ? undefined : v)
+    }
+    const doc = { ...fresh, players }
     const result = await saveConfig(doc as never)
     config.value = doc
     const restart = ((result?.reconfig ?? {}) as { restart_required?: unknown[] }).restart_required?.length
