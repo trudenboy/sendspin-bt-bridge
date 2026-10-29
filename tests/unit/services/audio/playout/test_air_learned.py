@@ -38,3 +38,13 @@ def test_stage_a_sequence_moves_less_with_the_robust_mean_than_with_the_median()
     used_median = [184.0 - statistics.median(STAGE_A_H[:k]) for k in range(3, 8)]
     assert statistics.stdev(used_mean) == pytest.approx(1.44, abs=0.05)
     assert statistics.stdev(used_median) == pytest.approx(5.02, abs=0.05)
+
+
+@pytest.mark.parametrize(
+    ("ds", "expected"),
+    [([214.0, 214.0, 184.0], 214.0), ([184.0, 184.0, 214.0], 184.0), ([184.0, 214.0], 199.0)],
+)
+def test_d_ref_is_the_median_of_the_sample_delays(ds, expected):
+    xs = [d + 40.0 for d in ds]
+    _, d_ref = learned_reference(xs, ds)
+    assert d_ref == pytest.approx(expected)

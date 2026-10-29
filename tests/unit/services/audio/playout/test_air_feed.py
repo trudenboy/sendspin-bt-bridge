@@ -100,3 +100,11 @@ def test_history_forgets_readings_older_than_30_s():
     for k in range(400):  # 40 s
         h.add(k * 1e5, k * 1e8, 100.0, usable=True)
     assert h.median_over(0.0, 3e9) is None and h.median_over(30e9, 33e9) is not None
+
+
+def test_reopen_never_lowers_the_minimum_generation():
+    f = AirFeed()
+    f.reopen(5)
+    f.reopen(3)
+    f.push(sample(0, gen=4))  # an old output's window stays out
+    assert f.take().samples == ()
