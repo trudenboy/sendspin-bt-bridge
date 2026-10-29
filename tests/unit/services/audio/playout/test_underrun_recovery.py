@@ -135,3 +135,20 @@ def test_a_small_ring_gives_no_false_underruns(ring_ms, noise_us, saw, seed):
     snap = eng.snapshot()
     assert snap["underruns"] == 0 and snap["jumps"] == 1
     assert len(reads) <= 510  # the 10 Hz readings (500) and a few more
+
+
+def test_an_arrival_of_other_data_does_not_date_the_underrun():
+    # An arrival dates only the delivery it starts (pts == the previous delivered mark); one of
+    # other data (here 10 ms further, read early) is ignored and the first sight dates it.
+    eng, port, raw = engine()
+    due = zeros_then_marker(eng, raw, zero_s=30.0)
+    kw = {"arrivals": False}
+    drive(eng, port, raw, 12.0, **kw)
+    port.starve(800.0)
+    drive(eng, port, raw, 0.7, **kw)  # the ring ran dry; nothing delivered yet
+    eng.note_arrival(port.delivered_ns + 10_000_000, port.read())
+    drive(eng, port, raw, 20.0, **kw)
+    assert eng.snapshot()["underruns"] == 1
+    heard = port.heard_at_us(first_nonzero=True)
+    assert heard is not None
+    assert heard - due == pytest.approx(0.0, abs=1_000)

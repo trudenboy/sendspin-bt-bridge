@@ -65,7 +65,7 @@ STARVE_MARGIN_US = 3_000.0
 ARRIVAL_ARM_EARLY_US = 6_000.0  # > one feeder tick (5 ms)
 ARRIVALS_KEPT = 8
 MIN_DEFICIT_NS = 3_000_000  # a smaller deficit is the reading's noise (sigma 4 ms per reading)
-ARRIVAL_X_TOLERANCE_NS = 20_000_000  # an arrival dates the delivery it starts within this
+ARRIVAL_X_TOLERANCE_NS = 5_000  # an arrival dates only the delivery it starts (pts rounding)
 # After an underrun or stall placement (R3, R14) the error restarts from a fresh baseline:
 # once the port reaches the placed audio, e_w is taken in 1 s medians; the baseline is the
 # last of two consecutive medians within BASELINE_STABLE_US (or the last one after

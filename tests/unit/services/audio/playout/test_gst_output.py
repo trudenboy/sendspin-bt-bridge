@@ -671,3 +671,75 @@ def test_no_arrival_is_reported_while_the_engine_does_not_ask():
     _drive_paced(player, 10)
     assert noted == []
     player.stop()
+
+
+# -- the arrival probe's callback (R3): never in the way of the audio ------------------------
+
+
+class _Info:
+    def __init__(self, pts: int | None = 0, *, raises: bool = False) -> None:
+        self.pts, self.raises, self.asked = pts, raises, 0
+
+    def get_buffer(self):
+        self.asked += 1
+        if self.raises:
+            raise RuntimeError("no buffer")
+        return SimpleNamespace(pts=self.pts)
+
+
+class _Target:
+    def __init__(self, *, armed: bool = True, raises: bool = False) -> None:
+        self.armed, self.raises, self.seen = armed, raises, []
+
+    def on_buffer(self, pts_ns: int) -> None:
+        if self.raises:
+            raise RuntimeError("probe broke")
+        self.seen.append(pts_ns)
+
+
+@requires_gst
+@pytest.mark.parametrize(("target_kw", "info_kw"), [({"raises": True}, {}), ({}, {"raises": True})])
+def test_the_arrival_callback_never_drops_a_buffer(caplog, target_kw, info_kw):
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+    from sendspin_bridge.services.audio.playout.gst_output import _arrival_callback
+
+    target = _Target(**target_kw)
+    callback = _arrival_callback(lambda: target)
+    with caplog.at_level("WARNING"):
+        for _ in range(3):
+            assert callback(None, _Info(10_000_000, **info_kw)) == Gst.PadProbeReturn.OK
+    warnings = [r for r in caplog.records if "arrival probe" in r.getMessage()]
+    assert len(warnings) == 1  # rate-limited
+
+
+@requires_gst
+def test_the_arrival_callback_does_not_look_at_buffers_while_disarmed():
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+    from sendspin_bridge.services.audio.playout.gst_output import _arrival_callback
+
+    target = _Target(armed=False)
+    info = _Info(10_000_000)
+    assert _arrival_callback(lambda: target)(None, info) == Gst.PadProbeReturn.OK
+    assert info.asked == 0 and target.seen == []
+    target.armed = True
+    assert _arrival_callback(lambda: target)(None, info) == Gst.PadProbeReturn.OK
+    assert target.seen == [10_000_000]
+
+
+@requires_gst
+def test_stop_removes_the_arrival_probe(monkeypatch):
+    from sendspin_bridge.services.audio.playout import gst_output
+
+    removed = []
+    real_detach = gst_output._detach_arrival_probe
+    monkeypatch.setattr(
+        gst_output, "_detach_arrival_probe", lambda handle: (removed.append(handle), real_detach(handle))
+    )
+    player = _player()
+    player.start(PCM_S16_STEREO_48K)
+    handle = player._arrival_probe
+    assert handle is not None
+    _pad, probe_id = handle
+    assert probe_id > 0
+    player.stop()
+    assert removed == [handle] and player._arrival_probe is None

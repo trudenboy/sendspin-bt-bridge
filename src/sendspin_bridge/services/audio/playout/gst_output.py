@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 from sendspin_bridge.services.audio.playout.engine import PlayoutEngine, PlayoutSettings
 from sendspin_bridge.services.audio.playout.scheduler import InputFormat
 from sendspin_bridge.services.audio.playout.sensor import GstPortClock, PortSample
+from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -199,6 +200,10 @@ class _ArrivalProbe:
         self._armed = False
         self._seen: deque[tuple[int, PortSample | None]] = deque(maxlen=self.MAX_KEPT)
 
+    @property
+    def armed(self) -> bool:
+        return self._armed  # a plain read; the streaming thread re-checks under the lock
+
     def arm(self, armed: bool) -> None:
         with self._lock:
             self._armed = armed
@@ -221,25 +226,46 @@ class _ArrivalProbe:
         return seen
 
 
-def _attach_arrival_probe(appsrc: Any, probe: _ArrivalProbe) -> None:
+def _arrival_callback(probe_ref: Callable[[], _ArrivalProbe | None]) -> Callable[[Any, Any], Any]:
+    """The pad probe: reports a buffer to the probe while it is armed, and always passes it.
+
+    It runs on the streaming thread: an exception here must never drop audio, so it is logged
+    (once per 10 min) and the buffer goes on. Disarmed, it does not even look at the buffer.
+    """
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+
+    warn = RateLimitedLog(logger, clock=time.monotonic)  # per output
+
+    def _on_buffer(_pad: Any, info: Any) -> Any:
+        try:
+            target = probe_ref()
+            if target is not None and target.armed:
+                buf = info.get_buffer()
+                if buf is not None and buf.pts != Gst.CLOCK_TIME_NONE:
+                    target.on_buffer(int(buf.pts))
+        except Exception as exc:
+            warn.warning("probe", "playout: arrival probe failed (%r); the buffer passes", exc)
+        return Gst.PadProbeReturn.OK
+
+    return _on_buffer
+
+
+def _attach_arrival_probe(appsrc: Any, probe: _ArrivalProbe) -> tuple[Any, int] | None:
     """Report every buffer leaving appsrc to ``probe`` (held weakly: a GStreamer callback's
-    reference is invisible to Python's collector)."""
+    reference is invisible to Python's collector). Returns ``(pad, probe id)`` for removal."""
     from sendspin_bridge.services.audio.player.gst_support import Gst
 
     get_pad = getattr(appsrc, "get_static_pad", None)
     pad = get_pad("src") if get_pad is not None else None
     if pad is None:
-        return  # no pad (a test double): no arrivals, delivered reports still date the rest
-    probe_ref = weakref.ref(probe)
+        return None  # no pad (a test double): no arrivals, delivered reports still date the rest
+    probe_id = int(pad.add_probe(Gst.PadProbeType.BUFFER, _arrival_callback(weakref.ref(probe))) or 0)
+    return (pad, probe_id) if probe_id else None
 
-    def _on_buffer(_pad: Any, info: Any) -> Any:
-        target = probe_ref()
-        buf = info.get_buffer()
-        if target is not None and buf is not None and buf.pts != Gst.CLOCK_TIME_NONE:
-            target.on_buffer(int(buf.pts))
-        return Gst.PadProbeReturn.OK
 
-    pad.add_probe(Gst.PadProbeType.BUFFER, _on_buffer)
+def _detach_arrival_probe(handle: tuple[Any, int]) -> None:
+    pad, probe_id = handle
+    pad.remove_probe(probe_id)
 
 
 class PlayoutPlayer:
@@ -292,6 +318,7 @@ class PlayoutPlayer:
         self._engine: PlayoutEngine | None = None
         self._port: _WatchedPort | None = None
         self._arrivals: _ArrivalProbe | None = None
+        self._arrival_probe: tuple[Any, int] | None = None  # (appsrc src pad, probe id)
         self._playing_at_us: float | None = None
         self._next_sense_us: float | None = None
         self._x_w_ns = 0
@@ -381,7 +408,7 @@ class PlayoutPlayer:
         self._sink = output.sink
         self._port = _WatchedPort(self._port_factory(output.sink))
         self._arrivals = _ArrivalProbe(self._port_factory(output.sink))
-        _attach_arrival_probe(output.appsrc, self._arrivals)
+        self._arrival_probe = _attach_arrival_probe(output.appsrc, self._arrivals)
         self._engine = PlayoutEngine(settings=self._settings, port=self._port, k0_ns=output.k0_ns)
         self._playing_at_us = None
         self._next_sense_us = None
@@ -521,6 +548,9 @@ class PlayoutPlayer:
         if self._arrivals is not None:
             self._arrivals.arm(False)
         self._arrivals = None
+        handle, self._arrival_probe = self._arrival_probe, None
+        if handle is not None:
+            _detach_arrival_probe(handle)
         with self._cmd_lock:
             self._commands.clear()
         with self._pub_lock:
