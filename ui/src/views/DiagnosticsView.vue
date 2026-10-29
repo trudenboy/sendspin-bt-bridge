@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
 import { SbButton, SbTabs } from '@/kit'
 import { Bug } from 'lucide-vue-next'
@@ -13,7 +14,9 @@ import BugReportDialog from '@/components/BugReportDialog.vue'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
-const activeTab = ref('overview')
+const route = useRoute()
+const queryTab = String(route.query.tab ?? '')
+const activeTab = ref(['overview', 'logs', 'system'].includes(queryTab) ? queryTab : 'overview')
 const bugReportOpen = ref(false)
 
 // Overview answers "is everything fine, and if not, what happened"; the

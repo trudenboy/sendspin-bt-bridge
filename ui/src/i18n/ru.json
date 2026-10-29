@@ -696,7 +696,9 @@
     "restarting": "Перезапуск моста…",
     "ready": "Мост успешно перезапущен",
     "error": "Ошибка перезапуска",
-    "elapsed": "{seconds}с"
+    "elapsed": "{seconds}с",
+    "openLogs": "Открыть журнал",
+    "dismiss": "Закрыть"
   },
   "bugreport": {
     "title": "Сообщить об ошибке",

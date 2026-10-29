@@ -696,7 +696,9 @@
     "restarting": "Restarting bridge…",
     "ready": "Bridge restarted successfully",
     "error": "Restart failed",
-    "elapsed": "{seconds}s"
+    "elapsed": "{seconds}s",
+    "openLogs": "Open logs",
+    "dismiss": "Dismiss"
   },
   "bugreport": {
     "title": "File a Bug Report",

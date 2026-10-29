@@ -2,10 +2,12 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
+import { useRouter } from 'vue-router'
 import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
+const router = useRouter()
 
 const elapsed = ref(0)
 let elapsedTimer: ReturnType<typeof setInterval> | null = null
@@ -106,6 +108,10 @@ const showSpinner = computed(() =>
 const showElapsed = computed(() =>
   bridge.restartState === 'stopping' || bridge.restartState === 'restarting',
 )
+
+function openLogs() {
+  void router.push({ path: '/diagnostics', query: { tab: 'logs' } })
+}
 </script>
 
 <template>
@@ -120,6 +126,7 @@ const showElapsed = computed(() =>
     <div
       v-if="visible"
       class="overflow-hidden border-b"
+      role="status"
       :class="bannerClass"
     >
       <div class="flex items-center justify-center gap-3 px-4 py-2.5">
@@ -136,6 +143,24 @@ const showElapsed = computed(() =>
         >
           {{ t('restart.elapsed', { seconds: elapsed }) }}
         </span>
+        <template v-if="bridge.restartState === 'error'">
+          <button
+            type="button"
+            data-restart-logs
+            class="cursor-pointer rounded-(--radius-button) px-2 py-1 text-sm font-medium underline underline-offset-2"
+            @click="openLogs"
+          >
+            {{ t('restart.openLogs') }}
+          </button>
+          <button
+            type="button"
+            data-restart-dismiss
+            class="cursor-pointer rounded-(--radius-button) px-2 py-1 text-sm font-medium"
+            @click="bridge.dismissRestart()"
+          >
+            {{ t('restart.dismiss') }}
+          </button>
+        </template>
       </div>
     </div>
   </Transition>
