@@ -914,7 +914,7 @@
       },
       "EXPERIMENTAL_AIR_SENSOR": {
         "label": "Air sensor (SBC speakers)",
-        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure mode, a Bluetooth SBC speaker and CAP_NET_RAW."
+        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure or loop mode, a Bluetooth SBC speaker and CAP_NET_RAW. Measures in measure mode; corrects placement in loop mode."
       },
       "HA_INTEGRATION": {
         "mode": {
@@ -1306,8 +1306,7 @@
       "needsCalibration": "Needs calibration",
       "agoSeconds": "{s} s ago",
       "reasons": {
-        "needs_measure": "Needs playout sync in measure mode.",
-        "loop_not_supported_yet": "Not supported with playout sync in loop mode yet.",
+        "needs_measure": "Needs playout sync in measure or loop mode.",
         "not_bluetooth": "Only Bluetooth speakers are supported.",
         "cpu_budget": "Stopped: the sensor used too much processor time.",
         "internal_error": "Stopped after an internal error; it restarts with the next stream.",

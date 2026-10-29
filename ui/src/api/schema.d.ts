@@ -3025,7 +3025,7 @@ export interface components {
             EXPERIMENTAL_ADAPTER_AUTO_RECOVERY?: boolean | null;
             /**
              * Experimental Air Sensor
-             * @description Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback.
+             * @description Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure or loop and CAP_NET_RAW). Measures in measure mode; corrects placement in loop mode.
              * @default false
              */
             EXPERIMENTAL_AIR_SENSOR?: boolean | null;

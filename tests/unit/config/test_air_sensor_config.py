@@ -24,7 +24,7 @@ def test_schema_declares_a_boolean():
     [
         ({"EXPERIMENTAL_AIR_SENSOR": False, "PLAYOUT_SYNC": "measure"}, BT, (False, "switch_off")),
         ({"EXPERIMENTAL_AIR_SENSOR": True, "PLAYOUT_SYNC": "off"}, BT, (False, "needs_measure")),
-        ({"EXPERIMENTAL_AIR_SENSOR": True, "PLAYOUT_SYNC": "loop"}, BT, (False, "loop_not_supported_yet")),
+        ({"EXPERIMENTAL_AIR_SENSOR": True, "PLAYOUT_SYNC": "loop"}, BT, (True, None)),
         (
             {"EXPERIMENTAL_AIR_SENSOR": True, "PLAYOUT_SYNC": "measure"},
             {**BT, "playout_sync_enabled": False},

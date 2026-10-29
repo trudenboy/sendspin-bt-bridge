@@ -76,11 +76,17 @@ def test_every_playout_player_of_the_daemon_shares_the_sensor_tap(make_daemon):
     assert first._air_tap is second._air_tap is d._air_sensor._tap
 
 
-@pytest.mark.parametrize("mode", ["off", "loop"])
-def test_a_mode_other_than_measure_ignores_the_param(make_daemon, mode):
+@pytest.mark.parametrize("mode", ["off"])
+def test_a_mode_other_than_measure_or_loop_ignores_the_param(make_daemon, mode):
     d = make_daemon(playout_mode=mode, air_sensor=ON)
     assert d.air_snapshot() is None
     assert d.air_accepts() == []
+
+
+def test_loop_mode_builds_the_sensor(make_daemon):
+    d = make_daemon(playout_mode="loop", air_sensor=ON)
+    assert d.air_snapshot()["state"] != "off"
+    assert d.air_accepts() == [1]
 
 
 def test_a_disabled_param_builds_nothing(make_daemon):
@@ -604,12 +610,18 @@ async def test_an_effective_sensor_is_asked_for_at_spawn(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_loop_mode_asks_for_the_sensor_at_spawn(monkeypatch):
+    config = {"PLAYOUT_SYNC": "loop", "EXPERIMENTAL_AIR_SENSOR": True, "players": [_BT_PLAYER]}
+    params = await _spawned(monkeypatch, config)
+    assert params["air_sensor"] == {"enabled": True, "latency_ms": None}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "config",
     [
         {"PLAYOUT_SYNC": "measure", "EXPERIMENTAL_AIR_SENSOR": False, "players": [_BT_PLAYER]},
         {"PLAYOUT_SYNC": "measure", "players": [_BT_PLAYER]},
-        {"PLAYOUT_SYNC": "loop", "EXPERIMENTAL_AIR_SENSOR": True, "players": [_BT_PLAYER]},
         {"PLAYOUT_SYNC": "off", "EXPERIMENTAL_AIR_SENSOR": True, "players": [_BT_PLAYER]},
         {
             "PLAYOUT_SYNC": "measure",

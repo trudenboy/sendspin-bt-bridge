@@ -250,11 +250,11 @@ class BridgeDaemon:
         self._build_air_sensor()
 
     def _build_air_sensor(self) -> None:
-        """Build the sensor and take air commands, if the spawn asked for it (measure mode only)."""
+        """Build the sensor and take air commands, if the spawn asked for it (measure and loop modes)."""
         params = self._args.air_sensor
         if not isinstance(params, dict) or params.get("enabled") is not True:
             return
-        if self._args.playout_mode != "measure":
+        if self._args.playout_mode not in ("measure", "loop"):
             return
         self._air_tap = WrittenEnvelope()
         self._air_sensor = AirSensor(tap=self._air_tap, now_us=raw_now_us, output_delay_ms=self._air_output_delay_ms)

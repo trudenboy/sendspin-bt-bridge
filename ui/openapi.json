@@ -1621,7 +1621,7 @@
               }
             ],
             "default": false,
-            "description": "Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback.",
+            "description": "Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure or loop and CAP_NET_RAW). Measures in measure mode; corrects placement in loop mode.",
             "title": "Experimental Air Sensor"
           },
           "EXPERIMENTAL_PA_MODULE_RELOAD": {

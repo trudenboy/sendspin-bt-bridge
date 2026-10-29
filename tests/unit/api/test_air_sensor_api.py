@@ -263,9 +263,9 @@ def test_switch_on_but_not_effective_reports_off_with_reason(running_device_fact
     assert dev.status["air_sensor"] == {"state": "off", "reason": "needs_measure"}
 
 
-def test_switch_on_loop_mode_reports_off_with_its_reason(running_device_factory):
+def test_switch_on_loop_mode_gets_no_off_status_from_the_parent(running_device_factory):
     dev = running_device_factory(EXPERIMENTAL_AIR_SENSOR=True, PLAYOUT_SYNC="loop")
-    assert dev.status["air_sensor"] == {"state": "off", "reason": "loop_not_supported_yet"}
+    assert dev.status["air_sensor"] is None
 
 
 def test_switch_off_never_sets_the_status_at_spawn(running_device_factory):

@@ -218,7 +218,7 @@ class BridgeConfig(BaseModel):
     """
     EXPERIMENTAL_AIR_SENSOR: StrictBool | None = False
     """
-    Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure and CAP_NET_RAW). Does not change playback.
+    Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure or loop and CAP_NET_RAW). Measures in measure mode; corrects placement in loop mode.
     """
     PREFER_SBC_CODEC: bool | None = False
     """
