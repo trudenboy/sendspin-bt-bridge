@@ -50,7 +50,7 @@ function memberName(id: string) {
 
 /** One look for the native inputs (``SbInput`` puts extra attributes on its wrapper, not the input). */
 const inputClass =
-  'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40'
+  'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary'
 
 const root = ref<HTMLElement | null>(null)
 

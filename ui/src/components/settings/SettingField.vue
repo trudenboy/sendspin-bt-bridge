@@ -109,7 +109,7 @@ function onList(raw: string) {
 }
 
 const inputClass =
-  'h-9 w-full rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary focus:ring-2 focus:ring-primary/25'
+  'h-9 w-full rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary'
 </script>
 
 <template>

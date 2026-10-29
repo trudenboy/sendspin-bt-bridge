@@ -148,7 +148,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       <input
         type="checkbox"
         :checked="selected"
-        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
+        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary"
         :aria-label="t('device.select', { name: speakerName(device.name) })"
         @click.stop
         @change.stop="emit('toggleSelect', device.id)"

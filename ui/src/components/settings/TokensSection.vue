@@ -105,7 +105,7 @@ function when(value?: string | null) {
         maxlength="64"
         :placeholder="t('settings.parts.tokens.newLabel')"
         :aria-label="t('settings.parts.tokens.newLabel')"
-        class="h-9 min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+        class="h-9 min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary focus:border-primary"
       />
       <SbButton type="submit" variant="outline" :loading="busy">{{ t('settings.parts.tokens.create') }}</SbButton>
     </form>

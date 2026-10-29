@@ -171,7 +171,7 @@ onMounted(fetchLogs)
           v-model="searchQuery"
           type="text"
           :placeholder="t('diagnostics.logs.search')"
-          class="h-8 w-full rounded-md border border-border bg-surface-primary pl-8 pr-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="h-8 w-full rounded-md border border-border bg-surface-primary pl-8 pr-3 text-sm text-text-primary placeholder:text-text-tertiary"
         />
       </div>
 

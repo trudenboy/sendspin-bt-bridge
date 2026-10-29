@@ -41,7 +41,7 @@ watch(
 const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
 
 const selectClass =
-  'h-8 min-w-[8rem] flex-1 basis-32 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40'
+  'h-8 min-w-[8rem] flex-1 basis-32 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary'
 </script>
 
 <template>

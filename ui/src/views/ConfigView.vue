@@ -237,7 +237,7 @@ onMounted(async () => {
             type="search"
             :placeholder="t('settings.search')"
             :aria-label="t('settings.search')"
-            class="h-10 w-full rounded-(--radius-input) border border-border-strong bg-surface-card pr-3 pl-9 text-sm text-text-primary outline-none placeholder:text-text-disabled focus:border-primary focus:ring-2 focus:ring-primary/25"
+            class="h-10 w-full rounded-(--radius-input) border border-border-strong bg-surface-card pr-3 pl-9 text-sm text-text-primary placeholder:text-text-disabled focus:border-primary"
           />
         </div>
         <p v-if="nothingFound" class="py-10 text-center text-sm text-text-secondary">{{ t('settings.nothingFound', { q: query }) }}</p>

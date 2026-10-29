@@ -125,7 +125,7 @@ function confirmSave() {
             :aria-invalid="nameMissing || undefined"
             :aria-describedby="nameMissing ? 'sync-tune-profile-name-error' : undefined"
             :class="[
-              'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40',
+              'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary',
               nameMissing && 'border-error',
             ]"
             @input="nameMissing = false"

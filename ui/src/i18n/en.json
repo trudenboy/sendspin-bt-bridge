@@ -865,7 +865,7 @@
       },
       "PLAYOUT_SYNC": {
         "label": "Playout sync",
-        "help": "Off keeps the plain audio output. Measure is experimental: it measures the playout error at the speaker output and reports it, without correcting it. Takes effect after the speakers restart.",
+        "help": "Off keeps the plain audio output. Measure is experimental: it measures the playout error at the speaker output and reports it, without correcting it. Measure and correct corrects each start's placement using the air sensor; it needs the experimental air sensor and without it behaves like measure. Takes effect after the speakers restart.",
         "options": {
           "off": "Off",
           "measure": "Measure only",

@@ -63,7 +63,7 @@ function onInput(e: Event) {
       :max="max"
       :step="step"
       :disabled="disabled"
-      class="sb-slider h-2 w-full cursor-pointer appearance-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      class="sb-slider h-2 w-full cursor-pointer appearance-none rounded-full"
       :class="[disabled ? 'cursor-not-allowed' : '']"
       :style="{
         background: `linear-gradient(to right, var(--color-primary) ${percentage}%, var(--slider-track, #e5e7eb) ${percentage}%)`,

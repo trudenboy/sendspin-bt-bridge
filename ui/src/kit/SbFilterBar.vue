@@ -43,7 +43,7 @@ function clearSearch() {
         type="text"
         role="searchbox"
         :placeholder="placeholder"
-        class="w-full rounded-(--radius-input) border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        class="w-full rounded-(--radius-input) border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary"
       />
       <button
         v-if="search"

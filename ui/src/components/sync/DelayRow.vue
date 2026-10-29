@@ -64,7 +64,7 @@ const measuredChange = computed(() =>
           :value="modelValue"
           :aria-label="t('sync.manual.valueLabel', { name })"
           :aria-describedby="hintId"
-          class="h-8 w-20 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-right text-sm tabular-nums text-text-primary outline-none focus:ring-2 focus:ring-primary/40"
+          class="h-8 w-20 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-right text-sm tabular-nums text-text-primary"
           @change="onNumber"
         />
         <span aria-hidden="true">ms</span>

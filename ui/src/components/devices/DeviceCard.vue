@@ -84,7 +84,7 @@ function onDetails() {
       <div class="min-w-0 flex-1">
         <button
           type="button"
-          class="block max-w-full text-left text-base font-medium leading-snug text-text-primary after:absolute after:inset-0 after:rounded-(--radius-card) after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary/60"
+          class="block max-w-full text-left text-base font-medium leading-snug text-text-primary after:absolute after:inset-0 after:rounded-(--radius-card) after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-(--sb-focus-ring)"
           :title="device.name ?? undefined"
           @click="onDetails"
         >

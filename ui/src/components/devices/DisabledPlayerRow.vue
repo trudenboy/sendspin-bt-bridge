@@ -33,7 +33,7 @@ const backendLabel = computed(() => t(props.player.output ? 'device.chips.backen
       <input
         type="checkbox"
         :checked="selected"
-        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
+        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary"
         :aria-label="t('device.select', { name: displayName })"
         @change="emit('toggleSelect', player.id)"
       />

@@ -66,7 +66,7 @@ function applyRaw() {
         v-model="raw"
         spellcheck="false"
         data-testid="json-editor"
-        class="h-96 w-full rounded-(--radius-input) border border-border-strong bg-surface-card p-3 font-mono text-xs text-text-primary outline-none focus:border-primary"
+        class="h-96 w-full rounded-(--radius-input) border border-border-strong bg-surface-card p-3 font-mono text-xs text-text-primary focus:border-primary"
       />
       <p v-if="jsonError" class="text-sm text-error" role="alert">{{ jsonError }}</p>
       <SbButton variant="outline" size="sm" @click="applyRaw">{{ t('settings.parts.backup.apply') }}</SbButton>

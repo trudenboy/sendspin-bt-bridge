@@ -20,18 +20,14 @@ function optionsFor(stored: string) {
 describe('PLAYOUT_SYNC setting (Stage 1)', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('offers off and measure only', () => {
-    expect(field.offered).toEqual(['off', 'measure'])
-    expect(optionsFor('off')).toEqual(['off', 'measure'])
+  it('offers off, measure and loop (Stage B1 shipped loop mode)', () => {
+    expect(field.offered).toBeUndefined()
+    expect(optionsFor('off')).toEqual(['off', 'measure', 'loop'])
   })
 
-  it('still shows loop when the bridge config already holds it', () => {
-    expect(optionsFor('loop')).toEqual(['off', 'measure', 'loop'])
-  })
-
-  it('does not describe loop in the help text', () => {
-    expect(en.settings.fields.PLAYOUT_SYNC.help.toLowerCase()).not.toContain('loop')
-    expect(ru.settings.fields.PLAYOUT_SYNC.help.toLowerCase()).not.toContain('коррекц')
+  it('explains loop in the help text, in both languages', () => {
+    expect(en.settings.fields.PLAYOUT_SYNC.help.toLowerCase()).toContain('air sensor')
+    expect(ru.settings.fields.PLAYOUT_SYNC.help).toContain('датчик эфира')
   })
 
   it('describes the per-speaker opt-out by what Stage 1 does (no hold, no offset)', () => {

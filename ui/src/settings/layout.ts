@@ -145,7 +145,7 @@ export const SECTIONS: readonly SectionDef[] = [
         advanced: true,
         enabledWhen: (c) => ['measure', 'loop'].includes(String(getPath(c, 'PLAYOUT_SYNC') ?? 'off')),
       },
-      { key: 'PLAYOUT_SYNC', kind: 'select', options: ['off', 'measure', 'loop'], offered: ['off', 'measure'], advanced: true },
+      { key: 'PLAYOUT_SYNC', kind: 'select', options: ['off', 'measure', 'loop'], advanced: true },
     ],
     after: ['latencyAssistant'],
   },

@@ -47,7 +47,7 @@ const chip = computed(() => disabledLinkChip(props.player, bridge.adapters ?? []
         <button
           type="button"
           data-name
-          class="block max-w-full text-left text-base font-medium leading-snug text-text-primary after:absolute after:inset-0 after:rounded-(--radius-card) after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary/60"
+          class="block max-w-full text-left text-base font-medium leading-snug text-text-primary after:absolute after:inset-0 after:rounded-(--radius-card) after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-(--sb-focus-ring)"
           :title="player.name"
           @click="emit('openDetail', player.id)"
         >

@@ -47,7 +47,7 @@ function setEntry(hci: string, mac: string | null | undefined, patch: AdapterEnt
 }
 
 const inputClass =
-  'h-8 w-full rounded-(--radius-input) border border-border-strong bg-surface-card px-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/25'
+  'h-8 w-full rounded-(--radius-input) border border-border-strong bg-surface-card px-2.5 text-sm text-text-primary focus:border-primary'
 </script>
 
 <template>

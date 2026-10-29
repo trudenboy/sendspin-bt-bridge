@@ -42,7 +42,7 @@ const hasDescription = computed(() => !!props.error || !!props.hint)
       :class="[
         error
           ? 'border-error focus-within:ring-2 focus-within:ring-error/40'
-          : 'border-border-strong focus-within:ring-2 focus-within:ring-primary/40',
+          : 'border-border-strong focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-(--sb-focus-ring)',
         disabled ? 'opacity-50 cursor-not-allowed' : '',
       ]"
     >

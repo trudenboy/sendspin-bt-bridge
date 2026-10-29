@@ -181,7 +181,7 @@ function onDownload() {
         <input
           v-model="title"
           type="text"
-          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary"
           :placeholder="t('bugreport.fields.titlePlaceholder')"
           maxlength="200"
         />
@@ -196,7 +196,7 @@ function onDownload() {
         <textarea
           v-model="description"
           rows="4"
-          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary"
           :placeholder="t('bugreport.fields.descPlaceholder')"
           maxlength="5000"
         />
@@ -211,7 +211,7 @@ function onDownload() {
         <input
           v-model="email"
           type="email"
-          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary"
           placeholder="your@email.com"
         />
         <p v-if="emailError" class="mt-1 text-xs text-error">{{ emailError }}</p>
