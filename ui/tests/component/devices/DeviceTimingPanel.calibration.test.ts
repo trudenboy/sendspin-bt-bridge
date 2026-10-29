@@ -34,10 +34,10 @@ const entry = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-function mountPanel(entries: unknown[], opts: { locale?: 'en' | 'ru'; air?: Record<string, unknown> | null } = {}) {
+function mountPanel(entries: unknown[], opts: { locale?: 'en' | 'ru'; air?: Record<string, unknown> | null; learned?: unknown[] } = {}) {
   const device = makeDevice({
     id: 'dev-1',
-    audio: { air_to_sound_latency: entries } as never,
+    audio: { air_to_sound_latency: entries, air_learned_latency: opts.learned ?? [] } as never,
     bluetooth: { adapter: { mac: ADAPTER, hci: 'hci1', name: null } } as never,
     timing: { air_sensor: opts.air ?? null } as never,
   })
@@ -97,5 +97,62 @@ describe('DeviceTimingPanel air calibrations', () => {
     expect(text).not.toMatch(/timing\.air/)
     expect(text).toContain('203.4')
     expect(text).toContain('Забыть')
+  })
+})
+
+const learned = (over: Record<string, unknown> = {}) => ({
+  codec: 'sbc',
+  rate: 44100,
+  adapter: ADAPTER,
+  source: 'learned',
+  samples_ms: [219.4, 219.4],
+  d_out_ms: [184, 184],
+  latency_ms: 219.4,
+  d_ref_ms: 184,
+  starts: 6,
+  measured_at: '2026-10-28T09:00:00+00:00',
+  ...over,
+})
+const learnedSection = (w: ReturnType<typeof mountPanel>) => w.find('[data-testid="air-learned"]')
+
+describe('DeviceTimingPanel learned latencies', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.mocked(forgetAirCalibration).mockClear()
+    vi.mocked(confirmDialog).mockClear().mockResolvedValue(true)
+    refresh.mockClear()
+  })
+
+  it('shows nothing without learned entries', () => {
+    expect(learnedSection(mountPanel([entry()])).exists()).toBe(false)
+  })
+
+  it('shows one line per learned entry', () => {
+    const text = learnedSection(mountPanel([], { learned: [learned()] })).text()
+    expect(text).toContain('Learned: 219.4 ms at 184 ms delay · SBC · hci1 · 6 starts')
+  })
+
+  it('forgets a learned entry through the same API after confirmation', async () => {
+    const w = mountPanel([], { learned: [learned()] })
+    await learnedSection(w).find('[data-testid="air-learned-forget"]').trigger('click')
+    await flushPromises()
+    expect(confirmDialog).toHaveBeenCalledTimes(1)
+    expect(forgetAirCalibration).toHaveBeenCalledWith('dev-1', 'sbc', 44100, ADAPTER)
+    expect(refresh).toHaveBeenCalled()
+  })
+
+  it('keeps it when the dialog is cancelled', async () => {
+    vi.mocked(confirmDialog).mockResolvedValue(false)
+    const w = mountPanel([], { learned: [learned()] })
+    await learnedSection(w).find('[data-testid="air-learned-forget"]').trigger('click')
+    await flushPromises()
+    expect(forgetAirCalibration).not.toHaveBeenCalled()
+  })
+
+  it('has Russian text', () => {
+    const text = learnedSection(mountPanel([], { locale: 'ru', learned: [learned()] })).text()
+    expect(text).not.toMatch(/timing\.air/)
+    expect(text).toContain('Забыть')
+    expect(text).toContain('219.4')
   })
 })

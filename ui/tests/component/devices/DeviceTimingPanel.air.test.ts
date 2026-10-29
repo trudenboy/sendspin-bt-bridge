@@ -113,3 +113,116 @@ describe('DeviceTimingPanel air sensor reasons match their producers', () => {
     expect(enAir).not.toContain('reasons.no_monitor')
   })
 })
+
+const ADAPTER = 'C0:FB:F9:62:D7:D6'
+const learnedEntry = (samples = 6) => ({
+  codec: 'sbc',
+  rate: 44100,
+  adapter: ADAPTER,
+  source: 'learned',
+  samples_ms: Array.from({ length: Math.min(samples, 8) }, () => 219.4),
+  d_out_ms: Array.from({ length: Math.min(samples, 8) }, () => 184),
+  latency_ms: 219.4,
+  d_ref_ms: 184,
+  starts: samples,
+  measured_at: '2026-10-28T09:00:00+00:00',
+})
+
+function mountLoop(
+  playout: Record<string, unknown>,
+  opts: { air?: Record<string, unknown> | null; learned?: unknown[]; locale?: 'en' | 'ru' } = {},
+) {
+  const device = makeDevice({
+    timing: {
+      playout: { mode: 'loop', ...playout },
+      air_sensor: opts.air === undefined ? { state: 'locked', codec: 'sbc', rate: 44100, adapter: ADAPTER } : opts.air,
+    } as never,
+    audio: { air_learned_latency: opts.learned ?? [] } as never,
+    bluetooth: { adapter: { mac: ADAPTER, hci: 'hci1', name: null } } as never,
+  })
+  return mount(DeviceTimingPanel, {
+    props: { device },
+    global: { plugins: [createI18n({ legacy: false, locale: opts.locale ?? 'en', messages: { en, ru } })] },
+  })
+}
+const correction = (w: ReturnType<typeof mountLoop>) => w.find('[data-testid="air-correction"]')
+
+describe('DeviceTimingPanel air correction', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('names a calibrated target', () => {
+    const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 228.7, air_bias_ms: 1 })
+    expect(correction(w).text()).toContain('Air correction: calibrated (228.7 ms)')
+  })
+
+  it('names a learned target with its starts', () => {
+    const w = mountLoop({ air_bias_state: 'active', air_target: 'learned', air_learned_starts: 6, air_bias_ms: 1 })
+    expect(correction(w).text()).toContain('Air correction: learned (6 starts)')
+  })
+
+  it('shows learning progress without a target', () => {
+    const w = mountLoop({ air_bias_state: 'none', air_bias_reason: 'no_target' }, { learned: [learnedEntry(1)] })
+    expect(correction(w).text()).toContain('Air correction: no data (learning: 1 of 2 starts)')
+  })
+
+  it('counts zero learned starts without an entry', () => {
+    const w = mountLoop({ air_bias_state: 'none', air_bias_reason: 'no_target' })
+    expect(correction(w).text()).toContain('(learning: 0 of 2 starts)')
+  })
+
+  it('says it is inactive while the sensor is not locked', () => {
+    const w = mountLoop(
+      { air_bias_state: 'seeding', air_target: 'calibrated', air_target_ms: 228.7, air_bias_ms: null },
+      { air: { state: 'acquiring' } },
+    )
+    expect(correction(w).text()).toContain('inactive: not locked')
+  })
+
+  it('is not inactive when the sensor is locked', () => {
+    const w = mountLoop({ air_bias_state: 'seeding', air_target: 'calibrated', air_target_ms: 228.7, air_bias_ms: null })
+    expect(correction(w).text()).not.toContain('inactive')
+  })
+
+  it('shows the signed bias and the correction count', () => {
+    const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 228.7, air_bias_ms: 12.3, air_corrections: 1 })
+    expect(correction(w).text()).toContain('Air bias +12.3 ms')
+    expect(correction(w).text()).toContain('Air corrections 1')
+  })
+
+  it('hides the correction count at zero', () => {
+    const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_corrections: 0 })
+    expect(correction(w).text()).not.toContain('Air corrections')
+  })
+
+  it('shows the delay trim as an earlier placement', () => {
+    const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_trim_ms: 30 })
+    expect(correction(w).text()).toContain('Delay trim −30.0 ms (target 30.0 ms early)')
+  })
+
+  it('has no trim row at zero', () => {
+    const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_trim_ms: 0 })
+    expect(correction(w).text()).not.toContain('Delay trim')
+  })
+
+  it('shows nothing in measure mode', () => {
+    const w = mountLoop({ mode: 'measure', air_bias_state: null })
+    expect(correction(w).exists()).toBe(false)
+  })
+
+  it('has Russian text for every line', () => {
+    const w = mountLoop(
+      { air_bias_state: 'seeding', air_target: 'learned', air_learned_starts: 6, air_bias_ms: null, air_corrections: 2, air_trim_ms: 30 },
+      { locale: 'ru', air: { state: 'acquiring' } },
+    )
+    const text = correction(w).text()
+    expect(text).not.toMatch(/timing\.air/)
+    expect(text).toContain('Коррекция по эфиру')
+    expect(text).toContain('не захвачен')
+  })
+
+  it('has Russian text for the learning line', () => {
+    const w = mountLoop({ air_bias_state: 'none', air_bias_reason: 'no_target' }, { locale: 'ru' })
+    expect(correction(w).text()).not.toMatch(/timing\.air/)
+    expect(correction(w).text()).toContain('нет данных')
+  })
+})

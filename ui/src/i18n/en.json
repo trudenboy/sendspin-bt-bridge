@@ -1326,6 +1326,24 @@
         "forget": "Forget",
         "forgetTitle": "Forget this calibration?",
         "forgetConfirm": "{name} is reported uncalibrated for {codec} {rate} kHz on {adapter} until the sync wizard measures it again."
+      },
+      "correction": {
+        "target": "Air correction: {target}",
+        "calibrated": "calibrated ({ms} ms)",
+        "learned": "learned ({n} starts)",
+        "noData": "no data (learning: {n} of {need} starts)",
+        "inactive": "inactive: not locked",
+        "bias": "Air bias {value} ms",
+        "corrections": "Air corrections {n}",
+        "trimEarly": "Delay trim {value} ms (target {ms} ms early)",
+        "trimLate": "Delay trim {value} ms (target {ms} ms late)"
+      },
+      "learned": {
+        "title": "Learned latencies",
+        "line": "Learned: {latency} ms at {delay} ms delay · {codec} · {adapter} · {starts} starts",
+        "forget": "Forget",
+        "forgetTitle": "Forget this learned latency?",
+        "forgetConfirm": "{name} starts learning its latency for {codec} {rate} kHz on {adapter} again. A calibration for it is forgotten too."
       }
     }
   },
