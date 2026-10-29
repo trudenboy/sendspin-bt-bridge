@@ -1014,6 +1014,7 @@ def save_air_calibrations(sid: str, members: list[str]) -> list[AirCalibrationCa
     reference = by_id.get(str(data.get("reference")))
     low, high = AIR_LATENCY_RANGE_MS
     chosen: list[tuple[AirCalibrationCandidate, str, dict[str, Any]]] = []
+    warned_no_d_out = False
     for mid in dict.fromkeys(members):
         c = candidates.get(mid)
         if c is None or not c.eligible or c.latency_ms is None or reference is None:
@@ -1041,6 +1042,14 @@ def save_air_calibrations(sid: str, members: list[str]) -> list[AirCalibrationCa
         d_out = member_folds[mid].written_d_out_ms if mid in member_folds else None
         if d_out is not None and 0 <= d_out <= 5000:
             entry["d_ref_ms"] = float(d_out)
+        elif mid in member_folds and not warned_no_d_out:
+            warned_no_d_out = True
+            logger.warning(
+                "Sync session %s: the air fold of %s reported no d_out_ms; saving without d_ref_ms "
+                "(the config load backfills it)",
+                sid,
+                mid,
+            )
         chosen.append((c, str(client.player_id), entry))
     for _c, device_id, entry in chosen:
         devices_uc.save_air_calibration(device_id, entry)

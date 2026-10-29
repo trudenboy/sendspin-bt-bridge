@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -403,6 +404,7 @@ def _clean_air_latency(entry: dict) -> None:
     # Stage A calibrations carry no reference delay: they were folded with the player's static delay.
     fallback = entry.get("static_delay_ms")
     fallback_ms = float(fallback) if isinstance(fallback, (int, float)) and not isinstance(fallback, bool) else 0.0
+    fallback_ms = min(5000.0, max(0.0, fallback_ms)) if math.isfinite(fallback_ms) else 0.0
     for calibration in clean:
         if calibration.get("d_ref_ms") is None:
             calibration["d_ref_ms"] = fallback_ms

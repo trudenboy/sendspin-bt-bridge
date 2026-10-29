@@ -549,15 +549,16 @@ def test_forget_with_neither_kind_is_404(api_client, calibrated_bridge):
 
 
 def test_forgetting_another_rate_keeps_the_live_value(api_client, calibrated_bridge):
-    dev = calibrated_bridge()
+    # Entries carry their reference delay (as a loaded config does), so the reload behind the
+    # Forget changes nothing the daemon has.
+    dev = calibrated_bridge(
+        entries=[{**AIR_ENTRY, "d_ref_ms": 184.0}, {**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0, "d_ref_ms": 184.0}]
+    )
+    count = len(dev.sent())
     r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/48000/{AIR_ADAPTER.lower()}")
     assert r.status_code == 204, r.text
     assert [e["rate"] for e in dev.stored()] == [44100]
-    # The daemon keeps 203.4.  Stage B decision (S-22): a calibration's reference delay is sent
-    # with it, and the reload behind the Forget backfills it into this fixture's entry, so the
-    # one resend that can follow carries the same latency plus that reference.
-    assert {c["latency_ms"] for c in dev.sent()} == {203.4}
-    assert len(dev.sent()) <= 2
+    assert len(dev.sent()) == count  # the daemon already has 203.4
 
 
 def test_forget_all_calibrations(api_client, calibrated_bridge):

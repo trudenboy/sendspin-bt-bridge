@@ -1122,26 +1122,32 @@ class SendspinClient:
         seq = sample.get("seq")
         if not isinstance(seq, int) or isinstance(seq, bool):
             return
-        seen = self._air_learned_seen
-        if seen is not None and seen[0] is proc and seen[1] == seq:
-            return
-        self._air_learned_seen = (proc, seq)
-        parsed = self._valid_air_learned_sample(sample)
+        parsed = None
+        # ``_air_lock`` (never held across a call back into this client) keeps the seen marker and
+        # the entries consistent when two status updates race (loop and API worker threads).
+        with self._air_lock:
+            seen = self._air_learned_seen
+            if seen is not None and seen[0] is proc and seen[1] == seq:
+                return
+            self._air_learned_seen = (proc, seq)
+            parsed = self._valid_air_learned_sample(sample)
+            if parsed is not None:
+                key, x_ms, d_out_ms = parsed
+                try:
+                    self.air_learned_latency = record_air_learned_sample(
+                        self.air_learned_latency,
+                        key,
+                        x_ms,
+                        d_out_ms,
+                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    )
+                except Exception as exc:  # a sample that makes an invalid entry; nothing to keep
+                    logger.debug("[%s] Learned air sample not usable: %s", self.player_name, type(exc).__name__)
+                    return
         if parsed is None:
             logger.debug("[%s] Ignoring an invalid learned air sample: %r", self.player_name, sample)
             return
         key, x_ms, d_out_ms = parsed
-        try:
-            self.air_learned_latency = record_air_learned_sample(
-                self.air_learned_latency,
-                key,
-                x_ms,
-                d_out_ms,
-                datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            )
-        except Exception as exc:  # a sample that makes an invalid entry; nothing to keep
-            logger.debug("[%s] Learned air sample not usable: %s", self.player_name, type(exc).__name__)
-            return
         if self.config_id:
             self._air_learned_writes += 1
             self._schedule_persist(

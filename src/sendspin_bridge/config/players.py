@@ -156,9 +156,10 @@ class AirLearnedEntry(BaseModel):
             latency, d_ref = learned_reference(self.samples_ms, self.d_out_ms)
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
-        if abs(latency - self.latency_ms) > _AIR_LEARNED_TOLERANCE_MS or abs(d_ref - self.d_ref_ms) > (
-            _AIR_LEARNED_TOLERANCE_MS
-        ):
+        if not (
+            abs(latency - self.latency_ms) <= _AIR_LEARNED_TOLERANCE_MS
+            and abs(d_ref - self.d_ref_ms) <= _AIR_LEARNED_TOLERANCE_MS
+        ):  # written so NaN fails
             raise ValueError("latency_ms and d_ref_ms do not match the samples")
         return self
 

@@ -213,3 +213,31 @@ def test_save_air_learned_sample(tmp_path, monkeypatch):
     disk = json.loads((tmp_path / "config.json").read_text())
     entries = disk["players"][0]["air_learned_latency"]
     assert len(entries) == 1 and entries[0]["samples_ms"] == [250.0, 260.0] and entries[0]["starts"] == 2
+
+
+@pytest.mark.parametrize("field", ["latency_ms", "d_ref_ms"])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_model_rejects_a_non_finite_latency_or_reference(field, bad):
+    with pytest.raises(ValidationError):
+        AirLearnedEntry.model_validate({**_entry(), field: bad})
+
+
+@pytest.mark.parametrize(("static", "expected"), [(7000, 5000.0), (-50, 0.0), (120, 120.0)])
+def test_the_calibration_reference_backfill_is_clamped(static, expected):
+    from sendspin_bridge.config.migration import _clean_air_latency
+
+    player = {
+        "id": "p",
+        "static_delay_ms": static,
+        "air_to_sound_latency": [
+            {
+                "codec": "sbc",
+                "rate": 44100,
+                "adapter": ADAPTER,
+                "latency_ms": 200.0,
+                "measured_at": "2026-10-28T09:00:00+00:00",
+            }
+        ],
+    }
+    _clean_air_latency(player)
+    assert player["air_to_sound_latency"][0]["d_ref_ms"] == expected
