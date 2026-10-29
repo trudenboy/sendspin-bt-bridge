@@ -101,3 +101,18 @@ describe('measuring with a phone', () => {
     expect(w.find('[data-member-step]').exists()).toBe(false)
   })
 })
+
+describe('phone sequence: Cancel', () => {
+  it('stays active while the sequence runs, Back does not', async () => {
+    useSyncStore().group = { id: 'g', name: 'G', session_id: null, members } as never
+    vi.mocked(api.captureLink).mockResolvedValue(LINK)
+    const running = session({ sequence: { members: ['a'], phase: 'solo', index: 0, member: 'a', error: null, error_member: null, solo_s: 7, gap_s: 5, lead_s: 3, uploaded: false } })
+    useSyncStore().session = running
+    const w = mount(PhoneCapture, { global: { plugins: [i18n] }, props: { session: running, members: members as never } })
+    await flushPromises()
+    expect(w.get('[data-cancel]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-back]').attributes('disabled')).toBeDefined()
+    await w.get('[data-cancel]').trigger('click')
+    expect(w.emitted('cancel')).toHaveLength(1)
+  })
+})

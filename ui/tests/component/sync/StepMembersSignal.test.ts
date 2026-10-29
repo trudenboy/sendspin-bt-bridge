@@ -28,3 +28,14 @@ describe('StepMembers: the clicker', () => {
     expect(w.emitted('restart')).toHaveLength(1)
   })
 })
+
+describe('StepMembers: Cancel while a speaker records', () => {
+  it('keeps Cancel active (the emergency stop) while Back and Next wait', async () => {
+    const w = mountStep({ clickerPlaying: true, active: { member: 'a', phase: 'recording' }, complete: true })
+    expect(w.get('[data-cancel]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-back]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeDefined()
+    await w.get('[data-cancel]').trigger('click')
+    expect(w.emitted('cancel')).toHaveLength(1)
+  })
+})

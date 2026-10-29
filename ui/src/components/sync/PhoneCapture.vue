@@ -235,7 +235,7 @@ const label = (s: string | null) =>
     </div>
 
     <div class="flex flex-wrap justify-end gap-3">
-      <SbButton type="button" variant="outline" data-cancel :disabled="running" @click="emit('cancel')">{{ t('sync.wizard.cancel') }}</SbButton>
+      <SbButton type="button" variant="outline" data-cancel @click="emit('cancel')">{{ t('sync.wizard.cancel') }}</SbButton>
       <SbButton type="button" variant="outline" data-back :disabled="running" @click="emit('back')">{{ t('sync.wizard.back') }}</SbButton>
       <SbButton type="button" data-to-tune :disabled="!complete || running" @click="emit('next')">{{ t('sync.wizard.toTune') }}</SbButton>
     </div>
