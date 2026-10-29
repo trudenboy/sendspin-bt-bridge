@@ -138,3 +138,17 @@ describe('SbToast hover and focus pause', () => {
     expect(w.emitted('close')).toBeTruthy()
   })
 })
+
+describe('SbToast action', () => {
+  it('renders an action button that emits action with the id and dismisses', async () => {
+    const w = mountToast({ id: 5, actionLabel: 'Undo' })
+    const btn = w.get('[data-testid="toast-action-btn"]')
+    expect(btn.text()).toBe('Undo')
+    await btn.trigger('click')
+    expect(w.emitted('action')?.[0]).toEqual([5])
+    expect(w.emitted('close')?.[0]).toEqual([5])
+  })
+  it('has no action button without a label', () => {
+    expect(mountToast().find('[data-testid="toast-action-btn"]').exists()).toBe(false)
+  })
+})

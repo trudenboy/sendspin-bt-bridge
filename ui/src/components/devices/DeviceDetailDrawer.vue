@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
 import { confirmDialog } from '@/composables/useConfirm'
+import { useReversibleActions } from '@/composables/useReversibleActions'
 import { actionFailure } from '@/utils/actionFailure'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -39,6 +40,7 @@ const activeTab = ref('status')
 const adapterLoading = ref(false)
 const managementLoading = ref(false)
 const btInfoOpen = ref(false)
+const reversible = useReversibleActions()
 
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
 const pulse = computed(() => (device.value ? isPulseSink(device.value) : false))
@@ -156,7 +158,11 @@ async function onRelease(release: boolean) {
   if (!d) return
   managementLoading.value = true
   try {
-    await deviceStore.release(d.id, release)
+    if (release) {
+      await reversible.handOver(d.id, speakerName(d.name))
+      return
+    }
+    await deviceStore.release(d.id, false)
   } catch (e) {
     notifications.error(actionFailure(t, release ? 'release' : 'claim', speakerName(d.name), e))
   } finally {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useNotificationStore } from '@/stores/notifications'
@@ -42,5 +42,17 @@ describe('SbToastContainer', () => {
     const w = mountContainer()
     expect(w.classes()).toContain('fixed')
     expect(w.classes()).toContain('z-[100]')
+  })
+
+  it('runs a toast action and removes the toast', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useNotificationStore()
+    const run = vi.fn()
+    store.undo('Done', 'Undo', run)
+    const w = mount(SbToastContainer, { global: { plugins: [pinia] } })
+    await w.get('[data-testid="toast-action-btn"]').trigger('click')
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(store.toasts).toHaveLength(0)
   })
 })

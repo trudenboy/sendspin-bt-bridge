@@ -52,4 +52,17 @@ describe('useNotificationStore', () => {
     expect(store.toasts).toHaveLength(1)
     vi.useRealTimers()
   })
+
+  it('undo() adds a success toast carrying an action', () => {
+    setActivePinia(createPinia())
+    const store = useNotificationStore()
+    const run = vi.fn()
+    store.undo('Handed over', 'Undo', run)
+    const t = store.toasts[0]!
+    expect(t.type).toBe('success')
+    expect(t.action?.label).toBe('Undo')
+    expect(t.duration).toBeGreaterThan(4000)
+    t.action!.run()
+    expect(run).toHaveBeenCalled()
+  })
 })

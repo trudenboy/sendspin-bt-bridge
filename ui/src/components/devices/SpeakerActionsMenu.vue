@@ -8,6 +8,7 @@ import { claimAudio } from '@/api/devices'
 import { ApiError } from '@/api/client'
 import { confirmDialog } from '@/composables/useConfirm'
 import { speakerName } from '@/utils/speakerName'
+import { useReversibleActions } from '@/composables/useReversibleActions'
 import { canDo } from '@/utils/supportedActions'
 import { SbDropdown, SbDropdownItem } from '@/kit'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
@@ -25,6 +26,7 @@ const { t } = useI18n()
 const store = useDeviceStore()
 const notifications = useNotificationStore()
 const infoOpen = ref(false)
+const reversible = useReversibleActions()
 
 const name = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
@@ -75,13 +77,13 @@ const heading = 'px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary'
     </template>
 
     <p :class="heading">{{ t('speaker.groups.bridge') }}</p>
-    <SbDropdownItem v-if="device.enabled && !handedOver" @click="run(() => store.release(device.id, true))">
+    <SbDropdownItem v-if="device.enabled && !handedOver" @click="reversible.handOver(device.id, name)">
       {{ t('speaker.handOver') }}
     </SbDropdownItem>
     <SbDropdownItem v-else-if="device.enabled" @click="run(() => store.release(device.id, false))">
       {{ t('speaker.takeBack') }}
     </SbDropdownItem>
-    <SbDropdownItem @click="run(() => store.setEnabled(device.id, !device.enabled))">
+    <SbDropdownItem @click="device.enabled ? reversible.disable(device.id, name) : run(() => store.setEnabled(device.id, true))">
       {{ device.enabled ? t('speaker.disable') : t('speaker.enable') }}
     </SbDropdownItem>
     <SbDropdownItem v-if="device.bluetooth?.mac" @click="infoOpen = true">{{ t('speaker.bluetoothInfo') }}</SbDropdownItem>

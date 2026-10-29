@@ -21,9 +21,8 @@ vi.mock('@/stores/devices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/devices')>()),
   useDeviceStore: () => store,
 }))
-vi.mock('@/stores/notifications', () => ({
-  useNotificationStore: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
-}))
+const notes = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
+vi.mock('@/stores/notifications', () => ({ useNotificationStore: () => notes }))
 vi.mock('@/api/playback', () => ({ transport: vi.fn().mockResolvedValue(undefined) }))
 
 import { transport } from '@/api/playback'
@@ -124,6 +123,7 @@ describe('DeviceListRow expansion', () => {
     expect(store.reconnect).toHaveBeenCalledWith('dev-1')
     expect(store.standby).toHaveBeenCalledWith('dev-1')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
+    expect(notes.undo).toHaveBeenCalledTimes(1)
   })
 
   it('offers wake and take back where they apply', async () => {

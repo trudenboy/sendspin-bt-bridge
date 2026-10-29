@@ -696,6 +696,11 @@
     "rebooted": "Adapter rebooted",
     "rebootFailed": "Failed to reboot adapter"
   },
+  "undo": {
+    "label": "Undo",
+    "handedOver": "{name} handed over. It will not reconnect until you take it back.",
+    "disabled": "{name} disabled."
+  },
   "restart": {
     "stopping": "Stopping bridge…",
     "restarting": "Restarting bridge…",

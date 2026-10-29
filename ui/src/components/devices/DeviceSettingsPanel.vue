@@ -14,6 +14,7 @@ import { DEVICE_GROUPS, deviceFieldFor, deviceFieldVisible, type DeviceField } f
 import { getPath, setPath } from '@/settings/layout'
 import { confirmDialog } from '@/composables/useConfirm'
 import { speakerName } from '@/utils/speakerName'
+import { useReversibleActions } from '@/composables/useReversibleActions'
 import type { Device } from '@/api/types'
 
 /** What the panel needs of a player: a running Device, or a disabled player shaped like one. */
@@ -32,6 +33,7 @@ const bridge = useBridgeStore()
 const audio = useAudioStore()
 const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
+const reversible = useReversibleActions()
 
 type Entry = Record<string, unknown>
 
@@ -161,6 +163,12 @@ async function togglePlayoutSync(on: boolean) {
 
 async function toggleEnabled(enabled: boolean) {
   try {
+    if (!enabled) {
+      const result = (await reversible.disable(props.device.id, speakerName(props.device.name))) as { restart_required?: boolean } | undefined
+      await bridge.refresh()
+      if (result?.restart_required) notifications.warning(t('settings.restartNeeded'))
+      return
+    }
     const result = (await deviceStore.setEnabled(props.device.id, enabled)) as { restart_required?: boolean } | undefined
     await bridge.refresh()
     if (result?.restart_required) notifications.warning(t('settings.restartNeeded'))

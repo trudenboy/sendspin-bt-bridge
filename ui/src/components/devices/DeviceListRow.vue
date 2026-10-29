@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
+import { useReversibleActions } from '@/composables/useReversibleActions'
 import { actionFailure, type ActionKind } from '@/utils/actionFailure'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -111,6 +112,7 @@ function onMuteUpdate(muted: boolean) {
   void run(() => deviceStore.setMute(props.device.id, muted), 'mute')
 }
 
+const reversible = useReversibleActions()
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const detailId = computed(() => `device-row-detail-${props.device.id}`)
 /* The expanded row spans every column: checkbox, name, status, volume, transport, adapter, actions. */
@@ -313,7 +315,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
                 {{ t('speaker.standby') }}
               </SbButton>
             </template>
-            <SbButton size="sm" variant="secondary" data-quick="release" @click="quick(() => deviceStore.release(device.id, true))">
+            <SbButton size="sm" variant="secondary" data-quick="release" @click="reversible.handOver(device.id, displayName)">
               {{ t('speaker.handOver') }}
             </SbButton>
           </template>

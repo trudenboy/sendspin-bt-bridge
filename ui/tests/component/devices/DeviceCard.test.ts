@@ -23,9 +23,8 @@ vi.mock('@/stores/devices', async (importOriginal) => ({
   useDeviceStore: () => store,
 }))
 
-vi.mock('@/stores/notifications', () => ({
-  useNotificationStore: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
-}))
+const notes = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
+vi.mock('@/stores/notifications', () => ({ useNotificationStore: () => notes }))
 
 vi.mock('@/api/playback', () => ({ transport: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/api/devices', () => ({ claimAudio: vi.fn().mockResolvedValue(undefined) }))
@@ -153,12 +152,15 @@ describe('DeviceCard', () => {
     const items = await openMenu(mountCard(makeDevice({ enabled })))
     await items.find((b) => b.text().includes(item))!.trigger('click')
     expect(store.setEnabled).toHaveBeenCalledWith('dev-1', next)
+    // Disabling is reversible: it runs at once and offers Undo. Enabling needs none.
+    expect(notes.undo).toHaveBeenCalledTimes(enabled ? 1 : 0)
   })
 
   it('releases and reclaims through the device store', async () => {
     let items = await openMenu(mountCard())
     await items.find((b) => b.text() === 'Hand over to other devices')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
+    expect(notes.undo).toHaveBeenCalledTimes(1)
 
     items = await openMenu(mountCard(makeDevice({ bluetooth: { management_enabled: false } })))
     await items.find((b) => b.text() === 'Take back')!.trigger('click')

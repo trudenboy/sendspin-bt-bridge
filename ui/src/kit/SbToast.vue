@@ -8,12 +8,14 @@ const props = withDefaults(
     type?: 'success' | 'error' | 'warning' | 'info'
     duration?: number
     closable?: boolean
+    actionLabel?: string
   }>(),
   { type: 'info', duration: 5000, closable: true },
 )
 
 const emit = defineEmits<{
   close: [id: number]
+  action: [id: number]
 }>()
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -36,6 +38,11 @@ const iconMap = {
   warning: '⚠',
   info: 'ℹ',
 } as const
+
+function onAction() {
+  emit('action', props.id)
+  dismiss()
+}
 
 function dismiss() {
   visible.value = false
@@ -77,6 +84,16 @@ onBeforeUnmount(stop)
 
     <!-- Message -->
     <p class="flex-1 text-sm text-text-primary">{{ message }}</p>
+
+    <button
+      v-if="actionLabel"
+      type="button"
+      class="shrink-0 cursor-pointer rounded-(--radius-button) px-2 py-1 text-sm font-medium text-primary-text underline-offset-2 hover:underline"
+      data-testid="toast-action-btn"
+      @click="onAction"
+    >
+      {{ actionLabel }}
+    </button>
 
     <!-- Close button -->
     <button
