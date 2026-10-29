@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import { useSyncStore } from '@/stores/sync'
 import { SyncCaptureError } from '@/sync/capture'
+import { confirmState, settleConfirm } from '@/composables/useConfirm'
 import en from '@/i18n/en.json'
 import ru from '@/i18n/ru.json'
 
@@ -25,7 +26,7 @@ describe('MeasureWizard', () => {
   let rec: FakeRecorder
   beforeEach(() => { setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks(); rec = new FakeRecorder() })
 
-  it('walks prepare → stop → clicker → volume → members, soloing, recording and uploading each adjustable member', async () => {
+  it('walks prepare → clicker (stop + start in one step) → volume → members, soloing, recording and uploading each adjustable member', async () => {
     const store = useSyncStore(); store.group = { id: 'g', name: 'G', session_id: null, members } as never
     vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', mode: 'semi', point: 'device', state: 'measuring', members, measurements: {}, clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: { a: 40, b: 40, cast: null } } as never)
     vi.mocked(api.uploadRecording).mockResolvedValueOnce({ member: 'a', status: 'ok', confidence: 0.8, clicks: 3, phase_ms: 1, spread_ms: 0.4 } as never)
@@ -35,8 +36,8 @@ describe('MeasureWizard', () => {
     await w.find('[data-next]').trigger('click'); await flushPromises()
     expect(rec.opened).toBe(true); expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'semi', point: 'device' })
     expect(w.find('[data-group-state]').exists()).toBe(true)
-    await w.find('[data-next]').trigger('click'); await flushPromises()
     expect(w.find('[data-start-clicker]').exists()).toBe(true)
+    expect(w.find('[data-stop-group]').exists()).toBe(false)
     await w.find('[data-next]').trigger('click'); await flushPromises()
     expect(w.find('[data-level-meter]').exists()).toBe(true)
     await w.find('[data-next]').trigger('click'); await flushPromises()
@@ -61,7 +62,7 @@ describe('MeasureWizard', () => {
     const store = useSyncStore(); store.group = { id: 'g', name: 'G', session_id: null, members } as never
     vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', mode: 'semi', point: 'device', state: 'measuring', members, measurements: {}, clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: { a: 40, b: 40, cast: null } } as never)
     const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never } })
-    for (let i = 0; i < 4; i++) { await w.find('[data-next]').trigger('click'); await flushPromises() }
+    for (let i = 0; i < 3; i++) { await w.find('[data-next]').trigger('click'); await flushPromises() }
     rec.epochInvalidated = true
     await w.find('[data-record="a"]').trigger('click'); await flushPromises()
     expect(w.text()).toContain('record the speakers marked'); expect(api.uploadRecording).not.toHaveBeenCalled()
@@ -103,14 +104,14 @@ const session = (over: Record<string, unknown> = {}) =>
 
 const ok = (member: string, confidence = 0.9) => ({ member, status: 'ok', confidence, clicks: 3, phase_ms: 1, spread_ms: 0.3, reason: '' }) as never
 
-/** prepare → stop → clicker → volume → members (the fixture's clicker already plays). */
+/** prepare → clicker → volume → members (the fixture's clicker already plays). */
 async function toMembers(w: ReturnType<typeof mount>) {
-  for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+  for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
 }
 
-/** prepare → stop → clicker → volume (where the level meter is). */
+/** prepare → clicker → volume (where the level meter is). */
 async function toVolume(w: ReturnType<typeof mount>) {
-  for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+  for (let i = 0; i < 2; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
 }
 
 async function recordMember(w: ReturnType<typeof mount>, id: string, attr = 'data-record') {
@@ -411,9 +412,7 @@ describe('MeasureWizard rulings', () => {
     const status = () => w.get('[data-step-status]').text()
     expect(status()).toContain('Prepare (1/4) · Where and how')
     await w.get('[data-next]').trigger('click'); await flushPromises()
-    expect(status()).toContain('Prepare (1/4) · Stop the music')
-    await w.get('[data-next]').trigger('click'); await flushPromises()
-    expect(status()).toContain('Prepare (1/4) · Start the clicks')
+    expect(status()).toContain('Prepare (1/4) · Stop the music, start the clicks')
     await w.get('[data-next]').trigger('click'); await flushPromises()
     expect(status()).toContain('Prepare (1/4) · Set the volume')
     await w.get('[data-next]').trigger('click'); await flushPromises()
@@ -463,24 +462,36 @@ describe('MeasureWizard: the clicker', () => {
   const mountWizard = () =>
     mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never } })
 
-  it('goes on past "Stop playback" only once the group stopped playing', async () => {
+  it('stops the music and starts the clicks with one button, after saying what happens', async () => {
     vi.mocked(api.createSession).mockResolvedValue(session({ clicker_playing: false, clicker_starts: 0, group_state: 'playing' }))
-    vi.mocked(api.sessionSignal).mockResolvedValue(session({ clicker_playing: false, clicker_starts: 0, group_state: 'idle' }))
+    vi.mocked(api.sessionSignal).mockResolvedValue(session())
     const w = mountWizard()
     await w.get('[data-next]').trigger('click'); await flushPromises()
     expect(w.get('[data-group-state]').text()).toContain('Playing')
+    expect(w.get('[data-start-clicker]').text()).toBe('Stop the music and start the clicks')
     expect(w.get('[data-next]').attributes('disabled')).toBeDefined()
-    await w.get('[data-stop-group]').trigger('click'); await flushPromises()
-    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')
-    expect(w.get('[data-group-state]').text()).toContain('Stopped')
+    await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
+    expect(confirmState.options?.title).toBe("Stop the group's music?")
+    expect(api.sessionSignal).not.toHaveBeenCalled()
+    settleConfirm(true); await flushPromises()
+    expect(vi.mocked(api.sessionSignal).mock.calls).toEqual([['s1', 'stop'], ['s1', 'start']])
     expect(w.get('[data-next]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('changes nothing when the operator declines to stop the music', async () => {
+    vi.mocked(api.createSession).mockResolvedValue(session({ clicker_playing: false, clicker_starts: 0, group_state: 'playing' }))
+    const w = mountWizard()
+    await w.get('[data-next]').trigger('click'); await flushPromises()
+    await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
+    settleConfirm(false); await flushPromises()
+    expect(api.sessionSignal).not.toHaveBeenCalled()
+    expect(w.get('[data-next]').attributes('disabled')).toBeDefined()
   })
 
   it('starts the clicker and goes on once the bridge sees it playing; a playing group is explained', async () => {
     const idle = { clicker_playing: false, clicker_starts: 0, group_state: 'idle' }
     vi.mocked(api.createSession).mockResolvedValue(session(idle))
     const w = mountWizard()
-    await w.get('[data-next]').trigger('click'); await flushPromises()
     await w.get('[data-next]').trigger('click'); await flushPromises()
     expect(w.get('[data-next]').attributes('disabled')).toBeDefined()
     vi.mocked(api.sessionSignal).mockRejectedValueOnce(new ApiError({ status: 409, code: 'group_playing' }))

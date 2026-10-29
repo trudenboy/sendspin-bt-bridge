@@ -94,7 +94,7 @@ describe('measuring with a phone', () => {
     const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => ({ open }) as never } })
     await w.get('[data-capture="phone"]').setValue(true)
     expect(w.get('[data-next]').text()).toBe('Start')
-    for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+    for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     expect(open).not.toHaveBeenCalled()
     expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'semi', point: 'device' })
     expect(w.find('[data-phone]').exists()).toBe(true)

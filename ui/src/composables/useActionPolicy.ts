@@ -38,10 +38,10 @@ export const ACTION_POLICY = {
   'sync.deleteProfile': 'confirm',
   'sync.endForeign': 'confirm',
   'sync.cancelMeasurement': 'confirm',
+  'sync.stopMusic': 'confirm',
   'timing.forgetCalibration': 'confirm',
   'timing.forgetLearned': 'confirm',
   'sync.saveManualOnLeave': 'choice',
-  'timing.applyMicSuggestion': 'choice',
 } as const
 
 export type ActionId = keyof typeof ACTION_POLICY

@@ -1612,8 +1612,7 @@
       },
       "steps": {
         "prepare": "Where and how",
-        "stop": "Stop the music",
-        "clicker": "Start the clicks",
+        "clicker": "Stop the music, start the clicks",
         "volume": "Set the volume",
         "members": "Speaker by speaker",
         "tune": "Listen and adjust",
@@ -1621,7 +1620,7 @@
       },
       "notice": {
         "title": "Nothing else plays while you measure.",
-        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop.",
+        "help": "The click track plays on the group once you start the clicks; if the group is playing, that stops it first. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop.",
         "queue": "Calibration replaces the group’s queue with the click track; start your music again afterwards."
       },
       "point": {
@@ -1803,13 +1802,6 @@
         "paused": "Paused",
         "unknown": "Unknown"
       },
-      "stop": {
-        "help": "The group must be silent before the clicks start: nothing else may play while the speakers are measured.",
-        "state": "Group:",
-        "button": "Stop the music",
-        "stillPlaying": "The group is still playing. Stop it to go on.",
-        "notPlaying": "The group is not playing — moving on."
-      },
       "clicker": {
         "help": "The click track plays on every speaker of the group through Music Assistant for 3 minutes. If it stops, start it again.",
         "start": "Start the clicks",
@@ -1818,7 +1810,12 @@
         "stopped": "Clicks are not playing.",
         "groupPlaying": "The group plays something else: stop it first.",
         "whyDisabled": "Start the clicks to go on.",
-        "left": "Clicks: {time} left"
+        "left": "Clicks: {time} left",
+        "helpStop": "The group is playing something. Starting the clicks stops it first, then plays the click track on every speaker of the group for 3 minutes.",
+        "groupState": "Group:",
+        "stopAndStart": "Stop the music and start the clicks",
+        "confirmTitle": "Stop the group's music?",
+        "confirmMessage": "What the group is playing stops and its queue is replaced by the click track. Start your music again afterwards."
       },
       "volume": {
         "help": "Set a level where the clicks are clearly audible where you measure.",

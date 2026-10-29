@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Play } from 'lucide-vue-next'
 import { SbBadge, SbButton } from '@/kit'
 import { formatClock } from '@/sync/format'
 
 /**
- * Preparation, step 2: the click track plays on the whole group through Music Assistant. Starting it
- * again while it plays starts it over; the next step opens once the bridge sees it playing.
+ * Preparation, step 1 (stopping the music and starting the clicks are one step): the click track
+ * plays on the whole group through Music Assistant. When the group plays something else, the same
+ * button stops it first (after a confirmation). Starting it again while it plays starts it over;
+ * the next step opens once the bridge sees it playing.
  */
-defineProps<{
+const props = defineProps<{
+  /** The group's playback state as the bridge last read it (playing, idle, paused; null: unknown). */
+  groupState?: string | null
   clickerPlaying: boolean
   /** The clicker was started in this session already (the button then says "again"). */
   started: boolean
@@ -19,18 +24,25 @@ defineProps<{
   cancelLabel?: 'cancel' | 'skip'
   /** Seconds of the click track left while it plays (the bridge's count). */
   leftS?: number | null
-  /** A line about the step before (e.g. "The group is not playing — moving on."), already translated. */
-  note?: string
 }>()
-const emit = defineEmits<{ start: []; next: []; back: []; cancel: [] }>()
+const emit = defineEmits<{ start: []; next: []; cancel: [] }>()
 
 const { t } = useI18n()
+/** Something else plays: starting the clicks stops it. */
+const otherPlaying = computed(() => props.groupState === 'playing' && !props.clickerPlaying)
+const stateLabel = computed(() => {
+  const g = props.groupState
+  return t(`sync.prep.group.${g === 'playing' || g === 'idle' || g === 'paused' ? g : 'unknown'}`)
+})
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
-    <p v-if="note" data-auto-note role="status" class="text-sm text-text-primary">{{ note }}</p>
-    <p class="text-sm text-text-secondary">{{ t('sync.prep.clicker.help') }}</p>
+    <p class="text-sm text-text-secondary">{{ t(otherPlaying ? 'sync.prep.clicker.helpStop' : 'sync.prep.clicker.help') }}</p>
+    <p v-if="groupState !== undefined" data-group-state role="status" aria-live="polite" class="flex items-center gap-2 text-sm text-text-primary">
+      {{ t('sync.prep.clicker.groupState') }}
+      <SbBadge :tone="otherPlaying ? 'warning' : 'success'" size="sm">{{ stateLabel }}</SbBadge>
+    </p>
     <div class="flex flex-wrap items-center gap-3">
       <SbButton
         type="button"
@@ -40,7 +52,7 @@ const { t } = useI18n()
         @click="emit('start')"
       >
         <template #icon-left><Play aria-hidden="true" /></template>
-        {{ started ? t('sync.prep.clicker.again') : t('sync.prep.clicker.start') }}
+        {{ otherPlaying ? t('sync.prep.clicker.stopAndStart') : started ? t('sync.prep.clicker.again') : t('sync.prep.clicker.start') }}
       </SbButton>
       <span data-clicker-state role="status" aria-live="polite">
         <SbBadge :tone="clickerPlaying ? 'success' : 'neutral'" size="sm">
@@ -56,7 +68,6 @@ const { t } = useI18n()
       <SbButton type="button" variant="outline" data-cancel @click="emit('cancel')">
         {{ cancelLabel === 'skip' ? t('sync.prep.skip') : t('sync.wizard.cancel') }}
       </SbButton>
-      <SbButton type="button" variant="outline" data-back @click="emit('back')">{{ t('sync.wizard.back') }}</SbButton>
       <SbButton
         type="button"
         data-next

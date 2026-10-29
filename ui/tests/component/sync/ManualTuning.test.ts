@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
 import { useSyncStore } from '@/stores/sync'
+import { settleConfirm } from '@/composables/useConfirm'
 import en from '@/i18n/en.json'
 
 vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), sessionSound: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
@@ -266,21 +267,21 @@ describe('ManualTuning', () => {
 describe('ManualTuning: getting the group ready', () => {
   afterEach(() => { vi.useRealTimers() })
 
-  it('stops the group, starts the clicker and sets the volumes before tuning', async () => {
+  it('stops the music and starts the clicks in one step, then sets the volumes before tuning', async () => {
     const w = setup({ prepared: false, over: { group_state: 'playing' } })
     const store = useSyncStore()
     await flushPromises()
     expect(w.find('[data-signal]').exists()).toBe(false)  // no tuning controls yet
     expect(w.get('[data-group-state]').text()).toContain('Playing')
     expect(w.get('[data-manual-prep] [data-next]').attributes('disabled')).toBeDefined()
-    vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, group_state: 'idle' } as never)
-    await w.get('[data-stop-group]').trigger('click'); await flushPromises()
-    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')  // "Stop group" stops the user's music on purpose
     expect(w.get('[data-manual-prep] [data-cancel]').text()).toBe('Skip')
-    await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
+    expect(w.find('[data-stop-group]').exists()).toBe(false)
+    expect(w.get('[data-start-clicker]').text()).toBe('Stop the music and start the clicks')
+    vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, group_state: 'idle' } as never)
     vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, clicker_playing: true, clicker_starts: 1, group_state: 'playing' } as never)
     await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
-    expect(api.sessionSignal).toHaveBeenLastCalledWith('s1', 'start')
+    settleConfirm(true); await flushPromises()  // stopping the user's music is confirmed first
+    expect(vi.mocked(api.sessionSignal).mock.calls.map((c) => c[1])).toEqual(['stop', 'start'])
     await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
     expect(w.text()).toContain('Set a level where the clicks are clearly audible where you measure.')
     w.findComponent({ name: 'VolumeSlider' }).vm.$emit('update:volume', 70)
@@ -305,12 +306,12 @@ describe('ManualTuning: getting the group ready', () => {
 describe('ManualTuning: UX round', () => {
   afterEach(() => { vi.useRealTimers() })
 
-  it('skips the stop step when nothing plays and says so', async () => {
+  it('starts the clicks without asking when nothing plays', async () => {
     const w = setup({ prepared: false })   // IDLE: the group is stopped
-    expect(w.find('[data-stop-group]').exists()).toBe(false)
-    expect(w.get('[data-start-clicker]').exists()).toBe(true)
-    expect(w.get('[data-auto-note]').text()).toBe('The group is not playing — moving on.')
-    expect(w.get('[data-manual-prep] h2').text()).toContain('(2/3)')
+    expect(w.get('[data-start-clicker]').text()).toBe('Start the clicks')
+    expect(w.get('[data-manual-prep] h2').text()).toContain('(1/2)')
+    await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
+    expect(vi.mocked(api.sessionSignal).mock.calls.map((c) => c[1])).toEqual(['start'])
   })
 
   it('says which way the delay moves next to every delay control', () => {
