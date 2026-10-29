@@ -3,6 +3,7 @@
 from sendspin_bridge.application.models.bridge import (
     Bridge,
     BridgeStatus,
+    BridgeVerdict,
     Group,
     GroupMember,
     StartupProgress,
@@ -13,6 +14,7 @@ from sendspin_bridge.application.models.devices import Device, DisabledDevice
 __all__ = [
     "Bridge",
     "BridgeStatus",
+    "BridgeVerdict",
     "Device",
     "DisabledDevice",
     "Group",

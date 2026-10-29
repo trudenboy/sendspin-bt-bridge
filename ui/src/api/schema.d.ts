@@ -2919,6 +2919,8 @@ export interface components {
             mock_runtime: {
                 [key: string]: unknown;
             } | null;
+            /** @description The bridge's sign-in to the Music Assistant API: signed_in, signed_out or not_configured. */
+            music_assistant_account: components["schemas"]["LinkStatus"];
             /**
              * Name
              * @description The bridge's name (BRIDGE_NAME, or the host name).
@@ -2963,6 +2965,7 @@ export interface components {
              * @default
              */
             uptime: string;
+            verdict: components["schemas"]["BridgeVerdict"];
             /** Version */
             version: string;
         };
@@ -3363,6 +3366,22 @@ export interface components {
             /** Groups */
             groups: components["schemas"]["Group"][];
         };
+        /**
+         * BridgeVerdict
+         * @description The bridge's one-word health, from the same issue list as the guidance banner.
+         */
+        BridgeVerdict: {
+            /**
+             * Count
+             * @description Issues at warning or error.
+             */
+            count: number;
+            /**
+             * Level
+             * @description ok, warning or error: the worst severity in the issue list.
+             */
+            level: string;
+        };
         /** BugReportIn */
         BugReportIn: {
             /** Description */
@@ -3537,6 +3556,8 @@ export interface components {
             last_error: string | null;
             /** Last Error At */
             last_error_at: string | null;
+            /** @description The speaker's Audio link and Bluetooth connection, named once. */
+            links: components["schemas"]["DeviceLinks"];
             music_assistant: components["schemas"]["DeviceMusicAssistant"];
             /** Name */
             name: string | null;
@@ -3800,6 +3821,16 @@ export interface components {
              * @default
              */
             summary: string;
+        };
+        /**
+         * DeviceLinks
+         * @description A speaker's own states; the account is bridge-wide (``Bridge.music_assistant_account``).
+         */
+        DeviceLinks: {
+            /** @description Sendspin stream with Music Assistant: streaming, connected, foreign, disconnected, unavailable. */
+            audio_link: components["schemas"]["LinkStatus"];
+            /** @description connected, connecting, disconnected, standby, released, disabled, not_paired; null for a local output. */
+            bluetooth: components["schemas"]["LinkStatus"] | null;
         };
         /** DeviceMusicAssistant */
         DeviceMusicAssistant: {
@@ -4370,6 +4401,27 @@ export interface components {
             source: string;
             /** Suggested Static Delay Ms */
             suggested_static_delay_ms: number | null;
+        };
+        /**
+         * LinkStatus
+         * @description One of the three named states (Audio link, Music Assistant account, Bluetooth connection).
+         */
+        LinkStatus: {
+            /**
+             * Reason
+             * @description Stable code of why, when the state has a reason.
+             */
+            reason: string | null;
+            /**
+             * State
+             * @description Stable state code; the vocabulary differs per state kind.
+             */
+            state: string;
+            /**
+             * Tone
+             * @description success, warning, error or neutral.
+             */
+            tone: string;
         };
         /** LogLevel */
         LogLevel: {

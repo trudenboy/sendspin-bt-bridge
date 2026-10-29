@@ -4,6 +4,7 @@ import type { Schemas } from './client'
 export type Bridge = Schemas['Bridge']
 export type BridgeStatus = Schemas['BridgeStatus']
 export type Device = Schemas['Device']
+export type LinkStatus = Schemas['LinkStatus']
 export type DisabledDevice = Schemas['DisabledDevice']
 export type Group = Schemas['Group']
 export type GroupMember = Schemas['GroupMember']
