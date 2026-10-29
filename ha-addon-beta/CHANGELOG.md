@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.18] - 2026-10-29
+
+### Added
+
+- Diagnostics warn when the host suspends a Bluetooth speaker's audio sink
+  between songs (PipeWire's suspend timeout, PulseAudio's suspend-on-idle);
+  speakers can shift by tens of ms after such a pause. The bridge never
+  changes the host setting.
+- Experimental air sensor (`EXPERIMENTAL_AIR_SENSOR`, off by default):
+  for SBC Bluetooth speakers in playout sync `measure` mode the bridge
+  measures when the audio it wrote actually leaves over the air, shows
+  this host placement in the device's timing panel, and the group sync
+  wizard can calibrate each speaker's air-to-sound latency against an
+  on-schedule reference (the panel lists it, with Forget). It does not
+  change playback, needs the `CAP_NET_RAW` capability, and takes effect
+  after a bridge restart.
+- Playout sync `loop` mode now corrects Bluetooth speakers from the
+  experimental air sensor (`EXPERIMENTAL_AIR_SENSOR`): each start is placed
+  where the speaker's audio really leaves over the air, on the schedule when
+  the speaker's latency is calibrated in the group sync wizard, otherwise
+  where it played on average in its previous starts. The speaker's delay
+  setting keeps working as a trim: changing it moves the speaker by exactly
+  the change. The timing panel shows the correction, and Forget also clears
+  the learned latency. Diagnostics tell when a `loop` speaker runs without
+  its air correction.
+
+### Fixed
+
+- In playout sync a delay change now moves the sound by exactly the change;
+  before, it also removed a small leftover offset (up to the dead band).
+- After an underrun, playout sync could place the recovered audio up to
+  100 ms late.
+- A delay change during an inserted silence could freeze the playout
+  controller.
+
 ## [3.1.0-beta.17] - 2026-10-28
 
 ### Added
