@@ -82,6 +82,10 @@ const showGroupBar = computed(() => playerCount.value >= 2)
 /* Search and filters earn their space only on larger setups. */
 const FILTER_FROM = 6
 const showFilters = computed(() => playerCount.value >= FILTER_FROM)
+/* Filters that outlive their bar would leave "No results" with no way out. */
+watch(showFilters, (shown) => {
+  if (!shown) deviceStore.clearFilters()
+})
 const showViewToggle = computed(() => playerCount.value >= 1)
 
 /** One line of context above the speakers: Music Assistant, playing, adapters. */
@@ -457,8 +461,11 @@ function openDetail(id: string) {
       </div>
 
       <!-- No filter results -->
-      <div v-else-if="deviceStore.filteredPlayers.length === 0" class="py-16 text-center text-text-secondary">
+      <div v-else-if="deviceStore.filteredPlayers.length === 0" class="flex flex-col items-center gap-3 py-16 text-center text-text-secondary">
         {{ t('common.noResults') }}
+        <SbButton variant="outline" size="sm" data-clear-filters @click="deviceStore.clearFilters()">
+          {{ t('common.clearFilters') }}
+        </SbButton>
       </div>
     </template>
 
