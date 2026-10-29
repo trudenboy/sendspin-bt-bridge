@@ -11,6 +11,7 @@ import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
 import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
+import StatusState from '@/components/StatusState.vue'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import { setAdapterPower } from '@/api/bluetooth'
 import { openPairingWindow, reconnectDevice, repairDevice, setPowerSave, unmuteSink } from '@/api/devices'
@@ -99,10 +100,10 @@ const signalSegments = computed(() => {
       ? ('inactive' as const)
       : ('error' as const)
   return [
-    { id: 'ma', label: t('drawer.signal.ma'), status: bridge.maConnected ? ('active' as const) : ('inactive' as const) },
+    { id: 'ma', label: t('status.kind.ma_account'), status: bridge.maConnected ? ('active' as const) : ('inactive' as const) },
     {
       id: 'sendspin',
-      label: t('drawer.signal.sendspin'),
+      label: t('status.kind.audio_link'),
       status: d.playback.server_connected ? ('active' as const) : ('inactive' as const),
       sublabel: d.sendspin.listen_port ? t('drawer.signal.port', { port: d.sendspin.listen_port }) : undefined,
     },
@@ -258,11 +259,17 @@ async function onAdapterReboot() {
                   {{ device.audio.sink_name ?? '—' }}
                 </p>
               </div>
+              <div v-if="device.links.bluetooth">
+                <span class="text-text-secondary">{{ t('status.kind.bluetooth') }}</span>
+                <div class="mt-1"><StatusState kind="bluetooth" :status="device.links.bluetooth" /></div>
+              </div>
               <div>
-                <span class="text-text-secondary">{{ t('drawer.status.connected') }}</span>
-                <p class="mt-1 text-text-primary">
-                  {{ isDeviceConnected(device) ? t('common.yes') : t('common.no') }}
-                </p>
+                <span class="text-text-secondary">{{ t('status.kind.audio_link') }}</span>
+                <div class="mt-1"><StatusState kind="audio_link" :status="device.links.audio_link" /></div>
+              </div>
+              <div>
+                <span class="text-text-secondary">{{ t('status.kind.ma_account') }}</span>
+                <div class="mt-1"><StatusState kind="ma_account" :status="bridge.maAccount" /></div>
               </div>
               <div v-if="!pulse">
                 <span class="text-text-secondary">{{ t('drawer.status.codec') }}</span>

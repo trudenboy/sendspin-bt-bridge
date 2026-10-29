@@ -24,7 +24,7 @@
     "hostname": "Имя хоста",
     "ipAddress": "IP-адрес",
     "upFor": "работает {uptime}",
-    "speakersConnected": "Подключено колонок: {n}/{total}",
+    "speakersConnected": "Bluetooth-соединение: {n}/{total}",
     "runtime": {
       "ha_addon": "Дополнение Home Assistant",
       "docker": "Docker",
@@ -33,13 +33,61 @@
       "standalone": "Отдельная установка"
     }
   },
+  "status": {
+    "kind": {
+      "audio_link": "Аудиоканал",
+      "ma_account": "Аккаунт Music Assistant",
+      "bluetooth": "Bluetooth-соединение"
+    },
+    "hint": {
+      "audio_link": "Аудиоканал — это поток между этим плеером и Music Assistant",
+      "ma_account": "Аккаунт Music Assistant — это вход моста в API Music Assistant",
+      "bluetooth": "Bluetooth-соединение — это связь между мостом и колонкой"
+    },
+    "audio_link": {
+      "streaming": "Играет",
+      "connected": "Работает",
+      "foreign": "Другой сервер",
+      "disconnected": "Нет связи",
+      "unavailable": "Недоступен"
+    },
+    "ma_account": {
+      "signed_in": "Вход выполнен",
+      "signed_out": "Вход не выполнен",
+      "not_configured": "Не настроен"
+    },
+    "bluetooth": {
+      "connected": "Подключено",
+      "connecting": "Подключается",
+      "disconnected": "Отключено",
+      "standby": "Режим ожидания",
+      "released": "Освобождена",
+      "disabled": "Выключена",
+      "not_paired": "Не сопряжена"
+    },
+    "reason": {
+      "reconnecting": "Мост переподключается",
+      "user": "Освобождена вами",
+      "auto": "Освобождена автоматически после повторных сбоев связи",
+      "foreign_server": "Плеер подключён к Music Assistant, который не принадлежит этому мосту",
+      "bluetooth_down": "Ожидает Bluetooth-соединения",
+      "standby": "Колонка в режиме ожидания",
+      "released": "Колонка освобождена",
+      "disabled": "Плеер выключен",
+      "unreachable_or_rejected": "Music Assistant недоступен или не принял вход"
+    },
+    "bluetoothSummary": "Bluetooth-соединение: {n}/{total}",
+    "sectionTitle": "Состояния связи",
+    "accountRow": "Аккаунт Music Assistant",
+    "speakersTitle": "Колонки"
+  },
   "device": {
     "status": {
       "streaming": "Играет",
-      "ready": "Подключена",
+      "ready": "Готова",
       "connecting": "Подключение",
       "error": "Ошибка",
-      "offline": "Нет связи",
+      "offline": "Не в сети",
       "standby": "Режим ожидания",
       "idle": "Простой",
       "degraded": "Проблема",
@@ -189,8 +237,8 @@
         "output": "Аудиовыход"
       },
       "server": {
-        "title": "Подключён к Music Assistant {where}",
-        "foreign": "Подключён к {where} — это не Music Assistant этого моста"
+        "title": "Аудиоканал к Music Assistant {where}",
+        "foreign": "Аудиоканал идёт к {where} — это не Music Assistant этого моста"
       }
     },
     "elapsed": {
@@ -271,9 +319,6 @@
     }
   },
   "ma": {
-    "connection": {
-      "connected": "Подключён"
-    },
     "login": {
       "title": "Подключение к Music Assistant",
       "step1": "Шаг 1: Адрес сервера",
@@ -287,7 +332,7 @@
       "username": "Имя пользователя",
       "password": "Пароль",
       "withHa": "Войти через Home Assistant",
-      "connected": "Подключено к {url}",
+      "connected": "Вход в Music Assistant выполнен: {url}",
       "useToken": "Использовать токен",
       "maToken": "Токен Music Assistant",
       "maTokenHint": "Создайте долгосрочный токен в Music Assistant → Настройки → Профиль и вставьте его сюда.",
@@ -332,10 +377,6 @@
       "ha_via_ma": "Аккаунт Home Assistant",
       "ha": "Аккаунт Home Assistant"
     }
-  },
-  "dashboard": {
-    "maConnected": "Подключён",
-    "maDisconnected": "Отключён"
   },
   "devices": {
     "addDevice": "Добавить колонку",
@@ -418,7 +459,6 @@
     "status": {
       "playerState": "Состояние",
       "audioSink": "Аудиовыход",
-      "connected": "Подключён",
       "codec": "Кодек",
       "reportedDelay": "Заявленная задержка",
       "reportedDelayHint": "Задержка, которую колонка сообщает по Bluetooth (A2DP Delay Reporting). Справочно: значение сообщает колонка, оно не измерено.",
@@ -443,8 +483,6 @@
       "empty": "Нет зарегистрированных событий"
     },
     "signal": {
-      "ma": "Music Assistant",
-      "sendspin": "Sendspin",
       "port": "порт {port}",
       "corrections": "{n} пересинхронизация | {n} пересинхронизации | {n} пересинхронизаций",
       "subprocess": "Процесс плеера"
@@ -470,7 +508,7 @@
       "host": "Адрес",
       "id": "ID сервера",
       "url": "URL",
-      "foreign": "Подключён к Music Assistant на {where}, а не к Music Assistant этого моста. Этот плеер первым занял другой сервер; переподключите плеер, чтобы его мог занять Music Assistant этого моста.",
+      "foreign": "Аудиоканал идёт к Music Assistant на {where}, а не к Music Assistant этого моста. Этот плеер первым занял другой сервер; переподключите плеер, чтобы его мог занять Music Assistant этого моста.",
       "refusedTitle": "Отклонены",
       "refusedCount": "попыток: {n}"
     }
@@ -514,7 +552,6 @@
     "close": "Закрыть",
     "search": "Поиск",
     "noResults": "Нет результатов",
-    "yes": "Да",
     "no": "Нет"
   },
   "update": {
@@ -1325,9 +1362,7 @@
     "sync": "Синхронизация группы"
   },
   "home": {
-    "maConnected": "Music Assistant подключён",
-    "maDisconnected": "Music Assistant не подключён",
-    "connected": "Подключено {n} из {total}",
+    "connected": "Bluetooth-соединение: {n} из {total}",
     "playing": "Играют: {n}"
   },
   "groups": {

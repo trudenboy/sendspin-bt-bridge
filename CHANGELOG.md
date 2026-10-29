@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error notifications stay until dismissed, the others pause while hovered or focused, and text fields use the same keyboard focus outline as buttons.
 - Speaker actions and states now have consistent names in English and Russian: Release / Reclaim, Power save, Standby / Wake, Enable / Disable, Speaker latency compensation, and Air-to-sound latency.
 - Messages from the bridge (guidance, recovery cards, the header status, action buttons, event timeline and blocked-control reasons) now follow the chosen language instead of always being English.
+- Connection status now uses three separate names everywhere (header, cards, speaker details, Diagnostics): Audio link, Music Assistant account and Bluetooth connection, instead of one "Connected"; the Diagnostics verdict and the header status come from the same list of issues, so Healthy no longer appears above warnings.
 
 ### Fixed
 

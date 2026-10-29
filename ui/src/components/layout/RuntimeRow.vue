@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { fleetSummary } from '@/utils/fleetSummary'
+import StatusState from '@/components/StatusState.vue'
 
 /**
  * The bridge at a glance, under the header (stable's runtime line): where it
@@ -52,9 +53,7 @@ const pill = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-x
         <span v-if="fleet.total > 0" data-runtime="speakers" :class="[pill, speakersTone]">
           {{ t('header.speakersConnected', { n: fleet.connected, total: fleet.total }) }}
         </span>
-        <span data-runtime="ma" :class="[pill, bridge.maConnected ? 'tone-success' : 'tone-neutral']">
-          <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />{{ bridge.maConnected ? t('home.maConnected') : t('home.maDisconnected') }}
-        </span>
+        <StatusState data-runtime="ma" kind="ma_account" :status="bridge.maAccount" variant="full" />
         <span v-if="fleet.playing > 0" data-runtime="playing" :class="[pill, 'tone-info']">
           {{ t('home.playing', { n: fleet.playing }) }}
         </span>

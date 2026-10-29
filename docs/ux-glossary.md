@@ -51,8 +51,11 @@ same thing, the one in the "Use" columns wins.
 | Sign-in of the bridge to the Music Assistant API | Music Assistant account | Аккаунт Music Assistant | Bridge-wide. |
 | Bluetooth link between the bridge and the speaker | Bluetooth connection | Bluetooth-соединение | Per speaker. |
 
-These three names are agreed here; the UI adopts them with the status model
-work, not in this change.
+The UI shows these three states the same way in the runtime row, the speaker
+cards, the speaker drawer and Diagnostics (`StatusState`). The bridge derives
+each state and its reason as codes (`services/diagnostics/status_model.py`);
+the API carries them as `bridge.music_assistant_account` and `device.links`.
+State words never repeat across the account and the audio link.
 
 ## Allowed exceptions
 

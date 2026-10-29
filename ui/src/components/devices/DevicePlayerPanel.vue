@@ -15,6 +15,7 @@ import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
 import LinkChip from './chips/LinkChip.vue'
 import ServerChip from './chips/ServerChip.vue'
+import StatusState from '@/components/StatusState.vue'
 import BlockedHints from './chips/BlockedHints.vue'
 import { SbBadge } from '@/kit'
 import { transferChip } from '@/utils/deviceChips'
@@ -142,6 +143,8 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   <!-- Where it plays through, its group, sync and signal -->
   <div class="relative z-10 flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
     <LinkChip :device="device" />
+    <StatusState kind="bluetooth" :status="device.links.bluetooth" />
+    <StatusState kind="audio_link" :status="device.links.audio_link" />
     <GroupChip :device="device" />
     <ServerChip :device="device" />
     <SyncChip :device="device" />

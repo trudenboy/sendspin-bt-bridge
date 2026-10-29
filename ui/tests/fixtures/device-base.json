@@ -179,5 +179,17 @@
     "pairing_window",
     "rssi",
     "battery"
-  ]
+  ],
+  "links": {
+    "audio_link": {
+      "state": "connected",
+      "tone": "success",
+      "reason": null
+    },
+    "bluetooth": {
+      "state": "connected",
+      "tone": "success",
+      "reason": null
+    }
+  }
 }

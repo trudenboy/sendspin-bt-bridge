@@ -23,6 +23,8 @@ export const useBridgeStore = defineStore('bridge', () => {
   const bridge = computed(() => snapshot.value?.bridge ?? null)
   const version = computed(() => snapshot.value?.bridge.version ?? '')
   const maConnected = computed(() => snapshot.value?.bridge.ma_connected ?? false)
+  /** The bridge's sign-in to Music Assistant, as the bridge names it (not a player's audio link). */
+  const maAccount = computed(() => snapshot.value?.bridge.music_assistant_account ?? null)
 
   function apply(status: BridgeStatus) {
     snapshot.value = status
@@ -107,6 +109,7 @@ export const useBridgeStore = defineStore('bridge', () => {
     adapters,
     version,
     maConnected,
+    maAccount,
     connectSSE,
     disconnectSSE: stream.disconnect,
     refresh,

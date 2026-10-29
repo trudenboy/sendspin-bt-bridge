@@ -18,6 +18,7 @@ import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
 import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
+import StatusState from '@/components/StatusState.vue'
 import { useMediaQuery } from '@/composables/useMediaQuery'
 import { Plus, LayoutGrid, List, ChevronDown, ArrowUpDown } from 'lucide-vue-next'
 
@@ -246,10 +247,7 @@ function openDetail(id: string) {
 
       <!-- From md up the header's runtime row carries these. -->
       <p v-if="bridge.devices.length" data-home-summary class="mb-4 flex md:hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
-        <span class="inline-flex items-center gap-1.5">
-          <span class="size-2 rounded-full" :class="bridge.maConnected ? 'bg-success' : 'bg-text-disabled'" aria-hidden="true" />
-          {{ bridge.maConnected ? t('home.maConnected') : t('home.maDisconnected') }}
-        </span>
+        <StatusState kind="ma_account" :status="bridge.maAccount" variant="full" />
         <span>{{ t('home.connected', { n: fleet.connected, total: fleet.total }) }}</span>
         <span v-if="fleet.playing">{{ t('home.playing', { n: fleet.playing }) }}</span>
       </p>

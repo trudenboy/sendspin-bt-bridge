@@ -27,6 +27,7 @@ import SyncChip from './chips/SyncChip.vue'
 import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
 import ServerChip from './chips/ServerChip.vue'
+import StatusState from '@/components/StatusState.vue'
 import LinkChip from './chips/LinkChip.vue'
 import DevicePlayerPanel from './DevicePlayerPanel.vue'
 import { canDo } from '@/utils/supportedActions'
@@ -214,6 +215,8 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <td class="whitespace-nowrap px-2 py-2">
       <div class="flex flex-wrap items-center gap-1.5">
         <DeviceStatusBadge :state="state" :device="device" />
+        <StatusState kind="bluetooth" :status="device.links.bluetooth" />
+        <StatusState kind="audio_link" :status="device.links.audio_link" />
         <SyncChip :device="device" />
         <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning-text" :title="blockedTitle">
           <CircleAlert class="h-4 w-4" aria-hidden="true" />

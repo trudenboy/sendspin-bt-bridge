@@ -234,7 +234,7 @@ describe('HomeView disabled players', () => {
 
   it('keeps the header counts to running players', () => {
     const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')])
-    expect(w.get('[data-home-summary]').text()).toContain('1 of 1 connected')
+    expect(w.get('[data-home-summary]').text()).toContain('1 of 1 Bluetooth connected')
   })
 })
 

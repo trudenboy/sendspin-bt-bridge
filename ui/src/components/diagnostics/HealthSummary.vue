@@ -5,9 +5,12 @@ import { useDiagnosticsStore } from '@/stores/diagnostics'
 import { SbCard, SbStatusDot, SbBadge, SbSpinner, SbButton } from '@/kit'
 import { Activity, Bluetooth, Monitor, HardDrive, ClipboardCopy } from 'lucide-vue-next'
 import { copyToClipboard } from '@/utils/clipboard'
+import { useBridgeStore } from '@/stores/bridge'
+import StatusState from '@/components/StatusState.vue'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
+const bridge = useBridgeStore()
 const copyLabel = ref(t('diagnostics.copy'))
 
 async function copyHealth() {
@@ -99,6 +102,24 @@ const subsystems = computed<SubsystemCheck[]>(() => [
         <SbStatusDot :status="overallStatus" :label="overallLabel" size="md" />
         <span class="text-lg font-semibold text-text-primary">{{ overallLabel }}</span>
       </div>
+    </SbCard>
+
+    <!-- The three named states, as the header, cards and drawer show them -->
+    <SbCard>
+      <template #header>{{ t('status.sectionTitle') }}</template>
+      <ul class="space-y-2 text-sm" data-connection-states>
+        <li class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-text-primary">{{ t('status.kind.ma_account') }}</span>
+          <StatusState kind="ma_account" :status="bridge.maAccount" />
+        </li>
+        <li v-for="d in bridge.devices" :key="d.id" :data-speaker="d.id" class="flex flex-wrap items-center justify-between gap-2">
+          <span class="min-w-0 truncate text-text-primary">{{ d.name }}</span>
+          <span class="flex flex-wrap items-center gap-1.5">
+            <StatusState kind="bluetooth" :status="d.links.bluetooth" />
+            <StatusState kind="audio_link" :status="d.links.audio_link" />
+          </span>
+        </li>
+      </ul>
     </SbCard>
 
     <!-- Subsystem grid -->

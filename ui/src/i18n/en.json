@@ -24,7 +24,7 @@
     "hostname": "Host name",
     "ipAddress": "IP address",
     "upFor": "up {uptime}",
-    "speakersConnected": "{n}/{total} speakers connected",
+    "speakersConnected": "{n}/{total} Bluetooth connected",
     "runtime": {
       "ha_addon": "Home Assistant add-on",
       "docker": "Docker",
@@ -33,13 +33,61 @@
       "standalone": "Standalone"
     }
   },
+  "status": {
+    "kind": {
+      "audio_link": "Audio link",
+      "ma_account": "Music Assistant account",
+      "bluetooth": "Bluetooth connection"
+    },
+    "hint": {
+      "audio_link": "The audio link is the stream between this player and Music Assistant",
+      "ma_account": "The Music Assistant account is the bridge’s sign-in to the Music Assistant API",
+      "bluetooth": "The Bluetooth connection is the link between the bridge and the speaker"
+    },
+    "audio_link": {
+      "streaming": "Playing",
+      "connected": "Up",
+      "foreign": "Other server",
+      "disconnected": "Down",
+      "unavailable": "Unavailable"
+    },
+    "ma_account": {
+      "signed_in": "Signed in",
+      "signed_out": "Signed out",
+      "not_configured": "Not set up"
+    },
+    "bluetooth": {
+      "connected": "Connected",
+      "connecting": "Connecting",
+      "disconnected": "Disconnected",
+      "standby": "Standby",
+      "released": "Released",
+      "disabled": "Disabled",
+      "not_paired": "Not paired"
+    },
+    "reason": {
+      "reconnecting": "The bridge is reconnecting",
+      "user": "Released by you",
+      "auto": "Released automatically after repeated connection problems",
+      "foreign_server": "The player is on a Music Assistant that is not this bridge’s",
+      "bluetooth_down": "Waiting for the Bluetooth connection",
+      "standby": "The speaker is on standby",
+      "released": "The speaker is released",
+      "disabled": "The player is disabled",
+      "unreachable_or_rejected": "Music Assistant is not reachable or did not accept the sign-in"
+    },
+    "bluetoothSummary": "{n}/{total} Bluetooth connected",
+    "sectionTitle": "Connection states",
+    "accountRow": "Music Assistant account",
+    "speakersTitle": "Speakers"
+  },
   "device": {
     "status": {
       "streaming": "Playing",
-      "ready": "Connected",
+      "ready": "Ready",
       "connecting": "Connecting",
       "error": "Error",
-      "offline": "Not connected",
+      "offline": "Offline",
       "standby": "Standby",
       "idle": "Idle",
       "degraded": "Problem",
@@ -189,8 +237,8 @@
         "output": "Audio output"
       },
       "server": {
-        "title": "Connected to Music Assistant {where}",
-        "foreign": "Connected to {where} — not this bridge’s Music Assistant"
+        "title": "Audio link to Music Assistant {where}",
+        "foreign": "Audio link goes to {where} — not this bridge’s Music Assistant"
       }
     },
     "elapsed": {
@@ -271,9 +319,6 @@
     }
   },
   "ma": {
-    "connection": {
-      "connected": "Connected"
-    },
     "login": {
       "title": "Connect to Music Assistant",
       "step1": "Step 1: Server Address",
@@ -287,7 +332,7 @@
       "username": "Username",
       "password": "Password",
       "withHa": "Sign in with Home Assistant",
-      "connected": "Connected to {url}",
+      "connected": "Signed in to Music Assistant at {url}",
       "useToken": "Use a token instead",
       "maToken": "Music Assistant token",
       "maTokenHint": "Create a long-lived token in Music Assistant → Settings → Profile, then paste it here.",
@@ -332,10 +377,6 @@
       "ha_via_ma": "Home Assistant account",
       "ha": "Home Assistant account"
     }
-  },
-  "dashboard": {
-    "maConnected": "Connected",
-    "maDisconnected": "Disconnected"
   },
   "devices": {
     "addDevice": "Add speaker",
@@ -418,7 +459,6 @@
     "status": {
       "playerState": "State",
       "audioSink": "Audio Sink",
-      "connected": "Connected",
       "codec": "Codec",
       "reportedDelay": "Reported latency",
       "reportedDelayHint": "Latency the speaker reports over Bluetooth (A2DP Delay Reporting). Advisory: reported by the speaker, not measured.",
@@ -443,8 +483,6 @@
       "empty": "No events recorded"
     },
     "signal": {
-      "ma": "Music Assistant",
-      "sendspin": "Sendspin",
       "port": "port {port}",
       "corrections": "{n} correction | {n} corrections",
       "subprocess": "Player process"
@@ -470,7 +508,7 @@
       "host": "Address",
       "id": "Server ID",
       "url": "URL",
-      "foreign": "Connected to Music Assistant on {where}, not to this bridge’s Music Assistant. Another server took this player first; reconnect the player so this bridge’s Music Assistant can take it.",
+      "foreign": "The audio link goes to Music Assistant on {where}, not to this bridge’s Music Assistant. Another server took this player first; reconnect the player so this bridge’s Music Assistant can take it.",
       "refusedTitle": "Turned away",
       "refusedCount": "{n} attempts"
     }
@@ -514,7 +552,6 @@
     "close": "Close",
     "search": "Search",
     "noResults": "No results",
-    "yes": "Yes",
     "no": "No"
   },
   "update": {
@@ -1325,9 +1362,7 @@
     "sync": "Group sync"
   },
   "home": {
-    "maConnected": "Music Assistant connected",
-    "maDisconnected": "Music Assistant not connected",
-    "connected": "{n} of {total} connected",
+    "connected": "{n} of {total} Bluetooth connected",
     "playing": "{n} playing"
   },
   "groups": {

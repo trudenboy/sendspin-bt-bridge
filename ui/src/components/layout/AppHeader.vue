@@ -11,8 +11,9 @@ import { shortcutsOpen } from '@/composables/useKeyboardShortcuts'
 import { CircleHelp, SlidersHorizontal, ArrowUpCircle, Heart } from 'lucide-vue-next'
 import logoUrl from '@/assets/bridge-logo.svg'
 import { tServer, type ServerText } from '@/i18n/server'
+import { describeStatus } from '@/composables/useStatusState'
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const router = useRouter()
 const { mode } = useTheme()
 const bridge = useBridgeStore()
@@ -31,6 +32,12 @@ const status = computed(() => {
   return header?.label
     ? { tone: header.tone ?? 'neutral', label: tServer('header', header, header.area === 'issue' ? 'title' : 'label', header.label) }
     : null
+})
+/** The pill opens diagnostics; its tooltip adds the account state, so it never reads as the whole story. */
+const statusTitle = computed(() => {
+  const account = bridge.maAccount
+  const line = account ? describeStatus('ma_account', account, { t: (k, p) => t(k, p ?? {}), te }).full : ''
+  return line ? `${t('header.openDiagnostics')} · ${line}` : t('header.openDiagnostics')
 })
 const statusClass: Record<string, string> = {
   success: 'tone-success',
@@ -80,7 +87,7 @@ const iconButton =
           type="button"
           class="hidden max-w-64 items-center gap-1.5 truncate rounded-full px-3 py-1 text-xs font-medium md:inline-flex"
           :class="statusClass[status.tone] ?? 'tone-neutral'"
-          :title="t('header.openDiagnostics')"
+          :title="statusTitle"
           @click="router.push('/diagnostics')"
         >
           <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
