@@ -638,7 +638,9 @@
     "updating": "Updating… the bridge restarts",
     "updated": "Updated, the bridge is back",
     "updateFailed": "Update failed",
-    "errorNext": "Open the logs to see why, then try again."
+    "errorNext": "Open the logs to see why, then try again.",
+    "updateTimedOut": "The update did not finish — open the logs",
+    "updateTimedOutNext": "The bridge has not come back after 3 minutes. Open the logs to see where the update stopped; if the bridge is still the old version, try the update again."
   },
   "bugreport": {
     "title": "File a Bug Report",

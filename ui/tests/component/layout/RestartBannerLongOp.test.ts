@@ -39,3 +39,44 @@ describe('RestartBanner as a long operation', () => {
     expect(w.text()).toContain(en.restart.errorNext)
   })
 })
+
+describe('an update that never finishes', () => {
+  it('after 3 minutes without the stream dropping or a new version it says so and points to the logs', async () => {
+    vi.useFakeTimers()
+    try {
+      const w = banner('stopping', 'update')
+      expect(w.text()).toContain(en.restart.updating)
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000 + 1000)
+      expect(w.text()).toContain(en.restart.updateTimedOut)
+      expect(w.text()).toContain(en.restart.updateTimedOutNext)
+      expect(w.find('[data-restart-logs]').exists()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not time out an update that finished in time', async () => {
+    vi.useFakeTimers()
+    try {
+      const w = banner('stopping', 'update')
+      const bridge = useBridgeStore()
+      await vi.advanceTimersByTimeAsync(60_000)
+      bridge.restartState = 'ready'
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000)
+      expect(w.text()).not.toContain(en.restart.updateTimedOut)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a plain restart does not time out', async () => {
+    vi.useFakeTimers()
+    try {
+      const w = banner('restarting', 'restart')
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000)
+      expect(w.text()).not.toContain(en.restart.updateTimedOut)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

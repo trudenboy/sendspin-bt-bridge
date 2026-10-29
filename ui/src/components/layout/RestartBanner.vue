@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useRouter } from 'vue-router'
@@ -20,6 +20,28 @@ function clearAutoHide() {
   }
 }
 
+/** An update that neither drops the event stream nor changes the version in this time did not finish. */
+const UPDATE_TIMEOUT_MS = 3 * 60 * 1000
+const timedOut = ref(false)
+let updateTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearUpdateTimer() {
+  if (updateTimer) clearTimeout(updateTimer)
+  updateTimer = null
+}
+
+watch(
+  () => [bridge.restartState, bridge.restartReason, bridge.restartStartedAt] as const,
+  ([state, reason, startedAt]) => {
+    clearUpdateTimer()
+    timedOut.value = false
+    if (reason !== 'update' || (state !== 'stopping' && state !== 'restarting')) return
+    const left = Math.max(0, UPDATE_TIMEOUT_MS - (Date.now() - (startedAt ?? Date.now())))
+    updateTimer = setTimeout(() => (timedOut.value = true), left)
+  },
+  { immediate: true },
+)
+
 watch(() => bridge.restartState, (state) => {
   clearAutoHide()
   if (state === 'ready') {
@@ -27,13 +49,17 @@ watch(() => bridge.restartState, (state) => {
   }
 })
 
-onUnmounted(clearAutoHide)
+onUnmounted(() => {
+  clearAutoHide()
+  clearUpdateTimer()
+})
 
 const isUpdate = computed(() => bridge.restartReason === 'update')
 
 const label = computed(() => {
   const state = bridge.restartState
   if (isUpdate.value) {
+    if (timedOut.value) return t('restart.updateTimedOut')
     if (state === 'ready') return t('restart.updated')
     if (state === 'error') return t('restart.updateFailed')
     return t('restart.updating')
@@ -48,8 +74,9 @@ const label = computed(() => {
 })
 
 const status = computed<'running' | 'done' | 'error'>(() =>
-  bridge.restartState === 'ready' ? 'done' : bridge.restartState === 'error' ? 'error' : 'running',
+  bridge.restartState === 'ready' ? 'done' : bridge.restartState === 'error' || timedOut.value ? 'error' : 'running',
 )
+const nextStep = computed(() => (timedOut.value ? t('restart.updateTimedOutNext') : t('restart.errorNext')))
 
 function openLogs() {
   void router.push({ path: '/diagnostics', query: { tab: 'logs' } })
@@ -71,7 +98,7 @@ function openLogs() {
         :label="label"
         :status="status"
         :started-at="bridge.restartStartedAt"
-        :next-step="t('restart.errorNext')"
+        :next-step="nextStep"
       >
         <template #actions>
           <button

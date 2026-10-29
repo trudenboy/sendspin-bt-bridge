@@ -29,8 +29,16 @@ export const useBridgeStore = defineStore('bridge', () => {
   /** The bridge's sign-in to Music Assistant, as the bridge names it (not a player's audio link). */
   const maAccount = computed(() => snapshot.value?.bridge.music_assistant_account ?? null)
 
+  /** The version the bridge ran when an update began; another version means it is done. */
+  let versionBeforeUpdate = ''
+
   function apply(status: BridgeStatus) {
     snapshot.value = status
+    const inProgress = restartState.value === 'stopping' || restartState.value === 'restarting'
+    if (inProgress && restartReason.value === 'update' && versionBeforeUpdate && status.bridge.version !== versionBeforeUpdate) {
+      restartState.value = 'ready'
+      void refreshAdapters()
+    }
     loading.value = false
   }
 
@@ -65,6 +73,7 @@ export const useBridgeStore = defineStore('bridge', () => {
 
   function initiateRestart(reason: RestartReason = 'restart') {
     restartReason.value = reason
+    versionBeforeUpdate = reason === 'update' ? version.value : ''
     restartState.value = 'stopping'
     restartStartedAt.value = Date.now()
   }
