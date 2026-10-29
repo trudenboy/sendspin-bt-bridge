@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on-schedule reference (the panel lists it, with Forget). It does not
   change playback, needs the `CAP_NET_RAW` capability, and takes effect
   after a bridge restart.
+- Playout sync `loop` mode now corrects Bluetooth speakers from the
+  experimental air sensor (`EXPERIMENTAL_AIR_SENSOR`): each start is placed
+  where the speaker's audio really leaves over the air, on the schedule when
+  the speaker's latency is calibrated in the group sync wizard, otherwise
+  where it played on average in its previous starts. The speaker's delay
+  setting keeps working as a trim: changing it moves the speaker by exactly
+  the change. The timing panel shows the correction, and Forget also clears
+  the learned latency. Diagnostics tell when a `loop` speaker runs without
+  its air correction.
+
+### Fixed
+
+- In playout sync a delay change now moves the sound by exactly the change;
+  before, it also removed a small leftover offset (up to the dead band).
+- After an underrun, playout sync could place the recovered audio up to
+  100 ms late.
+- A delay change during an inserted silence could freeze the playout
+  controller.
 
 ## [3.1.0-beta.17] - 2026-10-28
 

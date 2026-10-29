@@ -92,11 +92,11 @@ Restart WirePlumber (`systemctl --user restart wireplumber`) and reconnect the s
 
 ## Air sensor (experimental)
 
-The air sensor measures when each speaker's audio actually leaves the host over Bluetooth, and how far that is from its schedule. The bridge reads a copy of the Bluetooth traffic from the kernel's HCI monitor, takes the loudness pattern of the SBC frames sent to the speaker, and matches it against the loudness pattern of the audio it wrote, once a second over 3-second windows. Playback is not changed: the sensor only measures and reports.
+The air sensor measures when each speaker's audio actually leaves the host over Bluetooth, and how far that is from its schedule. The bridge reads a copy of the Bluetooth traffic from the kernel's HCI monitor, takes the loudness pattern of the SBC frames sent to the speaker, and matches it against the loudness pattern of the audio it wrote, once a second over 3-second windows. In `measure` mode playback is not changed: the sensor only measures and reports. In `loop` mode it also corrects the speaker (see Air correction in `loop` below).
 
 **Turning it on.** **Settings → Audio → Air sensor (SBC speakers)** (`EXPERIMENTAL_AIR_SENSOR`, an advanced setting, off by default). The switch takes effect after a **bridge restart**. It works for a speaker only when:
 
-- **Playout sync** is set to **Measure only** (`measure`). With `off` the panel says the sensor needs measure mode; `loop` is not supported yet.
+- **Playout sync** is set to **Measure only** (`measure`) or **Measure and correct** (`loop`). With `off` the panel says the sensor needs measure or loop mode.
 - The speaker plays **SBC**. For a speaker that also offers AAC, turn on **Prefer SBC codec**; any other codec shows *Unsupported codec*.
 - The source is 44.1 or 48 kHz at 16 to 32 bit; anything else shows *Unsupported input*.
 - The bridge can open the kernel's HCI monitor, which needs `CAP_NET_RAW` (Linux only). The Home Assistant add-on already has it. Docker needs `NET_RAW` in `cap_add`, as in the documented compose file (see [Docker](/installation/docker/)). LXC and systemd installs run the bridge as root and have it unless the container drops that capability. Without it the panel shows *Unavailable* with "needs CAP_NET_RAW".
@@ -130,3 +130,30 @@ The air sensor measures when each speaker's audio actually leaves the host over 
 **Calibration.** `H` ends at the air; the time a speaker takes from receiving the audio to playing it (air → sound) differs from speaker to speaker. The group sync wizard measures it with the phone: see [Group sync tuning › Speaker latency (air sensor)](/group-sync-tuning/#speaker-latency-air-sensor). The **reference** you pick must play on the Sendspin schedule: a Sendspin web player on a headset or a wired output, or a bridge speaker with Playout sync set to `measure` and no delay of its own. A reference with Playout sync off (the older output path) or with its own added delay makes the value wrong by that difference. On the test stand the same speaker calibrated to 209 ms against an older-path reference and to 228.7 ms against an on-schedule one; with 209 ms its air error was 13–16 ms off what a microphone heard, with 228.7 ms within 3 ms.
 
 A calibration is stored per speaker, codec, sampling rate and Bluetooth adapter, and listed under **Calibrations** in the Timing panel. **Forget** deletes it: the speaker is then reported uncalibrated for that codec, rate and adapter until the wizard measures it again.
+
+## Air correction in `loop`
+
+With Playout sync in `loop` and the air sensor on, the bridge also uses the air placement to correct the speaker. It is **one correction per stream start**: once the sensor locks (about 6 to 7 s after the output opens) the bridge moves the audio to where the speaker's sound should be, and then only follows slow changes. It is not a continuous chase of the measured value.
+
+Where the audio is placed depends on what the bridge knows about the speaker:
+
+- **Calibrated.** The group sync wizard measured the speaker's air-to-sound latency (see Calibration above). Each start is placed on the schedule, using that latency.
+- **Learned.** There is no calibration, so the bridge learns where the speaker played on average in its previous starts. It learns from the first 2 starts, uses the value from then on, and converges in about 6 to 8 starts; the first starts are uncorrected or only roughly placed. A calibration always wins over a learned value.
+
+**Forget** in the Timing panel clears both a calibration and a learned latency for that codec, rate and adapter.
+
+**The delay still moves the sound exactly.** The speaker's delay setting (slider or wizard) works as a trim relative to the delay the calibration or learning was made at: changing it by 30 ms moves the sound by 30 ms, and the correction does not undo it. A delay change does not produce a jump in the air value; the panel shows the trim instead.
+
+**In the Timing panel**, a `loop` speaker with the sensor shows these additional lines:
+
+| Field | Meaning |
+|---|---|
+| **Air correction** | `calibrated (N ms)`, `learned (N starts)`, `no data (learning: N of 2 starts)` or `inactive: not locked` |
+| **Air bias** | The correction currently in force, ms |
+| **Air corrections** | How many corrections were made in this stream |
+| **Delay trim** | The delay set for the speaker relative to the one the calibration or learning refers to, with the resulting target (early or late), ms |
+| **Learned latencies** | The learned entries per codec, rate and adapter, each with **Forget** |
+
+**Guidance.** If a speaker is in `loop` but has no air correction, Diagnostics lists an info item and the speaker works as in `measure`. The reasons are: the air sensor switch is off, the sensor is not running for this speaker (not a Bluetooth speaker), the sensor cannot run (see its state), or it has not locked since the stream started.
+
+**Requirements** are the same as for the sensor: the **Air sensor (SBC speakers)** switch (restart the bridge after changing it), an SBC link at 44.1 or 48 kHz, and `CAP_NET_RAW`. Without any of them `loop` keeps working as before, without the air correction.

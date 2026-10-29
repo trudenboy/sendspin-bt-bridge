@@ -120,7 +120,7 @@ Times are `CLOCK_MONOTONIC_RAW` µs, signs as in the stage A spec (positive erro
 | `EMA` | The controller's filtered input, in its own domain: `e_w − β` without a bias, `c = e_w − b − β` with one. |
 | `r` | The raw residual: the engine's current estimate of `e_w`: `EMA + β` without a bias, `EMA + β + b` with one. |
 | `o` | The placement offset: a placement aligns the next frame to `audible − o`, so that `e = o` right after it. |
-| `X_i`, `d_i` | Learned sample of one output start: `X_i = median(d_out_i − h_i)`, `d_i = median(d_out_i)` over the seed triple; `X_i − d_i = −H_i`, the start's raw placement. |
+| `X_i`, `d_i` | Learned sample of one output start: `X_i = median(d_out_i − h_i + ê_i) − β`, `d_i = median(d_out_i)` over the seed triple (`ê` the pulsesink error matched to the same audio); `X_i − d_i = −(H_i − ê_i + β)`, the placement the uncorrected loop holds (B12 ruling 1). |
 
 ## Why a bias and not the air error directly
 
@@ -753,7 +753,7 @@ offered (`air_delay_changed`), as stage A refuses a fold across an air epoch.
 | S-9 | Tracking: EMA τ 30 s on window-middle time (Δt ≤ 5 s); gate `max(10 ms, 4·1.4826·MAD)` over the last 20 accepted `b_i`, seeded with the seed's; 15 consecutive gated windows within 3 ms set `b` | Q8; I6 |
 | S-10 | `held` freezes `b`; the next accepted window resumes tracking (no jump) or reseeds when one is pending; reset only on reopen | Q5; round 2 (4); I2 |
 | S-11 | Calibration changes apply live (`b −= ΔL`, `air_target` jump beyond 2 ms); a learned value is accepted until this output published its own sample | I3 |
-| S-12 | One learned sample per output from the first agreeing triple after reopen (`X_i`, `d_i`), in `loop` only, with a per-daemon `seq` and the key; the parent persists it | Q7; round 2 (5) |
+| S-12 | One learned sample per output from the first agreeing triple after reopen (`X_i = median(d − h + ê) − β`, `d_i`; B12 ruling 1), in `loop` only, with a per-daemon `seq` and the key; the parent persists it | Q7; round 2 (5) |
 | S-13 | Learned entries in a sibling per-player field `air_learned_latency`, one per key, ≤ 8 pairs | downgrade-safe, no cap or uniqueness interplay |
 | S-14 | A delay change moves the sound by exactly `ΔD` in every mode; in `loop` with a target the static delay is a trim (`E = −(D_out − D_ref)`, `b` unchanged) | round 2 (1) |
 | S-15 | Air sensor effective in `measure` and `loop`; the correction runs where the sensor runs in `loop`; no new key, no separate config function; `needs_measure` kept | Q2, Q11, round 2 (3) |
@@ -766,3 +766,51 @@ offered (`air_delay_changed`), as stage A refuses a fold across an air epoch.
 | S-22 | The trim is the static delay itself; `D_ref` stored with each calibration (from the fold's `d_out_ms`) and learned entry; older calibrations migrated from `static_delay_ms`; without one, `D_out,latched` | round 2 (1); I10 |
 | S-23 | A delay change (`resync(shift ≠ 0)`) is a frame-exact jump of `ΔD` against the existing schedule, no placement, in every mode; `resync(0)` stays a placement | I1 |
 | S-24 | Residual domains: placement residual `o − β − (b or 0)`, EMA restart `o − (b or 0)`, the re-measure branch in the controller's domain; explicit transitions seed, resume, bias → none | I9 |
+
+## Stage B1 validation note (2026-10-29)
+
+Stand: HAOS VM, PulseAudio 17, ENEBY20 on hci1, SBC 44.1 kHz, `PLAYOUT_SYNC=loop`, static delay 184 ms.
+
+**Restart method.** Powering off in Music Assistant stops the whole sync group, so it cannot restart one speaker. The working method is killing ENEBY20's daemon: the parent respawns it in about 10 s, which gives a new stream for that speaker only while the reference keeps playing.
+
+**Reference limit.** The reference is the desktop bridge "Local Headphones" on the playout engine in `measure`. It drifts (no rate correction) and makes its own steady jumps (15:35:27 -26.9 ms; 19:38 +42.8 / -27.7 ms; a peer session saw -27.6 ms plus a 68.5 ms underrun). The microphone measurement `M` therefore carries the reference's own error, and absolute microphone criteria are reference-limited. The numbers below are what the stand showed, not a pass against the original absolute criteria.
+
+**Series 1, calibrated** (b12a; `L_as` 228.7 ms, `D_ref` 184 ms migrated from the delay at calibration time; no phone available for a fresh calibration), 8 restarts:
+
+| Item | Result |
+|---|---|
+| Seed | one `air_seed` per start, 6.3-6.9 s after the output opened; seeds +45.1 to +59.8 ms |
+| `H` after correction | -43.8 to -46.1 ms |
+| `M` per start (ms) | 11.0, 10.5, 14.5, 13.6, 15.8, then -9.7, -7.5, -6.8 |
+| Break in `M` | the reference's -26.9 ms steady jump before start 5 |
+| `sd` within a segment, reference drift removed | about 1.0 ms (stage A, `measure`: 4.8-16 ms) |
+
+**Series 2, uncalibrated.** First attempt failed, for two reasons found on the stand:
+
+- b12b: the protocol muted the speaker 9 s after start, so lock was lost before the triples (2 samples in 8 starts).
+- b12c (45 s wait): the learned target walked ENEBY about 70 ms later over 8 starts. Cause: the sample was taken at lock, while the pulsesink error was about +50 ms (start transient, removed in an uncorrected start by the first steady jump 9-10 s in). With a target the seed removes that jump, so every sample was late and the estimator swapped to the late population. Not feedback: the sample is the wrong quantity. Also, `_learned_tried` was set before the key check, so a first triple arriving before the key gave no sample.
+
+Fix (ruling 1 below) and rerun b12d (Forget first, 10 restarts, 45 s wait):
+
+| Item | Result |
+|---|---|
+| Learned samples (ms) | 241.9, 228.7, 207.3, 198.0, 208.8, 227.6, 228.5, 229.3, 228.8, 228.6 |
+| Converged to | 228.6 ms, equal to the wizard calibration 228.7 ms, found independently |
+| Seeds | from start 3 |
+| `H` after correction, starts 7-9 | -46.6, -47.5, -45.5 ms (same place as series 1) |
+| `M` | reference-limited (reference error -11 to +4 ms, jumps at 19:38); `M - H` at starts 5-9 within +-3 ms |
+
+**Slider in `loop`** (b12e, warm stream): +30 ms moved ENEBY by -28.8 ms by microphone (tolerance -30 +- 1.5), `H` unchanged (-45.4 to -45.9), no air jump, INFO "air target trim -(D_out - D_ref) = -30.0 ms", one "playout jump: delay, 30.0 ms". Delay restored to 184 ms.
+
+**Not run:** the `measure`-mode delay check on the stand (covered by the B0 simulation and tests); the CPU comparison `loop` vs `measure` (the ENEBY daemon idled at 1.6 % over 60 s, no comparison); guidance on the stand; re-calibration with the phone.
+
+**Constants.** None changed. The learned sample formula and the rulings below changed.
+
+### Rulings made during implementation
+
+1. **Learned sample** = `median(d − h + ê) − β` over the seed triple, not `median(d − h)`. `ê` is the pulsesink error matched to the same audio (already among the seeding candidates), `β` the baseline. This is the placement the uncorrected loop holds, so the start transient does not enter. The sample carries pulsesink noise from three windows; the +-15 ms band of the estimator drops outliers. Tests: the simulation got a start transient and an independent oracle (the no-target loop's `H` after its steady jump); the unit assertion `x = d - h` encoded the bug and was changed.
+2. **`pa_step` before the first seed is ignored.** There is nothing to reseed yet.
+3. **Step rule** (refines S-9): the tracked bias steps when at least 12 of 15 consecutive gated windows lie within `STEP_AGREE_US` (3 ms) of their median, instead of all 15, so one outlying window does not postpone a real step.
+4. **`pa_step` needs confirmation by a second reading:** a pulse clock step is a candidate when seen once and breaks the readings (reseed) only when the next reading confirms it; an unconfirmed candidate is dropped (PipeWire's clock sawtooth).
+5. **Underrun delivery dating:** after an underrun the recovered audio is dated by when it arrives at the output (arrival probe), not by the schedule; before, recovery placed audio up to 100 ms late.
+6. **`_learned_tried` is set only after the sample is emitted.** A triple that arrives before the key, or fails to emit, is retried.
