@@ -143,7 +143,13 @@ async def test_a_fold_is_answered_in_the_air_sensor_status(make_daemon):
     d = make_daemon(playout_mode="measure", air_sensor=ON)
     d.air_intake(AirFold(id="c1f3a2b4", from_us=1.0, to_us=12e6))
     await d.air_step()
-    assert d.air_snapshot()["fold"] == {"id": "c1f3a2b4", "phase_ms": None, "ok": False, "reason": "no_written_clicks"}
+    assert d.air_snapshot()["fold"] == {
+        "id": "c1f3a2b4",
+        "phase_ms": None,
+        "d_out_ms": None,
+        "ok": False,
+        "reason": "no_written_clicks",
+    }
 
 
 # -- fallback -----------------------------------------------------------------------------

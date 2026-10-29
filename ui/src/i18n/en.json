@@ -1766,6 +1766,7 @@
         "not_measured": "This speaker or the reference was not heard",
         "not_sbc": "The speaker does not play SBC",
         "air_epoch_changed": "Its Bluetooth stream restarted during its turn",
+        "air_delay_changed": "The speaker's delay changed during the recording.",
         "no_air_clicks": "Its clicks were not found on the air",
         "no_written_clicks": "Its clicks were not found in what the bridge wrote",
         "fold_failed": "The air measurement for this speaker could not be completed",

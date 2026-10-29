@@ -1052,9 +1052,10 @@ def _cycle_err(a: float, b: float) -> float:
 async def test_written_fold_on_the_heard_axis(click_world):
     w = click_world(output_delay_ms=180.0, click0_heard_raw_us=5_000_123_000.0)
     w.write_seconds(14)
-    phase, reason = w.sensor.fold(w.t(13.0))
+    phase, reason, d_out = w.sensor.fold(w.t(13.0))
     assert reason is None
     assert phase == pytest.approx((5_000_123_000.0 / 1000.0 - 1000.0) % 10_000.0, abs=0.5)
+    assert d_out == pytest.approx(180.0, abs=0.01)
 
 
 @pytest.mark.parametrize("muted", ["user", "tail"])
@@ -1063,7 +1064,7 @@ async def test_written_fold_ignores_mute(click_world, muted):
     w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0, muted=muted)
     w.write_seconds(14)
     assert w.muted_fraction() > 0.9  # the correlation would skip these cells as muted
-    phase, reason = w.sensor.fold(w.t(13.0))
+    phase, reason, _d_out = w.sensor.fold(w.t(13.0))
     assert reason is None and abs(_cycle_err(phase, (1_000_000.0 / 1000.0 - 1000.0) % 10_000.0)) <= 0.5  # 0 wraps
 
 
@@ -1072,14 +1073,14 @@ async def test_written_fold_needs_5s_since_the_last_reopen(click_world):
     w.write_seconds(14)
     w.reopen()
     w.write_seconds(3)
-    assert w.sensor.fold(w.t(16.5)) == (None, "no_written_clicks")
+    assert w.sensor.fold(w.t(16.5)) == (None, "no_written_clicks", None)
 
 
 async def test_written_fold_counts_only_cells_inside_the_span(click_world):
     w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0)
     w.write_seconds(14)
-    assert w.sensor.fold(w.t(13.0), span_s=4.0) == (None, "no_written_clicks")
-    phase, reason = w.sensor.fold(w.t(13.0), span_s=6.0)
+    assert w.sensor.fold(w.t(13.0), span_s=4.0) == (None, "no_written_clicks", None)
+    phase, reason, _d_out = w.sensor.fold(w.t(13.0), span_s=6.0)
     assert reason is None and abs(_cycle_err(phase, 0.0)) <= 0.5
 
 
@@ -1087,12 +1088,12 @@ async def test_written_fold_without_clicks_is_no_written_clicks(click_world):
     w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0)
     w.silent = True  # 14 s of program that carries no clicks
     w.write_seconds(14)
-    assert w.sensor.fold(w.t(13.0)) == (None, "no_written_clicks")
+    assert w.sensor.fold(w.t(13.0)) == (None, "no_written_clicks", None)
 
 
 async def test_written_fold_on_an_empty_tap_is_no_written_clicks(click_world):
     w = click_world(output_delay_ms=0.0, click0_heard_raw_us=1_000_000.0)
-    assert w.sensor.fold(w.t(13.0)) == (None, "no_written_clicks")
+    assert w.sensor.fold(w.t(13.0)) == (None, "no_written_clicks", None)
 
 
 async def test_an_air_fold_command_is_answered_in_the_status(click_world):
@@ -1114,7 +1115,13 @@ async def test_an_air_fold_uses_the_commands_span(click_world):
     w.write_seconds(14)
     w.sensor.submit(AirFold(id="short", from_us=w.t(10.0), to_us=w.t(13.0)))  # 3 s: too short
     await w.sensor.step()
-    assert w.sensor.snapshot()["fold"] == {"id": "short", "phase_ms": None, "ok": False, "reason": "no_written_clicks"}
+    assert w.sensor.snapshot()["fold"] == {
+        "id": "short",
+        "phase_ms": None,
+        "d_out_ms": None,
+        "ok": False,
+        "reason": "no_written_clicks",
+    }
 
 
 async def test_a_new_fold_id_replaces_the_pending_one(click_world):
@@ -1162,7 +1169,13 @@ async def test_a_failing_fold_is_answered_and_leaves_the_sensor_running(click_wo
     w.sensor.submit(AirFold(id="x", from_us=w.t(1.0), to_us=w.t(13.0)))
     await w.sensor.step()
     snap = w.sensor.snapshot()
-    assert snap["fold"] == {"id": "x", "phase_ms": None, "ok": False, "reason": "internal_error"}
+    assert snap["fold"] == {
+        "id": "x",
+        "phase_ms": None,
+        "d_out_ms": None,
+        "ok": False,
+        "reason": "internal_error",
+    }
     assert snap["reason"] != "internal_error"
 
 
@@ -1174,5 +1187,24 @@ async def test_a_written_fold_longer_than_the_ring_is_clamped_to_it(click_world)
     assert written_fold_span_s(w.tap, 30.0) == 20.0
     assert written_fold_span_s(w.tap, 12.0) == 12.0
     w.write_seconds(14)
-    phase, reason = w.sensor.fold(w.t(13.0), span_s=30.0)
+    phase, reason, _d_out = w.sensor.fold(w.t(13.0), span_s=30.0)
     assert reason is None and abs(_cycle_err(phase, 0.0)) <= 0.5
+
+
+async def test_the_written_fold_reports_the_delay_its_cells_were_written_at(click_world):
+    from sendspin_bridge.services.ipc.commands import AirFold
+
+    w = click_world(output_delay_ms=184.0, click0_heard_raw_us=2_000_250_000.0)
+    w.write_seconds(14)
+    w.sensor.submit(AirFold(id="d", from_us=w.t(1.0), to_us=w.t(13.0)))
+    await w.sensor.step()
+    fold = w.sensor.snapshot()["fold"]
+    assert fold["ok"] is True and fold["d_out_ms"] == pytest.approx(184.0, abs=0.01)
+
+
+async def test_a_fold_over_two_delays_is_air_delay_changed(click_world):
+    w = click_world(output_delay_ms=184.0, click0_heard_raw_us=5_000_123_000.0)
+    w.write_seconds(8)
+    w.d_out_us = 214_000.0  # the speaker's delay changed mid-recording (rebuilt at the same schedule)
+    w.write_seconds(6)
+    assert w.sensor.fold(w.t(13.0) + 60_000.0) == (None, "air_delay_changed", None)

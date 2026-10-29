@@ -637,9 +637,10 @@ class AirMemberFold:
 
     air: AirFoldResult | None  # None when the fold worker failed (fold_failed)
     written_phase_ms: float | None  # φ_T, None when the written fold found no clicks or failed
-    written_reason: str | None  # no_written_clicks, or fold_failed (refused or unanswered request)
+    written_reason: str | None  # no_written_clicks, air_delay_changed, or fold_failed (refused or unanswered request)
     delay_report_ms: float | None  # the speaker's A2DP delay report at the time (a hint)
     stream_codec: str | None = None  # the codec the speaker played then (daemon snapshot, else connection)
+    written_d_out_ms: float | None = None  # the delay the written PCM went out with (the calibration's d_ref_ms)
 
 
 #: The running sequence watcher per session.
@@ -714,10 +715,13 @@ def _status_number(client: Any, *path: str) -> float | None:
     return float(value) if ok else None
 
 
-def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) -> tuple[float | None, str | None]:
+def _written_fold(
+    loop: asyncio.AbstractEventLoop, client: Any, to_us: float
+) -> tuple[float | None, str | None, float | None]:
     """Ask the daemon for the written click phase over ``WRITTEN_FOLD_SPAN_S`` ending at *to_us* and
     wait (this worker thread) for its answer in ``air_sensor.fold``. A refused request or no answer
-    in time is ``fold_failed``; an answer without clicks is ``no_written_clicks``."""
+    in time is ``fold_failed``; an answer without clicks is ``no_written_clicks`` and one over two delays
+    ``air_delay_changed``; an ok answer carries ``d_out_ms`` (None when the daemon sent none)."""
     from sendspin_bridge.services.ipc.commands import AirFold
 
     fold_id = uuid.uuid4().hex
@@ -731,7 +735,7 @@ def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) ->
     except TimeoutError:
         sent = False
     if not sent:
-        return None, "fold_failed"
+        return None, "fold_failed", None
     deadline = time.monotonic() + _AIR_REPLY_S
     while True:
         info = client.status.get("air_sensor")
@@ -739,10 +743,12 @@ def _written_fold(loop: asyncio.AbstractEventLoop, client: Any, to_us: float) ->
         if isinstance(fold, dict) and fold.get("id") == fold_id:
             phase = fold.get("phase_ms")
             if fold.get("ok") is True and isinstance(phase, (int, float)) and math.isfinite(phase):
-                return float(phase), None
-            return None, "no_written_clicks"
+                d_out = fold.get("d_out_ms")
+                finite = isinstance(d_out, (int, float)) and math.isfinite(d_out)
+                return float(phase), None, float(d_out) if finite else None  # type: ignore[arg-type]
+            return None, "air_delay_changed" if fold.get("reason") == "air_delay_changed" else "no_written_clicks", None
         if time.monotonic() >= deadline:
-            return None, "fold_failed"
+            return None, "fold_failed", None
         time.sleep(0.05)
 
 
@@ -797,12 +803,12 @@ def _finish_member(
             _air_wait_until(hi + _AIR_MARGIN_S * 1e6)
         finally:
             air = service.finish_fold(fold_id, hi, from_us=lo)  # detached even when the wait failed
-        phase, reason = _written_fold(service.loop, client, hi)
+        phase, reason, d_out = _written_fold(service.loop, client, hi)
     except Exception:
         logger.warning("Sync session %s: the air fold of %s failed", sid, member, exc_info=True)
         _store_air_fold(sid, token, member, AirMemberFold(None, None, "fold_failed", hint, codec))
         return
-    _store_air_fold(sid, token, member, AirMemberFold(air, phase, reason, hint, codec))
+    _store_air_fold(sid, token, member, AirMemberFold(air, phase, reason, hint, codec, d_out))
 
 
 class _AirWatch:
@@ -949,6 +955,8 @@ def _air_candidate(
         return out("no_air_frames" if stream == "sbc" else "not_sbc")
     if air.epochs > 1 or air.reason == "air_epoch_changed":
         return out("air_epoch_changed")
+    if fold.written_reason == "air_delay_changed":
+        return out("air_delay_changed")
     if air.phase_ms is None or not air.found:
         return out("no_air_clicks")
     if fold.written_phase_ms is None:
@@ -1000,7 +1008,8 @@ def save_air_calibrations(sid: str, members: list[str]) -> list[AirCalibrationCa
 
     session = _session(sid)
     data = session.to_dict()
-    candidates = {c.member: c for c in air_calibration_candidates(data, _air_folds(sid))}
+    member_folds = _air_folds(sid)
+    candidates = {c.member: c for c in air_calibration_candidates(data, member_folds)}
     by_id = {m["ma_player_id"]: m for m in data["members"]}
     reference = by_id.get(str(data.get("reference")))
     low, high = AIR_LATENCY_RANGE_MS
@@ -1029,6 +1038,9 @@ def save_air_calibrations(sid: str, members: list[str]) -> list[AirCalibrationCa
         }
         if isinstance(spread, (int, float)) and 0 <= spread <= 500:
             entry["spread_ms"] = float(spread)
+        d_out = member_folds[mid].written_d_out_ms if mid in member_folds else None
+        if d_out is not None and 0 <= d_out <= 5000:
+            entry["d_ref_ms"] = float(d_out)
         chosen.append((c, str(client.player_id), entry))
     for _c, device_id, entry in chosen:
         devices_uc.save_air_calibration(device_id, entry)

@@ -117,6 +117,8 @@ _SOURCE_STATES = {"unavailable": "unavailable", "unsupported_codec": "unsupporte
 FOLD_SPAN_S = 12.0  # the written fold's default span: the last 12 s of heard time
 FOLD_MIN_S = 5.0  # fewer program cells than this in the span: no_written_clicks
 NO_WRITTEN_CLICKS = "no_written_clicks"
+AIR_DELAY_CHANGED = "air_delay_changed"
+FOLD_DELAY_SPREAD_MS = 0.5  # fold cells whose written delays (T - s) differ by more than this: two delays
 
 
 def written_fold_span_s(tap: WrittenEnvelope, span_s: float) -> float:
@@ -127,7 +129,7 @@ def written_fold_span_s(tap: WrittenEnvelope, span_s: float) -> float:
 
 EngineEvent = Literal["underrun", "pa_step", "stall", "reopen", "fallback"]
 AddStatus = Literal["ok", "new_epoch", "anchor_reset", "dropped"]
-FoldOutcome = tuple[float | None, str | None]  # (phase_ms, reason)
+FoldOutcome = tuple[float | None, str | None, float | None]  # (phase_ms, reason, d_out_ms)
 
 
 def enc_delay_us(subbands: int, rate: int) -> float:
@@ -472,15 +474,16 @@ class AirSensor:
                 self._fold_pending = None
                 try:
                     span_s = (cmd.to_us - cmd.from_us) / 1e6
-                    phase, reason = await self._run_fold(partial(self.fold, cmd.to_us, span_s))
+                    phase, reason, d_out = await self._run_fold(partial(self.fold, cmd.to_us, span_s))
                 except Exception:
                     self._log.debug("Air sensor: written fold failed", exc_info=True)
-                    phase, reason = None, INTERNAL_ERROR
+                    phase, reason, d_out = None, INTERNAL_ERROR, None
                 if self._fold_pending is not None:
                     continue  # a newer id arrived while this one folded: it replaces it
                 self._fold = {
                     "id": cmd.id,
                     "phase_ms": _round(phase, 3),
+                    "d_out_ms": _round(d_out, 3),
                     "ok": phase is not None and reason is None,
                     "reason": reason,
                 }
@@ -497,25 +500,35 @@ class AirSensor:
     def fold(self, to_us: float, span_s: float = FOLD_SPAN_S) -> FoldOutcome:
         """The written click phase (ms on the 10 s cycle, chirp start) over the program cells whose
         heard time ``T`` lies in ``[to_us − span_s, to_us]``, mute ignored and ``d_comb`` removed;
-        ``(None, "no_written_clicks")`` with fewer than :data:`FOLD_MIN_S` of them since the last
-        reopen or without the click pattern. Thread-safe (reads the tap only): run it off the loop."""
+        ``(None, "no_written_clicks", None)`` with fewer than :data:`FOLD_MIN_S` of them since the last
+        reopen or without the click pattern, ``(None, "air_delay_changed", None)`` when the cells carry
+        two delays (``T − s`` spread over :data:`FOLD_DELAY_SPREAD_MS`); otherwise the third item is
+        their median ``T − s``, the delay the written PCM went out with (``d_out_ms``). Thread-safe (reads the tap only): run it off the loop."""
         tap = self._tap
         held = tap.held()
         sl = tap.slice(*held) if held is not None else None
         if sl is None:
-            return None, NO_WRITTEN_CLICKS
+            return None, NO_WRITTEN_CLICKS, None
         in_rate = round(CELL_FRAMES / sl.cell_us * 1e6)
         d_comb_s = (comb_delay_us(in_rate) + lookback_delay_us(in_rate, tap.lookback_frames)) / 1e6
         cell_s = sl.cell_us / 1e6
         lo = to_us - written_fold_span_s(tap, span_s) * 1e6
         # NaN T (no schedule) fails both comparisons; mute is deliberately not looked at.
-        rows = [(t / 1e6, 2.0**w) for w, t, p in zip(sl.w, sl.t, sl.program, strict=True) if p and lo <= t <= to_us]
-        if len(rows) * cell_s < FOLD_MIN_S - 1e-9 or not click_fold_found(rows, cell_s, 0.0, d_comb_s):
-            return None, NO_WRITTEN_CLICKS
+        picked = [
+            (w, t, t - s) for w, s, t, p in zip(sl.w, sl.s, sl.t, sl.program, strict=True) if p and lo <= t <= to_us
+        ]
+        rows = [(t / 1e6, 2.0**w) for w, t, _d in picked]
+        if len(rows) * cell_s < FOLD_MIN_S - 1e-9:
+            return None, NO_WRITTEN_CLICKS, None
+        delays = sorted(d / 1000.0 for _w, _t, d in picked)
+        if delays[-1] - delays[0] > FOLD_DELAY_SPREAD_MS:
+            return None, AIR_DELAY_CHANGED, None
+        if not click_fold_found(rows, cell_s, 0.0, d_comb_s):
+            return None, NO_WRITTEN_CLICKS, None
         phase = click_phase_ms(rows, cell_s, 0.0, d_comb_s)
         if phase is None:
-            return None, NO_WRITTEN_CLICKS
-        return phase, None
+            return None, NO_WRITTEN_CLICKS, None
+        return phase, None, statistics.median(delays)
 
     # -- window step ------------------------------------------------------------------------
 

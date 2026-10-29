@@ -137,6 +137,8 @@ def sync_air_env(monkeypatch, tmp_config, tmp_path, api_client):
         switch: bool = True,
         air_epochs: int = 1,
         air_frames: int = 900,
+        d_out_ms: float | None = None,
+        written_reason: str | None = None,
         codec: str = "sbc",
         host_latency_ms: float | None = 800.0,
         delay_report_ms: float | None = 150.0,
@@ -202,9 +204,11 @@ def sync_air_env(monkeypatch, tmp_config, tmp_path, api_client):
             fold = {
                 "id": msg["id"],
                 "phase_ms": phase,
-                "ok": phase is not None,
-                "reason": None if phase is not None else "no_written_clicks",
+                "ok": phase is not None and written_reason is None,
+                "reason": written_reason or (None if phase is not None else "no_written_clicks"),
             }
+            if d_out_ms is not None:
+                fold["d_out_ms"] = d_out_ms
             client._update_status({"air_sensor": {**client.status.get("air_sensor"), "fold": fold}})
 
         def air_result(mac):
@@ -631,3 +635,31 @@ def test_a_written_fold_without_a_reply_is_fold_failed(sync_air_env, monkeypatch
 def test_a_written_fold_that_found_no_clicks_stays_no_written_clicks(sync_air_env):
     c = _eneby(sync_air_env(**{**BASE, "sched_phase": {"eneby": None}}).record_and_get_session())
     assert c["reason"] == "no_written_clicks"
+
+
+# -- the calibration's reference delay (B8b-2) -----------------------------------------------------
+
+
+def test_a_save_stores_the_written_folds_delay_as_d_ref(sync_air_env):
+    env = sync_air_env(**BASE, d_out_ms=184.0)
+    env.record_and_get_session()
+    r = env.client.post(f"/api/v1/sync/sessions/{env.sid}/air-calibrations", json={"members": ["eneby"]})
+    assert r.status_code == 200, r.text
+    assert env.player_config("eneby")["air_to_sound_latency"][0]["d_ref_ms"] == 184.0
+    assert env.sent("eneby")[-1]["d_ref_ms"] == 184.0
+
+
+def test_a_written_fold_over_two_delays_is_air_delay_changed(sync_air_env):
+    kw = {**BASE, "written_reason": "air_delay_changed"}
+    c = _eneby(sync_air_env(**kw).record_and_get_session())
+    assert not c["eligible"] and c["reason"] == "air_delay_changed" and c["latency_ms"] is None
+
+
+def test_air_delay_changed_comes_after_air_epoch_changed(sync_air_env):
+    kw = {**BASE, "written_reason": "air_delay_changed", "air_epochs": 2}
+    assert _eneby(sync_air_env(**kw).record_and_get_session())["reason"] == "air_epoch_changed"
+
+
+def test_air_delay_changed_comes_before_no_air_clicks(sync_air_env):
+    kw = {**BASE, "written_reason": "air_delay_changed", "air_phase": {"eneby": None}}
+    assert _eneby(sync_air_env(**kw).record_and_get_session())["reason"] == "air_delay_changed"
