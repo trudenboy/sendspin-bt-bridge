@@ -403,7 +403,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start or stop the metronome */
+        /**
+         * Start or stop the metronome
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         post: operations["metronome_api_v1_calibration_metronome_post"];
         delete?: never;
         options?: never;
@@ -437,7 +440,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a microphone session */
+        /**
+         * Start a microphone session
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         post: operations["create_session_api_v1_calibration_sessions_post"];
         delete?: never;
         options?: never;
@@ -455,7 +461,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** End a session */
+        /**
+         * End a session
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         delete: operations["delete_session_api_v1_calibration_sessions__session_id__delete"];
         options?: never;
         head?: never;
@@ -471,7 +480,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload a recording */
+        /**
+         * Upload a recording
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         post: operations["upload_api_v1_calibration_sessions__session_id__audio_post"];
         delete?: never;
         options?: never;

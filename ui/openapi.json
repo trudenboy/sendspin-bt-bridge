@@ -9819,6 +9819,7 @@
     },
     "/api/v1/calibration/metronome": {
       "post": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "metronome_api_v1_calibration_metronome_post",
         "requestBody": {
           "content": {
@@ -9918,6 +9919,7 @@
     },
     "/api/v1/calibration/sessions": {
       "post": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "create_session_api_v1_calibration_sessions_post",
         "responses": {
           "201": {
@@ -9961,6 +9963,7 @@
     },
     "/api/v1/calibration/sessions/{session_id}": {
       "delete": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "delete_session_api_v1_calibration_sessions__session_id__delete",
         "parameters": [
           {
@@ -10008,6 +10011,7 @@
     },
     "/api/v1/calibration/sessions/{session_id}/audio": {
       "post": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "upload_api_v1_calibration_sessions__session_id__audio_post",
         "parameters": [
           {
