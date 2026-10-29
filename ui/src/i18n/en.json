@@ -1198,25 +1198,6 @@
   "timing": {
     "suggestion": "Suggested latency compensation: {value} ms",
     "applySuggestion": "Apply",
-    "clicks": {
-      "label": "Click track",
-      "help": "Plays steady clicks in time with the group, so you can hear which speaker is late.",
-      "start": "Start",
-      "stop": "Stop"
-    },
-    "mic": {
-      "label": "Measure with a microphone",
-      "help": "Compares this speaker with another one through your phone or computer microphone. Keep the device still between both speakers.",
-      "needPeer": "Needs a second connected speaker to compare with.",
-      "needHttps": "The browser only allows the microphone over HTTPS or on localhost.",
-      "reference": "Compare with",
-      "start": "Measure",
-      "step": "Measurement {n} of 3: {name}",
-      "not_detected": "The clicks were not heard clearly. Move closer and try again.",
-      "unstable": "The measurements disagreed. Keep the device still and try again.",
-      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s latency compensation to {value} ms?",
-      "resultTitle": "Measurement result"
-    },
     "history": {
       "title": "Recent timing",
       "syncError": "Sync error {ms} ms",
@@ -1889,7 +1870,9 @@
       "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):",
       "keepsDelay": "Not measured, these keep their current delay: {names}"
     },
-    "tuneLink": "Tune with your group →"
+    "tuneLink": "Tune with your group →",
+    "noGroupHelp": "{name} is not in a sync group. To tune it with others, create a sync group in Groups and add this speaker to it.",
+    "noGroupLink": "Open Groups →"
   },
   "server": {
     "action": {

@@ -5,24 +5,31 @@ import { setActivePinia, createPinia } from 'pinia'
 import DeviceTimingPanel from '@/components/devices/DeviceTimingPanel.vue'
 import en from '@/i18n/en.json'
 import { setLatency } from '@/api/devices'
-import { setMetronome } from '@/api/calibration'
 import { makeDevice } from '../../fixtures/device'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('@/api/devices', () => ({ setLatency: vi.fn().mockResolvedValue({ field: 'static_delay_ms', value: 0 }) }))
 vi.mock('@/api/calibration', () => ({
   getLatencyHistory: vi.fn().mockResolvedValue({ samples: [] }),
-  setMetronome: vi.fn().mockResolvedValue({ active: true }),
   createSession: vi.fn(),
   uploadRecording: vi.fn(),
   endSession: vi.fn(),
 }))
 vi.mock('@/stores/bridge', () => ({ useBridgeStore: () => ({ devices: [] }) }))
 
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/', component: { template: '<div />' } },
+    { path: '/groups', name: 'groups', component: { template: '<div />' } },
+    { path: '/sync/:groupId', name: 'sync', component: { template: '<div />' } },
+  ],
+})
+
 function mountPanel(overrides: Parameters<typeof makeDevice>[0] = {}) {
   return mount(DeviceTimingPanel, {
     props: { device: makeDevice({ audio: { static_delay_ms: 120, has_sink: true }, ...overrides }) },
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
+    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router] },
   })
 }
 
@@ -60,33 +67,27 @@ describe('DeviceTimingPanel', () => {
     expect(setLatency).toHaveBeenCalledWith(expect.any(String), 150, expect.objectContaining({ source: 'bluez_delay_report', revision: 'r1' }))
   })
 
-  it('starts the click track on this speaker', async () => {
+  it('has one calibration path: no per-speaker click track or microphone comparison', () => {
     const w = mountPanel()
-    await w.findAll('button').find((b) => b.text() === 'Start')!.trigger('click')
-    expect(setMetronome).toHaveBeenCalledWith(expect.any(String), 'start')
+    expect(w.text()).not.toContain('Click track')
+    expect(w.text()).not.toContain('microphone')
+    expect(w.findAll('button').some((b) => b.text() === 'Start')).toBe(false)
   })
 
   it('links to tuning the whole Music Assistant group the player is in', async () => {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/', component: { template: '<div />' } },
-        { path: '/sync/:groupId', name: 'sync', component: { template: '<div />' } },
-      ],
-    })
     await router.push('/')
-    const w = mount(DeviceTimingPanel, {
-      props: { device: makeDevice({ music_assistant: { syncgroup_id: 'syncgroup_abc' } }) },
-      global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router] },
-    })
+    const w = mountPanel({ music_assistant: { syncgroup_id: 'syncgroup_abc' } })
     const link = w.findAll('a').find((a) => a.attributes('href') === '/sync/syncgroup_abc')
     expect(link).toBeTruthy()
-    expect(w.text()).toContain('Tune the whole group')
+    expect(link!.text()).toBe('Tune with your group →')
   })
 
-  it('offers no group tuning when the player is in no group', () => {
+  it('explains how to make a sync group, with a link to Groups, when the player is in none', async () => {
+    await router.push('/')
     const w = mountPanel()
-    expect(w.text()).not.toContain('Tune the whole group')
+    expect(w.text()).toContain('is not in a sync group')
+    expect(w.findAll('a').find((a) => a.attributes('href') === '/groups')).toBeTruthy()
+    expect(w.findAll('a').some((a) => a.attributes('href')?.startsWith('/sync/'))).toBe(false)
   })
   it('lists the playout measurements, with the fallback reason when it fell back', () => {
     const playout = { mode: 'measure', state: 'playing', warm: true, warm_s: 90, warmup_s: 60, error_ms: 0.4, error_p95_ms: 1.1, error_slope_ms_per_s: 0.02, corrections_per_s: 0.5, jumps: 1, underruns: 0, pa_latency_ms: 800, host_latency_ms: 12, sink_rate_ppm: 3, clock_slew_ppm: -2 }
