@@ -373,6 +373,7 @@ def main() -> None:
                     "playout_sync_enabled",
                     # Air sensor calibrations from the sync wizard (web UI only).
                     "air_to_sound_latency",
+                    "air_learned_latency",
                     # Preserve MA-pushed static_delay_ms across addon restarts.
                     # The Supervisor options.json is the source of truth for
                     # fields the user touched in the HA addon UI; everything

@@ -400,7 +400,38 @@ def _clean_air_latency(entry: dict) -> None:
             entry.get("id"),
             len(raw) - len(clean) if isinstance(raw, list) else "all",
         )
+    # Stage A calibrations carry no reference delay: they were folded with the player's static delay.
+    fallback = entry.get("static_delay_ms")
+    fallback_ms = float(fallback) if isinstance(fallback, (int, float)) and not isinstance(fallback, bool) else 0.0
+    for calibration in clean:
+        if calibration.get("d_ref_ms") is None:
+            calibration["d_ref_ms"] = fallback_ms
+            logger.info(
+                "Player %s: air calibration %s/%s/%s had no d_ref_ms; set it to %s ms",
+                entry.get("id"),
+                calibration.get("codec"),
+                calibration.get("rate"),
+                calibration.get("adapter"),
+                fallback_ms,
+            )
     entry["air_to_sound_latency"] = clean
+
+
+def _clean_air_learned(entry: dict) -> None:
+    """Drop invalid learned air latencies one by one (never the player); keep the newest 8."""
+    from sendspin_bridge.config.players import valid_air_learned_entries
+
+    raw = entry.get("air_learned_latency")
+    if raw is None:
+        return
+    clean = valid_air_learned_entries(raw)
+    if not isinstance(raw, list) or len(clean) != len(raw):
+        logger.warning(
+            "Player %s: dropped %s invalid or surplus learned air latency entr(ies)",
+            entry.get("id"),
+            len(raw) - len(clean) if isinstance(raw, list) else "all",
+        )
+    entry["air_learned_latency"] = clean
 
 
 def _normalize_players(config: dict) -> None:
@@ -415,6 +446,7 @@ def _normalize_players(config: dict) -> None:
             if isinstance(entry, dict):
                 _clamp_power_save_delay(entry)
                 _clean_air_latency(entry)
+                _clean_air_learned(entry)
             try:
                 kept.append(Player.model_validate(entry).model_dump(mode="json", exclude_unset=True))
                 continue

@@ -1007,3 +1007,31 @@ def test_air_calibrations_of_a_v5_speaker_preserved_across_addon_restart(tmp_pat
 
     devs = {d["mac"]: d for d in _read_json(tmp_path / "config.json")["BLUETOOTH_DEVICES"]}
     assert devs["AA:BB:CC:DD:EE:FF"]["air_to_sound_latency"] == [entry]
+
+
+def test_air_learned_latency_of_a_speaker_preserved_across_addon_restart(tmp_path):
+    from tests.support.config_v6 import v6_config
+
+    entry = {
+        "codec": "sbc",
+        "rate": 44100,
+        "adapter": "C0:FB:F9:62:D7:D6",
+        "source": "learned",
+        "samples_ms": [250.0, 260.0],
+        "d_out_ms": [100.0, 110.0],
+        "latency_ms": 155.0,
+        "d_ref_ms": 105.0,
+        "starts": 2,
+        "measured_at": "2026-10-28T09:00:00+00:00",
+    }
+    existing = v6_config([{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Speaker", "air_learned_latency": [entry]}])
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    stored = [p for p in cfg.get("players") or [] if (p.get("backend") or {}).get("mac") == "AA:BB:CC:DD:EE:FF"]
+    legacy = [d for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac") == "AA:BB:CC:DD:EE:FF"]
+    assert (stored or legacy)[0]["air_learned_latency"] == [entry]

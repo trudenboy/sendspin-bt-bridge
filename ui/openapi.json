@@ -421,6 +421,19 @@
             "title": "Codec",
             "type": "string"
           },
+          "d_ref_ms": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "D Ref Ms"
+          },
           "latency_ms": {
             "maximum": 2000.0,
             "minimum": 0.0,
@@ -536,6 +549,88 @@
           "source"
         ],
         "title": "AirLatencyEntryOut",
+        "type": "object"
+      },
+      "AirLearnedEntry": {
+        "additionalProperties": false,
+        "description": "Learned air latency of a speaker for one (codec, rate, adapter): the per-start pairs and their reference.",
+        "properties": {
+          "adapter": {
+            "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$",
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "const": "sbc",
+            "title": "Codec",
+            "type": "string"
+          },
+          "d_out_ms": {
+            "items": {
+              "maximum": 5000.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "D Out Ms",
+            "type": "array"
+          },
+          "d_ref_ms": {
+            "title": "D Ref Ms",
+            "type": "number"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "enum": [
+              16000,
+              32000,
+              44100,
+              48000
+            ],
+            "title": "Rate",
+            "type": "integer"
+          },
+          "samples_ms": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Samples Ms",
+            "type": "array"
+          },
+          "source": {
+            "const": "learned",
+            "default": "learned",
+            "title": "Source",
+            "type": "string"
+          },
+          "starts": {
+            "minimum": 1.0,
+            "title": "Starts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "samples_ms",
+          "d_out_ms",
+          "latency_ms",
+          "d_ref_ms",
+          "starts",
+          "measured_at"
+        ],
+        "title": "AirLearnedEntry",
         "type": "object"
       },
       "AirSensorFold": {
@@ -5292,6 +5387,21 @@
       "Player": {
         "additionalProperties": true,
         "properties": {
+          "air_learned_latency": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AirLearnedEntry"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air Learned Latency"
+          },
           "air_to_sound_latency": {
             "anyOf": [
               {

@@ -41,6 +41,7 @@ _DEVICE_HOT_FIELDS: frozenset[str] = frozenset(
         "room_name",
         # Air sensor calibrations: the matching entry is resent to the running daemon.
         "air_to_sound_latency",
+        "air_learned_latency",
     }
 )
 

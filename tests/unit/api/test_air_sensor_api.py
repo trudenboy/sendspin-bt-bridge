@@ -540,5 +540,5 @@ def test_switch_off_forgets_in_the_config_and_sends_nothing(api_client, calibrat
     r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/44100/{AIR_ADAPTER}")
     assert r.status_code == 204, r.text
     assert [e["rate"] for e in dev.stored()] == [48000]
-    assert dev.client.air_to_sound_latency == [{**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0}]
+    assert dev.client.air_to_sound_latency == [{**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0, "d_ref_ms": 0.0}]
     assert dev.sent() == []

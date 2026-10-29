@@ -2500,6 +2500,8 @@ export interface components {
              * @constant
              */
             codec: "sbc";
+            /** D Ref Ms */
+            d_ref_ms?: number | null;
             /** Latency Ms */
             latency_ms: number;
             /** Measured At */
@@ -2550,6 +2552,42 @@ export interface components {
             source: string;
             /** Spread Ms */
             spread_ms: number | null;
+        };
+        /**
+         * AirLearnedEntry
+         * @description Learned air latency of a speaker for one (codec, rate, adapter): the per-start pairs and their reference.
+         */
+        AirLearnedEntry: {
+            /** Adapter */
+            adapter: string;
+            /**
+             * Codec
+             * @constant
+             */
+            codec: "sbc";
+            /** D Out Ms */
+            d_out_ms: number[];
+            /** D Ref Ms */
+            d_ref_ms: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /**
+             * Rate
+             * @enum {integer}
+             */
+            rate: 16000 | 32000 | 44100 | 48000;
+            /** Samples Ms */
+            samples_ms: number[];
+            /**
+             * Source
+             * @default learned
+             * @constant
+             */
+            source?: "learned";
+            /** Starts */
+            starts: number;
         };
         /**
          * AirSensorFold
@@ -4517,6 +4555,8 @@ export interface components {
         };
         /** Player */
         Player: {
+            /** Air Learned Latency */
+            air_learned_latency?: components["schemas"]["AirLearnedEntry"][] | null;
             /** Air To Sound Latency */
             air_to_sound_latency?: components["schemas"]["AirLatencyEntry"][] | null;
             /** Backend */

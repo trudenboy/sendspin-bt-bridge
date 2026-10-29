@@ -9,6 +9,7 @@ keyed by player id, so writing it does not look like a settings change.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import uuid
 from datetime import UTC, datetime
@@ -95,6 +96,11 @@ Backend = Annotated[BluetoothBackend | PulseSinkBackend, Field(discriminator="ty
 
 # R-12: the air-to-sound latency is stored per (codec, SBC rate, adapter MAC), at most 8 per player.
 AIR_LATENCY_MAX_ENTRIES: Final = 8
+# Learned air latency: one entry per key, each with at most 8 (sample, delay) pairs.
+AIR_LEARNED_MAX_ENTRIES: Final = 8
+AIR_LEARNED_MAX_SAMPLES: Final = 8
+AIR_LEARNED_MIN_SAMPLES: Final = 2
+_AIR_LEARNED_TOLERANCE_MS: Final = 0.05
 
 
 class AirLatencyEntry(BaseModel):
@@ -110,9 +116,51 @@ class AirLatencyEntry(BaseModel):
     measured_at: str
     reference: str = Field("", max_length=80)
     source: Literal["sync_wizard", "manual"] = "sync_wizard"
+    # The output delay the measurement was folded with (S-22).
+    d_ref_ms: float | None = Field(None, ge=0, le=5000)
 
     def key(self) -> tuple[str, int, str]:
         return (self.codec, self.rate, self.adapter)
+
+
+class AirLearnedEntry(BaseModel):
+    """Learned air latency of a speaker for one (codec, rate, adapter): the per-start pairs and their reference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    codec: Literal["sbc"]
+    rate: Literal[16000, 32000, 44100, 48000]
+    adapter: str = Field(pattern=r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
+    source: Literal["learned"] = "learned"
+    samples_ms: list[float] = Field(min_length=1, max_length=AIR_LEARNED_MAX_SAMPLES)
+    d_out_ms: list[Annotated[float, Field(ge=0, le=5000)]] = Field(min_length=1, max_length=AIR_LEARNED_MAX_SAMPLES)
+    latency_ms: float
+    d_ref_ms: float
+    starts: int = Field(ge=1)
+    measured_at: str
+
+    def key(self) -> tuple[str, int, str]:
+        return (self.codec, self.rate, self.adapter)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> AirLearnedEntry:
+        from sendspin_bridge.services.audio.playout.air_learned import learned_reference
+
+        if len(self.samples_ms) != len(self.d_out_ms):
+            raise ValueError("samples_ms and d_out_ms must have the same length")
+        if not all(math.isfinite(x) for x in self.samples_ms):
+            raise ValueError("samples_ms must be finite")
+        if self.starts < len(self.samples_ms):
+            raise ValueError("starts must be at least the number of samples")
+        try:
+            latency, d_ref = learned_reference(self.samples_ms, self.d_out_ms)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        if abs(latency - self.latency_ms) > _AIR_LEARNED_TOLERANCE_MS or abs(d_ref - self.d_ref_ms) > (
+            _AIR_LEARNED_TOLERANCE_MS
+        ):
+            raise ValueError("latency_ms and d_ref_ms do not match the samples")
+        return self
 
 
 class Player(BaseModel):
@@ -146,6 +194,8 @@ class Player(BaseModel):
     playout_sync_enabled: StrictBool | None = None
     # Air sensor calibrations, one per (codec, SBC rate, adapter); applied live.
     air_to_sound_latency: list[AirLatencyEntry] | None = Field(None, max_length=AIR_LATENCY_MAX_ENTRIES)
+    # Learned air latency per (codec, SBC rate, adapter); written by the bridge, applied live.
+    air_learned_latency: list[AirLearnedEntry] | None = Field(None, max_length=AIR_LEARNED_MAX_ENTRIES)
     backend: Backend
 
     @field_validator("keepalive_interval")
@@ -160,6 +210,13 @@ class Player(BaseModel):
     def _unique_air_latency_keys(cls, value: list[AirLatencyEntry] | None) -> list[AirLatencyEntry] | None:
         if value is not None and len({entry.key() for entry in value}) != len(value):
             raise ValueError("air_to_sound_latency has two entries for the same codec, rate and adapter")
+        return value
+
+    @field_validator("air_learned_latency")
+    @classmethod
+    def _unique_air_learned_keys(cls, value: list[AirLearnedEntry] | None) -> list[AirLearnedEntry] | None:
+        if value is not None and len({entry.key() for entry in value}) != len(value):
+            raise ValueError("air_learned_latency has two entries for the same codec, rate and adapter")
         return value
 
     @model_validator(mode="after")
@@ -365,6 +422,91 @@ def forget_air_latency(
     Returns the remaining valid entries and how many were removed.
     """
     valid = valid_air_latency_entries(entries)
+    if codec is None:
+        return [], len(valid)
+    wanted = (codec.strip().lower(), rate, normalize_mac(adapter))
+    remaining = [e for e in valid if _air_key(e) != wanted]
+    return remaining, len(valid) - len(remaining)
+
+
+def valid_air_learned_entries(raw: object) -> list[dict[str, Any]]:
+    """The valid entries of a stored ``air_learned_latency`` value, as dicts.
+
+    Invalid entries are dropped one by one, a repeated key keeps its newest entry,
+    and only the newest 8 stay.
+    """
+    if not isinstance(raw, list):
+        return []
+    by_key: dict[tuple[str, int, str], dict[str, Any]] = {}
+    for item in raw:
+        try:
+            entry = AirLearnedEntry.model_validate(item)
+        except ValidationError:
+            continue
+        dumped = entry.model_dump(mode="json")
+        previous = by_key.get(entry.key())
+        if previous is None or _measured_at(dumped) >= _measured_at(previous):
+            by_key[entry.key()] = dumped
+    return _cap_air_latency(list(by_key.values()), AIR_LEARNED_MAX_ENTRIES)
+
+
+def resolve_air_learned(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> tuple[float, float, int] | None:
+    """``(latency_ms, d_ref_ms, starts)`` learned for the current key, or None below 2 samples."""
+    if not isinstance(codec, str) or not isinstance(rate, int) or isinstance(rate, bool):
+        return None
+    wanted = (codec.strip().lower(), rate, normalize_mac(adapter))
+    if not wanted[2]:
+        return None
+    for entry in valid_air_learned_entries(player_cfg.get("air_learned_latency")):
+        if _air_key(entry) == wanted:
+            if len(entry["samples_ms"]) < AIR_LEARNED_MIN_SAMPLES:
+                return None
+            return float(entry["latency_ms"]), float(entry["d_ref_ms"]), int(entry["starts"])
+    return None
+
+
+def record_air_learned_sample(
+    entries: object, key: tuple[str, int, str], x_ms: float, d_out_ms: float, now_iso: str
+) -> list[dict[str, Any]]:
+    """*entries* with the pair (*x_ms*, *d_out_ms*) added under *key*; the oldest pair beyond 8 goes.
+
+    Recomputes ``latency_ms``/``d_ref_ms``, adds one to ``starts`` and sets ``measured_at``.
+    Raises ``pydantic.ValidationError`` when the result is not a valid entry.
+    """
+    from sendspin_bridge.services.audio.playout.air_learned import learned_reference
+
+    codec, rate, adapter = key
+    wanted = (codec.strip().lower(), rate, normalize_mac(adapter))
+    valid = valid_air_learned_entries(entries)
+    previous = next((e for e in valid if _air_key(e) == wanted), None)
+    samples = [*(previous["samples_ms"] if previous else []), float(x_ms)][-AIR_LEARNED_MAX_SAMPLES:]
+    delays = [*(previous["d_out_ms"] if previous else []), float(d_out_ms)][-AIR_LEARNED_MAX_SAMPLES:]
+    latency, d_ref = learned_reference(samples, delays)
+    new = AirLearnedEntry.model_validate(
+        {
+            "codec": wanted[0],
+            "rate": wanted[1],
+            "adapter": wanted[2],
+            "source": "learned",
+            "samples_ms": samples,
+            "d_out_ms": delays,
+            "latency_ms": latency,
+            "d_ref_ms": d_ref,
+            "starts": (int(previous["starts"]) if previous else 0) + 1,
+            "measured_at": now_iso,
+        }
+    )
+    kept = [e for e in valid if _air_key(e) != wanted]
+    return _cap_air_latency([*kept, new.model_dump(mode="json")], AIR_LEARNED_MAX_ENTRIES)
+
+
+def forget_air_learned(
+    entries: object, codec: str | None = None, rate: int | None = None, adapter: str | None = None
+) -> tuple[list[dict[str, Any]], int]:
+    """*entries* without the one for (codec, rate, adapter), or without all of them when *codec* is None."""
+    valid = valid_air_learned_entries(entries)
     if codec is None:
         return [], len(valid)
     wanted = (codec.strip().lower(), rate, normalize_mac(adapter))

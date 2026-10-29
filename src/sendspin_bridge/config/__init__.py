@@ -647,6 +647,39 @@ def upsert_air_latency(entries: list[dict], entry: dict, *, max_entries: int = 8
     return _upsert(entries, entry, max_entries=max_entries)
 
 
+def resolve_air_learned(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> tuple[float, float, int] | None:
+    """The player's learned ``(latency_ms, d_ref_ms, starts)`` for this key, or None below 2 samples."""
+    from sendspin_bridge.config.players import resolve_air_learned as _resolve
+
+    return _resolve(player_cfg, codec, rate, adapter)
+
+
+def save_air_learned_sample(player_id: str | None, key: tuple[str, int, str], x_ms: float, d_out_ms: float) -> None:
+    """Persist one learned (sample, delay) pair of a player under its ``air_learned_latency``."""
+    if not player_id or not CONFIG_FILE.exists():
+        return
+
+    def _record(cfg: dict) -> None:
+        from datetime import UTC, datetime
+
+        from sendspin_bridge.config.players import find_player_by_id, record_air_learned_sample
+
+        player = find_player_by_id(cfg, player_id)
+        if player is None:
+            logger.warning("Skipping learned air sample for unknown player %s", player_id)
+            return
+        player["air_learned_latency"] = record_air_learned_sample(
+            player.get("air_learned_latency"), key, x_ms, d_out_ms, datetime.now(UTC).isoformat(timespec="seconds")
+        )
+
+    try:
+        update_config(_record)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save learned air sample for %s: %s", player_id, e)
+
+
 def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> str:
     """The playout mode one player runs: ``off`` when it opted out, else ``PLAYOUT_SYNC``.
 
