@@ -32,6 +32,7 @@ vi.mock('@/api/config', () => ({
   uploadConfig: vi.fn(),
   testSendspin: vi.fn(),
 }))
+vi.mock('@/components/settings/LatencyAssistantSection.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/api/auth', () => ({
   listTokens: vi.fn().mockResolvedValue({ tokens: [] }),
   issueToken: vi.fn(),
@@ -63,7 +64,7 @@ async function mountView(config: Record<string, unknown> = BASE) {
   const wrapper = mount(ConfigView, {
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
-      stubs: { MaLoginFlow: true, LatencyAssistantSection: true, Teleport: true },
+      stubs: { MaLoginFlow: true, Teleport: true },
     },
     attachTo: document.body,
   })
