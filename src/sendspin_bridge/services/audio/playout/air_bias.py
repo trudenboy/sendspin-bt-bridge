@@ -43,6 +43,7 @@ GATE_MAD_K = 4.0
 GATE_HISTORY = 20
 STEP_WINDOWS = 15
 STEP_AGREE_US = 3_000.0
+STEP_MIN_AGREE = 12  # of the STEP_WINDOWS gated windows must lie within STEP_AGREE_US of their median
 RESEED_TIMEOUT_S = 15.0
 
 BiasState = Literal["none", "seeding", "active", "held"]
@@ -545,9 +546,12 @@ class AirBias:
             return
         self._gated += 1
         self._gated_run.append(b_i)
-        if len(self._gated_run) == STEP_WINDOWS and max(self._gated_run) - min(self._gated_run) <= STEP_AGREE_US:
+        if len(self._gated_run) == STEP_WINDOWS:
+            centre = float(median(self._gated_run))
+            if sum(abs(v - centre) <= STEP_AGREE_US for v in self._gated_run) < STEP_MIN_AGREE:
+                return
             old = self._b
-            self._b = float(median(self._gated_run))
+            self._b = centre
             self._history.clear()
             self._history.extend(self._gated_run)
             self._gated_run.clear()

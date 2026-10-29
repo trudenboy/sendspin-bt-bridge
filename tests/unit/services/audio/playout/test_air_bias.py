@@ -441,3 +441,23 @@ def test_a_pa_step_before_the_first_seed_does_not_restart_the_triple():
     b2.on_reading_break("underrun", 21.5e9, 22.0)
     assert run(b2, feed2, hist, [win(2, h)], t0=22.0) == []
     assert b2.state == "seeding"
+
+
+def test_a_hidden_step_is_absorbed_despite_a_few_noisy_windows():
+    # 12 of the 15 gated windows within 3 ms of their median are enough; the other three may stray
+    b, feed = bias()
+    h = (D_REF - L_AS) * 1000
+    run(b, feed, FakeHistory(5_000.0), [win(i, h) for i in range(3)])
+    offs = [25_000.0] * 15
+    offs[2], offs[7], offs[11] = 29_500.0, 20_500.0, 30_000.0
+    run(b, feed, FakeHistory(5_000.0), [win(i + 3, h + o) for i, o in enumerate(offs)], t0=23.0)
+    assert b.value_us == pytest.approx(5_000.0 - 25_000.0, abs=200.0)
+
+
+def test_a_scattered_run_is_not_a_step():
+    b, feed = bias()
+    h = (D_REF - L_AS) * 1000
+    run(b, feed, FakeHistory(5_000.0), [win(i, h) for i in range(3)])
+    offs = [25_000.0 + (8_000.0 if i % 2 else -8_000.0) for i in range(15)]  # 15 gated, none within 3 ms of the median
+    run(b, feed, FakeHistory(5_000.0), [win(i + 3, h + o) for i, o in enumerate(offs)], t0=23.0)
+    assert b.value_us == pytest.approx(5_000.0, abs=200.0)

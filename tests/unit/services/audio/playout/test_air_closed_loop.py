@@ -553,10 +553,9 @@ def test_calibration_set_mid_stream():
 
 
 @pytest.mark.slow
-def test_hidden_step_is_absorbed_then_corrected():
-    # Seed 4: the step needs 15 consecutive gated windows within 3 ms of each other and the tracked b carries
-    # about 0.5 ms of window noise, so the +-0.5 ms band holds for some port seeds and not for others.
-    st = start(30.0, seed=4, tone_s=100.0)
+@pytest.mark.parametrize("seed", range(1, 13))
+def test_hidden_step_is_absorbed_then_corrected(seed):
+    st = start(30.0, seed=seed, tone_s=100.0)
     try:
         st.run(16.0)
         b0 = st.eng.snapshot()["air_bias_ms"]
@@ -577,7 +576,8 @@ def test_hidden_step_is_absorbed_then_corrected():
         rows = st.jumps.rows[n:]
         steady = [(round((t - t_step) / 1e6, 1), size) for t, r, size in rows if r == "steady"]
         print("hidden step +25 ms: bias", b0, "->", b1, "after", t_absorbed, "s; steady jumps", steady)
-        assert abs((b1 - b0) - (-25.0)) <= 0.5
+        # b0 is the median of only three windows (sigma ~0.9 ms of its own), so the change is that noise plus b1's
+        assert abs((b1 - b0) - (-25.0)) <= 2.5
         assert [r for _, r, _ in rows] == ["steady"], rows
         assert abs(rows[0][2] - 25.0) <= 5.0  # R14 acts on the noisy pulsesink readings
         assert (rows[0][0] - t_step) / 1e6 - t_absorbed <= 10.0
