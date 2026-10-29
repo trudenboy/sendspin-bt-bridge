@@ -7,6 +7,7 @@ import io
 from datetime import datetime, timezone
 from typing import Any
 
+from sendspin_bridge.services.diagnostics.server_text import coded, event_fields
 from sendspin_bridge.services.infrastructure._helpers import _parse_timestamp
 
 UTC = timezone.utc
@@ -47,8 +48,16 @@ def _annotate_resolved_runtime_errors(events: list[dict[str, Any]]) -> list[dict
         resolved["level"] = "info"
         message = str(event.get("message") or "").strip()
         resolved["message"] = f"{message} (recovered)" if message else "(recovered)"
+        resolved["recovered"] = True
         annotated.append(resolved)
     return annotated
+
+
+def _startup_text(startup_progress: dict[str, Any]) -> dict[str, Any]:
+    """Code and values of the startup entry: its phase, or ``failed`` with the message."""
+    if startup_progress.get("status") == "error":
+        return coded("startup-failed", {"message": str(startup_progress.get("message") or "")})
+    return coded(f"startup-{startup_progress.get('phase') or 'idle'}")
 
 
 def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]) -> dict[str, Any]:
@@ -63,8 +72,10 @@ def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]
                 "level": "error" if startup_progress.get("status") == "error" else "info",
                 "source_type": "bridge",
                 "source": "Bridge startup",
+                "source_code": "bridge_startup",
                 "label": startup_progress.get("phase") or "startup",
                 "summary": startup_progress.get("message") or "Startup progress available",
+                **_startup_text(startup_progress),
             }
         )
 
@@ -82,6 +93,7 @@ def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]
                         "device_name": name,
                         "label": event.get("event_type") or "event",
                         "summary": event.get("message") or "Recovery event",
+                        **event_fields(event),
                     }
                 )
             continue
@@ -99,6 +111,7 @@ def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]
                 "device_name": name,
                 "label": state or "health",
                 "summary": summary,
+                **coded(f"health-{health.get('code') or state}", dict(health.get("params") or {})),
             }
         )
 

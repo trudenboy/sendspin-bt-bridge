@@ -17,7 +17,7 @@ from typing import Any
 
 from sendspin_bridge.services.infrastructure._helpers import _device_extra
 
-__all__ = ["device_bluetooth_state", "reconnect_attempt_summary"]
+__all__ = ["device_bluetooth_state", "reconnect_attempt_params", "reconnect_attempt_summary"]
 
 
 def device_bluetooth_state(device: Any) -> dict[str, Any]:
@@ -48,3 +48,12 @@ def reconnect_attempt_summary(device: Any) -> str:
         remaining = max(threshold - attempt, 0)
         return f"Reconnect attempt {attempt}/{threshold}. {remaining} attempts remain before auto-release."
     return f"Reconnect attempt {attempt} is in progress."
+
+
+def reconnect_attempt_params(device: Any) -> dict[str, int]:
+    """The numbers behind ``reconnect_attempt_summary``, for translated text (``{}`` when none)."""
+    facts = device_bluetooth_state(device)
+    attempt = int(facts.get("reconnect_attempt") or 0)
+    if attempt <= 0:
+        return {}
+    return {"attempt": attempt, "max_attempts": max(int(facts.get("max_reconnect_fails") or 0), 0)}

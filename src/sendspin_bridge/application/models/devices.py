@@ -14,6 +14,7 @@ from pydantic import AfterValidator, ConfigDict, Field, StrictBool, StrictInt, S
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, supported_actions_for
+from sendspin_bridge.services.diagnostics.server_text import event_fields
 
 IdleMode = Literal["default", "power_save", "auto_disconnect", "keep_alive"]
 
@@ -438,6 +439,8 @@ class DeviceHealth(ResponseModel):
     summary: str = ""
     reasons: list[str] = Field(default_factory=list)
     last_event_at: str | None = None
+    code: str = Field(default="", description="Stable id of the summary's wording; the UI translates it.")
+    params: dict[str, Any] = Field(default_factory=dict, description="Values the summary's sentence interpolates.")
 
 
 class Device(ResponseModel):
@@ -664,7 +667,7 @@ class Device(ResponseModel):
             ),
             capabilities=g("capabilities") or {},
             transfer_readiness=g("transfer_readiness"),
-            recent_events=list(g("recent_events") or []),
+            recent_events=[{**e, **event_fields(e)} if isinstance(e, dict) else e for e in g("recent_events") or []],
         )
 
 

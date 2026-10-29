@@ -60,6 +60,9 @@ class DeviceHealthState:
     summary: str
     reasons: list[str] = field(default_factory=list)
     last_event_at: str | None = None
+    #: Stable id of the summary wording (``server_text``, area ``event`` as ``health-<code>``).
+    code: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -79,6 +82,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="disabled",
             severity="info",
             summary="Bluetooth management released",
+            code="released",
             reasons=["bt_management_disabled", *event_reasons],
             last_event_at=last_event_at,
         )
@@ -91,6 +95,8 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="degraded",
             severity="error",
             summary=str(facts.last_error),
+            code="error",
+            params={"error": str(facts.last_error)},
             reasons=reasons,
             last_event_at=facts.last_error_at or last_event_at,
         )
@@ -103,6 +109,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="transitioning",
             severity="info",
             summary="Stopping playback service",
+            code="stopping",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -115,6 +122,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="recovering",
             severity="warning",
             summary="Reconnect in progress",
+            code="reconnecting",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -127,6 +135,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="recovering",
             severity="warning",
             summary="Audio sync re-anchor in progress",
+            code="resyncing",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -140,6 +149,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
                 state="offline",
                 severity="warning",
                 summary="Audio output missing",
+                code="output_missing",
                 reasons=reasons,
                 last_event_at=last_event_at,
             )
@@ -151,6 +161,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="offline",
             severity="warning",
             summary="Bluetooth speaker disconnected",
+            code="bluetooth_disconnected",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -166,6 +177,8 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="degraded",
             severity="warning",
             summary=f"Connected to Music Assistant on {where}, not to this bridge's Music Assistant",
+            code="foreign_server",
+            params={"host": facts.connected_server_host or "", "name": facts.connected_server_name or ""},
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -175,6 +188,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="streaming",
             severity="info",
             summary="Streaming audio",
+            code="streaming",
             reasons=event_reasons,
             last_event_at=last_event_at,
         )
@@ -187,6 +201,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="recovering",
             severity="warning",
             summary="Refreshing Music Assistant connection",
+            code="ma_reconnecting",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -199,6 +214,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="degraded",
             severity="warning",
             summary="Sendspin daemon disconnected",
+            code="daemon_disconnected",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -216,6 +232,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="degraded",
             severity="warning",
             summary="Audio sink muted at system level",
+            code="sink_muted",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -228,6 +245,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="degraded",
             severity="warning",
             summary="Playback active without audio stream",
+            code="playback_without_audio",
             reasons=reasons,
             last_event_at=last_event_at,
         )
@@ -237,6 +255,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             state="streaming",
             severity="info",
             summary="Streaming audio",
+            code="streaming",
             reasons=event_reasons,
             last_event_at=last_event_at,
         )
@@ -245,6 +264,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
         state="ready" if getattr(device, "connected", False) else "idle",
         severity="info",
         summary="Connected and ready" if getattr(device, "connected", False) else "Idle",
+        code="ready" if getattr(device, "connected", False) else "idle",
         reasons=event_reasons,
         last_event_at=last_event_at,
     )

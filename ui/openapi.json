@@ -3383,6 +3383,12 @@
       },
       "DeviceHealth": {
         "properties": {
+          "code": {
+            "default": "",
+            "description": "Stable id of the summary's wording; the UI translates it.",
+            "title": "Code",
+            "type": "string"
+          },
           "last_event_at": {
             "anyOf": [
               {
@@ -3393,6 +3399,12 @@
               }
             ],
             "title": "Last Event At"
+          },
+          "params": {
+            "additionalProperties": true,
+            "description": "Values the summary's sentence interpolates.",
+            "title": "Params",
+            "type": "object"
           },
           "reasons": {
             "items": {
@@ -3422,7 +3434,9 @@
           "severity",
           "summary",
           "reasons",
-          "last_event_at"
+          "last_event_at",
+          "code",
+          "params"
         ],
         "title": "DeviceHealth",
         "type": "object"

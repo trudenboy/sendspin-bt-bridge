@@ -3768,8 +3768,21 @@ export interface components {
         };
         /** DeviceHealth */
         DeviceHealth: {
+            /**
+             * Code
+             * @description Stable id of the summary's wording; the UI translates it.
+             * @default
+             */
+            code: string;
             /** Last Event At */
             last_event_at: string | null;
+            /**
+             * Params
+             * @description Values the summary's sentence interpolates.
+             */
+            params: {
+                [key: string]: unknown;
+            };
             /** Reasons */
             reasons: string[];
             /**

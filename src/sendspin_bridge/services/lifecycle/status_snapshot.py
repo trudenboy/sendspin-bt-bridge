@@ -106,6 +106,8 @@ class DeviceHealthSummary:
     summary: str
     reasons: list[str] = field(default_factory=list)
     last_event_at: str | None = None
+    code: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -293,6 +295,8 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         summary=health.summary,
         reasons=list(health.reasons),
         last_event_at=health.last_event_at,
+        code=health.code,
+        params=dict(health.params),
     )
 
 
