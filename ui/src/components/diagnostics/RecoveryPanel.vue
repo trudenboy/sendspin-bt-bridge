@@ -6,9 +6,11 @@ import { SbCard, SbBadge, SbButton, SbSpinner } from '@/kit'
 import { ShieldCheck, RefreshCw, ClipboardCopy, DownloadCloud } from 'lucide-vue-next'
 import { copyToClipboard } from '@/utils/clipboard'
 import { downloadTimelineCsv } from '@/api/diagnostics'
+import { useGuidanceActions, type GuidanceAction } from '@/composables/useGuidanceActions'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
+const { run } = useGuidanceActions()
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 const copyLabel = computed(() =>
   t(copyState.value === 'copied' ? 'diagnostics.copied' : copyState.value === 'failed' ? 'diagnostics.copyFailed' : 'diagnostics.copy'),
@@ -19,7 +21,7 @@ interface RecoveryIssue {
   severity: string
   title: string
   summary?: string
-  primary_action?: { key: string; label: string }
+  primary_action?: GuidanceAction
 }
 
 const issues = computed(() => (diagnostics.recovery?.issues ?? []) as RecoveryIssue[])
@@ -91,7 +93,15 @@ async function runChecks() {
             <span class="text-sm font-medium text-text-primary">{{ issue.title }}</span>
           </div>
           <p v-if="issue.summary" class="text-sm text-text-secondary">{{ issue.summary }}</p>
-          <p v-if="issue.primary_action" class="text-xs text-text-secondary">→ {{ issue.primary_action.label }}</p>
+          <SbButton
+            v-if="issue.primary_action"
+            variant="outline"
+            size="sm"
+            data-recovery-action
+            @click="run(issue.primary_action)"
+          >
+            {{ issue.primary_action.label }}
+          </SbButton>
         </div>
       </SbCard>
     </template>

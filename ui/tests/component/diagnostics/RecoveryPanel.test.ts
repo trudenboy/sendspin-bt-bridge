@@ -7,6 +7,8 @@ import { useDiagnosticsStore } from '@/stores/diagnostics'
 import en from '@/i18n/en.json'
 import ru from '@/i18n/ru.json'
 
+const run = vi.hoisted(() => vi.fn())
+vi.mock('@/composables/useGuidanceActions', () => ({ useGuidanceActions: () => ({ run }) }))
 vi.mock('@/api/diagnostics', () => ({
   getDiagnostics: vi.fn().mockResolvedValue({}),
   getRecoveryAssistant: vi.fn().mockResolvedValue({}),
@@ -111,5 +113,18 @@ describe('RecoveryPanel', () => {
     i18n.global.locale.value = 'ru'
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain(ru.diagnostics.copy)
+  })
+
+  it('renders the primary action as a button that runs it', async () => {
+    const store = useDiagnosticsStore()
+    store.loading = false
+    const action = { key: 'reconnect_device', label: 'Reconnect speaker', device_names: ['Kitchen'] }
+    store.recovery = { issues: [{ key: 'x', severity: 'error', title: 'Down', primary_action: action }] }
+    const wrapper = mount(RecoveryPanel, { global: { plugins: [buildI18n()] } })
+    const btn = wrapper.find('[data-recovery-action]')
+    expect(btn.element.tagName).toBe('BUTTON')
+    expect(btn.text()).toContain('Reconnect speaker')
+    await btn.trigger('click')
+    expect(run).toHaveBeenCalledWith(action)
   })
 })
