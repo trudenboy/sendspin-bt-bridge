@@ -162,6 +162,6 @@ describe('DeviceListRow', () => {
   it('shows standby time and an automatic release in the status cell', () => {
     const since = new Date(Date.now() - 3 * 60_000 - 5_000).toISOString()
     expect(mountRow(makeDevice({ bluetooth: { standby: true, standby_since: since } })).text()).toContain('Standby · 3 min')
-    expect(mountRow(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()).toContain('Auto-released')
+    expect(mountRow(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()).toContain('Handed over automatically')
   })
 })

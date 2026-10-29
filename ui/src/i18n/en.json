@@ -52,8 +52,8 @@
       "sink_muted": "Muted by system",
       "stopping": "Stopping",
       "reconnecting": "Reconnecting",
-      "autoReleased": "Auto-released",
-      "autoReleasedTitle": "The bridge let go of this speaker after repeated connection problems. Take it back to retry.",
+      "autoReleased": "Handed over automatically",
+      "autoReleasedTitle": "The bridge handed this speaker over after repeated connection problems. Take it back to retry.",
       "standbyFor": "{state} · {elapsed}",
       "standbySince": "On standby since {time}"
     },
@@ -66,7 +66,7 @@
       "enable": "Enable",
       "disable": "Disable",
       "details": "Details",
-      "enableFailed": "Failed to toggle device",
+      "enableFailed": "Could not enable or disable the player",
       "volumeFailed": "Could not change the volume of {name}",
       "muteFailed": "Could not mute or unmute {name}",
       "releaseFailed": "Could not hand over {name}",
@@ -74,7 +74,7 @@
       "forget": "Forget Bluetooth bond",
       "forgetConfirm": "Forget the Bluetooth bond? The speaker must be paired again.",
       "repair": "Pair again",
-      "claim": "Claim audio",
+      "claim": "Use this bridge as the source",
       "reconnectFailed": "Reconnect failed",
       "forgetTitle": "Forget {name}?",
       "more": "More actions for {name}"
@@ -94,12 +94,12 @@
     "chips": {
       "sync": {
         "label": "Sync",
-        "reanchoring": "Re-anchoring",
+        "reanchoring": "Resyncing",
         "errorMs": "{ms} ms",
         "title": "Playback in sync with the group",
-        "reanchoringTitle": "Re-anchoring stream timing",
+        "reanchoringTitle": "Resyncing stream timing",
         "count": "×{count}",
-        "countTitle": "Re-anchors: {count} this session · {m5} in 5 min · {m30} in 30 min",
+        "countTitle": "Resyncs: {count} this session · {m5} in 5 min · {m30} in 30 min",
         "playout": "Playout",
         "playoutTitle": "Measured playout error at the speaker output",
         "warming": "Warming {s} s",
@@ -132,7 +132,7 @@
           "disconnected": "Bluetooth disconnected",
           "reconnecting": "Bluetooth reconnecting",
           "released": "Bluetooth handed over",
-          "autoReleased": "Bluetooth auto-released after connection issues",
+          "autoReleased": "Bluetooth handed over automatically after connection issues",
           "disabled": "Speaker disabled"
         }
       },
@@ -140,10 +140,10 @@
         "title": "Audio output {name}"
       },
       "transfer": {
-        "ready": "Transfer",
+        "ready": "Room switch",
         "notReady": "Not ready",
-        "readyTitle": "Ready for room handoff",
-        "notReadyTitle": "Room handoff not ready: {reason}",
+        "readyTitle": "Ready to switch rooms",
+        "notReadyTitle": "Not ready to switch rooms: {reason}",
         "reasons": {
           "ready": "ready",
           "disabled": "speaker disabled",
@@ -151,7 +151,7 @@
           "stopping": "stopping",
           "reconnecting": "reconnecting",
           "music_assistant_reconnecting": "Music Assistant reconnecting",
-          "reanchoring": "re-anchoring",
+          "reanchoring": "resyncing",
           "output_missing": "output missing",
           "daemon_unavailable": "player not running",
           "bluetooth_disconnected": "Bluetooth disconnected",
@@ -251,7 +251,7 @@
     "audioSink": "Audio Sink",
     "codec": "Codec",
     "sampleRate": "Sample Rate",
-    "reanchorCount": "Routing Corrections",
+    "reanchorCount": "Resyncs",
     "logs": {
       "title": "Application Logs",
       "logLevel": "Log Level",
@@ -340,8 +340,8 @@
   "devices": {
     "addDevice": "Add speaker",
     "empty": {
-      "title": "No devices yet",
-      "description": "Scan for Bluetooth devices or add a device manually."
+      "title": "No players yet",
+      "description": "Scan for Bluetooth speakers or add a player manually."
     },
     "viewGrid": "Grid view",
     "viewList": "List view",
@@ -367,8 +367,8 @@
     },
     "bulk": {
       "power_save": {
-        "label": "Power save",
-        "title": "Suspend the audio output of {count} of {total} selected (Bluetooth stays connected)"
+        "label": "Pause output",
+        "title": "Pause the audio output of {count} of {total} selected (Bluetooth stays connected)"
       },
       "standby": {
         "label": "Standby",
@@ -377,10 +377,10 @@
         "confirmMessage": "Bluetooth disconnects and playback stops on: {names}. Wake them from their menu."
       },
       "release": {
-        "label": "Release",
+        "label": "Hand over",
         "title": "Hand {count} of {total} selected over to other devices",
         "confirmTitle": "Hand over {count} speaker(s)?",
-        "confirmMessage": "The bridge lets go of: {names}. They will not reconnect until you take them back."
+        "confirmMessage": "The bridge stops managing: {names}. They will not reconnect until you take them back."
       },
       "failed": "{action} failed for: {names}",
       "enable": {
@@ -420,8 +420,8 @@
       "audioSink": "Audio Sink",
       "connected": "Connected",
       "codec": "Codec",
-      "reportedDelay": "Reported delay",
-      "reportedDelayHint": "Delay the speaker reports over Bluetooth (A2DP Delay Reporting). Advisory: reported by the speaker, not measured.",
+      "reportedDelay": "Reported latency",
+      "reportedDelayHint": "Latency the speaker reports over Bluetooth (A2DP Delay Reporting). Advisory: reported by the speaker, not measured.",
       "sampleRate": "Sample Rate"
     },
     "config": {
@@ -429,7 +429,7 @@
       "mac": "MAC Address",
       "adapter": "Adapter",
       "port": "Listen Port",
-      "delay": "Static Delay",
+      "delay": "Speaker latency compensation",
       "enabled": "Enabled",
       "save": "Save",
       "saved": "Device configuration saved",
@@ -459,10 +459,10 @@
       "pairingDone": "Music Assistant can pair for a while",
       "unmute": "Unmute the audio output",
       "unmuteDone": "Audio output unmuted",
-      "release": "Suspend audio output",
-      "releaseDone": "Audio output suspended",
-      "resume": "Resume audio output",
-      "resumeDone": "Audio output resumed"
+      "release": "Pause output",
+      "releaseDone": "Output paused",
+      "resume": "Resume output",
+      "resumeDone": "Output resumed"
     },
     "server": {
       "title": "Music Assistant server",
@@ -788,8 +788,8 @@
         "help": "Also log the speaker sink's own clock rate in the minute-by-minute Clock diag line. Playback is unchanged."
       },
       "PULSE_SINK_RESET_ON_START": {
-        "label": "Wake audio outputs on start",
-        "help": "Suspend and resume each local audio output once before its player first starts. Helps an output that comes up silent."
+        "label": "Reset audio outputs on start",
+        "help": "Pause and resume each local audio output once before its player first starts. Helps an output that comes up silent."
       },
       "BT_CHECK_INTERVAL": {
         "label": "Connection check interval",
@@ -805,7 +805,7 @@
       },
       "BT_CHURN_THRESHOLD": {
         "label": "Reconnect loop limit",
-        "help": "Connect/disconnect cycles within the window that make the bridge pause a speaker. 0 turns this off."
+        "help": "Connect/disconnect cycles within the window that make the bridge hand a speaker over. 0 turns this off."
       },
       "BT_CHURN_WINDOW": {
         "label": "Reconnect loop window",
@@ -1094,14 +1094,14 @@
         "help": "What the bridge does while nothing plays.",
         "options": {
           "default": "Stay connected",
-          "power_save": "Release audio (power save)",
+          "power_save": "Pause output (power save)",
           "auto_disconnect": "Disconnect",
           "keep_alive": "Keep the speaker awake"
         }
       },
       "power_save_delay_minutes": {
-        "label": "Release audio after",
-        "help": "Free the speaker's audio connection after this long without sound."
+        "label": "Pause output after",
+        "help": "Pause the speaker's audio output after this long without sound."
       },
       "idle_disconnect_minutes": {
         "label": "Disconnect after",
@@ -1121,7 +1121,7 @@
         "help": "Time between keep-awake bursts."
       },
       "static_delay_ms": {
-        "label": "Speaker delay",
+        "label": "Speaker latency compensation",
         "help": "How late this speaker plays its sound. The bridge sends audio this much earlier so it stays in time with the group."
       },
       "min_buffer_ms": {
@@ -1146,7 +1146,7 @@
     "retry": "Try again"
   },
   "timing": {
-    "suggestion": "Suggested delay: {value} ms",
+    "suggestion": "Suggested latency compensation: {value} ms",
     "applySuggestion": "Apply",
     "clicks": {
       "label": "Click track",
@@ -1164,7 +1164,7 @@
       "step": "Measurement {n} of 3: {name}",
       "not_detected": "The clicks were not heard clearly. Move closer and try again.",
       "unstable": "The measurements disagreed. Keep the device still and try again.",
-      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s delay to {value} ms?",
+      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s latency compensation to {value} ms?",
       "resultTitle": "Measurement result"
     },
     "history": {
@@ -1237,7 +1237,7 @@
       },
       "calibration": {
         "title": "Calibrations",
-        "line": "Speaker latency: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "line": "Air-to-sound latency: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
         "forget": "Forget",
         "forgetTitle": "Forget this calibration?",
         "forgetConfirm": "{name} is reported uncalibrated for {codec} {rate} kHz on {adapter} until the sync wizard measures it again."
@@ -1250,12 +1250,12 @@
         "inactive": "inactive: not locked",
         "bias": "Air bias {value} ms",
         "corrections": "Air corrections {n}",
-        "trimEarly": "Delay trim {value} ms (target {ms} ms early)",
-        "trimLate": "Delay trim {value} ms (target {ms} ms late)"
+        "trimEarly": "Compensation trim {value} ms (target {ms} ms early)",
+        "trimLate": "Compensation trim {value} ms (target {ms} ms late)"
       },
       "learned": {
         "title": "Learned latencies",
-        "line": "Learned: {latency} ms at {delay} ms delay · {codec} · {adapter} · {starts} starts",
+        "line": "Learned: {latency} ms at {delay} ms compensation · {codec} · {adapter} · {starts} starts",
         "forget": "Forget",
         "forgetTitle": "Forget this learned latency?",
         "forgetConfirm": "{name} starts learning its latency for {codec} {rate} kHz on {adapter} again. A calibration for it is forgotten too."
@@ -1391,8 +1391,8 @@
     },
     "reconnect": "Reconnect",
     "standby": "Put on standby",
-    "wake": "Wake from standby",
-    "claim": "Make this bridge the active source",
+    "wake": "Wake",
+    "claim": "Use this bridge as the source",
     "handOver": "Hand over to other devices",
     "takeBack": "Take back",
     "disable": "Disable",
@@ -1415,7 +1415,7 @@
     },
     "members": "Members",
     "delay": "{ms} ms",
-    "delayHeading": "Delay (larger = earlier)",
+    "delayHeading": "Latency compensation (larger = earlier)",
     "sign": "+ plays earlier · − plays later",
     "noMembers": "This group has no members.",
     "loadError": "Could not read the group members ({code}).",
@@ -1449,7 +1449,7 @@
       "other": "Cannot be adjusted"
     },
     "measuredAgo": "Measured {age}",
-    "noDelay": "No delay reported",
+    "noDelay": "No latency reported",
     "actions": {
       "title": "Tune",
       "manual": "Manual tuning",
@@ -1523,13 +1523,13 @@
       }
     },
     "manual": {
-      "title": "Delays",
-      "help": "A larger delay makes a speaker play earlier. Changes are written at once.",
+      "title": "Latency compensation",
+      "help": "A larger value makes a speaker play earlier. Changes are written at once.",
       "reset": "Put back the delays from the start",
       "resetDone": "Delays are back to where this tuning started.",
       "minus": "−{n} ms (later)",
       "plus": "+{n} ms (earlier)",
-      "valueLabel": "Delay of {name} in ms",
+      "valueLabel": "Latency compensation of {name} in ms",
       "departed": "Left the group",
       "starting": "Starting manual tuning…",
       "startFailed": "Could not start manual tuning ({code}).",
@@ -1678,7 +1678,7 @@
       "saveConfirm": "Save and finish"
     },
     "air": {
-      "title": "Speaker latency (air → sound)",
+      "title": "Air-to-sound latency",
       "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is measured against a reference: a member whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much.",
       "reference": "Reference",
       "referencePick": "Choose a reference…",
@@ -1686,7 +1686,7 @@
       "referenceFailed": "Could not set the reference ({code}).",
       "value": "{ms} ms",
       "hint": "the speaker reports {ms} ms",
-      "save": "Save as this speaker's latency",
+      "save": "Save as this speaker's air-to-sound latency",
       "saveButton": "Save latencies",
       "saved": "Saved",
       "saveFailed": "Could not save ({code}).",
@@ -1697,7 +1697,7 @@
         "not_measured": "This speaker or the reference was not heard",
         "not_sbc": "The speaker does not play SBC",
         "air_epoch_changed": "Its Bluetooth stream restarted during its turn",
-        "air_delay_changed": "The speaker's delay changed during the recording.",
+        "air_delay_changed": "The speaker's latency compensation changed during the recording.",
         "no_air_clicks": "Its clicks were not found on the air",
         "no_written_clicks": "Its clicks were not found in what the bridge wrote",
         "fold_failed": "The air measurement for this speaker could not be completed",

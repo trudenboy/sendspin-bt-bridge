@@ -208,12 +208,12 @@ describe('DeviceTimingPanel air correction', () => {
 
   it('shows the delay trim as an earlier placement', () => {
     const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_trim_ms: 30 })
-    expect(correction(w).text()).toContain('Delay trim −30.0 ms (target 30.0 ms early)')
+    expect(correction(w).text()).toContain('Compensation trim −30.0 ms (target 30.0 ms early)')
   })
 
   it('has no trim row at zero', () => {
     const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_trim_ms: 0 })
-    expect(correction(w).text()).not.toContain('Delay trim')
+    expect(correction(w).text()).not.toContain('Compensation trim')
   })
 
   it('shows nothing in measure mode', () => {

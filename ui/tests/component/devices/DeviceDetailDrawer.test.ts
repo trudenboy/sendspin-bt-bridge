@@ -105,7 +105,7 @@ describe('DeviceDetailDrawer', () => {
       const reporting = await mountDrawer()
       const row = reporting.find('[data-reported-delay]')
       expect(row.exists()).toBe(true)
-      expect(row.text()).toContain('Reported delay')
+      expect(row.text()).toContain('Reported latency')
       expect(row.text()).toContain('123.4 ms')
     } finally {
       mockDevice.bluetooth!.reported_delay_ms = null

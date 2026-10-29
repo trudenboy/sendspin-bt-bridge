@@ -62,7 +62,7 @@ describe('DeviceTimingPanel air calibrations', () => {
 
   it('shows one line per calibration with codec, rate, adapter and age', () => {
     const text = section(mountPanel([entry()])).text()
-    expect(text).toContain('Speaker latency: 203.4 ms · SBC 44.1 kHz · hci1 · 2 days ago')
+    expect(text).toContain('Air-to-sound latency: 203.4 ms · SBC 44.1 kHz · hci1 · 2 days ago')
   })
 
   it('names another adapter by its MAC', () => {
@@ -129,7 +129,7 @@ describe('DeviceTimingPanel learned latencies', () => {
 
   it('shows one line per learned entry', () => {
     const text = learnedSection(mountPanel([], { learned: [learned()] })).text()
-    expect(text).toContain('Learned: 219.4 ms at 184 ms delay · SBC · hci1 · 6 starts')
+    expect(text).toContain('Learned: 219.4 ms at 184 ms compensation · SBC · hci1 · 6 starts')
   })
 
   it('forgets a learned entry through the same API after confirmation', async () => {

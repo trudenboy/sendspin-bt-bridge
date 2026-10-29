@@ -25,7 +25,7 @@ Writing a delay needs a Music Assistant token with administrator rights, because
 
 ## Before you start
 
-The **Group** tab lists the members with their delay (*Delay (larger = earlier)*) and flags what would stop a measurement, before anything is touched:
+The **Group** tab lists the members with their delay (*Latency compensation (larger = earlier)*) and flags what would stop a measurement, before anything is touched:
 
 - **Cannot be muted**: the player offers no mute in Music Assistant (web kiosks today). Hearing one speaker alone mutes all the others, so while it is in the group the other speakers cannot be measured one at a time. It can still be measured itself; or use **Manual tuning**, where **Everyone** and that speaker alone still work.
 - **Unavailable**: Music Assistant reports the player switched off or disconnected.
@@ -122,7 +122,7 @@ With the experimental air sensor on (`EXPERIMENTAL_AIR_SENSOR`, a speaker with P
 
 It needs a reference: a member whose sound is on the Sendspin schedule, typically a Sendspin web player on a headset or a wired output. A phone recording has no clock link to the bridge, so a speaker's lateness can only be measured against another member; a reference that adds its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much. Pick it on the tuning step (**Reference**); without one no latency is offered.
 
-With the air sensor switched off the tuning step shows none of this. With it on, every bridge speaker of the sequence shows either **Speaker latency (air → sound)** with the value, the speaker's own delay report as a hint, and **Save as this speaker's latency**, or the reason there is none: the air sensor was not effective for it (for example Playout sync not set to `measure`), no reference, the speaker or the reference was not heard, it does not play SBC, its Bluetooth stream restarted during its turn, or its clicks were not found on the air or in what the bridge wrote. Measuring again and saving replaces the value for the same codec, rate and adapter. The live lock of the air sensor is not needed.
+With the air sensor switched off the tuning step shows none of this. With it on, every bridge speaker of the sequence shows either **Air-to-sound latency** with the value, the speaker's own delay report as a hint, and **Save as this speaker's air-to-sound latency**, or the reason there is none: the air sensor was not effective for it (for example Playout sync not set to `measure`), no reference, the speaker or the reference was not heard, it does not play SBC, its Bluetooth stream restarted during its turn, or its clicks were not found on the air or in what the bridge wrote. Measuring again and saving replaces the value for the same codec, rate and adapter. The live lock of the air sensor is not needed.
 
 ## Profiles
 

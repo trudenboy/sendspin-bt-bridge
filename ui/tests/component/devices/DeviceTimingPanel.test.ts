@@ -54,7 +54,7 @@ describe('DeviceTimingPanel', () => {
         },
       },
     })
-    expect(w.text()).toContain('Suggested delay: 150 ms')
+    expect(w.text()).toContain('Suggested latency compensation: 150 ms')
     await w.findAll('button').find((b) => b.text() === 'Apply')!.trigger('click')
     await flushPromises()
     expect(setLatency).toHaveBeenCalledWith(expect.any(String), 150, expect.objectContaining({ source: 'bluez_delay_report', revision: 'r1' }))

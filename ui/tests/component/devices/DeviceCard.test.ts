@@ -203,10 +203,9 @@ describe('DeviceCard', () => {
 
   it('tells an automatic release from a hand-over', () => {
     const auto = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()
-    expect(auto).toContain('Auto-released')
-    expect(auto).not.toContain('Handed over')
+    expect(auto).toContain('Handed over automatically')
     const user = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } })).text()
     expect(user).toContain('Handed over')
-    expect(user).not.toContain('Auto-released')
+    expect(user).not.toContain('Handed over automatically')
   })
 })

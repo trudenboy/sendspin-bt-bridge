@@ -29,7 +29,7 @@ describe('speaker actions', () => {
 
   it('hides the actions the backend does not support', async () => {
     const items = await menuItems(makeDevice({ supported_actions: ['volume', 'transport', 'power_save'] }))
-    for (const gone of ['Reconnect', 'Put on standby', 'Make this bridge the active source']) expect(items).not.toContain(gone)
+    for (const gone of ['Reconnect', 'Put on standby', 'Use this bridge as the source']) expect(items).not.toContain(gone)
     expect(items).toContain('Disable')
     expect(items).toContain('Remove speaker…')
   })
@@ -46,7 +46,7 @@ describe('speaker actions', () => {
     expect(items).toEqual([
       'Reconnect',
       'Put on standby',
-      'Make this bridge the active source',
+      'Use this bridge as the source',
       'Hand over to other devices',
       'Disable',
       'Bluetooth details',

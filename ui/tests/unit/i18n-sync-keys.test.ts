@@ -34,7 +34,7 @@ describe('sync texts', () => {
   it('explains the sign of a delay the same way everywhere', () => {
     const s = flatten((en as { sync: unknown }).sync)
     expect(String(s['sign'])).toBe('+ plays earlier · − plays later')
-    expect(String(s['manual.help'])).toContain('larger delay makes a speaker play earlier')
+    expect(String(s['manual.help'])).toContain('larger value makes a speaker play earlier')
     expect(String(s['delayHeading'])).toContain('larger = earlier')
   })
 })
