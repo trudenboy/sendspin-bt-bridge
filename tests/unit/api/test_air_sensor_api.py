@@ -480,8 +480,16 @@ def test_device_audio_lists_the_stored_calibrations(api_client, calibrated_bridg
     dev = calibrated_bridge()
     audio = api_client.get(f"/api/v1/devices/{dev.id}").json()["audio"]
     assert audio["air_to_sound_latency"] == [
-        {**AIR_ENTRY, "spread_ms": None, "reference": "", "source": "sync_wizard"},
-        {**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0, "spread_ms": None, "reference": "", "source": "sync_wizard"},
+        {**AIR_ENTRY, "spread_ms": None, "reference": "", "source": "sync_wizard", "d_ref_ms": 0.0},
+        {
+            **AIR_ENTRY,
+            "rate": 48000,
+            "latency_ms": 150.0,
+            "spread_ms": None,
+            "reference": "",
+            "source": "sync_wizard",
+            "d_ref_ms": 0.0,
+        },
     ]
 
 

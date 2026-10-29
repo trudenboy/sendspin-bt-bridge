@@ -109,6 +109,24 @@ class AirLatencyEntryOut(ResponseModel):
     measured_at: str
     reference: str = ""
     source: str = "sync_wizard"
+    d_ref_ms: float | None = Field(
+        default=None, description="The delay (ms) the speaker ran with when this latency was measured."
+    )
+
+
+class AirLearnedEntryOut(ResponseModel):
+    """One latency the bridge learned from the speaker's starts (stage B): keyed like a calibration."""
+
+    codec: str
+    rate: int
+    adapter: str
+    source: str = "learned"
+    samples_ms: list[float] = Field(default_factory=list, description="The per-start air latencies, oldest first.")
+    d_out_ms: list[float] = Field(default_factory=list, description="The output delay of each start, in ms.")
+    latency_ms: float
+    d_ref_ms: float
+    starts: int
+    measured_at: str
 
 
 class DeviceAudio(ResponseModel):
@@ -137,6 +155,11 @@ class DeviceAudio(ResponseModel):
         description="The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); "
         "the one for the current codec, rate and adapter is applied.",
     )
+    air_learned_latency: list[AirLearnedEntryOut] = Field(
+        default_factory=list,
+        description="Air latencies learned from the speaker's starts (at most 8, one per codec, SBC rate and "
+        "adapter); used as the air correction target from the third start until a calibration exists.",
+    )
 
 
 class LatencySuggestion(ResponseModel):
@@ -149,7 +172,11 @@ class LatencySuggestion(ResponseModel):
 
 
 class PlayoutTiming(ResponseModel):
-    """The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored."""
+    """The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.
+
+    In ``loop`` with an air bias ``error_ms`` is the corrected error (the raw error is
+    ``error_ms + air_bias_ms``).
+    """
 
     model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
 
@@ -181,6 +208,26 @@ class PlayoutTiming(ResponseModel):
     late_start_ms: float | None = None
     trim_us: int | None = None
     fallback_reason: str | None = None
+    air_bias_state: str | None = Field(
+        default=None, description="none, seeding, active or held; null in measure or with the air sensor off."
+    )
+    air_bias_reason: str | None = Field(
+        default=None, description="Why there is no bias value (for example no_target or internal_error)."
+    )
+    air_bias_ms: float | None = Field(
+        default=None, description="b: the learned offset between the engine's clock and the air sensor."
+    )
+    air_target: str | None = Field(default=None, description="calibrated, learned or null.")
+    air_target_ms: float | None = Field(default=None, description="The air-to-sound latency the correction aims at.")
+    air_d_ref_ms: float | None = Field(default=None, description="The delay the target was measured at.")
+    air_trim_ms: float | None = Field(
+        default=None, description="The delay trim: how much earlier than its reference the output is placed."
+    )
+    air_learned_starts: int | None = Field(default=None, description="Starts behind a learned target.")
+    air_corrections: int = Field(default=0, description="Corrections the air bias made since the start.")
+    air_last_correction_ms: float | None = None
+    air_bias_gated: int = Field(default=0, description="Windows the bias gate rejected.")
+    air_bias_skipped: int = Field(default=0, description="Windows not used for the bias.")
 
 
 def _playout_or_none(raw: object) -> PlayoutTiming | None:
@@ -431,6 +478,7 @@ class Device(ResponseModel):
         config_id: str | None = None,
         playout_sync_enabled: bool = True,
         air_to_sound_latency: list[dict[str, Any]] | None = None,
+        air_learned_latency: list[dict[str, Any]] | None = None,
     ) -> Device:
         g = d.get
         pair_failure = None
@@ -516,6 +564,7 @@ class Device(ResponseModel):
                 static_delay_calibrated_at=g("static_delay_calibrated_at"),
                 static_delay_codec=g("static_delay_codec"),
                 air_to_sound_latency=[AirLatencyEntryOut.model_validate(e) for e in air_to_sound_latency or []],
+                air_learned_latency=[AirLearnedEntryOut.model_validate(e) for e in air_learned_latency or []],
             ),
             timing=DeviceTiming(
                 available=bool(g("timing_metrics_available")),

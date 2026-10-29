@@ -2534,6 +2534,11 @@ export interface components {
             adapter: string;
             /** Codec */
             codec: string;
+            /**
+             * D Ref Ms
+             * @description The delay (ms) the speaker ran with when this latency was measured.
+             */
+            d_ref_ms: number | null;
             /** Latency Ms */
             latency_ms: number;
             /** Measured At */
@@ -2586,6 +2591,41 @@ export interface components {
              * @constant
              */
             source?: "learned";
+            /** Starts */
+            starts: number;
+        };
+        /**
+         * AirLearnedEntryOut
+         * @description One latency the bridge learned from the speaker's starts (stage B): keyed like a calibration.
+         */
+        AirLearnedEntryOut: {
+            /** Adapter */
+            adapter: string;
+            /** Codec */
+            codec: string;
+            /**
+             * D Out Ms
+             * @description The output delay of each start, in ms.
+             */
+            d_out_ms: number[];
+            /** D Ref Ms */
+            d_ref_ms: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /** Rate */
+            rate: number;
+            /**
+             * Samples Ms
+             * @description The per-start air latencies, oldest first.
+             */
+            samples_ms: number[];
+            /**
+             * Source
+             * @default learned
+             */
+            source: string;
             /** Starts */
             starts: number;
         };
@@ -3530,6 +3570,11 @@ export interface components {
         };
         /** DeviceAudio */
         DeviceAudio: {
+            /**
+             * Air Learned Latency
+             * @description Air latencies learned from the speaker's starts (at most 8, one per codec, SBC rate and adapter); used as the air correction target from the third start until a calibration exists.
+             */
+            air_learned_latency: components["schemas"]["AirLearnedEntryOut"][];
             /**
              * Air To Sound Latency
              * @description The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); the one for the current codec, rate and adapter is applied.
@@ -4624,8 +4669,71 @@ export interface components {
         /**
          * PlayoutTiming
          * @description The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.
+         *
+         *     In ``loop`` with an air bias ``error_ms`` is the corrected error (the raw error is
+         *     ``error_ms + air_bias_ms``).
          */
         PlayoutTiming: {
+            /**
+             * Air Bias Gated
+             * @description Windows the bias gate rejected.
+             * @default 0
+             */
+            air_bias_gated: number;
+            /**
+             * Air Bias Ms
+             * @description b: the learned offset between the engine's clock and the air sensor.
+             */
+            air_bias_ms: number | null;
+            /**
+             * Air Bias Reason
+             * @description Why there is no bias value (for example no_target or internal_error).
+             */
+            air_bias_reason: string | null;
+            /**
+             * Air Bias Skipped
+             * @description Windows not used for the bias.
+             * @default 0
+             */
+            air_bias_skipped: number;
+            /**
+             * Air Bias State
+             * @description none, seeding, active or held; null in measure or with the air sensor off.
+             */
+            air_bias_state: string | null;
+            /**
+             * Air Corrections
+             * @description Corrections the air bias made since the start.
+             * @default 0
+             */
+            air_corrections: number;
+            /**
+             * Air D Ref Ms
+             * @description The delay the target was measured at.
+             */
+            air_d_ref_ms: number | null;
+            /** Air Last Correction Ms */
+            air_last_correction_ms: number | null;
+            /**
+             * Air Learned Starts
+             * @description Starts behind a learned target.
+             */
+            air_learned_starts: number | null;
+            /**
+             * Air Target
+             * @description calibrated, learned or null.
+             */
+            air_target: string | null;
+            /**
+             * Air Target Ms
+             * @description The air-to-sound latency the correction aims at.
+             */
+            air_target_ms: number | null;
+            /**
+             * Air Trim Ms
+             * @description The delay trim: how much earlier than its reference the output is placed.
+             */
+            air_trim_ms: number | null;
             /** Clock Slew Ppm */
             clock_slew_ppm: number | null;
             /** Correction Ppm */

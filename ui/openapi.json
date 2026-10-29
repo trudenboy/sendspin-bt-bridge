@@ -505,6 +505,18 @@
             "title": "Codec",
             "type": "string"
           },
+          "d_ref_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay (ms) the speaker ran with when this latency was measured.",
+            "title": "D Ref Ms"
+          },
           "latency_ms": {
             "title": "Latency Ms",
             "type": "number"
@@ -547,7 +559,8 @@
           "spread_ms",
           "measured_at",
           "reference",
-          "source"
+          "source",
+          "d_ref_ms"
         ],
         "title": "AirLatencyEntryOut",
         "type": "object"
@@ -632,6 +645,74 @@
           "measured_at"
         ],
         "title": "AirLearnedEntry",
+        "type": "object"
+      },
+      "AirLearnedEntryOut": {
+        "description": "One latency the bridge learned from the speaker's starts (stage B): keyed like a calibration.",
+        "properties": {
+          "adapter": {
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "title": "Codec",
+            "type": "string"
+          },
+          "d_out_ms": {
+            "description": "The output delay of each start, in ms.",
+            "items": {
+              "type": "number"
+            },
+            "title": "D Out Ms",
+            "type": "array"
+          },
+          "d_ref_ms": {
+            "title": "D Ref Ms",
+            "type": "number"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "integer"
+          },
+          "samples_ms": {
+            "description": "The per-start air latencies, oldest first.",
+            "items": {
+              "type": "number"
+            },
+            "title": "Samples Ms",
+            "type": "array"
+          },
+          "source": {
+            "default": "learned",
+            "title": "Source",
+            "type": "string"
+          },
+          "starts": {
+            "title": "Starts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "source",
+          "samples_ms",
+          "d_out_ms",
+          "latency_ms",
+          "d_ref_ms",
+          "starts",
+          "measured_at"
+        ],
+        "title": "AirLearnedEntryOut",
         "type": "object"
       },
       "AirSensorFold": {
@@ -2776,6 +2857,14 @@
       },
       "DeviceAudio": {
         "properties": {
+          "air_learned_latency": {
+            "description": "Air latencies learned from the speaker's starts (at most 8, one per codec, SBC rate and adapter); used as the air correction target from the third start until a calibration exists.",
+            "items": {
+              "$ref": "#/components/schemas/AirLearnedEntryOut"
+            },
+            "title": "Air Learned Latency",
+            "type": "array"
+          },
           "air_to_sound_latency": {
             "description": "The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); the one for the current codec, rate and adapter is applied.",
             "items": {
@@ -2921,7 +3010,8 @@
           "static_delay_source",
           "static_delay_calibrated_at",
           "static_delay_codec",
-          "air_to_sound_latency"
+          "air_to_sound_latency",
+          "air_learned_latency"
         ],
         "title": "DeviceAudio",
         "type": "object"
@@ -5688,8 +5778,133 @@
         "type": "object"
       },
       "PlayoutTiming": {
-        "description": "The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.",
+        "description": "The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.\n\nIn ``loop`` with an air bias ``error_ms`` is the corrected error (the raw error is\n``error_ms + air_bias_ms``).",
         "properties": {
+          "air_bias_gated": {
+            "default": 0,
+            "description": "Windows the bias gate rejected.",
+            "title": "Air Bias Gated",
+            "type": "integer"
+          },
+          "air_bias_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "b: the learned offset between the engine's clock and the air sensor.",
+            "title": "Air Bias Ms"
+          },
+          "air_bias_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why there is no bias value (for example no_target or internal_error).",
+            "title": "Air Bias Reason"
+          },
+          "air_bias_skipped": {
+            "default": 0,
+            "description": "Windows not used for the bias.",
+            "title": "Air Bias Skipped",
+            "type": "integer"
+          },
+          "air_bias_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "none, seeding, active or held; null in measure or with the air sensor off.",
+            "title": "Air Bias State"
+          },
+          "air_corrections": {
+            "default": 0,
+            "description": "Corrections the air bias made since the start.",
+            "title": "Air Corrections",
+            "type": "integer"
+          },
+          "air_d_ref_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay the target was measured at.",
+            "title": "Air D Ref Ms"
+          },
+          "air_last_correction_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air Last Correction Ms"
+          },
+          "air_learned_starts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Starts behind a learned target.",
+            "title": "Air Learned Starts"
+          },
+          "air_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "calibrated, learned or null.",
+            "title": "Air Target"
+          },
+          "air_target_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The air-to-sound latency the correction aims at.",
+            "title": "Air Target Ms"
+          },
+          "air_trim_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay trim: how much earlier than its reference the output is placed.",
+            "title": "Air Trim Ms"
+          },
           "clock_slew_ppm": {
             "anyOf": [
               {
@@ -5979,7 +6194,19 @@
           "hold_left_s",
           "late_start_ms",
           "trim_us",
-          "fallback_reason"
+          "fallback_reason",
+          "air_bias_state",
+          "air_bias_reason",
+          "air_bias_ms",
+          "air_target",
+          "air_target_ms",
+          "air_d_ref_ms",
+          "air_trim_ms",
+          "air_learned_starts",
+          "air_corrections",
+          "air_last_correction_ms",
+          "air_bias_gated",
+          "air_bias_skipped"
         ],
         "title": "PlayoutTiming",
         "type": "object"
