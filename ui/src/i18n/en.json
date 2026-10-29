@@ -714,6 +714,14 @@
   },
   "bugreport": {
     "title": "File a Bug Report",
+    "hints": {
+      "min": "At least {n} characters."
+    },
+    "submitBy": {
+      "github": "Open GitHub issue",
+      "proxy": "Send report",
+      "copy": "Copy report"
+    },
     "fileReport": "File Bug Report",
     "fields": {
       "title": "Issue Title",
