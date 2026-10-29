@@ -47,7 +47,7 @@ const dotColor = {
     <button
       v-if="removable"
       type="button"
-      class="-mr-0.5 ml-0.5 inline-flex items-center justify-center rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100 focus:outline-none"
+      class="-mr-0.5 ml-0.5 inline-flex items-center justify-center rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100"
       aria-label="Remove"
       @click="emit('remove')"
     >

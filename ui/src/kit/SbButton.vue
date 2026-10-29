@@ -43,7 +43,7 @@ const isDisabled = computed(() => props.disabled || props.loading)
 <template>
   <button
     :class="[
-      'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-(--radius-button) font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface [&_svg]:size-4 [&_svg]:shrink-0',
+      'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-(--radius-button) font-medium transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
       variantClasses[variant],
       sizeClasses,
       isDisabled && 'pointer-events-none opacity-50 cursor-not-allowed',

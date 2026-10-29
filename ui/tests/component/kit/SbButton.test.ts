@@ -114,11 +114,11 @@ describe('SbButton', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(true)
   })
 
-  it('has focus ring classes', () => {
+  it('leaves keyboard focus to the global :focus-visible outline', () => {
     const wrapper = mount(SbButton, { slots: { default: 'F' } })
     const btn = wrapper.find('button')
-    expect(btn.classes()).toContain('focus-visible:ring-2')
-    expect(btn.classes()).toContain('focus-visible:ring-primary/50')
+    expect(btn.classes()).not.toContain('focus:outline-none')
+    expect(btn.classes().some((c) => c.startsWith('focus-visible:ring'))).toBe(false)
   })
 
   it('renders icon-left slot', () => {

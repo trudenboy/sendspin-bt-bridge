@@ -60,6 +60,7 @@
   --sb-primary-fill-hover: #01579b;
   --sb-primary-text: #0277bd;
   --sb-on-primary: #ffffff;
+  --sb-focus-ring: #0277bd;
 
   /* Status colours as text on light surfaces: darker shades of HA's palette. */
   --sb-success: #2e7d32;
@@ -89,6 +90,7 @@
 .dark {
   color-scheme: dark;
   --sb-primary-text: #4fc3f7;
+  --sb-focus-ring: #4fc3f7;
   --sb-success: #43a047;
   --sb-error: #ef5350;
   --sb-info: #29b6f6;
@@ -144,6 +146,15 @@
   ::before,
   ::after {
     border-color: var(--sb-divider);
+  }
+}
+
+/* One keyboard-focus indicator for every control (WCAG 1.4.11, >=3:1 on both
+   themes). In the base layer so a component can still override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--sb-focus-ring);
+    outline-offset: 2px;
   }
 }
 

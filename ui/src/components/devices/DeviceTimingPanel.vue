@@ -338,7 +338,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
       <SettingsRow v-if="device.music_assistant.syncgroup_id" :label="t('sync.tuneGroup')" :help="t('sync.tuneGroupHelp')">
         <RouterLink
           :to="{ name: 'sync', params: { groupId: device.music_assistant.syncgroup_id } }"
-          class="inline-flex h-8 items-center rounded-(--radius-button) border border-border-strong px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          class="inline-flex h-8 items-center rounded-(--radius-button) border border-border-strong px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-secondary"
         >
           {{ t('sync.open') }}
         </RouterLink>

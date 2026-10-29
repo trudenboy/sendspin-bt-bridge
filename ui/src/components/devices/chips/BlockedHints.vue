@@ -51,7 +51,7 @@ function openDiagnostics() {
         <button
           type="button"
           data-hint-why
-          class="shrink-0 rounded text-primary-text underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none"
+          class="shrink-0 rounded text-primary-text underline-offset-2 hover:underline"
           :class="{ underline: open[hint.key] }"
           :aria-expanded="open[hint.key] ? 'true' : 'false'"
           :aria-controls="panelId(hint.key)"
