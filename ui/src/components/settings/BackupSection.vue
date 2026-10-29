@@ -5,6 +5,7 @@ import { useConfigStore } from '@/stores/config'
 import { useNotificationStore } from '@/stores/notifications'
 import { ApiError } from '@/api/client'
 import { SbButton } from '@/kit'
+import { confirmDialog } from '@/composables/useConfirm'
 import SettingsRow from './SettingsRow.vue'
 
 const { t } = useI18n()
@@ -25,6 +26,13 @@ async function onFile(event: Event) {
   const file = target.files?.[0]
   target.value = ''
   if (!file) return
+  const ok = await confirmDialog({
+    title: t('settings.parts.backup.confirmTitle'),
+    message: t('settings.parts.backup.confirmMessage'),
+    confirmLabel: t('settings.parts.backup.confirmLabel'),
+    danger: true,
+  })
+  if (!ok) return
   try {
     await configStore.uploadConfig(file)
     notifications.success(t('settings.parts.backup.imported'))

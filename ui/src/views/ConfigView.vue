@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { speakerName } from '@/utils/speakerName'
 import { confirmDialog } from '@/composables/useConfirm'
 import { computed, nextTick, onMounted, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -129,6 +130,17 @@ function jump(id: string) {
 const restartNeeded = ref(false)
 
 async function restartNow() {
+  const playing = bridge.devices
+    .filter((d) => d.playback?.playing)
+    .map((d) => speakerName(d.name))
+    .join(', ')
+  const ok = await confirmDialog({
+    title: t('settings.restartConfirmTitle'),
+    message: t('settings.restartConfirmMessage') + (playing ? ` ${t('settings.restartConfirmPlaying', { names: playing })}` : ''),
+    confirmLabel: t('settings.restartNow'),
+    danger: true,
+  })
+  if (!ok) return
   restartNeeded.value = false
   await bridge.restart()
 }

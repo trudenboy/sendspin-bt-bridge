@@ -5,6 +5,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUpdateStore } from '@/stores/update'
 import { useBridgeStore } from '@/stores/bridge'
+import { confirmDialog } from '@/composables/useConfirm'
 import SbDialog from '@/kit/SbDialog.vue'
 import SbButton from '@/kit/SbButton.vue'
 import SbBadge from '@/kit/SbBadge.vue'
@@ -43,6 +44,16 @@ const releaseNotesFormatted = computed(() => {
 
 function checkWithChannel() {
   update.checkForUpdates(selectedChannel.value as UpdateChannel)
+}
+
+async function applyNow() {
+  const ok = await confirmDialog({
+    title: t('update.confirmTitle', { version: update.latestVersion }),
+    message: t('update.confirmMessage'),
+    confirmLabel: t('update.applyNow'),
+    danger: true,
+  })
+  if (ok) await update.doApplyUpdate()
 }
 
 function copyCommand() {
@@ -191,7 +202,7 @@ function openHaAddon() {
         variant="primary"
         size="sm"
         :loading="update.applying"
-        @click="update.doApplyUpdate()"
+        @click="applyNow"
       >
         <template #icon-left><Terminal class="h-4 w-4" /></template>
         {{ t('update.applyNow') }}

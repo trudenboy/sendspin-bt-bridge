@@ -52,6 +52,9 @@ vi.mock('@/api/updates', () => ({
   applyUpdate: vi.fn(),
 }))
 vi.mock('@/api/status', () => ({ getStatus: vi.fn(), restartBridge: vi.fn().mockResolvedValue({}) }))
+const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
+vi.mock('@/composables/useConfirm', () => confirm)
+import { restartBridge } from '@/api/status'
 vi.mock('@/composables/useIngress', () => ({ useIngress: () => ({ basePath: '', apiBase: '' }) }))
 vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), useRoute: () => ({ hash: '' }) }))
 
@@ -140,6 +143,32 @@ describe('ConfigView (settings)', () => {
     await flushPromises()
 
     expect(w.text()).toContain('Restart the bridge to apply some changes')
+  })
+
+  describe('Restart now', () => {
+    async function pendingRestart() {
+      vi.mocked(saveConfig).mockResolvedValue({ reconfig: { restart_required: [{ key: 'WEB_PORT' }] }, warnings: [] } as never)
+      const w = await mountView()
+      const name = w.findAll('input').find((i) => (i.element as HTMLInputElement).value === 'Kitchen bridge')!
+      await name.setValue('x')
+      await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
+      await flushPromises()
+      await w.findAll('button').find((b) => b.text() === 'Restart now')!.trigger('click')
+      await flushPromises()
+    }
+
+    it('asks first, naming that playback stops, and does nothing when declined', async () => {
+      confirm.confirmDialog.mockResolvedValue(false)
+      await pendingRestart()
+      expect(confirm.confirmDialog.mock.calls[0]![0].message).toMatch(/Playback stops/)
+      expect(restartBridge).not.toHaveBeenCalled()
+    })
+
+    it('restarts once confirmed', async () => {
+      confirm.confirmDialog.mockResolvedValue(true)
+      await pendingRestart()
+      expect(restartBridge).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('stores null for an emptied automatic number and a list from lines', async () => {
