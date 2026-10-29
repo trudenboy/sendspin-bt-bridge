@@ -77,6 +77,16 @@ def _read_local_sinks(loop: asyncio.AbstractEventLoop | None) -> list[LocalSink]
         return []
 
 
+def _retire_air_subscription(client: Any, action: ReconfigAction) -> None:
+    retire = getattr(client, "retire_air_subscription", None)
+    if not callable(retire):
+        return
+    try:
+        retire()
+    except Exception as exc:
+        logger.debug("air sensor unsubscribe failed for %s: %s", action.label or action.mac, exc)
+
+
 def _is_pulse_sink_client(client: Any) -> bool:
     return getattr(client, "backend_type", None) == PULSE_SINK
 
@@ -444,6 +454,10 @@ class ReconfigOrchestrator:
         if client is None:
             summary.stopped.append(action.to_summary())
             return
+        if "removed" in action.fields:
+            # Gone for good: no air sensor subscription, even from a late status of its daemon.
+            # (A disabled player unsubscribes through its own status edges.)
+            _retire_air_subscription(client, action)
         if _is_pulse_sink_client(client):
             # No Bluetooth to release: stop the daemon and let the client go.
             # Enabling the player again activates a fresh client.

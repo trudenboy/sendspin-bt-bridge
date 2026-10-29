@@ -8,7 +8,9 @@ sensor (``GstPortClock``). What is written, and when, is decided by the ``Playou
 Threading: every public method enqueues a command under ``_cmd_lock`` and returns. One
 feeder thread per output (``_run``, a 5 ms ``Event.wait``) applies the commands, keeps
 ``appsrc`` ``LEAD_MS`` ahead, calls ``engine.sense()`` every 100 ms with
-``delivered = x_w − current-level-time`` and publishes what ``metrics()`` reports under
+``delivered = x_w − current-level-time`` (and reports ``delivered`` every tick, plus the
+arrivals a buffer probe on appsrc's src pad sees while the engine asks for them, so the
+engine sees an underrun's silence up to the data's arrival) and publishes what ``metrics()`` reports under
 ``_pub_lock``. The engine and every GStreamer element are touched by the feeder only;
 the caller thread builds the output (``prepare_output``), closes it (``stop``, after the
 feeder joined) and reads the sink's audio clock (``audio_clock_ns``, a read-only clock
@@ -22,6 +24,7 @@ import re
 import subprocess
 import threading
 import time
+import weakref
 from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -29,11 +32,14 @@ from typing import TYPE_CHECKING, Any
 from sendspin_bridge.services.audio.playout.engine import PlayoutEngine, PlayoutSettings
 from sendspin_bridge.services.audio.playout.scheduler import InputFormat
 from sendspin_bridge.services.audio.playout.sensor import GstPortClock, PortSample
+from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from sendspin_bridge.services.audio.player.player import PcmFormat
+    from sendspin_bridge.services.audio.playout.air_bias import AirFeed
+    from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
     from sendspin_bridge.services.audio.playout.scheduler import Block
     from sendspin_bridge.services.audio.playout.sensor import PortClock
 
@@ -61,7 +67,8 @@ TAIL_MUTE_MARGIN_NS = 20_000_000
 _FALLBACK_NO_CLOCK = "no audio clock from the sink within 2 s of PLAYING"
 
 
-def _raw_now_us() -> int:
+def raw_now_us() -> int:
+    """Now on the RAW clock (``CLOCK_MONOTONIC_RAW`` µs): the play-time axis of the engine and the air sensor."""
     clock_id = getattr(time, "CLOCK_MONOTONIC_RAW", time.CLOCK_MONOTONIC)
     return time.clock_gettime_ns(clock_id) // 1000
 
@@ -150,6 +157,15 @@ class _Counters:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _EngineMarks:
+    """The engine counters the air listener has already been told about."""
+
+    underruns: int = 0
+    pa_steps: int = 0
+    suspended: bool = False
+
+
 class _WatchedPort:
     """The port clock the engine reads, remembering the last reading for the player."""
 
@@ -166,6 +182,93 @@ class _WatchedPort:
         return sample
 
 
+class _ArrivalProbe:
+    """Buffers reaching the sink while the engine asks for them (R3).
+
+    ``on_buffer`` runs on appsrc's streaming thread, which pushes a buffer through convert,
+    resample and into the sink synchronously: a buffer leaving appsrc is data arriving in
+    the sink's ring. While armed by the feeder it reads the port then, so the engine knows
+    where the port was when the data that ends a starve landed (the feeder's own ``delivered``
+    report may come a tick later). One ``threading.Lock``, O(1) critical sections; the port
+    reader is its own instance, not the feeder's.
+    """
+
+    MAX_KEPT = 8
+
+    def __init__(self, port: PortClock) -> None:
+        self._port = port
+        self._lock = threading.Lock()
+        self._armed = False
+        self._seen: deque[tuple[int, PortSample | None]] = deque(maxlen=self.MAX_KEPT)
+
+    @property
+    def armed(self) -> bool:
+        return self._armed  # a plain read; the streaming thread re-checks under the lock
+
+    def arm(self, armed: bool) -> None:
+        with self._lock:
+            self._armed = armed
+            if not armed:
+                self._seen.clear()
+
+    def on_buffer(self, pts_ns: int) -> None:
+        with self._lock:
+            if not self._armed:
+                return
+        sample = self._port.read()
+        with self._lock:
+            if self._armed:
+                self._seen.append((pts_ns, sample))
+
+    def drain(self) -> list[tuple[int, PortSample | None]]:
+        with self._lock:
+            seen = list(self._seen)
+            self._seen.clear()
+        return seen
+
+
+def _arrival_callback(probe_ref: Callable[[], _ArrivalProbe | None]) -> Callable[[Any, Any], Any]:
+    """The pad probe: reports a buffer to the probe while it is armed, and always passes it.
+
+    It runs on the streaming thread: an exception here must never drop audio, so it is logged
+    (once per 10 min) and the buffer goes on. Disarmed, it does not even look at the buffer.
+    """
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+
+    warn = RateLimitedLog(logger, clock=time.monotonic)  # per output
+
+    def _on_buffer(_pad: Any, info: Any) -> Any:
+        try:
+            target = probe_ref()
+            if target is not None and target.armed:
+                buf = info.get_buffer()
+                if buf is not None and buf.pts != Gst.CLOCK_TIME_NONE:
+                    target.on_buffer(int(buf.pts))
+        except Exception as exc:
+            warn.warning("probe", "playout: arrival probe failed (%r); the buffer passes", exc)
+        return Gst.PadProbeReturn.OK
+
+    return _on_buffer
+
+
+def _attach_arrival_probe(appsrc: Any, probe: _ArrivalProbe) -> tuple[Any, int] | None:
+    """Report every buffer leaving appsrc to ``probe`` (held weakly: a GStreamer callback's
+    reference is invisible to Python's collector). Returns ``(pad, probe id)`` for removal."""
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+
+    get_pad = getattr(appsrc, "get_static_pad", None)
+    pad = get_pad("src") if get_pad is not None else None
+    if pad is None:
+        return None  # no pad (a test double): no arrivals, delivered reports still date the rest
+    probe_id = int(pad.add_probe(Gst.PadProbeType.BUFFER, _arrival_callback(weakref.ref(probe))) or 0)
+    return (pad, probe_id) if probe_id else None
+
+
+def _detach_arrival_probe(handle: tuple[Any, int]) -> None:
+    pad, probe_id = handle
+    pad.remove_probe(probe_id)
+
+
 class PlayoutPlayer:
     """StreamPlayer's daemon-facing interface on the playout engine."""
 
@@ -175,9 +278,13 @@ class PlayoutPlayer:
         sink_factory: Callable[[], Any],
         settings: PlayoutSettings,
         out_rate: int | None = None,
-        raw_now_us: Callable[[], float] = _raw_now_us,
+        raw_now_us: Callable[[], float] = raw_now_us,
         port_factory: Callable[[Any], PortClock] = GstPortClock,
         thread_factory: Callable[..., Any] = threading.Thread,
+        air_tap: WrittenEnvelope | None = None,
+        output_delay_us: Callable[[], float] | None = None,
+        on_engine_event: Callable[[str], None] | None = None,
+        air_feed: AirFeed | None = None,
     ) -> None:
         self._sink_factory = sink_factory
         self._settings = settings
@@ -185,6 +292,14 @@ class PlayoutPlayer:
         self._raw_now_us = raw_now_us
         self._port_factory = port_factory
         self._thread_factory = thread_factory
+        # The air sensor's tap on the written PCM; None (switch off) = no hook at all.
+        self._air_tap = air_tap
+        self._output_delay_us = output_delay_us
+        # The air sensor's listener for output reopens and engine events (feeder or caller
+        # thread); None (switch off) = the engine's counters are never even compared.
+        self._on_engine_event = on_engine_event
+        # The shared hand-over to every engine this player opens (loop mode); None = no air bias.
+        self._air_feed = air_feed
 
         # Caller-thread state (set by start/adopt/stop only).
         self._out: PlayoutOutput | None = None
@@ -206,6 +321,8 @@ class PlayoutPlayer:
         # Feeder-thread state (reset by adopt before the feeder starts).
         self._engine: PlayoutEngine | None = None
         self._port: _WatchedPort | None = None
+        self._arrivals: _ArrivalProbe | None = None
+        self._arrival_probe: tuple[Any, int] | None = None  # (appsrc src pad, probe id)
         self._playing_at_us: float | None = None
         self._next_sense_us: float | None = None
         self._x_w_ns = 0
@@ -213,6 +330,9 @@ class PlayoutPlayer:
         self._feeder_failed = False
         self._feeder_volume: tuple[float, bool] | None = None  # the user's, as last applied
         self._tail_until_ns: int | None = None  # muted until the port passes this x
+        self._input_format: InputFormat | None = None
+        self._air_muted: bool | None = None  # effective mute last handed to the air tap
+        self._air_seen = _EngineMarks()  # engine counters last forwarded to the listener
 
         # Published for metrics()/resync()/is_drained().
         self._pub_lock = threading.Lock()
@@ -291,7 +411,11 @@ class PlayoutPlayer:
         self._appsrc = output.appsrc
         self._sink = output.sink
         self._port = _WatchedPort(self._port_factory(output.sink))
-        self._engine = PlayoutEngine(settings=self._settings, port=self._port, k0_ns=output.k0_ns)
+        self._arrivals = _ArrivalProbe(self._port_factory(output.sink))
+        self._arrival_probe = _attach_arrival_probe(output.appsrc, self._arrivals)
+        self._engine = PlayoutEngine(
+            settings=self._settings, port=self._port, k0_ns=output.k0_ns, air_feed=self._air_feed
+        )
         self._playing_at_us = None
         self._next_sense_us = None
         self._x_w_ns = 0
@@ -299,6 +423,9 @@ class PlayoutPlayer:
         self._feeder_failed = False
         self._feeder_volume = None
         self._tail_until_ns = None
+        self._input_format = None
+        self._air_muted = None
+        self._air_seen = _EngineMarks()
         self._generation += 1
         self._first_lead_us = None
         self._stream_closed = False
@@ -309,6 +436,7 @@ class PlayoutPlayer:
             self._queued = False
         with self._cmd_lock:
             self._commands.clear()
+        self._reopen_air_tap()
         self._enqueue_format(audio_format)
         if self._volume is not None:
             self._enqueue(("volume", *self._volume))
@@ -322,6 +450,50 @@ class PlayoutPlayer:
         self._stop_evt = stop_evt
         self._thread = self._thread_factory(target=self._run, args=(stop_evt,), name="playout-feeder", daemon=True)
         self._thread.start()
+
+    def _reopen_air_tap(self) -> None:
+        """Every adopted output restarts ``x`` at 0: forget the tap's cells, tell the listener."""
+        tap = self._air_tap
+        if tap is not None:
+            try:
+                tap.reset()
+            except Exception:
+                self._air_tap_failed(tap)
+        feed = self._air_feed
+        if feed is not None:
+            # Windows of the old output (tap generations below this one) never reach the new engine.
+            try:
+                feed.reopen(0 if tap is None else tap.gen)
+            except Exception:
+                logger.warning("playout: air feed reopen failed", exc_info=True)
+        self._emit_engine_event("reopen")
+
+    def _emit_engine_event(self, kind: str) -> None:
+        """Hand one event to the listener; nothing it does reaches the caller (or the feeder)."""
+        listener = self._on_engine_event
+        if listener is None:
+            return
+        try:
+            listener(kind)
+        except Exception:
+            logger.debug("playout: engine event listener failed", exc_info=True)
+
+    def _forward_engine_events(self, snap: dict[str, object]) -> None:
+        """New underruns, PA steps and the start of a stall since the last snapshot, as events."""
+        seen = self._air_seen
+        underruns, pa_steps = snap.get("underruns"), snap.get("pa_steps")
+        suspended = snap.get("state") == "suspended"
+        if isinstance(underruns, int) and underruns > seen.underruns:
+            self._emit_engine_event("underrun")
+        if isinstance(pa_steps, int) and pa_steps > seen.pa_steps:
+            self._emit_engine_event("pa_step")
+        if suspended and not seen.suspended:
+            self._emit_engine_event("stall")
+        self._air_seen = _EngineMarks(
+            underruns if isinstance(underruns, int) else seen.underruns,
+            pa_steps if isinstance(pa_steps, int) else seen.pa_steps,
+            suspended,
+        )
 
     @staticmethod
     def discard_output(output: PlayoutOutput) -> None:
@@ -386,6 +558,12 @@ class PlayoutPlayer:
         self._format = None
         self._engine = None
         self._port = None
+        if self._arrivals is not None:
+            self._arrivals.arm(False)
+        self._arrivals = None
+        handle, self._arrival_probe = self._arrival_probe, None
+        if handle is not None:
+            _detach_arrival_probe(handle)
         with self._cmd_lock:
             self._commands.clear()
         with self._pub_lock:
@@ -474,11 +652,19 @@ class PlayoutPlayer:
         self._poll_bus(out, engine)
         if self._input_format_set:
             self._feed(out, engine, now_us)
+        # Every tick (R3): what the sink took, and when the data that ends a starve arrived.
+        arrivals = self._arrivals
+        if arrivals is not None:
+            for x_ns, sample in arrivals.drain():
+                engine.note_arrival(x_ns, sample)
+        engine.delivered(now_us, max(0, self._x_w_ns - _level_time_ns(out.appsrc)))
         sensed = False
         if self._next_sense_us is None or now_us >= self._next_sense_us:
             self._next_sense_us = now_us + SENSE_INTERVAL_US
             self._sense(out, engine, port, now_us)
             sensed = True
+        if arrivals is not None:
+            arrivals.arm(engine.arrival_wanted(now_us))
         with self._pub_lock:
             self._queued = engine.queued
             self._counters.queued_chunks = engine.queued_chunks
@@ -503,6 +689,15 @@ class PlayoutPlayer:
             _apply_mute_to(self._sink, tail)
         else:
             _apply_volume_to(self._sink, (user[0], user[1] or tail))
+        tap = self._air_tap
+        if tap is not None:
+            muted = tail or (user is not None and (user[1] or user[0] <= 0.0))
+            if muted != self._air_muted:
+                self._air_muted = muted
+                try:
+                    tap.mute_transition(float(self._raw_now_us()), muted)
+                except Exception:
+                    self._air_tap_failed(tap)
 
     def _apply(self, out: PlayoutOutput, engine: PlayoutEngine, cmd: tuple[Any, ...]) -> None:
         kind = cmd[0]
@@ -522,9 +717,10 @@ class PlayoutPlayer:
             out.appsrc.set_property(
                 "caps", pcm_caps(sample_rate=fmt.sample_rate, channels=fmt.channels, bit_depth=fmt.bit_depth)
             )
-            engine.set_format(
-                InputFormat(sample_rate=fmt.sample_rate, channels=fmt.channels, sample_bytes=fmt.bit_depth // 8)
+            self._input_format = InputFormat(
+                sample_rate=fmt.sample_rate, channels=fmt.channels, sample_bytes=fmt.bit_depth // 8
             )
+            engine.set_format(self._input_format)
             self._input_format_set = True
         elif kind == "volume":
             self._feeder_volume = (cmd[1], cmd[2])
@@ -561,6 +757,30 @@ class PlayoutPlayer:
         with self._pub_lock:
             self._counters.rendered += 1
             self._counters.overdue_dropped_us += block.late_drop_us
+        tap = self._air_tap
+        if tap is not None:
+            self._tap_block(tap, block)
+
+    def _tap_block(self, tap: WrittenEnvelope, block: Block) -> None:
+        """Hand a pushed block to the air tap; nothing it does reaches the feeder."""
+        engine, fmt = self._engine, self._input_format
+        if engine is None or fmt is None or tap.error is not None:
+            return
+        try:
+            d_out_us = self._output_delay_us() if self._output_delay_us is not None else 0.0
+            tap.add_block(block, fmt, engine.schedule_at, engine.kind_at, d_out_us)
+        except Exception:
+            self._air_tap_failed(tap)
+
+    @staticmethod
+    def _air_tap_failed(tap: WrittenEnvelope) -> None:
+        """Disable the tap for this stream (``internal_error``); logged once, the feeder carries on."""
+        if tap.error is None:
+            logger.exception("playout: air tap failed, disabled for this stream")
+        try:
+            tap.fail()
+        except Exception:
+            logger.debug("playout: air tap could not be marked failed", exc_info=True)
 
     def _sense(self, out: PlayoutOutput, engine: PlayoutEngine, port: _WatchedPort, now_us: float) -> None:
         level_ns = _level_time_ns(out.appsrc)
@@ -573,6 +793,8 @@ class PlayoutPlayer:
 
     def _publish_snapshot(self, engine: PlayoutEngine) -> None:
         snap = engine.snapshot()
+        if self._on_engine_event is not None:
+            self._forward_engine_events(snap)
         port = self._port
         sample = port.last if port is not None else None
         k_ns = snap.get("k_ns")

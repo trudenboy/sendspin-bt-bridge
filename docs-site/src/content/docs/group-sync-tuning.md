@@ -116,6 +116,14 @@ No music plays during a session. You stop the group first; then the click track 
 
 When the session ends (finished, cancelled, failed or timed out) the bridge puts the volumes it changed back to what they were (while the clicks still play), stops the click track, then unmutes every speaker it muted. Your music does not come back by itself: start it again in Music Assistant. The bridge never touches a speaker you muted yourself; a speaker you unmute yourself during the session is muted again by the next solo. Keep the room quiet and hold the phone still while it records.
 
+## Speaker latency (air sensor)
+
+With the experimental air sensor on (`EXPERIMENTAL_AIR_SENSOR`, a speaker with Playout sync set to `measure` playing SBC), a phone measurement also calibrates each bridge speaker's air-to-sound latency: how long the speaker takes from receiving the audio over Bluetooth to playing it. While a speaker plays alone in the sequence, the bridge records when its clicks left over the air; after the upload it subtracts that from the speaker's measured lateness. The result is stored per speaker, codec, sampling rate and Bluetooth adapter, applied at once, and shown in the device's **Timing** panel (with **Forget**).
+
+It needs a reference: a member whose sound is on the Sendspin schedule, typically a Sendspin web player on a headset or a wired output. A phone recording has no clock link to the bridge, so a speaker's lateness can only be measured against another member; a reference that adds its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much. Pick it on the tuning step (**Reference**); without one no latency is offered.
+
+With the air sensor switched off the tuning step shows none of this. With it on, every bridge speaker of the sequence shows either **Speaker latency (air → sound)** with the value, the speaker's own delay report as a hint, and **Save as this speaker's latency**, or the reason there is none: the air sensor was not effective for it (for example Playout sync not set to `measure`), no reference, the speaker or the reference was not heard, it does not play SBC, its Bluetooth stream restarted during its turn, or its clicks were not found on the air or in what the bridge wrote. Measuring again and saving replaces the value for the same codec, rate and adapter. The live lock of the air sensor is not needed.
+
 ## Profiles
 
 A profile is a named snapshot of a group's delays, kept in the bridge configuration (`SYNC_PROFILES`). Profiles are applied manually only; nothing selects one automatically.

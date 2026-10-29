@@ -41,6 +41,39 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("permission_denied", "read_only_filesystem"),
     ),
+    # EXPERIMENTAL_AIR_SENSOR only: the sensor cannot run (bridge-wide or for one speaker).
+    # Informational: playback is never affected.
+    "air_sensor_unavailable": GuidanceIssueDefinition(
+        key="air_sensor_unavailable",
+        layer="bluetooth",
+        priority=90,
+        severity="info",
+        default_reason_codes=(
+            "no_cap_net_raw",
+            "unsupported_platform",
+            "monitor_error",
+            "cpu_budget",
+            "unsupported_input",
+            "playout_fallback",
+            "internal_error",
+        ),
+    ),
+    # EXPERIMENTAL_AIR_SENSOR only: the speaker does not stream SBC, which the sensor reads.
+    "air_sensor_codec": GuidanceIssueDefinition(
+        key="air_sensor_codec",
+        layer="bluetooth",
+        priority=91,
+        severity="info",
+        default_reason_codes=("non_sbc_codec",),
+    ),
+    # A loop-mode speaker that runs without its air correction (it plays as in measure mode).
+    "air_correction_inactive": GuidanceIssueDefinition(
+        key="air_correction_inactive",
+        layer="audio",
+        priority=92,
+        severity="info",
+        default_reason_codes=("air_not_effective", "air_unavailable", "air_not_locked"),
+    ),
     "bluetooth_unavailable": GuidanceIssueDefinition(
         key="bluetooth_unavailable",
         layer="bluetooth",
@@ -82,6 +115,15 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         priority=32,
         severity="error",
         default_reason_codes=("pa_socket_missing",),
+    ),
+    # Read-only check: the host suspends the speaker's sink between songs, which
+    # can shift the speaker's buffer by tens of ms.  The bridge never changes it.
+    "bt_sink_suspend_in_gaps": GuidanceIssueDefinition(
+        key="bt_sink_suspend_in_gaps",
+        layer="audio",
+        priority=34,
+        severity="warning",
+        default_reason_codes=("observed_suspend", "module_suspend_on_idle", "wireplumber_suspend_timeout"),
     ),
     "missing_sink": GuidanceIssueDefinition(
         key="missing_sink",

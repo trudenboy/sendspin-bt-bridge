@@ -191,12 +191,15 @@ class RateLimitedLog:
         self._window_s = float(window_s)
         self._last: dict[str, float] = {}
 
-    def warning(self, kind: str, msg: str, *args: object) -> bool:
-        """Log the warning unless one of this kind went out within the window; True if logged."""
+    def warning(self, kind: str, msg: str, *args: object, exc_info: bool = False) -> bool:
+        """Log the warning unless one of this kind went out within the window; True if logged.
+
+        ``exc_info``: attach the exception being handled (call from an ``except`` block).
+        """
         now = self._clock()
         last = self._last.get(kind)
         if last is not None and now - last < self._window_s:
             return False
         self._last[kind] = now
-        self._log.warning(msg, *args)
+        self._log.warning(msg, *args, exc_info=exc_info)
         return True

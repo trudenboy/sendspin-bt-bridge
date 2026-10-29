@@ -131,6 +131,11 @@
       "default": "off",
       "description": "Bluetooth playout sync engine: off keeps the plain output, measure only measures the playout error, loop also corrects it."
     },
+    "EXPERIMENTAL_AIR_SENSOR": {
+      "type": "boolean",
+      "default": false,
+      "description": "Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure or loop and CAP_NET_RAW). Measures in measure mode; corrects placement in loop mode."
+    },
     "PREFER_SBC_CODEC": {
       "type": "boolean",
       "default": false,
@@ -745,6 +750,38 @@
           "default": true,
           "description": "false runs this speaker the way it worked before playout sync (legacy player, not held warm, no automatic offset); true or null follows PLAYOUT_SYNC."
         },
+        "air_to_sound_latency": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AirLatencyEntry"
+              },
+              "maxItems": 8
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Air sensor calibrations: the speaker's air-to-sound latency per codec, SBC rate and adapter MAC (at most 8, one per key), measured in the sync wizard and applied live."
+        },
+        "air_learned_latency": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AirLearnedEntry"
+              },
+              "maxItems": 8
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Learned air latency per codec, SBC rate and adapter MAC (at most 8, one per key): the bridge's own per-start samples, applied live."
+        },
         "room_id": {
           "anyOf": [
             {
@@ -791,6 +828,127 @@
       "required": ["id", "backend"],
       "type": "object",
       "description": "One player: a speaker the bridge keeps connected and fed with a Sendspin stream."
+    },
+    "AirLatencyEntry": {
+      "additionalProperties": false,
+      "description": "One air-to-sound calibration (R-12): keyed by codec, SBC sampling rate and adapter MAC.",
+      "properties": {
+        "codec": {
+          "enum": ["sbc"],
+          "type": "string"
+        },
+        "rate": {
+          "enum": [16000, 32000, 44100, 48000],
+          "type": "integer"
+        },
+        "adapter": {
+          "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$",
+          "type": "string"
+        },
+        "latency_ms": {
+          "maximum": 2000,
+          "minimum": 0,
+          "type": "number"
+        },
+        "spread_ms": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "measured_at": {
+          "type": "string"
+        },
+        "reference": {
+          "default": "",
+          "maxLength": 80,
+          "type": "string"
+        },
+        "source": {
+          "default": "sync_wizard",
+          "enum": ["sync_wizard", "manual"],
+          "type": "string"
+        },
+        "d_ref_ms": {
+          "anyOf": [
+            {
+              "maximum": 5000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The output delay (ms) the calibration was measured with."
+        }
+      },
+      "required": ["codec", "rate", "adapter", "latency_ms", "measured_at"],
+      "type": "object"
+    },
+    "AirLearnedEntry": {
+      "additionalProperties": false,
+      "description": "Learned air latency: per-start samples and the output delays they were taken at, keyed by codec, SBC rate and adapter MAC.",
+      "properties": {
+        "codec": {
+          "enum": ["sbc"],
+          "type": "string"
+        },
+        "rate": {
+          "enum": [16000, 32000, 44100, 48000],
+          "type": "integer"
+        },
+        "adapter": {
+          "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$",
+          "type": "string"
+        },
+        "source": {
+          "const": "learned",
+          "default": "learned",
+          "type": "string"
+        },
+        "samples_ms": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "d_out_ms": {
+          "items": {
+            "maximum": 5000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "latency_ms": {
+          "type": "number"
+        },
+        "d_ref_ms": {
+          "type": "number"
+        },
+        "starts": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "measured_at": {
+          "type": "string"
+        }
+      },
+      "required": ["codec", "rate", "adapter", "samples_ms", "d_out_ms", "latency_ms", "d_ref_ms", "starts", "measured_at"],
+      "type": "object"
     },
     "BluetoothBackend": {
       "additionalProperties": false,

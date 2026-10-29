@@ -255,6 +255,787 @@
         "title": "AdapterRef",
         "type": "object"
       },
+      "AirCalibrationCandidate": {
+        "description": "A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).\n\n``latency_ms = acoustic_lag_ms − host_placement_ms``: the speaker's acoustic lag against the\nsession's reference minus where its audio left over the air against the schedule.",
+        "properties": {
+          "acoustic_lag_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker's acoustic lag against the reference.",
+            "title": "Acoustic Lag Ms"
+          },
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Bluetooth adapter's MAC.",
+            "title": "Adapter"
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec"
+          },
+          "delay_report_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker's A2DP delay report, a hint only.",
+            "title": "Delay Report Ms"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "host_placement_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where its audio left over the air against the schedule.",
+            "title": "Host Placement Ms"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker's air-to-sound latency; null unless eligible.",
+            "title": "Latency Ms"
+          },
+          "member": {
+            "title": "Member",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The SBC sampling rate (Hz).",
+            "title": "Rate"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_effective",
+                  "no_reference",
+                  "not_measured",
+                  "not_sbc",
+                  "air_epoch_changed",
+                  "air_delay_changed",
+                  "no_air_clicks",
+                  "no_written_clicks",
+                  "fold_failed",
+                  "no_air_frames"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why there is no value, the first that applies: not_effective (the air sensor was not on for this speaker), no_reference (the session has no reference member), not_measured (the speaker's or the reference's measurement is not ok), fold_failed (the air fold or the written fold could not be completed), not_sbc, no_air_frames (no SBC frame in its span), air_epoch_changed, air_delay_changed (the speaker's delay changed during the recording), no_air_clicks, no_written_clicks.",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "member",
+          "eligible",
+          "reason",
+          "latency_ms",
+          "acoustic_lag_ms",
+          "host_placement_ms",
+          "codec",
+          "rate",
+          "adapter",
+          "delay_report_ms"
+        ],
+        "title": "AirCalibrationCandidate",
+        "type": "object"
+      },
+      "AirCalibrationSaveIn": {
+        "properties": {
+          "members": {
+            "description": "The members whose latency to save.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "AirCalibrationSaveIn",
+        "type": "object"
+      },
+      "AirLatencyEntry": {
+        "additionalProperties": false,
+        "description": "One air-to-sound calibration of a speaker (the sync wizard's ``L_as``). Strict: no string numbers.",
+        "properties": {
+          "adapter": {
+            "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$",
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "const": "sbc",
+            "title": "Codec",
+            "type": "string"
+          },
+          "d_ref_ms": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "D Ref Ms"
+          },
+          "latency_ms": {
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "enum": [
+              16000,
+              32000,
+              44100,
+              48000
+            ],
+            "title": "Rate",
+            "type": "integer"
+          },
+          "reference": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "default": "sync_wizard",
+            "enum": [
+              "sync_wizard",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "spread_ms": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Ms"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "latency_ms",
+          "measured_at"
+        ],
+        "title": "AirLatencyEntry",
+        "type": "object"
+      },
+      "AirLatencyEntryOut": {
+        "description": "One stored air-to-sound calibration (R-12): keyed by codec, SBC rate and adapter MAC.",
+        "properties": {
+          "adapter": {
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "title": "Codec",
+            "type": "string"
+          },
+          "d_ref_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay (ms) the speaker ran with when this latency was measured.",
+            "title": "D Ref Ms"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "integer"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "default": "sync_wizard",
+            "title": "Source",
+            "type": "string"
+          },
+          "spread_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Ms"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "latency_ms",
+          "spread_ms",
+          "measured_at",
+          "reference",
+          "source",
+          "d_ref_ms"
+        ],
+        "title": "AirLatencyEntryOut",
+        "type": "object"
+      },
+      "AirLearnedEntry": {
+        "additionalProperties": false,
+        "description": "Learned air latency of a speaker for one (codec, rate, adapter): the per-start pairs and their reference.",
+        "properties": {
+          "adapter": {
+            "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$",
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "const": "sbc",
+            "title": "Codec",
+            "type": "string"
+          },
+          "d_out_ms": {
+            "items": {
+              "maximum": 5000.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "D Out Ms",
+            "type": "array"
+          },
+          "d_ref_ms": {
+            "title": "D Ref Ms",
+            "type": "number"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "enum": [
+              16000,
+              32000,
+              44100,
+              48000
+            ],
+            "title": "Rate",
+            "type": "integer"
+          },
+          "samples_ms": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Samples Ms",
+            "type": "array"
+          },
+          "source": {
+            "const": "learned",
+            "default": "learned",
+            "title": "Source",
+            "type": "string"
+          },
+          "starts": {
+            "minimum": 1.0,
+            "title": "Starts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "samples_ms",
+          "d_out_ms",
+          "latency_ms",
+          "d_ref_ms",
+          "starts",
+          "measured_at"
+        ],
+        "title": "AirLearnedEntry",
+        "type": "object"
+      },
+      "AirLearnedEntryOut": {
+        "description": "One latency the bridge learned from the speaker's starts (stage B): keyed like a calibration.",
+        "properties": {
+          "adapter": {
+            "title": "Adapter",
+            "type": "string"
+          },
+          "codec": {
+            "title": "Codec",
+            "type": "string"
+          },
+          "d_out_ms": {
+            "description": "The output delay of each start, in ms.",
+            "items": {
+              "type": "number"
+            },
+            "title": "D Out Ms",
+            "type": "array"
+          },
+          "d_ref_ms": {
+            "title": "D Ref Ms",
+            "type": "number"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "integer"
+          },
+          "samples_ms": {
+            "description": "The per-start air latencies, oldest first.",
+            "items": {
+              "type": "number"
+            },
+            "title": "Samples Ms",
+            "type": "array"
+          },
+          "source": {
+            "default": "learned",
+            "title": "Source",
+            "type": "string"
+          },
+          "starts": {
+            "title": "Starts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "rate",
+          "adapter",
+          "source",
+          "samples_ms",
+          "d_out_ms",
+          "latency_ms",
+          "d_ref_ms",
+          "starts",
+          "measured_at"
+        ],
+        "title": "AirLearnedEntryOut",
+        "type": "object"
+      },
+      "AirSensorFold": {
+        "description": "The air side of a calibration fold (calibration only).",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "ok": {
+            "default": false,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "phase_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase Ms"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "id",
+          "phase_ms",
+          "ok",
+          "reason"
+        ],
+        "title": "AirSensorFold",
+        "type": "object"
+      },
+      "AirSensorTiming": {
+        "description": "The air sensor snapshot (``DeviceStatus.air_sensor``); unknown keys (``accepts``) are ignored.",
+        "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter"
+          },
+          "air_error_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "E (positive = late); null when uncalibrated or not locked/holding.",
+            "title": "Air Error Ms"
+          },
+          "air_to_sound_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air To Sound Ms"
+          },
+          "anchor": {
+            "default": "send",
+            "title": "Anchor",
+            "type": "string"
+          },
+          "calibrated": {
+            "default": false,
+            "title": "Calibrated",
+            "type": "boolean"
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec"
+          },
+          "complete_lag_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complete Lag Ms"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "dropped_messages": {
+            "default": 0,
+            "title": "Dropped Messages",
+            "type": "integer"
+          },
+          "epochs": {
+            "default": 0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "fold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AirSensorFold"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "host_placement_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "H: the median host-side placement offset of the last 5 confirmed windows.",
+            "title": "Host Placement Ms"
+          },
+          "ipc_dropped": {
+            "default": 0,
+            "title": "Ipc Dropped",
+            "type": "integer"
+          },
+          "jitter_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jitter Ms"
+          },
+          "lag_cells": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Cells"
+          },
+          "last_confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Confirmed At"
+          },
+          "missing_frames": {
+            "default": 0,
+            "title": "Missing Frames",
+            "type": "integer"
+          },
+          "monitor_drops": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monitor Drops"
+          },
+          "psr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Psr"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "default": "off",
+            "description": "off, unavailable, unsupported_codec, unsupported_input, no_signal, acquiring, locked, holding or no_lock.",
+            "title": "State",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "kernel, recv or null.",
+            "title": "Timestamp"
+          },
+          "windows_confirmed": {
+            "default": 0,
+            "title": "Windows Confirmed",
+            "type": "integer"
+          },
+          "windows_rejected": {
+            "default": 0,
+            "title": "Windows Rejected",
+            "type": "integer"
+          },
+          "windows_skipped": {
+            "default": 0,
+            "title": "Windows Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "codec",
+          "rate",
+          "adapter",
+          "host_placement_ms",
+          "air_error_ms",
+          "air_to_sound_ms",
+          "calibrated",
+          "confidence",
+          "jitter_ms",
+          "psr",
+          "lag_cells",
+          "windows_confirmed",
+          "windows_rejected",
+          "windows_skipped",
+          "last_confirmed_at",
+          "epochs",
+          "frames",
+          "missing_frames",
+          "anchor",
+          "complete_lag_ms",
+          "timestamp",
+          "monitor_drops",
+          "ipc_dropped",
+          "dropped_messages",
+          "fold"
+        ],
+        "title": "AirSensorTiming",
+        "type": "object"
+      },
       "ApplyIn": {
         "properties": {
           "rows": {
@@ -1006,6 +1787,19 @@
             "default": false,
             "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, power-cycle the adapter through Bluetooth MGMT/HCI and optionally issue a USB reset if the power cycle fails. Disruptive to every device on that controller. Requires Linux Bluetooth capabilities; USB escalation additionally requires /dev/bus/usb access.",
             "title": "Experimental Adapter Auto Recovery"
+          },
+          "EXPERIMENTAL_AIR_SENSOR": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure or loop and CAP_NET_RAW). Measures in measure mode; corrects placement in loop mode.",
+            "title": "Experimental Air Sensor"
           },
           "EXPERIMENTAL_PA_MODULE_RELOAD": {
             "anyOf": [
@@ -2063,6 +2857,22 @@
       },
       "DeviceAudio": {
         "properties": {
+          "air_learned_latency": {
+            "description": "Air latencies learned from the speaker's starts (at most 8, one per codec, SBC rate and adapter); used as the air correction target from the third start until a calibration exists.",
+            "items": {
+              "$ref": "#/components/schemas/AirLearnedEntryOut"
+            },
+            "title": "Air Learned Latency",
+            "type": "array"
+          },
+          "air_to_sound_latency": {
+            "description": "The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); the one for the current codec, rate and adapter is applied.",
+            "items": {
+              "$ref": "#/components/schemas/AirLatencyEntryOut"
+            },
+            "title": "Air To Sound Latency",
+            "type": "array"
+          },
           "buffering": {
             "default": false,
             "title": "Buffering",
@@ -2199,7 +3009,9 @@
           "static_delay_ms",
           "static_delay_source",
           "static_delay_calibrated_at",
-          "static_delay_codec"
+          "static_delay_codec",
+          "air_to_sound_latency",
+          "air_learned_latency"
         ],
         "title": "DeviceAudio",
         "type": "object"
@@ -3116,6 +3928,16 @@
       },
       "DeviceTiming": {
         "properties": {
+          "air_sensor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AirSensorTiming"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "available": {
             "default": false,
             "title": "Available",
@@ -3352,6 +4174,7 @@
           "declared_lead_time_ms",
           "effective_required_lead_time_ms",
           "playout",
+          "air_sensor",
           "reanchoring",
           "reanchor_count",
           "reanchor_count_session",
@@ -4655,6 +5478,36 @@
       "Player": {
         "additionalProperties": true,
         "properties": {
+          "air_learned_latency": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AirLearnedEntry"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air Learned Latency"
+          },
+          "air_to_sound_latency": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AirLatencyEntry"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air To Sound Latency"
+          },
           "backend": {
             "discriminator": {
               "mapping": {
@@ -4925,8 +5778,133 @@
         "type": "object"
       },
       "PlayoutTiming": {
-        "description": "The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.",
+        "description": "The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.\n\nIn ``loop`` with an air bias ``error_ms`` is the corrected error (the raw error is\n``error_ms + air_bias_ms``).",
         "properties": {
+          "air_bias_gated": {
+            "default": 0,
+            "description": "Windows the bias gate rejected.",
+            "title": "Air Bias Gated",
+            "type": "integer"
+          },
+          "air_bias_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "b: the learned offset between the engine's clock and the air sensor.",
+            "title": "Air Bias Ms"
+          },
+          "air_bias_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why there is no bias value (for example no_target or internal_error).",
+            "title": "Air Bias Reason"
+          },
+          "air_bias_skipped": {
+            "default": 0,
+            "description": "Windows not used for the bias.",
+            "title": "Air Bias Skipped",
+            "type": "integer"
+          },
+          "air_bias_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "none, seeding, active or held; null in measure or with the air sensor off.",
+            "title": "Air Bias State"
+          },
+          "air_corrections": {
+            "default": 0,
+            "description": "Corrections the air bias made since the start.",
+            "title": "Air Corrections",
+            "type": "integer"
+          },
+          "air_d_ref_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay the target was measured at.",
+            "title": "Air D Ref Ms"
+          },
+          "air_last_correction_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air Last Correction Ms"
+          },
+          "air_learned_starts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Starts behind a learned target.",
+            "title": "Air Learned Starts"
+          },
+          "air_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "calibrated, learned or null.",
+            "title": "Air Target"
+          },
+          "air_target_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The air-to-sound latency the correction aims at.",
+            "title": "Air Target Ms"
+          },
+          "air_trim_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay trim: how much earlier than its reference the output is placed.",
+            "title": "Air Trim Ms"
+          },
           "clock_slew_ppm": {
             "anyOf": [
               {
@@ -5216,7 +6194,19 @@
           "hold_left_s",
           "late_start_ms",
           "trim_us",
-          "fallback_reason"
+          "fallback_reason",
+          "air_bias_state",
+          "air_bias_reason",
+          "air_bias_ms",
+          "air_target",
+          "air_target_ms",
+          "air_d_ref_ms",
+          "air_trim_ms",
+          "air_learned_starts",
+          "air_corrections",
+          "air_last_correction_ms",
+          "air_bias_gated",
+          "air_bias_skipped"
         ],
         "title": "PlayoutTiming",
         "type": "object"
@@ -6746,6 +7736,14 @@
       "SyncSessionOut": {
         "description": "The session resource; also the payload of ``sync`` events.",
         "properties": {
+          "air_calibrations": {
+            "description": "Bridge speakers' air-to-sound latencies from the last measured sequence (air sensor).",
+            "items": {
+              "$ref": "#/components/schemas/AirCalibrationCandidate"
+            },
+            "title": "Air Calibrations",
+            "type": "array"
+          },
           "clicker_left_s": {
             "anyOf": [
               {
@@ -6987,7 +7985,8 @@
           "muted",
           "soloed",
           "reference",
-          "sequence"
+          "sequence",
+          "air_calibrations"
         ],
         "title": "SyncSessionOut",
         "type": "object"
@@ -9492,6 +10491,129 @@
           }
         },
         "summary": "Change a speaker's settings",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/air-calibrations": {
+      "delete": {
+        "description": "The air sensor reports the speaker uncalibrated until the sync wizard measures it again.",
+        "operationId": "delete_air_calibrations_api_v1_devices__device_id__air_calibrations_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Forget every air calibration of the speaker",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/air-calibrations/{codec}/{rate}/{adapter}": {
+      "delete": {
+        "description": "The calibration for this codec, SBC rate and adapter MAC; applied live to the running player.",
+        "operationId": "delete_air_calibration_api_v1_devices__device_id__air_calibrations__codec___rate___adapter__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "codec",
+            "required": true,
+            "schema": {
+              "title": "Codec",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "rate",
+            "required": true,
+            "schema": {
+              "title": "Rate",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "adapter",
+            "required": true,
+            "schema": {
+              "title": "Adapter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Forget one air calibration of the speaker",
         "tags": [
           "devices"
         ]
@@ -13688,6 +14810,75 @@
           }
         },
         "summary": "A-B listening: solo A",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/air-calibrations": {
+      "post": {
+        "description": "Stores each chosen member's latency (``air_calibrations`` of the session) for its codec, SBC rate and adapter, replacing the entry there, and applies it live. 409 not_eligible when a member has no eligible value (nothing is written then).",
+        "operationId": "save_air_calibrations_api_v1_sync_sessions__session_id__air_calibrations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AirCalibrationSaveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AirCalibrationCandidate"
+                  },
+                  "title": "Response Save Air Calibrations Api V1 Sync Sessions  Session Id  Air Calibrations Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Save bridge speakers' air-to-sound latencies from the last measured sequence",
         "tags": [
           "sync"
         ]

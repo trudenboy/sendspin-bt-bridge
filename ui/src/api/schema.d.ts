@@ -630,6 +630,46 @@ export interface paths {
         patch: operations["patch_device_api_v1_devices__device_id__patch"];
         trace?: never;
     };
+    "/api/v1/devices/{device_id}/air-calibrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget every air calibration of the speaker
+         * @description The air sensor reports the speaker uncalibrated until the sync wizard measures it again.
+         */
+        delete: operations["delete_air_calibrations_api_v1_devices__device_id__air_calibrations_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/air-calibrations/{codec}/{rate}/{adapter}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget one air calibration of the speaker
+         * @description The calibration for this codec, SBC rate and adapter MAC; applied live to the running player.
+         */
+        delete: operations["delete_air_calibration_api_v1_devices__device_id__air_calibrations__codec___rate___adapter__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/{device_id}/claim": {
         parameters: {
             query?: never;
@@ -1940,6 +1980,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/sessions/{session_id}/air-calibrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save bridge speakers' air-to-sound latencies from the last measured sequence
+         * @description Stores each chosen member's latency (``air_calibrations`` of the session) for its codec, SBC rate and adapter, replacing the entry there, and applies it live. 409 not_eligible when a member has no eligible value (nothing is written then).
+         */
+        post: operations["save_air_calibrations_api_v1_sync_sessions__session_id__air_calibrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/sessions/{session_id}/apply": {
         parameters: {
             query?: never;
@@ -2370,6 +2430,324 @@ export interface components {
             /** Name */
             name: string | null;
         };
+        /**
+         * AirCalibrationCandidate
+         * @description A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).
+         *
+         *     ``latency_ms = acoustic_lag_ms − host_placement_ms``: the speaker's acoustic lag against the
+         *     session's reference minus where its audio left over the air against the schedule.
+         */
+        AirCalibrationCandidate: {
+            /**
+             * Acoustic Lag Ms
+             * @description The speaker's acoustic lag against the reference.
+             */
+            acoustic_lag_ms: number | null;
+            /**
+             * Adapter
+             * @description The Bluetooth adapter's MAC.
+             */
+            adapter: string | null;
+            /** Codec */
+            codec: string | null;
+            /**
+             * Delay Report Ms
+             * @description The speaker's A2DP delay report, a hint only.
+             */
+            delay_report_ms: number | null;
+            /** Eligible */
+            eligible: boolean;
+            /**
+             * Host Placement Ms
+             * @description Where its audio left over the air against the schedule.
+             */
+            host_placement_ms: number | null;
+            /**
+             * Latency Ms
+             * @description The speaker's air-to-sound latency; null unless eligible.
+             */
+            latency_ms: number | null;
+            /** Member */
+            member: string;
+            /**
+             * Rate
+             * @description The SBC sampling rate (Hz).
+             */
+            rate: number | null;
+            /**
+             * Reason
+             * @description Why there is no value, the first that applies: not_effective (the air sensor was not on for this speaker), no_reference (the session has no reference member), not_measured (the speaker's or the reference's measurement is not ok), fold_failed (the air fold or the written fold could not be completed), not_sbc, no_air_frames (no SBC frame in its span), air_epoch_changed, air_delay_changed (the speaker's delay changed during the recording), no_air_clicks, no_written_clicks.
+             */
+            reason: ("not_effective" | "no_reference" | "not_measured" | "not_sbc" | "air_epoch_changed" | "air_delay_changed" | "no_air_clicks" | "no_written_clicks" | "fold_failed" | "no_air_frames") | null;
+        };
+        /** AirCalibrationSaveIn */
+        AirCalibrationSaveIn: {
+            /**
+             * Members
+             * @description The members whose latency to save.
+             */
+            members: string[];
+        };
+        /**
+         * AirLatencyEntry
+         * @description One air-to-sound calibration of a speaker (the sync wizard's ``L_as``). Strict: no string numbers.
+         */
+        AirLatencyEntry: {
+            /** Adapter */
+            adapter: string;
+            /**
+             * Codec
+             * @constant
+             */
+            codec: "sbc";
+            /** D Ref Ms */
+            d_ref_ms?: number | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /**
+             * Rate
+             * @enum {integer}
+             */
+            rate: 16000 | 32000 | 44100 | 48000;
+            /**
+             * Reference
+             * @default
+             */
+            reference?: string;
+            /**
+             * Source
+             * @default sync_wizard
+             * @enum {string}
+             */
+            source?: "sync_wizard" | "manual";
+            /** Spread Ms */
+            spread_ms?: number | null;
+        };
+        /**
+         * AirLatencyEntryOut
+         * @description One stored air-to-sound calibration (R-12): keyed by codec, SBC rate and adapter MAC.
+         */
+        AirLatencyEntryOut: {
+            /** Adapter */
+            adapter: string;
+            /** Codec */
+            codec: string;
+            /**
+             * D Ref Ms
+             * @description The delay (ms) the speaker ran with when this latency was measured.
+             */
+            d_ref_ms: number | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /** Rate */
+            rate: number;
+            /**
+             * Reference
+             * @default
+             */
+            reference: string;
+            /**
+             * Source
+             * @default sync_wizard
+             */
+            source: string;
+            /** Spread Ms */
+            spread_ms: number | null;
+        };
+        /**
+         * AirLearnedEntry
+         * @description Learned air latency of a speaker for one (codec, rate, adapter): the per-start pairs and their reference.
+         */
+        AirLearnedEntry: {
+            /** Adapter */
+            adapter: string;
+            /**
+             * Codec
+             * @constant
+             */
+            codec: "sbc";
+            /** D Out Ms */
+            d_out_ms: number[];
+            /** D Ref Ms */
+            d_ref_ms: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /**
+             * Rate
+             * @enum {integer}
+             */
+            rate: 16000 | 32000 | 44100 | 48000;
+            /** Samples Ms */
+            samples_ms: number[];
+            /**
+             * Source
+             * @default learned
+             * @constant
+             */
+            source?: "learned";
+            /** Starts */
+            starts: number;
+        };
+        /**
+         * AirLearnedEntryOut
+         * @description One latency the bridge learned from the speaker's starts (stage B): keyed like a calibration.
+         */
+        AirLearnedEntryOut: {
+            /** Adapter */
+            adapter: string;
+            /** Codec */
+            codec: string;
+            /**
+             * D Out Ms
+             * @description The output delay of each start, in ms.
+             */
+            d_out_ms: number[];
+            /** D Ref Ms */
+            d_ref_ms: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at: string;
+            /** Rate */
+            rate: number;
+            /**
+             * Samples Ms
+             * @description The per-start air latencies, oldest first.
+             */
+            samples_ms: number[];
+            /**
+             * Source
+             * @default learned
+             */
+            source: string;
+            /** Starts */
+            starts: number;
+        };
+        /**
+         * AirSensorFold
+         * @description The air side of a calibration fold (calibration only).
+         */
+        AirSensorFold: {
+            /** Id */
+            id: string | null;
+            /**
+             * Ok
+             * @default false
+             */
+            ok: boolean;
+            /** Phase Ms */
+            phase_ms: number | null;
+            /** Reason */
+            reason: string | null;
+        };
+        /**
+         * AirSensorTiming
+         * @description The air sensor snapshot (``DeviceStatus.air_sensor``); unknown keys (``accepts``) are ignored.
+         */
+        AirSensorTiming: {
+            /** Adapter */
+            adapter: string | null;
+            /**
+             * Air Error Ms
+             * @description E (positive = late); null when uncalibrated or not locked/holding.
+             */
+            air_error_ms: number | null;
+            /** Air To Sound Ms */
+            air_to_sound_ms: number | null;
+            /**
+             * Anchor
+             * @default send
+             */
+            anchor: string;
+            /**
+             * Calibrated
+             * @default false
+             */
+            calibrated: boolean;
+            /** Codec */
+            codec: string | null;
+            /** Complete Lag Ms */
+            complete_lag_ms: number | null;
+            /** Confidence */
+            confidence: number | null;
+            /**
+             * Dropped Messages
+             * @default 0
+             */
+            dropped_messages: number;
+            /**
+             * Epochs
+             * @default 0
+             */
+            epochs: number;
+            fold: components["schemas"]["AirSensorFold"] | null;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames: number;
+            /**
+             * Host Placement Ms
+             * @description H: the median host-side placement offset of the last 5 confirmed windows.
+             */
+            host_placement_ms: number | null;
+            /**
+             * Ipc Dropped
+             * @default 0
+             */
+            ipc_dropped: number;
+            /** Jitter Ms */
+            jitter_ms: number | null;
+            /** Lag Cells */
+            lag_cells: number | null;
+            /** Last Confirmed At */
+            last_confirmed_at: string | null;
+            /**
+             * Missing Frames
+             * @default 0
+             */
+            missing_frames: number;
+            /** Monitor Drops */
+            monitor_drops: number | null;
+            /** Psr */
+            psr: number | null;
+            /** Rate */
+            rate: number | null;
+            /** Reason */
+            reason: string | null;
+            /**
+             * State
+             * @description off, unavailable, unsupported_codec, unsupported_input, no_signal, acquiring, locked, holding or no_lock.
+             * @default off
+             */
+            state: string;
+            /**
+             * Timestamp
+             * @description kernel, recv or null.
+             */
+            timestamp: string | null;
+            /**
+             * Windows Confirmed
+             * @default 0
+             */
+            windows_confirmed: number;
+            /**
+             * Windows Rejected
+             * @default 0
+             */
+            windows_rejected: number;
+            /**
+             * Windows Skipped
+             * @default 0
+             */
+            windows_skipped: number;
+        };
         /** ApplyIn */
         ApplyIn: {
             /**
@@ -2723,6 +3101,12 @@ export interface components {
              * @default false
              */
             EXPERIMENTAL_ADAPTER_AUTO_RECOVERY?: boolean | null;
+            /**
+             * Experimental Air Sensor
+             * @description Experimental: measure when audio leaves over the air (SBC, needs PLAYOUT_SYNC=measure or loop and CAP_NET_RAW). Measures in measure mode; corrects placement in loop mode.
+             * @default false
+             */
+            EXPERIMENTAL_AIR_SENSOR?: boolean | null;
             /**
              * Experimental Pa Module Reload
              * @description Experimental: reload PulseAudio module-bluez5-discover as a last resort when bluez_card.* fails to appear. Disrupts all active BT audio on the bridge.
@@ -3187,6 +3571,16 @@ export interface components {
         /** DeviceAudio */
         DeviceAudio: {
             /**
+             * Air Learned Latency
+             * @description Air latencies learned from the speaker's starts (at most 8, one per codec, SBC rate and adapter); used as the air correction target from the third start until a calibration exists.
+             */
+            air_learned_latency: components["schemas"]["AirLearnedEntryOut"][];
+            /**
+             * Air To Sound Latency
+             * @description The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); the one for the current codec, rate and adapter is applied.
+             */
+            air_to_sound_latency: components["schemas"]["AirLatencyEntryOut"][];
+            /**
              * Buffering
              * @default false
              */
@@ -3561,6 +3955,7 @@ export interface components {
         };
         /** DeviceTiming */
         DeviceTiming: {
+            air_sensor: components["schemas"]["AirSensorTiming"] | null;
             /**
              * Available
              * @default false
@@ -4205,6 +4600,10 @@ export interface components {
         };
         /** Player */
         Player: {
+            /** Air Learned Latency */
+            air_learned_latency?: components["schemas"]["AirLearnedEntry"][] | null;
+            /** Air To Sound Latency */
+            air_to_sound_latency?: components["schemas"]["AirLatencyEntry"][] | null;
             /** Backend */
             backend: components["schemas"]["BluetoothBackend"] | components["schemas"]["PulseSinkBackend"];
             /**
@@ -4270,8 +4669,71 @@ export interface components {
         /**
          * PlayoutTiming
          * @description The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.
+         *
+         *     In ``loop`` with an air bias ``error_ms`` is the corrected error (the raw error is
+         *     ``error_ms + air_bias_ms``).
          */
         PlayoutTiming: {
+            /**
+             * Air Bias Gated
+             * @description Windows the bias gate rejected.
+             * @default 0
+             */
+            air_bias_gated: number;
+            /**
+             * Air Bias Ms
+             * @description b: the learned offset between the engine's clock and the air sensor.
+             */
+            air_bias_ms: number | null;
+            /**
+             * Air Bias Reason
+             * @description Why there is no bias value (for example no_target or internal_error).
+             */
+            air_bias_reason: string | null;
+            /**
+             * Air Bias Skipped
+             * @description Windows not used for the bias.
+             * @default 0
+             */
+            air_bias_skipped: number;
+            /**
+             * Air Bias State
+             * @description none, seeding, active or held; null in measure or with the air sensor off.
+             */
+            air_bias_state: string | null;
+            /**
+             * Air Corrections
+             * @description Corrections the air bias made since the start.
+             * @default 0
+             */
+            air_corrections: number;
+            /**
+             * Air D Ref Ms
+             * @description The delay the target was measured at.
+             */
+            air_d_ref_ms: number | null;
+            /** Air Last Correction Ms */
+            air_last_correction_ms: number | null;
+            /**
+             * Air Learned Starts
+             * @description Starts behind a learned target.
+             */
+            air_learned_starts: number | null;
+            /**
+             * Air Target
+             * @description calibrated, learned or null.
+             */
+            air_target: string | null;
+            /**
+             * Air Target Ms
+             * @description The air-to-sound latency the correction aims at.
+             */
+            air_target_ms: number | null;
+            /**
+             * Air Trim Ms
+             * @description The delay trim: how much earlier than its reference the output is placed.
+             */
+            air_trim_ms: number | null;
             /** Clock Slew Ppm */
             clock_slew_ppm: number | null;
             /** Correction Ppm */
@@ -4978,6 +5440,11 @@ export interface components {
          * @description The session resource; also the payload of ``sync`` events.
          */
         SyncSessionOut: {
+            /**
+             * Air Calibrations
+             * @description Bridge speakers' air-to-sound latencies from the last measured sequence (air sensor).
+             */
+            air_calibrations: components["schemas"]["AirCalibrationCandidate"][];
             /**
              * Clicker Left S
              * @description Seconds of the click track left while it plays (from its last start); null otherwise.
@@ -6905,6 +7372,89 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DevicePatchOut"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    delete_air_calibrations_api_v1_devices__device_id__air_calibrations_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    delete_air_calibration_api_v1_devices__device_id__air_calibrations__codec___rate___adapter__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+                codec: string;
+                rate: number;
+                adapter: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -10358,6 +10908,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    save_air_calibrations_api_v1_sync_sessions__session_id__air_calibrations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AirCalibrationSaveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AirCalibrationCandidate"][];
                 };
             };
             /** @description Client error */

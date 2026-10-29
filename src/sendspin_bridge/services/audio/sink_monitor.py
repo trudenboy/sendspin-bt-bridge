@@ -169,6 +169,7 @@ class SinkMonitor:
         self._presence: dict[str, _Presence] = {}
         self._presence_lock: asyncio.Lock | None = None
         self._poll_task: asyncio.Task[None] | None = None
+        self._state_listeners: list[Callable[[str, str | None, str, str], None]] = []
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -210,6 +211,22 @@ class SinkMonitor:
         elif known_state in ("idle", "suspended"):
             logger.debug("SinkMonitor: %s [%s] register → already %s, firing on_idle", sink_name, mac, known_state)
             on_idle()
+
+    def add_state_listener(self, listener: Callable[[str, str | None, str, str], None]) -> None:
+        """``listener(mac, old_state, new_state, sink_name)`` for every observed state change of a registered sink.
+
+        Called after the registered ``on_active`` / ``on_idle`` callbacks, including for
+        ``idle → suspended`` which those two do not distinguish.  A failing listener is logged
+        at DEBUG and never reaches the monitor.
+        """
+        self._state_listeners.append(listener)
+
+    def _notify_state(self, mac: str, old_state: str | None, new_state: str, sink_name: str) -> None:
+        for listener in list(self._state_listeners):
+            try:
+                listener(mac, old_state, new_state, sink_name)
+            except Exception:
+                logger.debug("SinkMonitor: state listener failed", exc_info=True)
 
     def unregister(self, mac: str) -> None:
         """Remove all state tracking for *mac*."""
@@ -418,14 +435,14 @@ class SinkMonitor:
         if key is None:
             return
         on_active, on_idle = self._callbacks.get(key, (None, None))
-        if on_active is None or on_idle is None:
-            return
-        if new_state == "running" and old_state != "running":
-            logger.debug("SinkMonitor: %s [%s] → running", sink_name, key)
-            on_active()
-        elif new_state in ("idle", "suspended") and old_state in ("running", None):
-            logger.debug("SinkMonitor: %s [%s] → %s", sink_name, key, new_state)
-            on_idle()
+        if on_active is not None and on_idle is not None:
+            if new_state == "running" and old_state != "running":
+                logger.debug("SinkMonitor: %s [%s] → running", sink_name, key)
+                on_active()
+            elif new_state in ("idle", "suspended") and old_state in ("running", None):
+                logger.debug("SinkMonitor: %s [%s] → %s", sink_name, key, new_state)
+                on_idle()
+        self._notify_state(key, old_state, new_state, sink_name)
 
     # ── Event loop ────────────────────────────────────────────────────
 
@@ -558,15 +575,14 @@ class SinkMonitor:
             return
 
         on_active, on_idle = self._callbacks.get(mac, (None, None))
-        if on_active is None:
-            return
-
-        if new_state == "running" and old_state != "running":
-            logger.debug("SinkMonitor: %s [%s] → running", sink_name, mac)
-            on_active()
-        elif new_state in ("idle", "suspended") and old_state in ("running", None):
-            logger.debug("SinkMonitor: %s [%s] → %s", sink_name, mac, new_state)
-            on_idle()  # type: ignore[misc]
+        if on_active is not None:
+            if new_state == "running" and old_state != "running":
+                logger.debug("SinkMonitor: %s [%s] → running", sink_name, mac)
+                on_active()
+            elif new_state in ("idle", "suspended") and old_state in ("running", None):
+                logger.debug("SinkMonitor: %s [%s] → %s", sink_name, mac, new_state)
+                on_idle()  # type: ignore[misc]
+        self._notify_state(mac, old_state, new_state, sink_name)
 
     def _handle_sink_remove(self, sink_index: int) -> None:
         """Handle sink removal — a followed output is lost; otherwise idle if it was running."""
@@ -626,15 +642,14 @@ class SinkMonitor:
                 continue
 
             on_active, on_idle = self._callbacks.get(mac, (None, None))
-            if on_active is None:
-                continue
-
-            if new_state == "running" and old_state != "running":
-                logger.debug("SinkMonitor: scan %s [%s] → running", sink_name, mac)
-                on_active()
-            elif new_state in ("idle", "suspended") and old_state in ("running", None):
-                logger.debug("SinkMonitor: scan %s [%s] → %s", sink_name, mac, new_state)
-                on_idle()  # type: ignore[misc]
+            if on_active is not None:
+                if new_state == "running" and old_state != "running":
+                    logger.debug("SinkMonitor: scan %s [%s] → running", sink_name, mac)
+                    on_active()
+                elif new_state in ("idle", "suspended") and old_state in ("running", None):
+                    logger.debug("SinkMonitor: scan %s [%s] → %s", sink_name, mac, new_state)
+                    on_idle()  # type: ignore[misc]
+            self._notify_state(mac, old_state, new_state, sink_name)
 
         logger.debug("SinkMonitor: initial scan complete — %d bluez sink(s) tracked", len(self._sink_states))
 

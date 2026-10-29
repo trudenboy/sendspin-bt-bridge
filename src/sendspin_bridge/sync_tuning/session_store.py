@@ -208,8 +208,14 @@ class SessionStore:
                     "volumes": volumes,
                 },
             )
+        payload, extras = data, _publish_extras
+        if extras is not None:
+            try:
+                payload = {**data, **extras(data)}
+            except Exception:
+                logger.warning("Adding to a sync event failed", exc_info=True)
         try:
-            self._publish(data)
+            self._publish(payload)
         except Exception:
             logger.warning("Publishing a sync event failed", exc_info=True)
 
@@ -492,6 +498,16 @@ class SessionStore:
 _store: SessionStore | None = None
 _store_lock = threading.Lock()
 _hub: Any = None  # the API's EventHub, attached by create_app()
+
+
+#: Fields the application adds to every published session (``air_calibrations``); called with the
+#: session's ``to_dict()`` under its lock, so it reads that dict and never the session.
+_publish_extras: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+
+
+def set_publish_extras(fn: Callable[[dict[str, Any]], dict[str, Any]] | None) -> None:
+    global _publish_extras
+    _publish_extras = fn
 
 
 def attach_event_hub(hub: Any) -> None:

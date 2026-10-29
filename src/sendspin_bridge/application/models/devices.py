@@ -8,9 +8,9 @@ the flat field names.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import AfterValidator, ConfigDict, Field, StrictBool, StrictInt, StrictStr, ValidationError
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, supported_actions_for
@@ -98,6 +98,37 @@ class DeviceBluetooth(ResponseModel):
     adapter_recovery: AdapterRecovery
 
 
+class AirLatencyEntryOut(ResponseModel):
+    """One stored air-to-sound calibration (R-12): keyed by codec, SBC rate and adapter MAC."""
+
+    codec: str
+    rate: int
+    adapter: str
+    latency_ms: float
+    spread_ms: float | None = None
+    measured_at: str
+    reference: str = ""
+    source: str = "sync_wizard"
+    d_ref_ms: float | None = Field(
+        default=None, description="The delay (ms) the speaker ran with when this latency was measured."
+    )
+
+
+class AirLearnedEntryOut(ResponseModel):
+    """One latency the bridge learned from the speaker's starts (stage B): keyed like a calibration."""
+
+    codec: str
+    rate: int
+    adapter: str
+    source: str = "learned"
+    samples_ms: list[float] = Field(default_factory=list, description="The per-start air latencies, oldest first.")
+    d_out_ms: list[float] = Field(default_factory=list, description="The output delay of each start, in ms.")
+    latency_ms: float
+    d_ref_ms: float
+    starts: int
+    measured_at: str
+
+
 class DeviceAudio(ResponseModel):
     sink_name: str | None = None
     has_sink: bool = False
@@ -119,6 +150,16 @@ class DeviceAudio(ResponseModel):
     static_delay_source: str = "default"
     static_delay_calibrated_at: str | None = None
     static_delay_codec: str | None = None
+    air_to_sound_latency: list[AirLatencyEntryOut] = Field(
+        default_factory=list,
+        description="The speaker's air sensor calibrations (at most 8, one per codec, SBC rate and adapter); "
+        "the one for the current codec, rate and adapter is applied.",
+    )
+    air_learned_latency: list[AirLearnedEntryOut] = Field(
+        default_factory=list,
+        description="Air latencies learned from the speaker's starts (at most 8, one per codec, SBC rate and "
+        "adapter); used as the air correction target from the third start until a calibration exists.",
+    )
 
 
 class LatencySuggestion(ResponseModel):
@@ -131,7 +172,11 @@ class LatencySuggestion(ResponseModel):
 
 
 class PlayoutTiming(ResponseModel):
-    """The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored."""
+    """The playout engine snapshot (``DeviceStatus.playout``); unknown keys are ignored.
+
+    In ``loop`` with an air bias ``error_ms`` is the corrected error (the raw error is
+    ``error_ms + air_bias_ms``).
+    """
 
     model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
 
@@ -163,6 +208,26 @@ class PlayoutTiming(ResponseModel):
     late_start_ms: float | None = None
     trim_us: int | None = None
     fallback_reason: str | None = None
+    air_bias_state: str | None = Field(
+        default=None, description="none, seeding, active or held; null in measure or with the air sensor off."
+    )
+    air_bias_reason: str | None = Field(
+        default=None, description="Why there is no bias value (for example no_target or internal_error)."
+    )
+    air_bias_ms: float | None = Field(
+        default=None, description="b: the learned offset between the engine's clock and the air sensor."
+    )
+    air_target: str | None = Field(default=None, description="calibrated, learned or null.")
+    air_target_ms: float | None = Field(default=None, description="The air-to-sound latency the correction aims at.")
+    air_d_ref_ms: float | None = Field(default=None, description="The delay the target was measured at.")
+    air_trim_ms: float | None = Field(
+        default=None, description="The delay trim: how much earlier than its reference the output is placed."
+    )
+    air_learned_starts: int | None = Field(default=None, description="Starts behind a learned target.")
+    air_corrections: int = Field(default=0, description="Corrections the air bias made since the start.")
+    air_last_correction_ms: float | None = None
+    air_bias_gated: int = Field(default=0, description="Windows the bias gate rejected.")
+    air_bias_skipped: int = Field(default=0, description="Windows not used for the bias.")
 
 
 def _playout_or_none(raw: object) -> PlayoutTiming | None:
@@ -170,6 +235,79 @@ def _playout_or_none(raw: object) -> PlayoutTiming | None:
         return None
     try:
         return PlayoutTiming.model_validate(raw)
+    except ValidationError:
+        return None
+
+
+# The air sensor's snapshot comes from a daemon subprocess: semi-trusted. Types are strict (a
+# number sent as a string, a bool as a count, NaN/inf drop the whole value), strings are cut to a
+# bounded length and counts/confidence clamped to their ranges.
+_AIR_STR_MAX = 64
+_AirStr = Annotated[StrictStr, AfterValidator(lambda s: s[:_AIR_STR_MAX])]
+_AirFloat = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+_AirCount = Annotated[StrictInt, AfterValidator(lambda n: max(0, n))]
+_AirUnit = Annotated[_AirFloat, AfterValidator(lambda x: min(1.0, max(0.0, x)))]
+
+
+class AirSensorFold(ResponseModel):
+    """The air side of a calibration fold (calibration only)."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
+
+    id: _AirStr | None = None
+    phase_ms: _AirFloat | None = None
+    ok: StrictBool = False
+    reason: _AirStr | None = None
+
+
+class AirSensorTiming(ResponseModel):
+    """The air sensor snapshot (``DeviceStatus.air_sensor``); unknown keys (``accepts``) are ignored."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, extra="ignore")
+
+    state: _AirStr = Field(
+        default="off",
+        description="off, unavailable, unsupported_codec, unsupported_input, no_signal, acquiring, locked, "
+        "holding or no_lock.",
+    )
+    reason: _AirStr | None = None
+    codec: _AirStr | None = None
+    rate: _AirCount | None = None
+    adapter: _AirStr | None = None
+    host_placement_ms: _AirFloat | None = Field(
+        default=None, description="H: the median host-side placement offset of the last 5 confirmed windows."
+    )
+    air_error_ms: _AirFloat | None = Field(
+        default=None, description="E (positive = late); null when uncalibrated or not locked/holding."
+    )
+    air_to_sound_ms: _AirFloat | None = None
+    calibrated: StrictBool = False
+    confidence: _AirUnit | None = None
+    jitter_ms: _AirFloat | None = None
+    psr: _AirFloat | None = None
+    lag_cells: _AirFloat | None = None
+    windows_confirmed: _AirCount = 0
+    windows_rejected: _AirCount = 0
+    windows_skipped: _AirCount = 0
+    last_confirmed_at: _AirStr | None = None
+    epochs: _AirCount = 0
+    frames: _AirCount = 0
+    missing_frames: _AirCount = 0
+    anchor: _AirStr = "send"
+    complete_lag_ms: _AirFloat | None = None
+    timestamp: _AirStr | None = Field(default=None, description="kernel, recv or null.")
+    monitor_drops: _AirCount | None = None
+    ipc_dropped: _AirCount = 0
+    dropped_messages: _AirCount = 0
+    fold: AirSensorFold | None = None
+
+
+def _air_or_none(raw: object) -> AirSensorTiming | None:
+    """The daemon's (or the parent's) air sensor dict, validated; None when absent or malformed."""
+    if not isinstance(raw, dict) or "state" not in raw:
+        return None
+    try:
+        return AirSensorTiming.model_validate(raw)
     except ValidationError:
         return None
 
@@ -195,6 +333,7 @@ class DeviceTiming(ResponseModel):
     cover the engine's buffer (PULSE_LATENCY_MSEC + 40 ms ring + 100 ms margin), in ``off`` the
     configured lead itself; null while the player is not running."""
     playout: PlayoutTiming | None = None
+    air_sensor: AirSensorTiming | None = None
     reanchoring: bool = False
     reanchor_count: int = 0
     reanchor_count_session: int = 0
@@ -333,7 +472,14 @@ class Device(ResponseModel):
     recent_events: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
-    def from_status(cls, d: dict[str, Any], config_id: str | None = None, playout_sync_enabled: bool = True) -> Device:
+    def from_status(
+        cls,
+        d: dict[str, Any],
+        config_id: str | None = None,
+        playout_sync_enabled: bool = True,
+        air_to_sound_latency: list[dict[str, Any]] | None = None,
+        air_learned_latency: list[dict[str, Any]] | None = None,
+    ) -> Device:
         g = d.get
         pair_failure = None
         if g("pair_failure_kind"):
@@ -417,6 +563,8 @@ class Device(ResponseModel):
                 static_delay_source=g("static_delay_source") or "default",
                 static_delay_calibrated_at=g("static_delay_calibrated_at"),
                 static_delay_codec=g("static_delay_codec"),
+                air_to_sound_latency=[AirLatencyEntryOut.model_validate(e) for e in air_to_sound_latency or []],
+                air_learned_latency=[AirLearnedEntryOut.model_validate(e) for e in air_learned_latency or []],
             ),
             timing=DeviceTiming(
                 available=bool(g("timing_metrics_available")),
@@ -435,6 +583,7 @@ class Device(ResponseModel):
                 declared_lead_time_ms=g("declared_lead_time_ms"),
                 effective_required_lead_time_ms=g("effective_required_lead_time_ms"),
                 playout=_playout_or_none(g("playout")),
+                air_sensor=_air_or_none(g("air_sensor")),
                 reanchoring=bool(g("reanchoring")),
                 reanchor_count=int(g("reanchor_count") or 0),
                 reanchor_count_session=int(g("reanchor_count_session") or 0),

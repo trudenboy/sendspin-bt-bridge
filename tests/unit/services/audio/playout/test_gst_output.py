@@ -615,3 +615,179 @@ def test_sink_rate_is_read_from_pactl_short_listing():
     assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink") == 48000
     assert sink_rate_from_pactl(_PACTL_SINKS_SHORT, "bluez_sink.missing") is None
     assert sink_rate_from_pactl("garbage\n", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink") is None
+
+
+@requires_gst
+def test_every_feeder_tick_reports_what_the_sink_took():
+    # R3: an underrun's silence played after the last reading is seen at the first delivery,
+    # so the engine hears of deliveries every tick, not only at the 100 ms readings.
+    player = _player()
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(2_000_000, bytes(19200))
+    seen: list[tuple[float, int]] = []
+    engine = player._engine
+    real = engine.delivered
+    engine.delivered = lambda now_us, delivered_ns: (seen.append((now_us, delivered_ns)), real(now_us, delivered_ns))
+    ticks = [1_000_000.0 + i * 5_000 for i in range(6)]
+    for now_us in ticks:
+        player._tick(now_us=now_us)
+        time.sleep(0.002)
+    assert [t for t, _ in seen] == ticks
+    assert all(0 <= d <= player._x_w_ns for _, d in seen)
+    player.stop()
+
+
+@requires_gst
+def test_buffers_reaching_the_sink_are_reported_while_the_engine_asks():
+    # R3: the feeder's delivered report races the streaming thread; the buffer probe dates the
+    # arrival itself (on the streaming thread), whichever side of a tick it happens on.
+    handed = []
+    player = _player(sink_factory=_recording_fakesink(handed))
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(2_000_000, bytes(19200))
+    engine = player._engine
+    noted: list[tuple[int, object]] = []
+    engine.arrival_wanted = lambda now_us: True
+    engine.note_arrival = lambda x_ns, sample: noted.append((x_ns, sample))
+    _drive_paced(player, 10)
+    _wait_until(lambda: len(handed) >= 4)
+    player._tick(now_us=2_000_000.0)  # drains what arrived since the last tick
+    assert noted, "no arrival reported"
+    pushed = {b.pts for b in handed}
+    assert all(x in pushed and sample is not None for x, sample in noted)
+    xs = [x for x, _ in noted]
+    assert xs == sorted(xs)
+    player.stop()
+
+
+@requires_gst
+def test_no_arrival_is_reported_while_the_engine_does_not_ask():
+    player = _player()
+    player.start(PCM_S16_STEREO_48K)
+    engine = player._engine
+    noted = []
+    engine.arrival_wanted = lambda now_us: False
+    engine.note_arrival = lambda x_ns, sample: noted.append(x_ns)
+    _drive_paced(player, 10)
+    assert noted == []
+    player.stop()
+
+
+# -- the arrival probe's callback (R3): never in the way of the audio ------------------------
+
+
+class _Info:
+    def __init__(self, pts: int | None = 0, *, raises: bool = False) -> None:
+        self.pts, self.raises, self.asked = pts, raises, 0
+
+    def get_buffer(self):
+        self.asked += 1
+        if self.raises:
+            raise RuntimeError("no buffer")
+        return SimpleNamespace(pts=self.pts)
+
+
+class _Target:
+    def __init__(self, *, armed: bool = True, raises: bool = False) -> None:
+        self.armed, self.raises, self.seen = armed, raises, []
+
+    def on_buffer(self, pts_ns: int) -> None:
+        if self.raises:
+            raise RuntimeError("probe broke")
+        self.seen.append(pts_ns)
+
+
+@requires_gst
+@pytest.mark.parametrize(("target_kw", "info_kw"), [({"raises": True}, {}), ({}, {"raises": True})])
+def test_the_arrival_callback_never_drops_a_buffer(caplog, target_kw, info_kw):
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+    from sendspin_bridge.services.audio.playout.gst_output import _arrival_callback
+
+    target = _Target(**target_kw)
+    callback = _arrival_callback(lambda: target)
+    with caplog.at_level("WARNING"):
+        for _ in range(3):
+            assert callback(None, _Info(10_000_000, **info_kw)) == Gst.PadProbeReturn.OK
+    warnings = [r for r in caplog.records if "arrival probe" in r.getMessage()]
+    assert len(warnings) == 1  # rate-limited
+
+
+@requires_gst
+def test_the_arrival_callback_does_not_look_at_buffers_while_disarmed():
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+    from sendspin_bridge.services.audio.playout.gst_output import _arrival_callback
+
+    target = _Target(armed=False)
+    info = _Info(10_000_000)
+    assert _arrival_callback(lambda: target)(None, info) == Gst.PadProbeReturn.OK
+    assert info.asked == 0 and target.seen == []
+    target.armed = True
+    assert _arrival_callback(lambda: target)(None, info) == Gst.PadProbeReturn.OK
+    assert target.seen == [10_000_000]
+
+
+@requires_gst
+def test_stop_removes_the_arrival_probe(monkeypatch):
+    from sendspin_bridge.services.audio.playout import gst_output
+
+    removed = []
+    real_detach = gst_output._detach_arrival_probe
+    monkeypatch.setattr(
+        gst_output, "_detach_arrival_probe", lambda handle: (removed.append(handle), real_detach(handle))
+    )
+    player = _player()
+    player.start(PCM_S16_STEREO_48K)
+    handle = player._arrival_probe
+    assert handle is not None
+    _pad, probe_id = handle
+    assert probe_id > 0
+    player.stop()
+    assert removed == [handle] and player._arrival_probe is None
+
+
+# -- B5b: the air feed ------------------------------------------------------------------------
+
+
+class _SpyFeed:
+    def __init__(self) -> None:
+        self.reopened: list[int] = []
+
+    def reopen(self, min_tap_gen: int) -> None:
+        self.reopened.append(min_tap_gen)
+
+    def take(self):  # never reached: the engine is built but not driven
+        raise AssertionError
+
+
+class _FakeTap:
+    def __init__(self, feed) -> None:
+        self.gen = 5
+        self.error = None
+        self._feed = feed
+        self.order: list[str] = []
+
+    def reset(self) -> None:
+        self.gen += 1
+        self.order.append(f"reset:{len(self._feed.reopened)}")
+
+
+@requires_gst
+def test_adopt_output_hands_the_feed_to_the_engine_and_reopens_it_after_the_tap_reset():
+    feed = _SpyFeed()
+    tap = _FakeTap(feed)
+    player = _player(settings=PlayoutSettings(mode="loop"), air_tap=tap, air_feed=feed)
+    output = player.prepare_output(PCM_S16_STEREO_48K)
+    player.adopt_output(output, PCM_S16_STEREO_48K)
+    assert player._engine._bias._feed is feed
+    assert tap.order == ["reset:0"]  # the reset came first
+    assert feed.reopened == [6]  # the tap's generation after its reset
+    player.stop()
+
+
+@requires_gst
+def test_a_player_without_a_feed_has_no_bias():
+    player = _player(settings=PlayoutSettings(mode="loop"))
+    output = player.prepare_output(PCM_S16_STEREO_48K)
+    player.adopt_output(output, PCM_S16_STEREO_48K)
+    assert player._engine._bias is None
+    player.stop()

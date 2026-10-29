@@ -116,6 +116,9 @@ DEFAULT_CONFIG = {
     "PULSE_LATENCY_MSEC": 600,
     # BT playout sync engine (see the playout sync spec): off = 3.1.0-beta.5 behaviour.
     "PLAYOUT_SYNC": "off",
+    # Air sensor (docs/plans/2026-10-28-air-sensor-design.md): measures when audio leaves over the air;
+    # observes in measure mode, corrects placement in loop mode.  Needs PLAYOUT_SYNC=measure or loop; a change needs a bridge restart.
+    "EXPERIMENTAL_AIR_SENSOR": False,
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
     # v2.70.0-rc.2 (#263) — was 0 (unlimited) prior; new default is 5 so
@@ -628,6 +631,55 @@ def load_player_state_for_mac(mac: str) -> dict:
     return dict(state) if isinstance(state, dict) else {}
 
 
+def resolve_air_latency(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> float | None:
+    """The player's air-to-sound latency (ms) for this codec, SBC rate and adapter MAC, or None (R-12)."""
+    from sendspin_bridge.config.players import resolve_air_latency as _resolve
+
+    return _resolve(player_cfg, codec, rate, adapter)
+
+
+def upsert_air_latency(entries: list[dict], entry: dict, *, max_entries: int = 8) -> list[dict]:
+    """*entries* with *entry* saved under its (codec, rate, adapter) key; the oldest beyond *max_entries* go."""
+    from sendspin_bridge.config.players import upsert_air_latency as _upsert
+
+    return _upsert(entries, entry, max_entries=max_entries)
+
+
+def resolve_air_learned(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> tuple[float, float, int] | None:
+    """The player's learned ``(latency_ms, d_ref_ms, starts)`` for this key, or None below 2 samples."""
+    from sendspin_bridge.config.players import resolve_air_learned as _resolve
+
+    return _resolve(player_cfg, codec, rate, adapter)
+
+
+def save_air_learned_sample(player_id: str | None, key: tuple[str, int, str], x_ms: float, d_out_ms: float) -> None:
+    """Persist one learned (sample, delay) pair of a player under its ``air_learned_latency``."""
+    if not player_id or not CONFIG_FILE.exists():
+        return
+
+    def _record(cfg: dict) -> None:
+        from datetime import UTC, datetime
+
+        from sendspin_bridge.config.players import find_player_by_id, record_air_learned_sample
+
+        player = find_player_by_id(cfg, player_id)
+        if player is None:
+            logger.warning("Skipping learned air sample for unknown player %s", player_id)
+            return
+        player["air_learned_latency"] = record_air_learned_sample(
+            player.get("air_learned_latency"), key, x_ms, d_out_ms, datetime.now(UTC).isoformat(timespec="seconds")
+        )
+
+    try:
+        update_config(_record)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save learned air sample for %s: %s", player_id, e)
+
+
 def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> str:
     """The playout mode one player runs: ``off`` when it opted out, else ``PLAYOUT_SYNC``.
 
@@ -636,6 +688,26 @@ def effective_playout_mode(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]
     if player_cfg.get("playout_sync_enabled") is False:
         return "off"
     return str(cfg.get("PLAYOUT_SYNC", "off"))
+
+
+def air_sensor_effective(player_cfg: Mapping[str, Any], cfg: Mapping[str, Any]) -> tuple[bool, str | None]:
+    """Whether the air sensor runs for one player, and if not, why.
+
+    ``(True, None)`` when ``EXPERIMENTAL_AIR_SENSOR`` is on, the player's effective playout mode is
+    ``measure`` or ``loop`` and its backend type is ``bluetooth_a2dp``; otherwise ``(False, reason)`` with reason one of
+    ``switch_off``, ``needs_measure``, ``not_bluetooth``.
+    """
+    from sendspin_bridge.config.players import BLUETOOTH
+
+    if not cfg.get("EXPERIMENTAL_AIR_SENSOR", False):
+        return False, "switch_off"
+    mode = effective_playout_mode(player_cfg, cfg)
+    if mode not in ("measure", "loop"):
+        return False, "needs_measure"
+    backend = player_cfg.get("backend")
+    if not isinstance(backend, dict) or backend.get("type") != BLUETOOTH:
+        return False, "not_bluetooth"
+    return True, None
 
 
 def load_config() -> dict:

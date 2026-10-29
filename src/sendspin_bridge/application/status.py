@@ -66,7 +66,13 @@ def _device(running_device, config: dict) -> Device:
     A Bluetooth speaker is found by its MAC; a pulse_sink player's runtime id
     is its config id.
     """
-    from sendspin_bridge.config.players import PULSE_SINK, find_player_by_id, find_player_by_mac
+    from sendspin_bridge.config.players import (
+        PULSE_SINK,
+        find_player_by_id,
+        find_player_by_mac,
+        valid_air_latency_entries,
+        valid_air_learned_entries,
+    )
 
     status = running_device.to_dict()
     mac = status.get("bluetooth_mac")
@@ -78,6 +84,8 @@ def _device(running_device, config: dict) -> Device:
         status,
         config_id=str(player["id"]) if player and player.get("id") else None,
         playout_sync_enabled=not (player and player.get("playout_sync_enabled") is False),
+        air_to_sound_latency=valid_air_latency_entries(player.get("air_to_sound_latency")) if player else [],
+        air_learned_latency=valid_air_learned_entries(player.get("air_learned_latency")) if player else [],
     )
 
 

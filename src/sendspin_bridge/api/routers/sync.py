@@ -18,6 +18,8 @@ from sendspin_bridge.api.errors import PROBLEM_RESPONSES, ApiError
 from sendspin_bridge.application import sync_tuning as uc
 from sendspin_bridge.application.models.sync import (
     AbIn,
+    AirCalibrationCandidate,
+    AirCalibrationSaveIn,
     ApplyIn,
     CaptureIn,
     CaptureLinkIn,
@@ -434,6 +436,20 @@ def capture_link(session_id: str, body: CaptureLinkIn) -> CaptureLinkOut:
 )
 def start_sequence(session_id: str, body: SequenceIn) -> SyncSessionOut:
     return uc.start_sequence(session_id, body.members)
+
+
+@router.post(
+    "/sessions/{session_id}/air-calibrations",
+    response_model=list[AirCalibrationCandidate],
+    summary="Save bridge speakers' air-to-sound latencies from the last measured sequence",
+    description=(
+        "Stores each chosen member's latency (``air_calibrations`` of the session) for its codec, SBC rate and "
+        "adapter, replacing the entry there, and applies it live. 409 not_eligible when a member has no eligible "
+        "value (nothing is written then)."
+    ),
+)
+def save_air_calibrations(session_id: str, body: AirCalibrationSaveIn) -> list[AirCalibrationCandidate]:
+    return uc.save_air_calibrations(session_id, body.members)
 
 
 # -- profiles -----------------------------------------------------------------------------

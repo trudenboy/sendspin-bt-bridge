@@ -68,6 +68,19 @@ export function syncBadge(d: Device, held = false): SyncBadge | null {
   return { kind: 'sync', tone: 'success', pulse: false, errorMs: round(timing.sync_error_ms), ...common }
 }
 
+/** Signed one-decimal milliseconds with a real minus sign: "+12.4", "−3.1". */
+export function signedMs(v: number): string {
+  const r = Math.round(Math.abs(v) * 10) / 10
+  return `${v < 0 && r !== 0 ? '−' : '+'}${r.toFixed(1)}`
+}
+
+/** The air sensor's state and H for the sync chip's tooltip; null when absent or off. */
+export function airChipSummary(d: Device): { state: string; hMs: number | null } | null {
+  const air = d.timing.air_sensor
+  if (!air || air.state === 'off') return null
+  return { state: air.state, hMs: air.host_placement_ms ?? null }
+}
+
 /* -------------------------------------------------------------- signal -- */
 
 export type SignalTier = 'excellent' | 'strong' | 'fair' | 'poor' | 'bad' | 'stale'

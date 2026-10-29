@@ -278,6 +278,77 @@ def _pulse_sink_players(config: dict[str, Any]) -> list[dict[str, Any]]:
     return players
 
 
+def _hci_monitor_for(config: dict[str, Any]) -> Any:
+    """Who owns the HCI monitor socket: the legacy AVRCP monitor, or the hub with the air sensor on.
+
+    Switch off (the default): ``HciAvrcpMonitor`` exactly as before. Switch on: the monitor hub's
+    reader thread owns the socket and AVRCP source correlation is one of its consumers; the legacy
+    monitor is not started. Both answer the async ``start()``/``stop()`` the lifecycle awaits.
+    """
+    if not bool(config.get("EXPERIMENTAL_AIR_SENSOR", False)):
+        from sendspin_bridge.services.bluetooth import hci_avrcp_monitor
+
+        return hci_avrcp_monitor.get_monitor()
+    from sendspin_bridge.services.bluetooth import hci_monitor_hub
+
+    return hci_monitor_hub.get_avrcp_hub_lifecycle()
+
+
+def _start_air_sensor_service(config: dict[str, Any], hci_monitor: Any) -> tuple[Any, asyncio.Task[None]] | None:
+    """Switch on only: the air sensor service on the hub, running on the bridge loop.
+
+    Fails soft: an error is logged once and the bridge starts without the sensor; a stand-in then
+    tells every daemon that built its sensor ``unavailable: internal_error`` (or the hub's own
+    reason), so the speakers do not report a misleading ``no_signal``.
+    """
+    if not bool(config.get("EXPERIMENTAL_AIR_SENSOR", False)):
+        return None
+    hub = getattr(hci_monitor, "hub", None)
+    if hub is None:
+        return None
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    loop = asyncio.get_running_loop()
+
+    def resolve_client(mac: str) -> Any:
+        return get_device_registry_snapshot().find_client_by_mac(mac)
+
+    service: Any
+    try:
+        service = air_sensor_service.AirSensorService(hub=hub, loop=loop, resolve_client=resolve_client)
+        task = asyncio.create_task(service.run(), name="air-sensor-service")
+    except Exception:
+        logger.warning("Air sensor service failed to start — continuing without the air sensor", exc_info=True)
+        service = air_sensor_service.UnavailableAirSensorService(
+            loop=loop, resolve_client=resolve_client, reason="internal_error", hub=hub
+        )
+        task = asyncio.create_task(service.run(), name="air-sensor-unavailable")
+    air_sensor_service.set_air_sensor_service(service)
+    # Clients already running subscribe now; later ones follow their own status edges.
+    for client in list(get_device_registry_snapshot().active_clients):
+        sync = getattr(client, "sync_air_subscription", None)
+        if callable(sync):
+            with contextlib.suppress(Exception):
+                sync()
+    return service, task
+
+
+async def _stop_air_sensor_service(started: tuple[Any, asyncio.Task[None]] | None) -> None:
+    if started is None:
+        return
+    from sendspin_bridge.services.bluetooth import air_sensor_service
+
+    service, task = started
+    # Withdrawn first: no client subscribes to a stopping service.
+    if air_sensor_service.get_air_sensor_service() is service:
+        air_sensor_service.set_air_sensor_service(None)
+    with contextlib.suppress(Exception):
+        await service.stop()
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
+
+
 @dataclass
 class DeviceBootstrap:
     bt_devices: list[dict[str, Any]]
@@ -297,6 +368,8 @@ class BridgeOrchestrator:
         breadcrumbs: BreadcrumbStore | None = None,
     ):
         self.startup_steps = startup_steps
+        self._suspend_probe_task: asyncio.Task[None] | None = None
+        self._air_sensor: tuple[Any, asyncio.Task[None]] | None = None
         self.breadcrumbs = breadcrumbs or BreadcrumbStore(_resolve_config_dir())
         self.lifecycle_state = lifecycle_state or BridgeLifecycleState(
             startup_steps=startup_steps,
@@ -473,6 +546,20 @@ class BridgeOrchestrator:
                 logger.warning("Sync capture HTTPS server could not start", exc_info=True)
         return server
 
+    async def _stop_suspend_probe(self) -> None:
+        task = getattr(self, "_suspend_probe_task", None)
+        self._suspend_probe_task = None
+        if task is None:
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    async def _stop_air_sensor(self) -> None:
+        started = getattr(self, "_air_sensor", None)
+        self._air_sensor = None
+        await _stop_air_sensor_service(started)
+
     async def graceful_shutdown(
         self,
         *,
@@ -529,8 +616,10 @@ class BridgeOrchestrator:
 
         await self._shutdown_sync_tuning()
 
+        await self._stop_suspend_probe()
         if sink_monitor is not None:
             await sink_monitor.stop()
+        await self._stop_air_sensor()
         if hci_monitor is not None:
             await hci_monitor.stop()
 
@@ -1104,18 +1193,26 @@ class BridgeOrchestrator:
         sink_monitor = SinkMonitor()
         for client in clients:
             client._sink_monitor = sink_monitor
+            attach = getattr(client, "_attach_suspend_listener", None)
+            if attach is not None:
+                attach(sink_monitor)
         # Players added later (live reconfig) follow their output through it too.
         set_sink_monitor(sink_monitor)
 
-        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import get_monitor as _get_hci_monitor
-
-        hci_monitor = _get_hci_monitor()
+        hci_monitor = _hci_monitor_for(bootstrap.config)
 
         try:
             await sink_monitor.start()
+            # Read-only check of the host's sink-suspend policy (never changes it).
+            from sendspin_bridge.services.audio.sink_suspend_policy import run_suspend_probe_loop
+
+            self._suspend_probe_task = asyncio.create_task(
+                run_suspend_probe_loop(lambda: get_device_registry_snapshot().active_clients)
+            )
             # Without sink events (no pulsectl, PA unreachable) local outputs are polled.
             sink_monitor.start_presence_polling(float(getattr(bootstrap, "bt_check_interval", 15) or 15))
             await hci_monitor.start()
+            self._air_sensor = _start_air_sensor_service(bootstrap.config, hci_monitor)
             startup_phase = "web"
             loop = asyncio.get_running_loop()
             await self.configure_executor(len(clients))
@@ -1142,7 +1239,9 @@ class BridgeOrchestrator:
                 details={"error_type": type(exc).__name__},
             )
             set_sink_monitor(None)
+            await self._stop_suspend_probe()
             await sink_monitor.stop()
+            await self._stop_air_sensor()
             await hci_monitor.stop()
             raise
         try:
@@ -1154,5 +1253,7 @@ class BridgeOrchestrator:
             )
         finally:
             set_sink_monitor(None)
+            await self._stop_suspend_probe()
             await sink_monitor.stop()
+            await self._stop_air_sensor()
             await hci_monitor.stop()

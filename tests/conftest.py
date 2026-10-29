@@ -209,6 +209,11 @@ def _reset_shared_module_state():
     _jobs.clear()
     _app_bt._last_scan_completed = 0.0
 
+    # 4. Forget the host's sink-suspend policy a sibling test's probe remembered.
+    import sendspin_bridge.services.audio.sink_suspend_policy as _suspend
+
+    _suspend._last_policy = None
+
     yield
 
 

@@ -57,3 +57,103 @@ If your model isn't listed, please [open an issue](https://github.com/trudenboy/
 - **Confirmed working** doesn't mean "works on every host." A speaker that's clean on PulseAudio 17 + BlueZ 5.82 might still hit a `pulse_latency_msec` tuning step on PipeWire-pulse, or need an adapter swap if the on-board controller is overloaded. Cross-check against [Bluetooth Adapters](/bluetooth-adapters/) and [Troubleshooting](/troubleshooting/) when in doubt.
 - **Working with caveats** entries mean the workaround is **available in the bridge or in the docs** — you don't need a custom firmware build to get there.
 - **Documented quirks** is here so a future operator can recognize the fingerprint quickly instead of debugging from scratch. If you find a workaround, please report it back so we can re-tier the speaker.
+
+## Bluetooth sink suspend
+
+When the host suspends a speaker's audio sink in the gap between songs, the speaker's A2DP stream stops and restarts. After such a restart the speaker's buffer can shift by tens of milliseconds, so a group that was in sync before the pause may be slightly off afterwards.
+
+The bridge only **reads** the host's behaviour; it never changes a host audio setting. It raises the guidance card "the host suspends the Bluetooth sink between songs" when it sees the sink go to `suspended` while the speaker was connected and the bridge had not asked for it, or when it finds a suspend policy with a timeout shorter than 60 s (PipeWire's WirePlumber, or PulseAudio's `module-suspend-on-idle`). The card clears after 24 hours without an observed suspend and a clean probe. The probe needs `pactl`; on PipeWire it also needs `pw-dump` and the native PipeWire socket, otherwise only observed suspends raise the card.
+
+To stop the host from suspending the sink, change the host, not the bridge:
+
+**WirePlumber 0.5 (PipeWire 1.0 and newer)**: create `~/.config/wireplumber/wireplumber.conf.d/51-bluez-no-suspend.conf`:
+
+```
+monitor.bluez.rules = [
+  {
+    matches = [ { node.name = "~bluez_output.*" } ]
+    actions = { update-props = { session.suspend-timeout-seconds = 0 } }
+  }
+]
+```
+
+**WirePlumber 0.4**: create `~/.config/wireplumber/bluetooth.lua.d/51-bluez-no-suspend.lua`:
+
+```lua
+table.insert(bluez_monitor.rules, {
+  matches = { { { "node.name", "matches", "bluez_output.*" } } },
+  apply_properties = { ["session.suspend-timeout-seconds"] = 0 },
+})
+```
+
+Restart WirePlumber (`systemctl --user restart wireplumber`) and reconnect the speaker.
+
+**PulseAudio**: unload the module for the running server with `pactl unload-module module-suspend-on-idle`, and remove the `load-module module-suspend-on-idle` line from `/etc/pulse/default.pa` (or your `~/.config/pulse/default.pa`) to keep it off after a restart. Home Assistant OS does not load this module, so nothing is needed there.
+
+## Air sensor (experimental)
+
+The air sensor measures when each speaker's audio actually leaves the host over Bluetooth, and how far that is from its schedule. The bridge reads a copy of the Bluetooth traffic from the kernel's HCI monitor, takes the loudness pattern of the SBC frames sent to the speaker, and matches it against the loudness pattern of the audio it wrote, once a second over 3-second windows. In `measure` mode playback is not changed: the sensor only measures and reports. In `loop` mode it also corrects the speaker (see Air correction in `loop` below).
+
+**Turning it on.** **Settings → Audio → Air sensor (SBC speakers)** (`EXPERIMENTAL_AIR_SENSOR`, an advanced setting, off by default). The switch takes effect after a **bridge restart**. It works for a speaker only when:
+
+- **Playout sync** is set to **Measure only** (`measure`) or **Measure and correct** (`loop`). With `off` the panel says the sensor needs measure or loop mode.
+- The speaker plays **SBC**. For a speaker that also offers AAC, turn on **Prefer SBC codec**; any other codec shows *Unsupported codec*.
+- The source is 44.1 or 48 kHz at 16 to 32 bit; anything else shows *Unsupported input*.
+- The bridge can open the kernel's HCI monitor, which needs `CAP_NET_RAW` (Linux only). The Home Assistant add-on already has it. Docker needs `NET_RAW` in `cap_add`, as in the documented compose file (see [Docker](/installation/docker/)). LXC and systemd installs run the bridge as root and have it unless the container drops that capability. Without it the panel shows *Unavailable* with "needs CAP_NET_RAW".
+
+**CPU.** On the Home Assistant OS test VM (x86, 2 vCPU) the bridge's Bluetooth monitor reader used 5.0–5.5 % of one core with two streaming links (one speaker playing music, one on a keep-alive stream), about **2.6 % per streaming speaker**. The per-speaker correlation in the speaker's own process was not measured separately. If the sensor ever uses too much processor time, a per-speaker guard stops it and the panel says so. The cost on a Raspberry Pi has not been measured yet.
+
+**How far to trust it.** On the test stand the live air times matched an independent offline analysis of the same Bluetooth capture within 0.04 ms (p95). That check compares window against window, so it does not cover an offset common to a whole stream; the microphone measurements cover the absolute side (see Calibration below).
+
+**The Timing panel.** With the switch on, each speaker's **Timing** panel has an **Air sensor** block, and the device card shows a chip such as `air: Locked, H -32.1 ms`.
+
+| Row | Meaning |
+|---|---|
+| **State** | One of the states below; when the sensor is off for this speaker or unavailable, the reason is shown |
+| **Host placement** | `H`: how far before (negative) or after its schedule the audio left over the air, the median of the last five confirmed windows. It stops at the air: the speaker's own air-to-sound latency is not in it. On the test stand `H` was −31 to −45 ms per stream start, with σ ≈ 0.2 ms within a stream (range ≤ 0.9 ms per start) |
+| **Air error** | With a calibration: the speaker's lateness at the sound, `H` plus its calibrated air-to-sound latency minus the delay set for it. Without one the row says **Needs calibration** |
+| **Confidence** | 0 to 1, from the peak ratio and the share of confirmed windows; it falls while the sensor is holding |
+| **Peak ratio (PSR)** | How clearly the last confirmed window matched; a window needs at least 1.17, music usually gives 2 to 4 |
+| **Last confirmed** | Seconds since the last confirmed window |
+
+| State | When |
+|---|---|
+| **Off** | The switch is on, but not for this speaker (Playout sync not `measure`, not a Bluetooth speaker) |
+| **Unavailable** | No HCI monitor (no `CAP_NET_RAW`, not Linux), the monitor failed, or the CPU guard stopped the sensor |
+| **Unsupported codec** / **Unsupported input** | The speaker does not play SBC / the source format is not supported |
+| **No signal** | No audio is going to the speaker over the air |
+| **Acquiring** | Audio flows; the sensor is searching for the first match after a stream start |
+| **Locked** | A window was confirmed within the last 5 s |
+| **Holding** | The last confirmed window was 5–20 s ago; the last values stay |
+| **Lock lost** | 20 s without a confirmed window (a long quiet passage can cause it); the values are cleared until the next match |
+
+**Calibration.** `H` ends at the air; the time a speaker takes from receiving the audio to playing it (air → sound) differs from speaker to speaker. The group sync wizard measures it with the phone: see [Group sync tuning › Speaker latency (air sensor)](/group-sync-tuning/#speaker-latency-air-sensor). The **reference** you pick must play on the Sendspin schedule: a Sendspin web player on a headset or a wired output, or a bridge speaker with Playout sync set to `measure` and no delay of its own. A reference with Playout sync off (the older output path) or with its own added delay makes the value wrong by that difference. On the test stand the same speaker calibrated to 209 ms against an older-path reference and to 228.7 ms against an on-schedule one; with 209 ms its air error was 13–16 ms off what a microphone heard, with 228.7 ms within 3 ms.
+
+A calibration is stored per speaker, codec, sampling rate and Bluetooth adapter, and listed under **Calibrations** in the Timing panel. **Forget** deletes it: the speaker is then reported uncalibrated for that codec, rate and adapter until the wizard measures it again.
+
+## Air correction in `loop`
+
+With Playout sync in `loop` and the air sensor on, the bridge also uses the air placement to correct the speaker. It is **one correction per stream start**: once the sensor locks (about 6 to 7 s after the output opens) the bridge moves the audio to where the speaker's sound should be, and then only follows slow changes. It is not a continuous chase of the measured value.
+
+Where the audio is placed depends on what the bridge knows about the speaker:
+
+- **Calibrated.** The group sync wizard measured the speaker's air-to-sound latency (see Calibration above). Each start is placed on the schedule, using that latency.
+- **Learned.** There is no calibration, so the bridge learns where the speaker played on average in its previous starts. It learns from the first 2 starts, uses the value from then on, and converges in about 6 to 8 starts; the first starts are uncorrected or only roughly placed. A calibration always wins over a learned value.
+
+**Forget** in the Timing panel clears both a calibration and a learned latency for that codec, rate and adapter.
+
+**The delay still moves the sound exactly.** The speaker's delay setting (slider or wizard) works as a trim relative to the delay the calibration or learning was made at: changing it by 30 ms moves the sound by 30 ms, and the correction does not undo it. A delay change does not produce a jump in the air value; the panel shows the trim instead.
+
+**In the Timing panel**, a `loop` speaker with the sensor shows these additional lines:
+
+| Field | Meaning |
+|---|---|
+| **Air correction** | `calibrated (N ms)`, `learned (N starts)`, `no data (learning: N of 2 starts)` or `inactive: not locked` |
+| **Air bias** | The correction currently in force, ms |
+| **Air corrections** | How many corrections were made in this stream |
+| **Delay trim** | The delay set for the speaker relative to the one the calibration or learning refers to, shown as the trim −(D_out − D_ref), the same sign as in the log, with the resulting target ("target N ms early" when the delay was raised, "late" when lowered), ms |
+| **Learned latencies** | The learned entries per codec, rate and adapter, each with **Forget** |
+
+**Guidance.** If a speaker is in `loop` but has no air correction, Diagnostics lists an info item and the speaker works as in `measure`. The reasons are: the air sensor switch is off, the sensor is not running for this speaker (not a Bluetooth speaker), the sensor cannot run (see its state), or it has not locked since the stream started.
+
+**Requirements** are the same as for the sensor: the **Air sensor (SBC speakers)** switch (restart the bridge after changing it), an SBC link at 44.1 or 48 kHz, and `CAP_NET_RAW`. Without any of them `loop` keeps working as before, without the air correction.

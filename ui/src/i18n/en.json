@@ -912,6 +912,10 @@
         "label": "Reset a stuck adapter",
         "help": "Experimental. After the reconnect attempts run out, power-cycle or reset the Bluetooth adapter."
       },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "Air sensor (SBC speakers)",
+        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure or loop mode, a Bluetooth SBC speaker and CAP_NET_RAW. Measures in measure mode; corrects placement in loop mode."
+      },
       "HA_INTEGRATION": {
         "mode": {
           "label": "Connection to Home Assistant",
@@ -1274,6 +1278,72 @@
         "sinkRate": "Sink rate",
         "clockSlew": "Clock slew",
         "warm": "Warm"
+      }
+    },
+    "air": {
+      "title": "Air sensor",
+      "chip": "air: {state}, H {h} ms",
+      "chipNoH": "air: {state}",
+      "states": {
+        "off": "Off",
+        "unavailable": "Unavailable",
+        "unsupported_codec": "Unsupported codec",
+        "unsupported_input": "Unsupported input",
+        "no_signal": "No signal",
+        "acquiring": "Acquiring",
+        "locked": "Locked",
+        "holding": "Holding",
+        "no_lock": "Lock lost"
+      },
+      "rows": {
+        "state": "State",
+        "host": "Host placement",
+        "air": "Air error",
+        "confidence": "Confidence",
+        "psr": "Peak ratio (PSR)",
+        "lock": "Last confirmed"
+      },
+      "needsCalibration": "Needs calibration",
+      "agoSeconds": "{s} s ago",
+      "reasons": {
+        "needs_measure": "Needs playout sync in measure or loop mode.",
+        "not_bluetooth": "Only Bluetooth speakers are supported.",
+        "cpu_budget": "Stopped: the sensor used too much processor time.",
+        "internal_error": "Stopped after an internal error; it restarts with the next stream.",
+        "playout_fallback": "Playout sync fell back to the plain output.",
+        "unsupported_input": "The audio format is not supported (44.1 and 48 kHz, 16 to 32 bit).",
+        "no_cap_net_raw": "The Bluetooth monitor is not available (needs CAP_NET_RAW).",
+        "unsupported_platform": "This system has no Bluetooth HCI monitor (Linux only).",
+        "monitor_error": "The Bluetooth monitor failed.",
+        "sbc_params": "The SBC stream parameters are not supported.",
+        "sbc_fragmented": "The speaker splits SBC frames over several packets.",
+        "codec": "The speaker uses {codec}; only SBC is supported.",
+        "unknown": "Reason: {reason}"
+      },
+      "calibration": {
+        "title": "Calibrations",
+        "line": "Speaker latency: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "Forget",
+        "forgetTitle": "Forget this calibration?",
+        "forgetConfirm": "{name} is reported uncalibrated for {codec} {rate} kHz on {adapter} until the sync wizard measures it again."
+      },
+      "correction": {
+        "target": "Air correction: {target}",
+        "calibrated": "calibrated ({ms} ms)",
+        "learned": "learned ({n} starts)",
+        "noData": "no data (learning: {n} of {need} starts)",
+        "inactive": "inactive: not locked",
+        "bias": "Air bias {value} ms",
+        "corrections": "Air corrections {n}",
+        "trimEarly": "Delay trim {value} ms (target {ms} ms early)",
+        "trimLate": "Delay trim {value} ms (target {ms} ms late)"
+      },
+      "learned": {
+        "title": "Learned latencies",
+        "line": "Learned: {latency} ms at {delay} ms delay · {codec} · {adapter} · {starts} starts",
+        "forget": "Forget",
+        "forgetTitle": "Forget this learned latency?",
+        "forgetConfirm": "{name} starts learning its latency for {codec} {rate} kHz on {adapter} again. A calibration for it is forgotten too."
       }
     }
   },
@@ -1693,6 +1763,33 @@
       "finishSave": "Finish and save as profile…",
       "saveTitle": "Finish and save as profile",
       "saveConfirm": "Save and finish"
+    },
+    "air": {
+      "title": "Speaker latency (air → sound)",
+      "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is measured against a reference: a member whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much.",
+      "reference": "Reference",
+      "referencePick": "Choose a reference…",
+      "referenceHint": "Pick a headset, wired output or another reference that plays on schedule. It also becomes the reference for the proposed delays.",
+      "referenceFailed": "Could not set the reference ({code}).",
+      "value": "{ms} ms",
+      "hint": "the speaker reports {ms} ms",
+      "save": "Save as this speaker's latency",
+      "saveButton": "Save latencies",
+      "saved": "Saved",
+      "saveFailed": "Could not save ({code}).",
+      "outOfRange": "outside {min}–{max} ms, cannot be saved",
+      "reasons": {
+        "not_effective": "The air sensor was not on for this speaker",
+        "no_reference": "Choose a reference first",
+        "not_measured": "This speaker or the reference was not heard",
+        "not_sbc": "The speaker does not play SBC",
+        "air_epoch_changed": "Its Bluetooth stream restarted during its turn",
+        "air_delay_changed": "The speaker's delay changed during the recording.",
+        "no_air_clicks": "Its clicks were not found on the air",
+        "no_written_clicks": "Its clicks were not found in what the bridge wrote",
+        "fold_failed": "The air measurement for this speaker could not be completed",
+        "no_air_frames": "No Bluetooth audio from this speaker was seen on the air during its turn"
+      }
     },
     "cancel": {
       "title": "Stop measuring?",

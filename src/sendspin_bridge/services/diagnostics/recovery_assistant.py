@@ -82,6 +82,8 @@ class RecoveryIssue:
     primary_action: RecoveryAction | None = None
     secondary_actions: list[RecoveryAction] = field(default_factory=list)
     device_name: str | None = None
+    #: Machine-readable causes (``guidance_issue_registry``); in the dict only when set.
+    reason_codes: list[str] = field(default_factory=list)
 
     @property
     def recommended_action(self) -> RecoveryAction | None:
@@ -97,6 +99,8 @@ class RecoveryIssue:
         }
         if self.device_name:
             payload["device_name"] = self.device_name
+        if self.reason_codes:
+            payload["reason_codes"] = list(self.reason_codes)
         if self.primary_action:
             payload["primary_action"] = self.primary_action.to_dict()
             payload["recommended_action"] = self.primary_action.to_dict()
@@ -329,6 +333,11 @@ def build_recovery_issue_actions(
             1,
             _recovery_action("open_diagnostics", "Open diagnostics", device_names=names),
         )
+    elif issue_key == "air_sensor_codec":
+        # The settings section that holds PREFER_SBC_CODEC ("audio" in the UI).
+        primary_action = _recovery_action(
+            "open_latency_settings", "Prefer SBC codec", device_names=names, value="PREFER_SBC_CODEC"
+        )
     elif issue_key == "setup_step":
         primary_action = None
     else:
@@ -336,7 +345,271 @@ def build_recovery_issue_actions(
     return primary_action, _merge_secondary_actions(primary_action, secondary_actions)
 
 
+_SINK_SUSPEND_DOCS = "https://trudenboy.github.io/sendspin-bt-bridge/bluetooth-speakers/#bluetooth-sink-suspend"
+_SINK_SUSPEND_CAUSES = {
+    "observed_suspend": "The host suspended this speaker's audio sink while the speaker was connected and idle.",
+    "module_suspend_on_idle": "PulseAudio's module-suspend-on-idle is loaded and suspends idle sinks.",
+    "wireplumber_suspend_timeout": "WirePlumber suspends idle Bluetooth nodes (session.suspend-timeout-seconds).",
+}
+
+
+def _host_sink_suspends(device: Any) -> dict[str, Any]:
+    """The device's ``host_sink_suspends`` dict, from a status object or a normalized state model."""
+    direct = getattr(device, "host_sink_suspends", None)
+    if isinstance(direct, dict):
+        return direct
+    audio = _device_state_model(device).get("audio")
+    nested = audio.get("host_sink_suspends") if isinstance(audio, dict) else None
+    return nested if isinstance(nested, dict) else {}
+
+
+def _device_connected_and_managed(device: Any) -> tuple[bool, bool]:
+    bluetooth = _device_state_model(device).get("bluetooth") or {}
+    management = _device_state_model(device).get("management") or {}
+    connected = bool(bluetooth.get("connected")) if bluetooth else bool(getattr(device, "bluetooth_connected", False))
+    released = management.get("released") if management else getattr(device, "bt_management_enabled", True) is False
+    return connected, not released
+
+
+def _build_sink_suspend_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    """One warning per connected speaker whose sink the host suspends in gaps (read-only check)."""
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        facts = _host_sink_suspends(device)
+        if not facts.get("warn"):
+            continue
+        # Only a connected, bridge-managed speaker: nothing to suspend otherwise.
+        connected, managed = _device_connected_and_managed(device)
+        if not connected or not managed:
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        cause = _SINK_SUSPEND_CAUSES.get(str(facts.get("reason") or ""), "")
+        primary_action, secondary_actions = build_recovery_issue_actions("bt_sink_suspend_in_gaps", [name])
+        issues.append(
+            RecoveryIssue(
+                key="bt_sink_suspend_in_gaps",
+                severity="warning",
+                title=f"{name}: the host suspends the Bluetooth sink between songs",
+                summary=(
+                    f"{cause} After such a pause the speaker restarts its stream and may shift by tens of "
+                    "milliseconds. The bridge never changes host audio settings; to stop it, disable the "
+                    f"sink suspend on the host: {_SINK_SUSPEND_DOCS}"
+                ).strip(),
+                primary_action=primary_action,
+                secondary_actions=secondary_actions,
+                device_name=name,
+            )
+        )
+    return issues
+
+
+#: Why the air sensor cannot run, in the order the summary explains them.
+_AIR_UNAVAILABLE_CAUSES = {
+    "no_cap_net_raw": (
+        "The bridge cannot open the Bluetooth monitor socket: it needs the NET_RAW capability "
+        "(add NET_RAW to the container's cap_add)."
+    ),
+    "unsupported_platform": "This system has no Bluetooth HCI monitor socket (Linux only).",
+    "monitor_error": "The Bluetooth monitor socket failed; the bridge keeps retrying.",
+    "cpu_budget": (
+        "Reading the Bluetooth monitor used more CPU than its budget, so the air sensor is off until the bridge restarts."
+    ),
+    "unsupported_input": "The stream's audio format is not supported (the air sensor needs 44.1 or 48 kHz).",
+    "playout_fallback": "The playout engine fell back to the legacy player, so there is no schedule to compare with.",
+    "internal_error": "The air sensor hit an internal error and turned itself off (details in the log).",
+}
+_AIR_WORKING_STATES = frozenset({"off", "locked", "holding", "no_lock", "acquiring", "no_signal"})
+
+
+def _air_sensor(device: Any) -> dict[str, Any] | None:
+    """The device's ``air_sensor`` snapshot, from a status object or a normalized state model."""
+    direct = getattr(device, "air_sensor", None)
+    if isinstance(direct, dict):
+        return direct
+    audio = _device_state_model(device).get("audio")
+    nested = audio.get("air_sensor") if isinstance(audio, dict) else None
+    return nested if isinstance(nested, dict) else None
+
+
+def _playout(device: Any) -> dict[str, Any] | None:
+    """The device's ``playout`` snapshot, from a status object or a normalized state model."""
+    direct = getattr(device, "playout", None)
+    if isinstance(direct, dict):
+        return direct
+    audio = _device_state_model(device).get("audio")
+    nested = audio.get("playout") if isinstance(audio, dict) else None
+    return nested if isinstance(nested, dict) else None
+
+
+def _air_unavailable_code(state: str, reason: Any) -> str:
+    if state == "unsupported_input":
+        return "unsupported_input"
+    code = str(reason or "")
+    return code if code in _AIR_UNAVAILABLE_CAUSES else "internal_error"
+
+
+def _build_air_sensor_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    """EXPERIMENTAL_AIR_SENSOR only (no snapshot or ``off`` = nothing).
+
+    One bridge-level ``air_sensor_unavailable`` for every speaker whose sensor cannot run (the
+    reasons of all of them), and one ``air_sensor_codec`` per connected speaker whose stream the
+    sensor cannot read.
+    """
+    unavailable: dict[str, set[str]] = {}  # device name → reason codes
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        snap = _air_sensor(device)
+        state = str(snap.get("state") or "") if snap else ""
+        if not state or state in _AIR_WORKING_STATES:
+            continue
+        connected, managed = _device_connected_and_managed(device)
+        if not managed:
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        reason = snap.get("reason") if snap else None
+        if state == "unsupported_codec":
+            if connected:
+                issues.append(_air_codec_issue(name, str(reason or "")))
+            continue
+        unavailable.setdefault(name, set()).add(_air_unavailable_code(state, reason))
+    if unavailable:
+        issues.insert(0, _air_unavailable_issue(unavailable))
+    return issues
+
+
+#: How long a loop-mode output must be warm before a bias that never got a value is reported.
+_AIR_NOT_LOCKED_WARM_S = 60.0
+
+
+def _air_correction_reason(device: Any) -> str | None:
+    """Why a loop-mode speaker runs without its air correction, in the spec's order; None when it does."""
+    playout = _playout(device)
+    if not playout or playout.get("mode") != "loop":
+        return None
+    snap = _air_sensor(device)
+    if snap is None:  # the switch is off: nothing of stage B shows up
+        return None
+    state = str(snap.get("state") or "")
+    if state == "off":
+        return "air_not_effective"
+    if state in {"unavailable", "unsupported_codec", "unsupported_input"} or playout.get("air_bias_reason") == (
+        "internal_error"
+    ):
+        return "air_unavailable"
+    warm_s = playout.get("warm_s")
+    if (
+        isinstance(warm_s, (int, float))
+        and warm_s >= _AIR_NOT_LOCKED_WARM_S
+        and playout.get("air_bias_ms") is None
+        and state not in {"locked", "holding"}
+    ):
+        return "air_not_locked"
+    return None
+
+
+_AIR_CORRECTION_CAUSES = {
+    "air_not_effective": "The air sensor is not running for this speaker (it needs a Bluetooth speaker).",
+    "air_unavailable": "The air sensor cannot run for this speaker (see its air sensor state).",
+    "air_not_locked": "The air sensor has not locked onto this speaker's stream since it started.",
+}
+
+
+def _build_air_correction_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    """One info issue per connected, managed loop-mode speaker that runs without its air correction."""
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        reason = _air_correction_reason(device)
+        if reason is None:
+            continue
+        connected, managed = _device_connected_and_managed(device)
+        if not connected or not managed:
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        primary_action, secondary_actions = build_recovery_issue_actions("air_correction_inactive", [name])
+        issues.append(
+            RecoveryIssue(
+                key="air_correction_inactive",
+                severity="info",
+                title=f"{name}: the air correction is not running",
+                summary=(
+                    "This speaker is in loop mode but the air correction is not running; it plays as in "
+                    f"measure mode. {_AIR_CORRECTION_CAUSES[reason]}"
+                ),
+                primary_action=primary_action,
+                secondary_actions=secondary_actions,
+                device_name=name,
+                reason_codes=[reason],
+            )
+        )
+    return issues
+
+
+def _air_unavailable_issue(unavailable: dict[str, set[str]]) -> RecoveryIssue:
+    names = list(unavailable)
+    found = set().union(*unavailable.values())
+    codes = [code for code in _AIR_UNAVAILABLE_CAUSES if code in found]
+    causes = " ".join(_AIR_UNAVAILABLE_CAUSES[code] for code in codes)
+    title = (
+        f"{names[0]}: the air sensor is unavailable"
+        if len(names) == 1
+        else f"The air sensor is unavailable on {len(names)} speakers"
+    )
+    primary_action, secondary_actions = build_recovery_issue_actions("air_sensor_unavailable", names)
+    return RecoveryIssue(
+        key="air_sensor_unavailable",
+        severity="info",
+        title=title,
+        summary=(
+            f"{causes} Playback is not affected. To hide this, turn off EXPERIMENTAL_AIR_SENSOR (needs a restart)."
+        ),
+        primary_action=primary_action,
+        secondary_actions=secondary_actions,
+        device_name=names[0] if len(names) == 1 else None,
+        reason_codes=codes,
+    )
+
+
+def _air_codec_issue(name: str, reason: str) -> RecoveryIssue:
+    if reason.startswith("codec:") or not reason:
+        codec = reason.partition(":")[2] or "unknown"
+        primary_action, secondary_actions = build_recovery_issue_actions("air_sensor_codec", [name])
+        return RecoveryIssue(
+            key="air_sensor_codec",
+            severity="info",
+            title=f"{name}: the air sensor needs the SBC codec",
+            summary=(
+                f"The speaker streams {codec.upper()}, and the air sensor reads only SBC. Enable "
+                "PREFER_SBC_CODEC and reconnect the speaker. Playback is not affected."
+            ),
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+            device_name=name,
+            reason_codes=["non_sbc_codec"],
+        )
+    primary_action = _recovery_action("open_diagnostics", "Open diagnostics", device_names=[name])
+    return RecoveryIssue(
+        key="air_sensor_codec",
+        severity="info",
+        title=f"{name}: the air sensor cannot read this speaker's SBC stream",
+        summary=(
+            f"The speaker uses SBC settings the air sensor does not support ({reason}). Playback is not affected."
+        ),
+        primary_action=primary_action,
+        secondary_actions=_merge_secondary_actions(primary_action, []),
+        device_name=name,
+        reason_codes=[reason],
+    )
+
+
 def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    issues = _build_device_connection_issues(devices)
+    issues.extend(_build_sink_suspend_issues(devices))
+    issues.extend(_build_air_sensor_issues(devices))
+    issues.extend(_build_air_correction_issues(devices))
+    return issues
+
+
+def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
     issues: list[RecoveryIssue] = []
     for device in devices:
         name = str(getattr(device, "player_name", None) or "Unknown")
@@ -1109,12 +1382,15 @@ def build_recovery_assistant_snapshot(
     if onboarding_issue:
         issues.append(onboarding_issue)
 
-    issues.sort(key=lambda issue: 0 if issue.severity == "error" else 1)
+    # Errors first, informational issues (e.g. the experimental air sensor) last.
+    issues.sort(key=lambda issue: 0 if issue.severity == "error" else 2 if issue.severity == "info" else 1)
     highest_severity = "ok"
     if any(issue.severity == "error" for issue in issues):
         highest_severity = "error"
-    elif issues:
+    elif any(issue.severity != "info" for issue in issues):
         highest_severity = "warning"
+    elif issues:
+        highest_severity = "info"
 
     headline = "No active recovery issues"
     summary = "The bridge looks healthy right now."

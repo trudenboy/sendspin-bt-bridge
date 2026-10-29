@@ -194,6 +194,28 @@ class DeviceFacts:
     def audio_streaming(self) -> bool:
         return bool(self._fact("audio_streaming", False))
 
+    def _dict_fact(self, name: str) -> dict[str, Any] | None:
+        """A dict-valued status fact: a field of the source (status dicts, test doubles) or the bag."""
+        value = self._field(name)
+        if value is None:
+            value = self._fact(name)
+        return value if isinstance(value, dict) else None
+
+    @property
+    def host_sink_suspends(self) -> dict[str, Any] | None:
+        """The read-only host sink-suspend check (``DeviceStatus.host_sink_suspends``)."""
+        return self._dict_fact("host_sink_suspends")
+
+    @property
+    def air_sensor(self) -> dict[str, Any] | None:
+        """The air sensor snapshot (``DeviceStatus.air_sensor``); ``None`` with the switch off."""
+        return self._dict_fact("air_sensor")
+
+    @property
+    def playout(self) -> dict[str, Any] | None:
+        """The playout engine snapshot (``DeviceStatus.playout``)."""
+        return self._dict_fact("playout")
+
     # -- runtime --------------------------------------------------------
 
     @property

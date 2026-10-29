@@ -50,22 +50,42 @@ from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_SCHEMA_VERSION,
     _player_id_from_mac,
+    air_sensor_effective,
     effective_playout_mode,
     get_runtime_version,
     load_config,
     load_player_volume,
+    resolve_air_learned,
+    save_air_learned_sample,
     save_device_static_delay,
     save_device_volume,
     save_player_static_delay,
     save_player_volume,
 )
-from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, find_player_by_id, find_player_by_mac
+from sendspin_bridge.config.players import (
+    BLUETOOTH,
+    PULSE_SINK,
+    find_player_by_id,
+    find_player_by_mac,
+    normalize_mac,
+    record_air_learned_sample,
+    resolve_air_d_ref,
+    resolve_air_latency,
+    valid_air_latency_entries,
+    valid_air_learned_entries,
+)
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
 )
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.audio.player.settings import output_latency_compensated
+from sendspin_bridge.services.audio.sink_suspend_policy import (
+    SuspendObserver,
+    SuspendPolicy,
+    last_suspend_policy,
+)
+from sendspin_bridge.services.bluetooth.air_sensor_service import get_air_sensor_service
 from sendspin_bridge.services.bluetooth.transport_telemetry import delay_change_line, transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -74,8 +94,11 @@ from sendspin_bridge.services.infrastructure.config_validation import (
 )
 from sendspin_bridge.services.infrastructure.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
 from sendspin_bridge.services.ipc.commands import (
+    AIR_ENVELOPE_VERSION,
+    AirCommand,
     Command,
     Reconnect,
+    SetAirCalibration,
     SetMinBufferMs,
     SetRequiredLeadTimeMs,
     SetStandby,
@@ -280,6 +303,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "declared_lead_time_ms",
         "effective_required_lead_time_ms",
         "playout",
+        "air_sensor",
         "pairing_pin",
         "pairing_window_open",
         "pairing_state",
@@ -429,6 +453,9 @@ class DeviceStatus:
     pa_latency_ms: float | None = None
     # Playout engine snapshot (dict) and the lead it needs; None while playout is off.
     playout: dict | None = None
+    # The daemon's air sensor snapshot; None while no daemon publishes one (always with the
+    # switch off). Cleared when the daemon goes, so ``accepts`` never outlives its daemon.
+    air_sensor: dict | None = None
     effective_required_lead_time_ms: int | None = None
     timing_sampled_at: str | None = None
     required_lead_time_ms: int = 250
@@ -500,6 +527,9 @@ class DeviceStatus:
     bt_standby_since: str | None = None
     bt_waking: bool = False
     bt_power_save: bool = False
+    # Host-initiated sink suspends in gaps (read-only check; see
+    # ``services.audio.sink_suspend_policy``).  ``None`` until observed or probed.
+    host_sink_suspends: dict | None = None
     # v2.63.0-rc.2 — last observed BT signal strength (dBm) + capture
     # timestamp.  Currently populated only via the user-triggered scan
     # path (``bluetooth.bluez.DeviceInfo.rssi`` /
@@ -644,6 +674,29 @@ class SendspinClient:
     D-Bus callbacks all read/write status through this single gate.
     """
 
+    # Air sensor (switch on only): the current air-to-sound calibration (ms, None = none),
+    # resent to every daemon that advertises ``accepts``; the service this speaker is
+    # subscribed to; the daemon process that already has the calibration. Class defaults so a
+    # client built without ``__init__`` (tests) behaves as "never subscribed".
+    #
+    # ``air_to_sound_latency`` holds the player's stored entries (from the config at spawn and
+    # from live reconfiguration); ``air_calibration_ms`` is then the entry matching the current
+    # codec, SBC rate and adapter (None when none matches). While the entries were never loaded
+    # (None), ``air_calibration_ms`` is used as set.
+    air_calibration_ms: float | None = None
+    air_to_sound_latency: list[dict[str, Any]] | None = None
+    # The player's learned entries (config at spawn and live reconfiguration, plus samples this
+    # process persisted); the daemon gets the one for the current key from the 2nd sample on.
+    air_learned_latency: list[dict[str, Any]] | None = None
+    _air_learned_seen: tuple[object, int] | None = None  # (daemon process, seq) last handled
+    _air_learned_writes: int = 0
+    _air_subscribed_to: Any | None = None
+    _air_subscribed_mac: str | None = None
+    _air_calibrated_proc: object | None = None
+    _air_calibrated_value: tuple | None = None  # the target the daemon has, see _resolve_air_target
+    _air_last_seen: dict[str, Any] | None = None  # codec/rate/adapter of the last daemon snapshot
+    _air_retired: bool = False
+
     def __init__(
         self,
         player_name: str,
@@ -785,6 +838,13 @@ class SendspinClient:
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
+        # Monotonic time of the last time *we* suspended our own sink (power save, output
+        # reset); a host suspend observed right after it is ours, not the host's.
+        self._suspend_requested_at: float | None = None
+        self._suspend_observer = SuspendObserver()
+        self._suspend_policy: SuspendPolicy | None = None
+        self._suspend_listener_attached = False
+        self._suspend_warned = False
         self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
         # Ring of recent daemon spawns/exits.  Populated on spawn (entry created)
         # and on death (exit fields filled).  Used for the diagnostics report
@@ -796,6 +856,7 @@ class SendspinClient:
         # ``unexpected=False`` and suppress the user-facing "daemon exited"
         # banner.  Cleared after the death is processed.
         self._explicit_stop_pending: bool = False
+        self._air_lock = threading.Lock()
 
     @property
     def _playing_since(self) -> float | None:
@@ -899,6 +960,233 @@ class SendspinClient:
         # ── Sink mute watchdog ────────────────────────────────────────
         if "sink_muted" in updates:
             self._apply_idle_actions(self._idle_machine.on_sink_mute_change(IdlePlaybackState.from_status(self.status)))
+        if "playout" in updates:
+            self._take_air_learned(updates["playout"])
+        self.sync_air_subscription()
+
+    # ── Air sensor subscription ──────────────────────────────────────────
+
+    def _air_wanted(self) -> bool:
+        """Subscribed while the daemon advertises v1, the speaker is connected, managed, awake."""
+        mac = getattr(self.bt_manager, "mac_address", None) if self.bt_manager is not None else None
+        return bool(
+            not self._air_retired
+            and mac
+            and self.bt_management_enabled
+            and self.status.get("bluetooth_connected")
+            and not self.status.get("bt_standby")
+            and self.is_running()
+            and AIR_ENVELOPE_VERSION in self.air_accepts
+        )
+
+    def sync_air_subscription(self) -> None:
+        """Follow the edges of the subscription conditions (any thread; cheap with the switch off)."""
+        self._remember_air_source()
+        service = get_air_sensor_service()
+        if service is None and self._air_subscribed_to is None:
+            return
+        with self._air_lock:
+            want = service is not None and self._air_wanted()
+            current = self._air_subscribed_to
+            if current is not None and (not want or current is not service):
+                current.unsubscribe(self._air_subscribed_mac or "")
+                self._air_subscribed_to = self._air_subscribed_mac = None
+            if want and self._air_subscribed_to is None and service is not None:
+                mac = str(self.bt_manager.mac_address).upper()  # type: ignore[union-attr]
+                service.subscribe(mac)
+                self._air_subscribed_to, self._air_subscribed_mac = service, mac
+        if service is None:
+            return
+        if self._air_calibration_current():
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is service.loop:
+            self._send_air_calibration_once()
+        else:
+            # Writes to the daemon's stdin happen on the loop only.
+            with contextlib.suppress(RuntimeError):
+                service.loop.call_soon_threadsafe(self._send_air_calibration_once)
+
+    def _remember_air_source(self) -> None:
+        """Keep the codec, SBC rate and adapter of the daemon's snapshot past a respawn."""
+        info = self.status.get("air_sensor")
+        if not isinstance(info, dict):
+            return
+        seen = dict(self._air_last_seen or {})
+        for key in ("codec", "rate", "adapter"):
+            if info.get(key) is not None:
+                seen[key] = info[key]
+        self._air_last_seen = seen
+
+    def _air_calibration_key(self) -> tuple[str | None, int | None, str | None]:
+        """(codec, SBC rate, adapter MAC) the speaker plays with now, as far as known.
+
+        The daemon's snapshot first, then the last one seen (a respawn), then the connection
+        (``bt_codec_name``, the adapter the speaker is connected through); the rate only
+        comes from a daemon.
+        """
+        info = self.status.get("air_sensor")
+        current: dict[str, Any] = info if isinstance(info, dict) else {}
+        seen = self._air_last_seen or {}
+
+        def pick(key: str) -> Any:
+            value = current.get(key)
+            return value if value is not None else seen.get(key)
+
+        codec = pick("codec")
+        if not isinstance(codec, str) or not codec:
+            name = self.status.get("bt_codec_name")
+            codec = name if isinstance(name, str) and name else None
+        rate = pick("rate")
+        adapter = normalize_mac(pick("adapter"))
+        if not adapter and self.bt_manager is not None:
+            adapter = normalize_mac(getattr(self.bt_manager, "effective_adapter_mac", None))
+        return (
+            codec.lower() if codec else None,
+            rate if isinstance(rate, int) and not isinstance(rate, bool) else None,
+            adapter or None,
+        )
+
+    def _resolve_air_calibration(self) -> float | None:
+        """The calibration the daemon should have now; updates ``air_calibration_ms``."""
+        entries = self.air_to_sound_latency
+        if entries is None:
+            return self.air_calibration_ms
+        codec, rate, adapter = self._air_calibration_key()
+        value = resolve_air_latency({"air_to_sound_latency": entries}, codec, rate, adapter)
+        self.air_calibration_ms = value
+        return value
+
+    def _resolve_air_target(self) -> tuple[float | None, float | None, float | None, float | None, int | None]:
+        """What the daemon should have: ``(latency, d_ref, learned_ms, learned_d_ref_ms, learned_starts)``.
+
+        The daemon replaces the feed's whole target on every command, so the learned three
+        (all or none) go with every calibration whenever known.
+        """
+        latency = self._resolve_air_calibration()
+        codec, rate, adapter = self._air_calibration_key()
+        d_ref = None
+        if latency is not None and self.air_to_sound_latency is not None:
+            d_ref = resolve_air_d_ref({"air_to_sound_latency": self.air_to_sound_latency}, codec, rate, adapter)
+        learned = None
+        if self.air_learned_latency:
+            learned = resolve_air_learned({"air_learned_latency": self.air_learned_latency}, codec, rate, adapter)
+        if learned is None:
+            return latency, d_ref, None, None, None
+        return latency, d_ref, learned[0], learned[1], learned[2]
+
+    def _air_calibration_current(self) -> bool:
+        """Whether the running daemon already has the current calibration (nothing to schedule)."""
+        proc = self._daemon_proc
+        return (
+            proc is not None
+            and proc is self._air_calibrated_proc
+            and self._resolve_air_target() == self._air_calibrated_value
+        )
+
+    def _send_air_calibration_once(self) -> None:
+        """Loop only: the current calibration, to every daemon that advertises ``accepts`` and lacks it."""
+        proc = self._daemon_proc
+        if not self.is_running() or AIR_ENVELOPE_VERSION not in self.air_accepts or self._air_retired:
+            self._air_calibrated_proc = None
+            return
+        target = self._resolve_air_target()
+        if proc is self._air_calibrated_proc and target == self._air_calibrated_value:
+            return
+        changed = target != self._air_calibrated_value
+        value = target[0]
+        if self.send_air_command(SetAirCalibration(*target)):
+            self._air_calibrated_proc, self._air_calibrated_value = proc, target
+            if changed:
+                key = self._air_calibration_key()
+                logger.info(
+                    "[%s] Air calibration applied: %s (codec %s, rate %s, adapter %s)",
+                    self.player_name,
+                    "none" if value is None else f"{value:g} ms",
+                    *key,
+                )
+
+    def _take_air_learned(self, playout: object) -> None:
+        """A daemon's learned sample (``playout.air_learned``): validate, persist once, use it now.
+
+        One sample per daemon process and sequence number; an invalid one is dropped with a
+        DEBUG line.  The write runs off the loop; the resend follows the subscription sync.
+        """
+        sample = playout.get("air_learned") if isinstance(playout, dict) else None
+        proc = self._daemon_proc
+        if not isinstance(sample, dict) or self._air_retired or proc is None:
+            return
+        seq = sample.get("seq")
+        if not isinstance(seq, int) or isinstance(seq, bool):
+            return
+        parsed = None
+        # ``_air_lock`` (never held across a call back into this client) keeps the seen marker and
+        # the entries consistent when two status updates race (loop and API worker threads).
+        with self._air_lock:
+            seen = self._air_learned_seen
+            if seen is not None and seen[0] is proc and seen[1] == seq:
+                return
+            self._air_learned_seen = (proc, seq)
+            parsed = self._valid_air_learned_sample(sample)
+            if parsed is not None:
+                key, x_ms, d_out_ms = parsed
+                try:
+                    self.air_learned_latency = record_air_learned_sample(
+                        self.air_learned_latency,
+                        key,
+                        x_ms,
+                        d_out_ms,
+                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    )
+                except Exception as exc:  # a sample that makes an invalid entry; nothing to keep
+                    logger.debug("[%s] Learned air sample not usable: %s", self.player_name, type(exc).__name__)
+                    return
+        if parsed is None:
+            logger.debug("[%s] Ignoring an invalid learned air sample: %r", self.player_name, sample)
+            return
+        key, x_ms, d_out_ms = parsed
+        if self.config_id:
+            self._air_learned_writes += 1
+            self._schedule_persist(
+                f"air_learned:{self._air_learned_writes}",
+                lambda pid, d_out: save_air_learned_sample(pid, key, x_ms, d_out),
+                self.config_id,
+                d_out_ms,
+            )
+        logger.info(
+            "[%s] Learned air sample %.1f ms at output delay %.1f ms (codec %s, rate %s, adapter %s)",
+            self.player_name,
+            x_ms,
+            d_out_ms,
+            *key,
+        )
+
+    @staticmethod
+    def _valid_air_learned_sample(sample: dict) -> tuple[tuple[str, int, str], float, float] | None:
+        """``(key, x_ms, d_out_ms)`` of a complete, in-range sample, else None."""
+        codec, rate, adapter = sample.get("codec"), sample.get("rate"), normalize_mac(sample.get("adapter"))
+        if not isinstance(codec, str) or not codec.strip() or not adapter:
+            return None
+        if not isinstance(rate, int) or isinstance(rate, bool) or rate <= 0:
+            return None
+        values: list[float] = []
+        for name in ("x_ms", "d_out_ms"):
+            value = sample.get(name)
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                return None
+            values.append(float(value))
+        x_ms, d_out_ms = values
+        if not 0.0 <= d_out_ms <= 5000.0 or abs(x_ms - d_out_ms) > 1000.0:
+            return None
+        return (codec.strip().lower(), rate, adapter), x_ms, d_out_ms
+
+    def retire_air_subscription(self) -> None:
+        """The player was removed: unsubscribe now and never again (late daemon status included)."""
+        self._air_retired = True
+        self.sync_air_subscription()
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
@@ -1081,7 +1369,9 @@ class SendspinClient:
             return
         from sendspin_bridge.services.audio.pulse import asuspend_sink
 
+        self._mark_suspend_requested()
         ok = await asuspend_sink(sink, True)
+        self._mark_suspend_requested()
         if ok:
             self._update_status({"bt_power_save": True})
             logger.info("[%s] Entered power-save (PA sink suspended)", self.player_name)
@@ -1104,6 +1394,63 @@ class SendspinClient:
             logger.info("[%s] Exited power-save (PA sink resumed)", self.player_name)
         else:
             logger.warning("[%s] Failed to resume PA sink from power-save", self.player_name)
+
+    # ---- Host sink-suspend check (read-only) ----
+
+    _OWN_SUSPEND_WINDOW_S = 2.0
+
+    def _mark_suspend_requested(self, now: float | None = None) -> None:
+        """Remember that the bridge itself is suspending (or just suspended) its sink."""
+        self._suspend_requested_at = time.monotonic() if now is None else now
+
+    def _bridge_requested_suspend(self, now: float | None = None) -> bool:
+        at = self._suspend_requested_at
+        if at is None:
+            return False
+        return ((time.monotonic() if now is None else now) - at) <= self._OWN_SUSPEND_WINDOW_S
+
+    def _on_sink_state_change(self, mac: str, old: str | None, new: str, sink_name: str) -> None:
+        """SinkMonitor listener: record a host-initiated suspend of this speaker's sink."""
+        own = self.bt_manager.mac_address if self.bt_manager else None
+        if not own or str(own).upper() != str(mac).upper():
+            return
+        bridge_requested = bool(
+            self.status.get("bt_power_save") or self.status.get("bt_standby") or self._bridge_requested_suspend()
+        )
+        self._suspend_observer.on_state(
+            old, new, bridge_requested=bridge_requested, connected=bool(self.status.get("bluetooth_connected"))
+        )
+        self._publish_host_sink_suspends()
+
+    def set_suspend_policy(self, policy: SuspendPolicy | None) -> None:
+        """The orchestrator's latest static probe of the host's suspend policy."""
+        self._suspend_policy = policy
+        self._publish_host_sink_suspends()
+
+    def _publish_host_sink_suspends(self) -> None:
+        if self.backend_type != BLUETOOTH:
+            return
+        snapshot = self._suspend_observer.snapshot(self._suspend_policy)
+        if snapshot != self.status.get("host_sink_suspends"):
+            warn = bool(snapshot and snapshot.get("warn"))
+            if warn and not self._suspend_warned:
+                logger.info(
+                    "[%s] The host suspends the Bluetooth sink in gaps (%s); see the Bluetooth sink suspend docs",
+                    self.player_name,
+                    (snapshot or {}).get("reason"),
+                )
+            self._suspend_warned = warn
+            self._update_status({"host_sink_suspends": snapshot})
+
+    def _attach_suspend_listener(self, monitor: object | None) -> None:
+        add = getattr(monitor, "add_state_listener", None)
+        if add is None or self._suspend_listener_attached or self.backend_type != BLUETOOTH:
+            return
+        self._suspend_listener_attached = True
+        add(self._on_sink_state_change)
+        cached = last_suspend_policy()
+        if cached is not None and self._suspend_policy is None:
+            self.set_suspend_policy(cached)
 
     # ---- Sink mute watchdog (safety net) ----
 
@@ -1647,6 +1994,8 @@ class SendspinClient:
                         status_updates: dict[str, Any] = {
                             "server_connected": False,
                             "connected": False,
+                            # The sensor belonged to the daemon that exited.
+                            "air_sensor": None,
                             "group_name": None,
                             "group_id": None,
                             "pairing_pin": None,
@@ -1810,7 +2159,9 @@ class SendspinClient:
             self.reset_output_on_start = False
             from sendspin_bridge.services.audio import pulse
 
+            self._mark_suspend_requested()
             await pulse.asuspend_sink(self.bluetooth_sink_name, True)
+            self._mark_suspend_requested()
             await pulse.asuspend_sink(self.bluetooth_sink_name, False)
         try:
             # Pre-flight gate (#291): refuse to spawn when SENDSPIN_SERVER is
@@ -1998,6 +2349,35 @@ class SendspinClient:
                 self._seen_server_delay_seq = 0
                 spawn_config = load_config()
                 player_cfg = self._config_entry(spawn_config)
+                # The switch needs a restart: what counts is whether the air sensor service runs
+                # now, not the saved value (toggled at runtime, nothing half-applies).
+                air_effective, air_reason = air_sensor_effective(
+                    player_cfg, {**spawn_config, "EXPERIMENTAL_AIR_SENSOR": get_air_sensor_service() is not None}
+                )
+                self.air_to_sound_latency = valid_air_latency_entries(player_cfg.get("air_to_sound_latency"))
+                self.air_learned_latency = valid_air_learned_entries(player_cfg.get("air_learned_latency"))
+                if air_reason != "switch_off":
+                    # Switch on: a speaker the sensor is not effective for reports why (its daemon
+                    # never builds the sensor); an effective one leaves the value to its daemon.
+                    # Switch off: never set (stays None).
+                    self._update_status(
+                        {"air_sensor": None if air_effective else {"state": "off", "reason": air_reason}}
+                    )
+                # The calibration for the codec, rate and adapter last seen; the daemon reports
+                # what it actually plays and the parent resends when that picks another entry.
+                spawn_air_target = self._resolve_air_target() if air_effective else None
+                spawn_air_sensor: dict[str, Any] = {"enabled": True, "latency_ms": None}
+                if spawn_air_target is not None:
+                    latency, d_ref, learned_ms, learned_d_ref, learned_starts = spawn_air_target
+                    spawn_air_sensor["latency_ms"] = latency
+                    for name, value in (
+                        ("d_ref_ms", d_ref),
+                        ("learned_ms", learned_ms),
+                        ("learned_d_ref_ms", learned_d_ref),
+                        ("learned_starts", learned_starts),
+                    ):
+                        if value is not None:
+                            spawn_air_sensor[name] = value
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -2028,6 +2408,9 @@ class SendspinClient:
                             # PLAYOUT_SYNC: off (legacy player) / measure / loop.
                             # A speaker that opted out (playout_sync_enabled=false) always runs "off".
                             "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
+                            # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for
+                            # gets the key; without it the daemon builds nothing (switch off).
+                            **({"air_sensor": spawn_air_sensor} if air_effective else {}),
                         }
                     )
                 )
@@ -2056,6 +2439,9 @@ class SendspinClient:
                     # next start.
                     **spawn_kwargs(),
                 )
+                if air_effective:
+                    # The spawn param already carries it: no command until the value changes.
+                    self._air_calibrated_proc, self._air_calibrated_value = self._daemon_proc, spawn_air_target
                 self._update_status({"playing": False})
                 self._clear_ma_reconnecting()
                 self._pending_reconnect_unmute_sync = True
@@ -2117,7 +2503,7 @@ class SendspinClient:
         elif mac:
             self._schedule_persist("static_delay", save_device_static_delay, mac, round(delay))
 
-    def _schedule_persist(self, key: str, fn, mac: str, value: int) -> None:
+    def _schedule_persist(self, key: str, fn, mac: str, value: float) -> None:
         """Debounce a daemon-driven config write and run it off the loop.
 
         Mirrors ``routes/api._schedule_volume_persist``: a ``threading.Timer``
@@ -2135,10 +2521,13 @@ class SendspinClient:
             self._persist_timers[key] = timer
             timer.start()
 
-    def _run_persist(self, key: str, fn, mac: str, value: int) -> None:
+    def _run_persist(self, key: str, fn, mac: str, value: float) -> None:
         # Runs on the Timer's own thread — the fsync never touches the loop.
-        # Stale entries are replaced by the next ``_schedule_persist`` and
-        # cleared by ``_cancel_persist_timers``, so no cleanup is needed here.
+        # Drop this run's entry (keys with a unique suffix would pile up otherwise);
+        # a newer timer under the same key stays.
+        with self._persist_timers_lock:
+            if self._persist_timers.get(key) is threading.current_thread():
+                del self._persist_timers[key]
         try:
             fn(mac, value)
         except Exception:  # pragma: no cover - best-effort persistence
@@ -2351,6 +2740,42 @@ class SendspinClient:
         payload = encode_command(cmd) if not isinstance(cmd, dict) else cmd
         await self._command_service.send(self._daemon_proc, payload)
 
+    #: Above this many bytes buffered on the daemon's stdin an air command is skipped, not queued.
+    #: 32 KiB keeps control commands (volume, stop, ...) well below the pipe's high-water mark.
+    AIR_WRITE_BUFFER_LIMIT = 32 * 1024
+
+    @property
+    def air_accepts(self) -> tuple[int, ...]:
+        """Air payload versions the daemon advertised in ``status.air_sensor.accepts`` (R-6); ``()`` if none."""
+        info = self.status.get("air_sensor")
+        accepts = info.get("accepts") if isinstance(info, dict) else None
+        if not isinstance(accepts, list):
+            return ()
+        return tuple(v for v in accepts if type(v) is int)
+
+    def send_air_command(self, cmd: AirCommand) -> bool:
+        """Write one air command to the daemon's stdin without waiting; ``False`` when not written.
+
+        Not written when the daemon has not advertised the air payload version, is not running,
+        or its stdin transport holds more than ``AIR_WRITE_BUFFER_LIMIT`` bytes (the caller keeps
+        the command and retries next round instead of awaiting ``drain()``).
+        """
+        if AIR_ENVELOPE_VERSION not in self.air_accepts:
+            return False
+        proc = self._daemon_proc
+        stdin = proc.stdin if proc is not None and proc.returncode is None else None
+        transport = getattr(stdin, "transport", None)
+        if stdin is None or transport is None:
+            return False
+        try:
+            if transport.is_closing() or transport.get_write_buffer_size() > self.AIR_WRITE_BUFFER_LIMIT:
+                return False
+            stdin.write((json.dumps(encode_command(cmd)) + "\n").encode())
+        except Exception as exc:
+            logger.debug("[%s] air command write failed: %s", self.player_name, type(exc).__name__)
+            return False
+        return True
+
     async def send_reconnect(self) -> None:
         """Trigger the sendspin subprocess to reconnect to MA server.
 
@@ -2472,10 +2897,21 @@ class SendspinClient:
             elif key in {"static_delay_source", "static_delay_calibrated_at", "static_delay_codec"}:
                 self._update_status({key: value})
                 applied.append(key)
+            elif key == "air_to_sound_latency":
+                # Resent below to the running daemon (switch on only), the entry for the current
+                # codec, rate and adapter or null.
+                self.air_to_sound_latency = valid_air_latency_entries(value)
+                applied.append(key)
+            elif key == "air_learned_latency":
+                self.air_learned_latency = valid_air_learned_entries(value)
+                applied.append(key)
             elif key in self._RECONFIG_PARENT_ONLY_FIELDS:
                 if hasattr(self, key):
                     setattr(self, key, value)
                     applied.append(key)
+
+        if "air_to_sound_latency" in applied or "air_learned_latency" in applied:
+            self.sync_air_subscription()
 
         if restart_metronome and "static_delay_ms" in applied:
             await self.stop_calibration_metronome()
@@ -2907,6 +3343,7 @@ class SendspinClient:
                 # The engine's snapshot belongs to the daemon that is gone; a restart
                 # in another mode must not inherit it.
                 "playout": None,
+                "air_sensor": None,
                 "effective_required_lead_time_ms": None,
                 "playback_sync_error_ms": None,
             }
@@ -2967,6 +3404,10 @@ class SendspinClient:
             monitor = self._sink_monitor or get_sink_monitor()
             if monitor is not None and hasattr(monitor, "register_presence"):
                 self.follow_output(monitor)
+        else:
+            from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_sink_monitor
+
+            self._attach_suspend_listener(self._sink_monitor or get_sink_monitor())
 
         # Start Sendspin player: immediately if no BT device, deferred if BT configured
         if not self.bt_management_enabled:

@@ -39,6 +39,9 @@ _DEVICE_HOT_FIELDS: frozenset[str] = frozenset(
         "keepalive_interval",
         "room_id",
         "room_name",
+        # Air sensor calibrations: the matching entry is resent to the running daemon.
+        "air_to_sound_latency",
+        "air_learned_latency",
     }
 )
 
@@ -120,6 +123,8 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
         "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
         "EXPERIMENTAL_PA_MODULE_RELOAD",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
+        # Decides at start which monitor path owns the HCI socket (R-17).
+        "EXPERIMENTAL_AIR_SENSOR",
     }
 )
 
@@ -311,7 +316,7 @@ def _normalize_scalar(value: Any) -> Any:
     UI often map to ``None`` in normalised configs.  Treat them as equivalent
     so we don't spuriously flag changes.
     """
-    if value is None:
+    if value is None or value == []:
         return ""
     if isinstance(value, str):
         return value.strip()

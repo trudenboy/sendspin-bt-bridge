@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -386,6 +387,75 @@ def _player_backend_is_valid(entry: dict) -> bool:
     return True
 
 
+def _fill_air_d_ref(entry: dict, calibrations: list[dict]) -> bool:
+    """Give stage A calibrations (no reference delay) the player's static delay; True when any was filled."""
+    fallback = entry.get("static_delay_ms")
+    fallback_ms = float(fallback) if isinstance(fallback, (int, float)) and not isinstance(fallback, bool) else 0.0
+    fallback_ms = min(5000.0, max(0.0, fallback_ms)) if math.isfinite(fallback_ms) else 0.0
+    filled = False
+    for calibration in calibrations:
+        if calibration.get("d_ref_ms") is None:
+            calibration["d_ref_ms"] = fallback_ms
+            filled = True
+            logger.info(
+                "Player %s: air calibration %s/%s/%s had no d_ref_ms; set it to %s ms",
+                entry.get("id"),
+                calibration.get("codec"),
+                calibration.get("rate"),
+                calibration.get("adapter"),
+                fallback_ms,
+            )
+    return filled
+
+
+def _persist_air_d_ref_backfill(config: dict) -> bool:
+    """Backfill missing calibration reference delays in ``players`` so a later delay change can't move them."""
+    players = config.get("players")
+    if not isinstance(players, list):
+        return False
+    changed = False
+    for entry in players:
+        calibrations = entry.get("air_to_sound_latency") if isinstance(entry, dict) else None
+        if isinstance(calibrations, list) and _fill_air_d_ref(entry, [c for c in calibrations if isinstance(c, dict)]):
+            changed = True
+    return changed
+
+
+def _clean_air_latency(entry: dict) -> None:
+    """Drop invalid air-to-sound calibrations one by one (never the player); keep the newest 8."""
+    from sendspin_bridge.config.players import valid_air_latency_entries
+
+    raw = entry.get("air_to_sound_latency")
+    if raw is None:
+        return
+    clean = valid_air_latency_entries(raw)
+    if not isinstance(raw, list) or len(clean) != len(raw):
+        logger.warning(
+            "Player %s: dropped %s invalid or surplus air-to-sound calibration(s)",
+            entry.get("id"),
+            len(raw) - len(clean) if isinstance(raw, list) else "all",
+        )
+    _fill_air_d_ref(entry, clean)
+    entry["air_to_sound_latency"] = clean
+
+
+def _clean_air_learned(entry: dict) -> None:
+    """Drop invalid learned air latencies one by one (never the player); keep the newest 8."""
+    from sendspin_bridge.config.players import valid_air_learned_entries
+
+    raw = entry.get("air_learned_latency")
+    if raw is None:
+        return
+    clean = valid_air_learned_entries(raw)
+    if not isinstance(raw, list) or len(clean) != len(raw):
+        logger.warning(
+            "Player %s: dropped %s invalid or surplus learned air latency entr(ies)",
+            entry.get("id"),
+            len(raw) - len(clean) if isinstance(raw, list) else "all",
+        )
+    entry["air_learned_latency"] = clean
+
+
 def _normalize_players(config: dict) -> None:
     from pydantic import ValidationError
 
@@ -397,6 +467,8 @@ def _normalize_players(config: dict) -> None:
         for entry in raw_players:
             if isinstance(entry, dict):
                 _clamp_power_save_delay(entry)
+                _clean_air_latency(entry)
+                _clean_air_learned(entry)
             try:
                 kept.append(Player.model_validate(entry).model_dump(mode="json", exclude_unset=True))
                 continue
@@ -567,6 +639,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "RSSI_BADGE",
         "COMPENSATE_OUTPUT_LATENCY",
         "PLAYOUT_DIAG",
+        "EXPERIMENTAL_AIR_SENSOR",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
 
@@ -814,6 +887,9 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
     else:
         for key in LEGACY_V5_KEYS:
             normalized.pop(key, None)
+
+    if _persist_air_d_ref_backfill(normalized):
+        needs_persist = True
 
     # Detection-only check for malformed SENDSPIN_SERVER values written before
     # the strict validator landed (issue #291). We do NOT auto-strip — Strict

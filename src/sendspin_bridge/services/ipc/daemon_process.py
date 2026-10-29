@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -32,9 +33,20 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
+from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
 from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
-from sendspin_bridge.services.ipc.commands import InvalidCommand, UnknownCommand, decode_command
+from sendspin_bridge.services.ipc.commands import (
+    AIR_COMMAND_NAMES,
+    AirEnvelope,
+    AirFold,
+    AirSource,
+    InvalidCommand,
+    SetAirCalibration,
+    UnknownCommand,
+    decode_command,
+)
 from sendspin_bridge.services.ipc.ipc_protocol import (
     IPC_PROTOCOL_VERSION,
     IPC_PROTOCOL_VERSION_KEY,
@@ -354,6 +366,96 @@ def _read_playout(audio_handler: object) -> dict | None:
     return dict(playout) if isinstance(playout, dict) else None
 
 
+# Calibration latency bounds (R-12); the parent clamps too, the daemon never trusts it.
+_AIR_LATENCY_MAX_MS = 2000.0
+
+
+_AIR_D_REF_MAX_MS = 5000.0
+
+
+def _air_number(value: object, low: float, high: float) -> float | None:
+    """A finite number within ``low``…``high`` as a float, else None (the field is dropped)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) and low <= number <= high else None
+
+
+def _air_sensor_args(raw: object) -> dict | None:
+    """The spawn's ``air_sensor`` param, validated: None unless it asks for the sensor."""
+    if not isinstance(raw, dict) or raw.get("enabled") is not True:
+        return None
+    latency = raw.get("latency_ms")
+    latency_ms: float | None = None
+    if isinstance(latency, int | float) and not isinstance(latency, bool) and math.isfinite(latency):
+        latency_ms = min(_AIR_LATENCY_MAX_MS, max(0.0, float(latency)))
+    out: dict = {"enabled": True, "latency_ms": latency_ms}
+    d_ref = _air_number(raw.get("d_ref_ms"), 0.0, _AIR_D_REF_MAX_MS)
+    if d_ref is not None:
+        out["d_ref_ms"] = d_ref
+    learned = _air_number(raw.get("learned_ms"), -math.inf, math.inf)
+    learned_ref = _air_number(raw.get("learned_d_ref_ms"), 0.0, _AIR_D_REF_MAX_MS)
+    starts = raw.get("learned_starts")
+    if (
+        learned is not None
+        and learned_ref is not None
+        and type(starts) is int
+        and 2 <= starts <= 2**31
+        and abs(learned - learned_ref) <= 1000.0
+    ):
+        out.update(learned_ms=learned, learned_d_ref_ms=learned_ref, learned_starts=starts)
+    return out
+
+
+def _air_step_done(task: asyncio.Future) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.debug("air sensor step failed: %s", task.exception())
+
+
+class _AirStepper:
+    """Runs the air sensor's step as a background task, never two at once.
+
+    The watcher never waits on a correlation: a step still running when the next tick comes
+    is left alone (the sensor's own guard keeps at most one window in flight as well).
+    """
+
+    def __init__(self) -> None:
+        self.task: asyncio.Future | None = None
+
+    def kick(self, air_step) -> None:
+        if self.task is not None and not self.task.done():
+            return
+        self.task = asyncio.ensure_future(air_step())
+        self.task.add_done_callback(_air_step_done)
+
+    def cancel(self) -> None:
+        if self.task is not None and not self.task.done():
+            self.task.cancel()
+
+
+def _air_status_tick(daemon, status: StatusStore | dict, last: dict | None, stepper: _AirStepper) -> dict | None:
+    """Start the air sensor's step and patch ``status["air_sensor"]`` if its snapshot changed.
+
+    Returns the snapshot now published (``last`` when nothing changed). A daemon without a
+    sensor has no ``air_snapshot`` value: nothing is scheduled and the key is never written.
+    """
+    air_step = getattr(daemon, "air_step", None)
+    air_snapshot = getattr(daemon, "air_snapshot", None)
+    if not callable(air_step) or not callable(air_snapshot):
+        return last
+    snap = air_snapshot()  # taken before the step task runs, as before (the kick only schedules it)
+    if snap is None:
+        return last
+    stepper.kick(air_step)
+    if snap == last:
+        return last
+    _patch_status(status, {"air_sensor": snap})
+    return snap
+
+
 async def _timing_telemetry_watcher(
     daemon,
     status: StatusStore | dict,
@@ -373,85 +475,102 @@ async def _timing_telemetry_watcher(
     next_playout_at = 0.0
     fell_back = False
     playout_error_ms: float | None = None
-    while not stop_event.is_set():
-        try:
+    air_published: dict | None = None
+    air_stepper = _AirStepper()
+    try:
+        while not stop_event.is_set():
             try:
-                slew.sample()
-                slew_ppm = slew.ppm()
-            except Exception as exc:
-                logger.debug("clock slew estimate failed: %s", exc)
-                slew_ppm = None
-            playout_changed = False
-            if playout_on:
-                # The engine's snapshot (1 s while playing, 5 s otherwise) and its
-                # fallback, checked every tick. After a fallback the legacy player
-                # has no snapshot: the last one (state "fallback") stays.
                 try:
-                    playout = _read_playout(getattr(daemon, "_audio_handler", None))
-                    if playout is None:
-                        playout_error_ms = None
-                    elif playout.get("state") == "fallback" and not fell_back:
-                        fell_back = True
-                        playout_error_ms = None
-                        _patch_status(status, {"playout": playout})
-                        playout_changed = True
-                        try:
-                            daemon.fall_back_to_legacy(str(playout.get("fallback_reason") or "playout engine fallback"))
-                        except Exception as exc:
-                            logger.warning("Falling back to the legacy player failed: %s", exc)
-                    elif time.monotonic() >= next_playout_at:
-                        playing = bool(status.get("playing"))
-                        next_playout_at = time.monotonic() + (
-                            _PLAYOUT_STATUS_PLAYING_S if playing else _PLAYOUT_STATUS_IDLE_S
-                        )
-                        error = playout.get("error_ms")
-                        playout_error_ms = float(error) if isinstance(error, int | float) else None
-                        _patch_status(status, {"playout": playout, "playback_sync_error_ms": playout_error_ms})
-                        playout_changed = True
+                    slew.sample()
+                    slew_ppm = slew.ppm()
                 except Exception as exc:
-                    logger.debug("playout status update failed: %s", exc)
-            audio_handler = getattr(daemon, "_audio_handler", None)
-            client = getattr(daemon, "_client", None)
-            metrics_due = audio_handler is not None and client is not None and time.monotonic() >= next_metrics_at
-            pa_latency_ms: float | None = None
-            # measure/loop: read every second alongside the playout snapshot;
-            # off: only with the metrics tick, so it adds no status patches.
-            pa_due = time.monotonic() >= next_pa_latency_at if playout_on else metrics_due
-            if status.get("playing") and pa_due:
-                next_pa_latency_at = time.monotonic() + 1.0
-                pa_latency_ms = await _pa_latency_or_none()
-            changed = playout_changed
-            if audio_handler is not None:
-                changed = _observe_structured_reanchor(audio_handler, status) or changed
-            now = time.monotonic()
-            if metrics_due:
-                snapshot = collect_timing_snapshot(audio_handler, client)
-                if playout_error_ms is not None:
-                    # In measure/loop the sync error is the engine's.
-                    snapshot["playback_sync_error_ms"] = playout_error_ms
-                if slew_ppm is not None:
-                    snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
+                    logger.debug("clock slew estimate failed: %s", exc)
+                    slew_ppm = None
+                playout_changed = False
+                if playout_on:
+                    # The engine's snapshot (1 s while playing, 5 s otherwise) and its
+                    # fallback, checked every tick. After a fallback the legacy player
+                    # has no snapshot: the last one (state "fallback") stays.
+                    try:
+                        playout = _read_playout(getattr(daemon, "_audio_handler", None))
+                        if playout is None:
+                            playout_error_ms = None
+                        elif playout.get("state") == "fallback" and not fell_back:
+                            fell_back = True
+                            playout_error_ms = None
+                            _patch_status(status, {"playout": playout})
+                            playout_changed = True
+                            try:
+                                daemon.fall_back_to_legacy(
+                                    str(playout.get("fallback_reason") or "playout engine fallback")
+                                )
+                            except Exception as exc:
+                                logger.warning("Falling back to the legacy player failed: %s", exc)
+                        elif time.monotonic() >= next_playout_at:
+                            playing = bool(status.get("playing"))
+                            next_playout_at = time.monotonic() + (
+                                _PLAYOUT_STATUS_PLAYING_S if playing else _PLAYOUT_STATUS_IDLE_S
+                            )
+                            error = playout.get("error_ms")
+                            playout_error_ms = float(error) if isinstance(error, int | float) else None
+                            _patch_status(status, {"playout": playout, "playback_sync_error_ms": playout_error_ms})
+                            playout_changed = True
+                    except Exception as exc:
+                        logger.debug("playout status update failed: %s", exc)
+                audio_handler = getattr(daemon, "_audio_handler", None)
+                client = getattr(daemon, "_client", None)
+                metrics_due = audio_handler is not None and client is not None and time.monotonic() >= next_metrics_at
+                pa_latency_ms: float | None = None
+                # measure/loop: read every second alongside the playout snapshot;
+                # off: only with the metrics tick, so it adds no status patches.
+                pa_due = time.monotonic() >= next_pa_latency_at if playout_on else metrics_due
+                if status.get("playing") and pa_due:
+                    next_pa_latency_at = time.monotonic() + 1.0
+                    pa_latency_ms = await _pa_latency_or_none()
+                changed = playout_changed
+                # The air sensor: a step started per tick (1 s) on this loop, never awaited here;
+                # its snapshot is published on change.
+                try:
+                    air_now = _air_status_tick(daemon, status, air_published, air_stepper)
+                except Exception as exc:
+                    logger.debug("air sensor status update failed: %s", exc)
+                    air_now = air_published
+                if air_now is not air_published:
+                    air_published = air_now
+                    changed = True
+                if audio_handler is not None:
+                    changed = _observe_structured_reanchor(audio_handler, status) or changed
+                now = time.monotonic()
+                if metrics_due:
+                    snapshot = collect_timing_snapshot(audio_handler, client)
+                    if playout_error_ms is not None:
+                        # In measure/loop the sync error is the engine's.
+                        snapshot["playback_sync_error_ms"] = playout_error_ms
+                    if slew_ppm is not None:
+                        snapshot["clock_slew_ppm"] = round(slew_ppm, 1)
+                    if pa_latency_ms is not None:
+                        snapshot["pa_latency_ms"] = round(pa_latency_ms, 1)
+                        pa_latency_ms = None
+                    _patch_status(status, snapshot)
+                    changed = True
+                    next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
+                elif slew_ppm is not None and status.get("clock_slew_ppm") is None:
+                    # First estimate: publish at once instead of waiting for the next metrics tick.
+                    _patch_status(status, {"clock_slew_ppm": round(slew_ppm, 1)})
+                    changed = True
                 if pa_latency_ms is not None:
-                    snapshot["pa_latency_ms"] = round(pa_latency_ms, 1)
-                    pa_latency_ms = None
-                _patch_status(status, snapshot)
-                changed = True
-                next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
-            elif slew_ppm is not None and status.get("clock_slew_ppm") is None:
-                # First estimate: publish at once instead of waiting for the next metrics tick.
-                _patch_status(status, {"clock_slew_ppm": round(slew_ppm, 1)})
-                changed = True
-            if pa_latency_ms is not None:
-                _patch_status(status, {"pa_latency_ms": round(pa_latency_ms, 1)})
-                changed = True
-            if changed and callable(on_status_change):
-                on_status_change()
-            failure_reported = False
-        except Exception as exc:
-            log = logger.debug if failure_reported else logger.warning
-            log("Timing telemetry update failed; playback will continue: %s", exc)
-            failure_reported = True
-        await asyncio.sleep(poll_interval)
+                    _patch_status(status, {"pa_latency_ms": round(pa_latency_ms, 1)})
+                    changed = True
+                if changed and callable(on_status_change):
+                    on_status_change()
+                failure_reported = False
+            except Exception as exc:
+                log = logger.debug if failure_reported else logger.warning
+                log("Timing telemetry update failed; playback will continue: %s", exc)
+                failure_reported = True
+            await asyncio.sleep(poll_interval)
+    finally:
+        air_stepper.cancel()
 
 
 async def _startup_sink_routing_watcher(
@@ -485,6 +604,47 @@ async def _startup_sink_routing_watcher(
         was_streaming = is_streaming
 
 
+#: Stdin lines dropped before they reached a daemon, by kind (never their content).
+stdin_drop_counters: dict[str, int] = {"overlong": 0, "too_deep": 0, "air_no_daemon": 0}
+_stdin_drop_log = RateLimitedLog(logger, clock=time.monotonic)
+
+
+def _note_stdin_drop(kind: str, message: str) -> None:
+    stdin_drop_counters[kind] += 1
+    _stdin_drop_log.warning(kind, "%s (%d so far; one warning per 10 min)", message, stdin_drop_counters[kind])
+
+
+def _dispatch_air_command(daemon: Any, raw: dict) -> None:
+    """Decode one air command and hand it to the daemon; nothing raised, nothing raw logged.
+
+    Air traffic is high-rate and comes from a peer that may be ahead of or
+    behind this build, so an invalid message is dropped and counted (one
+    WARNING per 10 min) instead of becoming an ``invalid_command`` error.
+    A daemon without an air sensor ignores the verbs without decoding them.
+    """
+    if daemon is None:
+        # The parent gates air traffic on the daemon's ``accepts``; this is a race at startup.
+        stdin_drop_counters["air_no_daemon"] += 1
+        return
+    if not daemon.air_accepts():
+        daemon.air_ignore()
+        return
+    try:
+        command = decode_command(raw)
+    except InvalidCommand as exc:
+        daemon.air_note_invalid(str(exc))
+        return
+    except Exception:
+        daemon.air_note_invalid("undecodable")
+        return
+    if not isinstance(command, (AirEnvelope, AirSource, SetAirCalibration, AirFold)):
+        return
+    try:
+        daemon.air_intake(command)
+    except Exception:
+        logger.debug("air intake failed", exc_info=True)
+
+
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink_name: str | None = None) -> None:
     """Read JSON commands from stdin and dispatch them."""
     loop = asyncio.get_running_loop()
@@ -492,18 +652,41 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
+    # An over-long line is discarded up to its newline, however many reads it
+    # spans: dropped and counted once, its tail never parsed as a command.
+    discarding = False
     while not stop_event.is_set():
         try:
-            line = await asyncio.wait_for(reader.readline(), timeout=1.0)
+            line = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=1.0)
         except TimeoutError:
+            continue
+        except asyncio.LimitOverrunError as exc:
+            if not discarding:
+                discarding = True
+                _note_stdin_drop("overlong", "Dropped an IPC command line over the 64 KiB limit")
+            await reader.readexactly(exc.consumed)
+            continue
+        except asyncio.IncompleteReadError as exc:
+            line = exc.partial  # end of input: whatever is left, b"" when nothing
+        if discarding and line:
+            discarding = False  # the newline (or end of input) that closes the long line
             continue
         if not line:
             break
         try:
             cmd = parse_command_envelope(json.loads(line.decode().strip()))
+        except RecursionError:
+            _note_stdin_drop("too_deep", "Dropped an IPC command nested too deeply to parse")
+            continue
         except (json.JSONDecodeError, ValueError):
             continue
         if cmd is None:
+            continue
+
+        # Air verbs carry their own payload version and are validated, counted
+        # and rate-limited on their own path (never the per-message warning).
+        if cmd.cmd in AIR_COMMAND_NAMES:
+            _dispatch_air_command(daemon_ref[0] if daemon_ref else None, cmd.raw)
             continue
 
         protocol_version = cmd.protocol_version
@@ -816,6 +999,7 @@ async def _run(params: dict) -> None:
         playout_diag=_env_flag("SENDSPIN_PLAYOUT_DIAG", default=bool(params.get("playout_diag", False))),
         playout_mode=playout_mode,
         playout=playout_params,
+        air_sensor=_air_sensor_args(params.get("air_sensor")),
     )
 
     status = StatusStore(

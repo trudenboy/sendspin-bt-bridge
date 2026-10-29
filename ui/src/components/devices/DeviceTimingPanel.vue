@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected } from '@/utils/deviceBackend'
-import { setLatency } from '@/api/devices'
+import { forgetAirCalibration, setLatency } from '@/api/devices'
 import { createSession, endSession, getLatencyHistory, setMetronome, uploadRecording, type TimingSample } from '@/api/calibration'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton } from '@/kit'
@@ -14,11 +14,12 @@ import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS } from '@/settings/device'
 import { microphoneAvailable, openMicrophone, recordClick } from '@/calibration/capture'
 import { planCorrection } from '@/calibration/plan'
+import { signedMs } from '@/utils/deviceChips'
 import type { Device } from '@/api/types'
 
 const props = defineProps<{ device: Device }>()
 
-const { t } = useI18n()
+const { t, te, locale } = useI18n()
 const bridge = useBridgeStore()
 const notifications = useNotificationStore()
 
@@ -163,6 +164,134 @@ const playoutRows = computed(() => {
     ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.warming', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
   ] as [string, string][]
 })
+/* Air sensor: null (switch off) shows nothing. */
+const air = computed(() => props.device.timing.air_sensor ?? null)
+const airReason = computed(() => {
+  const reason = air.value?.reason
+  if (!reason) return null
+  if (reason.startsWith('codec:')) return t('timing.air.reasons.codec', { codec: reason.slice(6).toUpperCase() })
+  /* input:<rate>/<bits> from the daemon's tap: the format it cannot read. */
+  if (reason.startsWith('input:')) return t('timing.air.reasons.unsupported_input')
+  const key = `timing.air.reasons.${reason}`
+  return te(key) ? t(key) : t('timing.air.reasons.unknown', { reason })
+})
+const airHasValues = computed(() => air.value != null && air.value.host_placement_ms != null)
+const airRows = computed(() => {
+  const a = air.value
+  if (!a || !airHasValues.value) return []
+  const jitter = a.jitter_ms == null ? '' : ` (±${a.jitter_ms.toFixed(1)})`
+  const rows: [string, string][] = [['host', `${signedMs(a.host_placement_ms!)} ms${jitter}`]]
+  rows.push(['air', a.air_error_ms != null && a.calibrated ? `${signedMs(a.air_error_ms)} ms` : t('timing.air.needsCalibration')])
+  if (a.confidence != null) rows.push(['confidence', `${Math.round(a.confidence * 100)} %`])
+  if (a.psr != null) rows.push(['psr', a.psr.toFixed(2)])
+  if (a.last_confirmed_at) {
+    const ageS = Math.max(0, Math.round((Date.now() - Date.parse(a.last_confirmed_at)) / 1000))
+    if (Number.isFinite(ageS)) rows.push(['lock', t('timing.air.agoSeconds', { s: ageS })])
+  }
+  return rows
+})
+/* Stored air-to-sound calibrations (one per codec, SBC rate and adapter), also with the sensor off. */
+type AirCalibration = Device['audio']['air_to_sound_latency'][number]
+const calibrations = computed(() => props.device.audio.air_to_sound_latency ?? [])
+const calibrationKey = (c: Pick<AirCalibration, 'codec' | 'rate' | 'adapter'>) => `${c.codec}/${c.rate}/${c.adapter}`
+const AGE_STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+]
+function calibrationAge(iso: string): string {
+  const at = Date.parse(iso)
+  if (Number.isNaN(at)) return '—'
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000))
+  const fmtAge = new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' })
+  for (const [unit, size] of AGE_STEPS) {
+    if (seconds >= size) return fmtAge.format(-Math.floor(seconds / size), unit)
+  }
+  return fmtAge.format(-seconds, 'second')
+}
+function calibrationParams(c: Pick<AirCalibration, 'codec' | 'rate' | 'adapter'>) {
+  const own = props.device.bluetooth?.adapter
+  const adapter = own?.hci && own.mac?.toUpperCase() === c.adapter.toUpperCase() ? own.hci : c.adapter
+  return { codec: c.codec.toUpperCase(), rate: String(Number((c.rate / 1000).toFixed(1))), adapter }
+}
+const calibrationLine = (c: AirCalibration) =>
+  t('timing.air.calibration.line', { ...calibrationParams(c), latency: c.latency_ms.toFixed(1), age: calibrationAge(c.measured_at) })
+const forgetting = ref('')
+async function forgetCalibration(c: AirCalibration) {
+  const ok = await confirmDialog({
+    title: t('timing.air.calibration.forgetTitle'),
+    message: t('timing.air.calibration.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
+    confirmLabel: t('timing.air.calibration.forget'),
+    danger: true,
+  })
+  if (!ok) return
+  forgetting.value = calibrationKey(c)
+  try {
+    await forgetAirCalibration(props.device.id, c.codec, c.rate, c.adapter)
+    await bridge.refresh()
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('common.error'))
+  } finally {
+    forgetting.value = ''
+  }
+}
+/* Learned latencies (from the speaker's starts), forgotten the same way as a calibration. */
+type AirLearned = Device['audio']['air_learned_latency'][number]
+const learnedEntries = computed(() => props.device.audio.air_learned_latency ?? [])
+const learnedLine = (c: AirLearned) =>
+  t('timing.air.learned.line', {
+    latency: c.latency_ms.toFixed(1),
+    delay: c.d_ref_ms.toFixed(0),
+    codec: c.codec.toUpperCase(),
+    adapter: calibrationParams(c).adapter,
+    starts: c.starts,
+  })
+async function forgetLearned(c: AirLearned) {
+  const ok = await confirmDialog({
+    title: t('timing.air.learned.forgetTitle'),
+    message: t('timing.air.learned.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
+    confirmLabel: t('timing.air.learned.forget'),
+    danger: true,
+  })
+  if (!ok) return
+  forgetting.value = `learned:${calibrationKey(c)}`
+  try {
+    await forgetAirCalibration(props.device.id, c.codec, c.rate, c.adapter)
+    await bridge.refresh()
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('common.error'))
+  } finally {
+    forgetting.value = ''
+  }
+}
+/* The air correction of a loop-mode speaker: target, bias, corrections and the delay trim. */
+const LEARN_NEED = 2
+const correctionLines = computed(() => {
+  const p = playout.value
+  if (!p || p.mode !== 'loop' || p.air_bias_state == null) return []
+  const lines: string[] = []
+  const parts: string[] = []
+  if (p.air_target === 'calibrated' && p.air_target_ms != null) {
+    parts.push(t('timing.air.correction.calibrated', { ms: p.air_target_ms.toFixed(1) }))
+  } else if (p.air_target === 'learned') {
+    parts.push(t('timing.air.correction.learned', { n: p.air_learned_starts ?? 0 }))
+  } else {
+    const a = air.value
+    const own = a?.codec != null && a.rate != null && a.adapter != null ? learnedEntries.value.find((e) => e.codec === a.codec && e.rate === a.rate && e.adapter === a.adapter) : undefined
+    parts.push(t('timing.air.correction.noData', { n: own?.samples_ms.length ?? 0, need: LEARN_NEED }))
+  }
+  const locked = air.value?.state === 'locked' || air.value?.state === 'holding'
+  if (p.air_bias_ms == null && air.value != null && !locked) parts.push(t('timing.air.correction.inactive'))
+  lines.push(t('timing.air.correction.target', { target: parts.join(' · ') }))
+  if (p.air_bias_ms != null) lines.push(t('timing.air.correction.bias', { value: signedMs(p.air_bias_ms) }))
+  if (p.air_corrections > 0) lines.push(t('timing.air.correction.corrections', { n: p.air_corrections }))
+  const trim = p.air_trim_ms
+  if (trim != null && Math.abs(trim) >= 0.05) {
+    const key = trim > 0 ? 'trimEarly' : 'trimLate'
+    lines.push(t(`timing.air.correction.${key}`, { value: signedMs(-trim), ms: Math.abs(trim).toFixed(1) }))
+  }
+  return lines
+})
 const syncError = computed(() => props.device.timing.sync_error_ms)
 </script>
 
@@ -234,6 +363,55 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
           <dd class="tabular-nums text-text-primary">{{ value }}</dd>
         </template>
       </dl>
+    </section>
+
+    <section v-if="air" class="mt-4" data-testid="air-sensor-block">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.air.title') }}</h3>
+      <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+        <dt class="text-text-secondary">{{ t('timing.air.rows.state') }}</dt>
+        <dd class="text-text-primary">{{ te(`timing.air.states.${air.state}`) ? t(`timing.air.states.${air.state}`) : air.state }}</dd>
+        <template v-for="[key, value] in airRows" :key="key">
+          <dt class="text-text-secondary">{{ t(`timing.air.rows.${key}`) }}</dt>
+          <dd class="tabular-nums text-text-primary">{{ value }}</dd>
+        </template>
+      </dl>
+      <p v-if="airReason" class="mt-1 text-sm text-text-secondary" data-testid="air-sensor-reason">{{ airReason }}</p>
+    </section>
+
+    <ul v-if="correctionLines.length" class="mt-4 space-y-1 text-sm tabular-nums text-text-primary" data-testid="air-correction">
+      <li v-for="line in correctionLines" :key="line">{{ line }}</li>
+    </ul>
+
+    <section v-if="learnedEntries.length" class="mt-4" data-testid="air-learned">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.air.learned.title') }}</h3>
+      <ul class="mt-2 space-y-1 text-sm">
+        <li v-for="c in learnedEntries" :key="calibrationKey(c)" class="flex items-center justify-between gap-2">
+          <span class="tabular-nums text-text-primary">{{ learnedLine(c) }}</span>
+          <SbButton
+            variant="outline"
+            size="sm"
+            data-testid="air-learned-forget"
+            :loading="forgetting === `learned:${calibrationKey(c)}`"
+            @click="forgetLearned(c)"
+          >{{ t('timing.air.learned.forget') }}</SbButton>
+        </li>
+      </ul>
+    </section>
+
+    <section v-if="calibrations.length" class="mt-4" data-testid="air-calibrations">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.air.calibration.title') }}</h3>
+      <ul class="mt-2 space-y-1 text-sm">
+        <li v-for="c in calibrations" :key="calibrationKey(c)" class="flex items-center justify-between gap-2">
+          <span class="tabular-nums text-text-primary">{{ calibrationLine(c) }}</span>
+          <SbButton
+            variant="outline"
+            size="sm"
+            data-testid="air-calibration-forget"
+            :loading="forgetting === calibrationKey(c)"
+            @click="forgetCalibration(c)"
+          >{{ t('timing.air.calibration.forget') }}</SbButton>
+        </li>
+      </ul>
     </section>
 
     <section class="mt-4">
