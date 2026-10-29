@@ -167,7 +167,7 @@ winrt-windows-devices-bluetooth==3.2.1 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-devices-bluetooth-advertisement==3.2.1 ; sys_platform == 'win32'
     # via bleak
-winrt-windows-devices-bluetooth-genericattributeprofile==3.2.1 ; sys_platform == 'win32'
+winrt-windows-devices-bluetooth-genericattributeprofile==4!10.0.28000.2705 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-devices-enumeration==3.2.1 ; sys_platform == 'win32'
     # via bleak
