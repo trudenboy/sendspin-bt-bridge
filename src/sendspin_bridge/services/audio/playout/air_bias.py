@@ -418,10 +418,14 @@ class AirBias:
         self._beta_now = beta_us
         view = self._feed.take()
         if self._d_out_latched_ms is None:
+            # The latch is the delay at the start of the output; a change that reached the engine
+            # first is already in the current value and is in ``_sum_dd_us`` too.
             if view.d_out_ms is not None:
-                self._d_out_latched_ms = view.d_out_ms
+                self._d_out_latched_ms = view.d_out_ms - self._sum_dd_us / 1000.0
             elif view.samples:
-                self._d_out_latched_ms = view.samples[0].d_out_us / 1000.0
+                first = view.samples[0]
+                after_change = self._sum_dd_us and first.x_lo_ns >= self._event_x
+                self._d_out_latched_ms = first.d_out_us / 1000.0 - (self._sum_dd_us / 1000.0 if after_change else 0.0)
         action = self._adopt_target(view.target)
         locked = view.lock[0] in _LOCK_OK
         if not locked:

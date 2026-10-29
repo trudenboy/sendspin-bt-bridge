@@ -214,6 +214,14 @@ def test_a_delay_keeps_b_trims_and_skips_the_spanning_window(caplog):
     assert abs(b.value_us - 5_000.0) < 100.0
 
 
+def test_a_delay_before_the_first_update_does_not_count_twice_in_the_trim():
+    b, feed = bias()
+    feed.set_output_delay((D_OUT + 30_000.0) / 1000)  # the daemon already holds the new delay
+    b.on_delay(30_000.0, 19.0e9)
+    run(b, feed, FakeHistory(5_000.0), [win(i, H0, d_out=D_OUT + 30_000.0) for i in range(3)])
+    assert b.snapshot()["air_trim_ms"] == pytest.approx(30.0)  # D_out - D_ref = 214 - 184
+
+
 def test_format_change_reseeds_provisionally_at_the_same_error_without_a_jump():
     b, feed = seeded()
     b.on_format(22.5e9)
