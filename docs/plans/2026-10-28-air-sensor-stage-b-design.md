@@ -436,8 +436,10 @@ and comes back (#562) is not chased.
 ### Learned target (Q7, Ruling S-12, S-21)
 
 - **Sample.** Once per output, from the first agreeing triple after the reopen (not after a reseed):
-  `X_i = median(d_out_i − h_i)`, `d_i = median(d_out_i)`. The triple precedes any seed jump, so
-  `X_i − d_i = −H_i` is the raw start placement whatever the target. Learning runs in `loop` only
+  `X_i = median(d_out_i − h_i + ê_i) − β`, `d_i = median(d_out_i)` (`ê` the controller's error at the
+  window, `β` the held placement), i.e. the placement the loop holds the speaker at, not the raw start
+  transient. If the feed's key is incomplete, or no sample is emitted, the next agreeing triple retries
+  until one is. Learning runs in `loop` only
   (round 2 (5)), also while a calibration exists (so Forget of the calibration can fall back to it).
 - **Publish.** The engine snapshot carries `air_learned = {"seq", "x_ms", "d_out_ms", "codec",
   "rate", "adapter"}`; `seq` is a per-daemon counter kept in the `AirFeed` (it survives engine

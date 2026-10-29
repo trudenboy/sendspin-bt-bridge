@@ -151,7 +151,7 @@ Where the audio is placed depends on what the bridge knows about the speaker:
 | **Air correction** | `calibrated (N ms)`, `learned (N starts)`, `no data (learning: N of 2 starts)` or `inactive: not locked` |
 | **Air bias** | The correction currently in force, ms |
 | **Air corrections** | How many corrections were made in this stream |
-| **Delay trim** | The delay set for the speaker relative to the one the calibration or learning refers to, with the resulting target (early or late), ms |
+| **Delay trim** | The delay set for the speaker relative to the one the calibration or learning refers to, shown as the trim −(D_out − D_ref), the same sign as in the log, with the resulting target ("target N ms early" when the delay was raised, "late" when lowered), ms |
 | **Learned latencies** | The learned entries per codec, rate and adapter, each with **Forget** |
 
 **Guidance.** If a speaker is in `loop` but has no air correction, Diagnostics lists an info item and the speaker works as in `measure`. The reasons are: the air sensor switch is off, the sensor is not running for this speaker (not a Bluetooth speaker), the sensor cannot run (see its state), or it has not locked since the stream started.
