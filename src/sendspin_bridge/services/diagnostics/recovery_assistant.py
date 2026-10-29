@@ -487,8 +487,8 @@ def _air_correction_reason(device: Any) -> str | None:
     if not playout or playout.get("mode") != "loop":
         return None
     snap = _air_sensor(device)
-    if snap is None:
-        return "air_switch_off"
+    if snap is None:  # the switch is off: nothing of stage B shows up
+        return None
     state = str(snap.get("state") or "")
     if state == "off":
         return "air_not_effective"
@@ -508,7 +508,6 @@ def _air_correction_reason(device: Any) -> str | None:
 
 
 _AIR_CORRECTION_CAUSES = {
-    "air_switch_off": "EXPERIMENTAL_AIR_SENSOR is off, so there is no air data to correct against.",
     "air_not_effective": "The air sensor is not running for this speaker (it needs a Bluetooth speaker).",
     "air_unavailable": "The air sensor cannot run for this speaker (see its air sensor state).",
     "air_not_locked": "The air sensor has not locked onto this speaker's stream since it started.",

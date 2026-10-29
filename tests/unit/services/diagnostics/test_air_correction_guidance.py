@@ -42,12 +42,12 @@ def test_the_issue_is_registered_next_to_the_air_sensor_issue():
     sensor = issue_definition("air_sensor_unavailable")
     assert d is not None and sensor is not None
     assert d.layer == "audio" and d.severity == "info"
-    assert d.default_reason_codes == ("air_switch_off", "air_not_effective", "air_unavailable", "air_not_locked")
+    assert d.default_reason_codes == ("air_not_effective", "air_unavailable", "air_not_locked")
     assert abs(d.priority - sensor.priority) <= 2
 
 
-def test_switch_off_is_reported():
-    assert _reasons(_device(_loop(), air_sensor=None)) == ["air_switch_off"]
+def test_switch_off_raises_nothing():
+    assert _issues([_device(_loop(), air_sensor=None)]) == []
 
 
 def test_a_sensor_that_is_off_is_not_effective():
@@ -106,7 +106,7 @@ def test_a_released_speaker_raises_nothing():
 
 
 def test_the_text_says_it_plays_as_in_measure_mode():
-    (issue,) = _issues([_device(_loop(), air_sensor=None)])
+    (issue,) = _issues([_device(_loop(), air_sensor={"state": "off", "reason": "not_bluetooth"})])
     assert issue.severity == "info" and issue.device_name == "ENEBY20"
     assert "plays as in measure mode" in issue.summary
 

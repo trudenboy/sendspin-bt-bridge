@@ -72,7 +72,7 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         layer="audio",
         priority=92,
         severity="info",
-        default_reason_codes=("air_switch_off", "air_not_effective", "air_unavailable", "air_not_locked"),
+        default_reason_codes=("air_not_effective", "air_unavailable", "air_not_locked"),
     ),
     "bluetooth_unavailable": GuidanceIssueDefinition(
         key="bluetooth_unavailable",
