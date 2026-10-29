@@ -28,6 +28,8 @@ function applyTheme() {
 
   const root = document.documentElement
   root.classList.toggle('dark', isDark)
+  // Only the decorative accent follows Home Assistant. Text, focus ring and warning-text
+  // tokens keep the bridge's own WCAG-checked values (light/dark switch with the .dark class).
   const accent = homeAssistant.value?.primary
   if (accent) root.style.setProperty('--sb-primary', accent)
   else root.style.removeProperty('--sb-primary')

@@ -63,7 +63,7 @@ async function mountView(config: Record<string, unknown> = BASE) {
   const wrapper = mount(ConfigView, {
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
-      stubs: { MaLoginFlow: true, Teleport: true },
+      stubs: { MaLoginFlow: true, LatencyAssistantSection: true, Teleport: true },
     },
     attachTo: document.body,
   })
