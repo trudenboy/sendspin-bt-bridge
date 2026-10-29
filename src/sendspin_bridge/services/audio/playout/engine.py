@@ -30,8 +30,9 @@ import statistics
 from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypeVar
 
+from sendspin_bridge.services.audio.playout.air_bias import AirBias, AirFeed, EHistory
 from sendspin_bridge.services.audio.playout.controller import JUMP_US, LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
 from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
@@ -45,6 +46,25 @@ if TYPE_CHECKING:
     from sendspin_bridge.services.audio.playout.timeline import PortReading
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+# The AirBias keys of the status ``playout`` dict when this engine has no bias (spec "Status").
+_NO_AIR_SNAPSHOT: dict[str, object] = {
+    "air_bias_state": None,
+    "air_bias_ms": None,
+    "air_bias_reason": None,
+    "air_target": None,
+    "air_target_ms": None,
+    "air_d_ref_ms": None,
+    "air_trim_ms": None,
+    "air_learned_starts": None,
+    "air_corrections": 0,
+    "air_last_correction_ms": None,
+    "air_bias_gated": 0,
+    "air_bias_skipped": 0,
+    "air_learned": None,
+}
 
 # Ruling R5: a forward step of (a - t) larger than this between consecutive readings is a PA step.
 PA_STEP_US = 15_000.0
@@ -104,6 +124,7 @@ class PlayoutEngine:
         port: PortClock,
         k0_ns: int = 0,
         wall_iso: Callable[[], str] = _wall_iso,
+        air_feed: AirFeed | None = None,
     ) -> None:
         self._settings = settings
         self._port = port
@@ -153,6 +174,15 @@ class PlayoutEngine:
         self._late_start_us: float | None = None
         self._started = False  # the start placement was requested
         self._fallback_reason: str | None = None
+        # The air bias (loop mode with a feed only; feeder-thread only). ``_b_dom`` is the bias value
+        # the controller and the published error are in the domain of (None: raw domain).
+        self._bias: AirBias | None = None
+        self._history: EHistory | None = None
+        self._b_dom: float | None = None
+        self._air_off_reason: str | None = None
+        if settings.mode == "loop" and air_feed is not None:
+            self._bias = AirBias(air_feed)
+            self._history = EHistory()
 
     # -- commands -------------------------------------------------------------------------
 
@@ -264,8 +294,9 @@ class PlayoutEngine:
         if jump is not None:
             if jump_reason == "delay":
                 # The schedule stays continuous across a delay jump: the residual is kept.
-                self._controller.placed(t_s, o - self._baseline_us, quiet_wait=True)
-                self._record_event(jump, "delay", residual_us=o)
+                b0 = self._b_dom or 0.0
+                self._controller.placed(t_s, o - self._baseline_us - b0, quiet_wait=True)
+                self._record_event(jump, "delay", residual_us=o - b0)
             else:
                 # The controller reset itself when it decided it; the jump removed e_w - β, so the
                 # raw error it leaves is the baseline.
@@ -363,6 +394,8 @@ class PlayoutEngine:
         t_s = r.t_us / 1e6
 
         a_minus_t = sample.a_ns / 1000.0 - sample.t_us
+        if r.stalled and not self._suspended:
+            self._air_break("stall", r.x_port_ns, t_s)
         if r.stalled:
             self._suspended = True
             self._prev_a_minus_t = None
@@ -370,10 +403,12 @@ class PlayoutEngine:
             self._stats.port(t_s, a_minus_t)
             if self._prev_a_minus_t is not None and not r.recovered and a_minus_t - self._prev_a_minus_t > PA_STEP_US:
                 self._stats.pa_step()
+                self._air_break("pa_step", r.x_port_ns, t_s)
                 self._offsets.clear()  # the port moved: older readings no longer date it
             self._prev_a_minus_t = a_minus_t
         if r.underrun:
             self._stats.underrun()
+            self._air_break("underrun", r.x_port_ns, t_s)
             self._in_underrun = True
         if r.stalled or self._in_underrun or r.recovered:
             self._offsets.clear()  # k is moving or the port is not on our data
@@ -402,6 +437,7 @@ class PlayoutEngine:
         s_port = self._map.at(r.x_port_ns)
         if s_port is not None and (self._settle_x_ns is None or r.x_port_ns >= self._settle_x_ns):
             self._stats.error(t_s, r.t_us - s_port)
+        self._air_step(r, s_port, t_s)
 
         if self._pending_place is not None or self._pending_jump_us is not None or self._sched.insert_owed:
             return  # an event is on its way into s(x_w); the controller waits for it
@@ -415,9 +451,13 @@ class PlayoutEngine:
         if self._baseline_samples is not None:
             if self._settle_x_ns is not None and r.x_port_ns < self._settle_x_ns:
                 return  # the port still plays audio from before the placement
-            if not self._measure_baseline(e_w):
+            if not self._measure_baseline(e_w - (self._b_dom or 0.0)):
                 return  # controller frozen until the baseline is known
-        e_rel = e_w - self._baseline_us
+        # c = e_w - b - β (without a bias value: e_rel = e_w - β)
+        e_rel = e_w - self._baseline_us - (self._b_dom or 0.0)
+        bias = self._bias
+        if bias is not None and self._air(lambda: bias.frozen, False):
+            return  # the readings broke; the controller waits for the bias to be seeded again
         d = self._controller.update(t_s, e_rel)
         if d.rejected:
             self._stats.rejected()
@@ -454,6 +494,102 @@ class PlayoutEngine:
             self._pending_jump_us = d.jump_us
             self._pending_jump_reason = "steady"
         self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
+
+    # -- the air bias ---------------------------------------------------------------------
+
+    def _air(self, fn: Callable[[], _T], default: _T) -> _T:
+        """The one guard (I8): every ``AirBias``/``EHistory`` call goes through it.
+
+        An exception disables the bias for this output (``internal_error``), re-bases the
+        controller to the raw domain and never reaches the feeder.
+        """
+        try:
+            return fn()
+        except Exception:
+            self._disable_air("internal_error")
+            return default
+
+    def _air_break(self, kind: Literal["underrun", "stall", "pa_step"], x_ns: int, t_s: float) -> None:
+        bias = self._bias
+        if bias is not None:
+            self._air(lambda: bias.on_reading_break(kind, float(x_ns), t_s), None)
+
+    def _air_handles_breaks(self) -> bool:
+        """``b`` has a value outside ``held``: no baseline is collected (C1)."""
+        bias = self._bias
+        return bias is not None and self._air(lambda: bias.handles_breaks, False)
+
+    def _air_read(self, bias: AirBias, hist: EHistory, r: PortReading, s_port: float | None, t_s: float) -> tuple:
+        """Feed the history, update the bias and read back everything the engine needs."""
+        if s_port is not None:
+            hist.add(r.t_us, float(r.x_port_ns), r.t_us - s_port, usable=True)
+        prev_state = bias.state
+        action = bias.update(t_s, hist, beta_us=self._baseline_us)
+        return prev_state, bias.state, bias.value_us, bias.seeded_now, bias.resume_beta(), action
+
+    def _air_step(self, r: PortReading, s_port: float | None, t_s: float) -> None:
+        """One reading's bias update and the residual-domain transitions (S-24, C1)."""
+        bias, hist = self._bias, self._history
+        if bias is None or hist is None:
+            return
+        got = self._air(lambda: self._air_read(bias, hist, r, s_port, t_s), None)
+        if got is None:
+            return
+        prev_state, state, value, seeded_now, resume_beta, _action = got  # actions are executed in B5b
+        b_eff = self._b_dom
+        if prev_state == "held" and state != "held" and value is not None:
+            # Resume (C1): b := b + β, β := 0; c = e_w - b - β is unchanged, the published error drops β.
+            self._stop_baseline()
+            self._baseline_us = 0.0
+            if self._error_ema_us is not None:
+                self._error_ema_us -= resume_beta
+            b_eff = (b_eff or 0.0) + resume_beta
+        if value is None:
+            if b_eff is not None:  # the bias dropped its value (calibration forgotten, no learned)
+                self._rebase_to_raw(b_eff)
+            self._b_dom = None
+            return
+        if seeded_now:
+            # Seed (C1): b₀ folds the current β; β := 0 and the baseline collection stops.
+            self._stop_baseline()
+            self._baseline_us = 0.0
+            if _action is None and self._error_ema_us is not None:
+                residual = self._error_ema_us + (b_eff or 0.0) - value
+                self._controller.placed(t_s, residual, quiet_wait=True)
+                self._error_ema_us = residual
+        self._b_dom = value
+
+    def _stop_baseline(self) -> None:
+        self._baseline_samples = None
+        self._baseline_medians = []
+        self._baseline_degraded = False
+
+    def _rebase_to_raw(self, b: float) -> None:
+        """Bias → none: ``r = EMA + β + b``, ``β := 0``, controller and EMA restart at ``r`` (audio kept)."""
+        self._b_dom = None
+        if self._error_ema_us is None:
+            self._baseline_us = 0.0
+            return
+        t_s = (self._now_us or 0.0) / 1e6
+        raw = self._error_ema_us + b  # the published value already holds β
+        self._baseline_us = 0.0
+        self._stop_baseline()
+        self._controller.placed(t_s, raw, quiet_wait=True)
+        self._error_ema_us = raw
+
+    def _disable_air(self, reason: str) -> None:
+        """Stop using the bias for this output; ``_air`` calls it from its ``except`` block."""
+        self._air_off_reason = reason
+        self._bias = None
+        self._history = None
+        self._warn.warning(
+            "air_bias",
+            "playout: the air bias is off for this output (%s); the error is measured against the pulsesink only",
+            reason,
+            exc_info=True,
+        )
+        if self._b_dom is not None:
+            self._rebase_to_raw(self._b_dom)
 
     def _measure_baseline(self, e_w: float) -> bool:
         """Add a post-event reading to the baseline; True once the baseline is accepted."""
@@ -537,7 +673,7 @@ class PlayoutEngine:
         error_ms = stats.pop("error_ms")
         if self._error_ema_us is not None:
             error_ms = round(self._error_ema_us / 1000.0, 3)
-        return {
+        snap: dict[str, object] = {
             "mode": self._settings.mode,
             "state": self._state(),
             "error_ms": error_ms,
@@ -556,6 +692,20 @@ class PlayoutEngine:
             "trim_us": self._settings.trim_us,
             "fallback_reason": self._fallback_reason,
         }
+        snap.update(self._air_snapshot())
+        return snap
+
+    def _air_snapshot(self) -> dict[str, object]:
+        bias = self._bias
+        if bias is not None:
+            got = self._air(lambda: bias.snapshot(), None)
+            if got is not None:
+                return got
+        out = dict(_NO_AIR_SNAPSHOT)
+        if self._air_off_reason is not None:
+            out["air_bias_state"] = "none"
+            out["air_bias_reason"] = self._air_off_reason
+        return out
 
     # -- internals ------------------------------------------------------------------------
 
@@ -601,7 +751,12 @@ class PlayoutEngine:
         self._pending_jump_reason = "steady"
 
     def _placement_offset_us(self) -> float:
-        """``o``: the raw residual a placement keeps (``EMA + β``), 0 before the first reading."""
+        """``o``: the raw residual a placement keeps, 0 before the first reading.
+
+        ``EMA + β`` without a bias value, ``b + β`` with one (spec "Residual domains").
+        """
+        if self._b_dom is not None:
+            return self._b_dom + self._baseline_us
         return 0.0 if self._error_ema_us is None else self._error_ema_us
 
     def _record_placement(self, reason: str, size_us: float, t_s: float, o: float) -> None:
@@ -611,16 +766,19 @@ class PlayoutEngine:
         # a stall the reading may still settle, so the baseline restarts at 0 and a fresh one is
         # measured (and measured again if another placement lands while it is being measured);
         # any other placement keeps the baseline and its degraded state.
-        if reason in _BASELINE_REASONS:
+        # With a bias value outside ``held`` the bias handles breaks (C1): no baseline, β stays 0.
+        handles = self._air_handles_breaks()
+        if reason in _BASELINE_REASONS and not handles:
             self._baseline_us = 0.0
             self._baseline_degraded = False
             self._baseline_reason = reason
-        collecting = reason in _BASELINE_REASONS or self._baseline_samples is not None
+        collecting = not handles and (reason in _BASELINE_REASONS or self._baseline_samples is not None)
         self._baseline_samples = [] if collecting else None
         self._baseline_medians = []
-        # An error right after it waits quietly.
-        self._controller.placed(t_s, o - self._baseline_us, quiet_wait=True)
-        self._record_event(size_us, reason, residual_us=o)
+        # An error right after it waits quietly: the residual o - β - b is 0 with a bias.
+        b0 = self._b_dom or 0.0
+        self._controller.placed(t_s, o - self._baseline_us - b0, quiet_wait=True)
+        self._record_event(size_us, reason, residual_us=o - b0)
 
     def _record_event(self, size_us: float, reason: str, residual_us: float = 0.0) -> None:
         """Count a placement or jump; the stats window restarts, the published error restarts at
