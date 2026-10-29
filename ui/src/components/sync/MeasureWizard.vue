@@ -19,7 +19,8 @@ import { ApiError } from '@/api/client'
 import type { SessionPoint, SyncMeasurement, SyncProposal, SyncSession } from '@/api/types'
 import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SOLO_SETTLE_MS, SyncCaptureError, SyncRecorder, type Capture } from '@/sync/capture'
-import { SbButton, SbSpinner } from '@/kit'
+import { SbButton } from '@/kit'
+import LongOperation from '@/components/LongOperation.vue'
 import { confirmAction } from '@/composables/useActionPolicy'
 import { formatMs } from '@/sync/format'
 import { speakerName } from '@/sync/names'
@@ -1166,9 +1167,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
       @cancel="cancel"
     />
     <template v-else-if="step === 'tune'">
-      <p v-if="proposing || applying" role="status" class="flex items-center gap-2 text-sm text-text-secondary">
-        <SbSpinner size="sm" />{{ proposing ? t('sync.wizard.computing') : t('sync.wizard.applying') }}
-      </p>
+      <LongOperation v-if="proposing || applying" :label="proposing ? t('sync.wizard.computing') : t('sync.wizard.applying')" />
       <div
         v-else-if="proposalError || applyError || forbidden"
         data-proposal-error

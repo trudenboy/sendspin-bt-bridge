@@ -9,6 +9,7 @@ import { confirmAction } from '@/composables/useActionPolicy'
 import SbDialog from '@/kit/SbDialog.vue'
 import SbButton from '@/kit/SbButton.vue'
 import SbBadge from '@/kit/SbBadge.vue'
+import LongOperation from '@/components/LongOperation.vue'
 import { ArrowUpCircle, ExternalLink, RefreshCw, Terminal, Copy } from 'lucide-vue-next'
 
 const CHANNELS = ['stable', 'rc', 'beta'] as const
@@ -77,6 +78,7 @@ function openHaAddon() {
 <template>
   <SbDialog v-model="update.showDialog" :title="t('update.title')" size="lg">
     <div class="space-y-5">
+      <LongOperation v-if="update.applying" :label="t('restart.updating')" />
       <!-- Channel selector -->
       <div class="flex items-center gap-3">
         <span class="text-sm text-text-secondary">{{ t('update.channel') }}</span>

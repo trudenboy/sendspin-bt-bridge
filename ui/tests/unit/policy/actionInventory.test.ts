@@ -62,3 +62,12 @@ describe('action policy inventory', () => {
     expect(offenders).toEqual([])
   })
 })
+
+describe('long operations', () => {
+  it('scan, pairing, update, restart and measurement all show progress through LongOperation', () => {
+    const users = files.filter(([, text]) => /<LongOperation\b/.test(text)).map(([path]) => path)
+    for (const expected of ['AddSpeakerDialog.vue', 'RestartBanner.vue', 'UpdateDialog.vue', 'MeasureWizard.vue']) {
+      expect(users.some((p) => p.endsWith(expected)), expected).toBe(true)
+    }
+  })
+})

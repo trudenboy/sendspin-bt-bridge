@@ -633,9 +633,12 @@
     "restarting": "Restarting bridge…",
     "ready": "Bridge restarted successfully",
     "error": "Restart failed",
-    "elapsed": "{seconds}s",
     "openLogs": "Open logs",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "updating": "Updating… the bridge restarts",
+    "updated": "Updated, the bridge is back",
+    "updateFailed": "Update failed",
+    "errorNext": "Open the logs to see why, then try again."
   },
   "bugreport": {
     "title": "File a Bug Report",
@@ -1407,7 +1410,9 @@
       "named": "Choose a name and a room for this output.",
       "looking": "Looking for audio outputs…",
       "taken": "Another player already uses this output."
-    }
+    },
+    "pairing": "Pairing {name}…",
+    "errorNext": "Check that the speaker is in pairing mode and close to the adapter, then try again."
   },
   "connection": {
     "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."
@@ -2640,5 +2645,11 @@
     "noReconnect": "The bridge stops managing: {names}. They do not reconnect until you reclaim them.",
     "wakeFromMenu": "Wake them from their menu.",
     "downloadFirst": "Download current config first"
+  },
+  "longOp": {
+    "elapsed": "{seconds}s",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling…",
+    "retry": "Try again"
   }
 }

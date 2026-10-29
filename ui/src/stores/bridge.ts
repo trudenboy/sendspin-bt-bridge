@@ -8,6 +8,8 @@ import { useSyncStore } from './sync'
 import type { Adapter, BridgeStatus, Device, Group, Job, SyncSession } from '@/api/types'
 
 export type RestartState = 'idle' | 'stopping' | 'restarting' | 'ready' | 'error'
+/** Why the bridge restarts: asked for, or because an update was installed. */
+export type RestartReason = 'restart' | 'update'
 
 export const useBridgeStore = defineStore('bridge', () => {
   const snapshot = ref<BridgeStatus | null>(null)
@@ -17,6 +19,7 @@ export const useBridgeStore = defineStore('bridge', () => {
 
   const restartState = ref<RestartState>('idle')
   const restartStartedAt = ref<number | null>(null)
+  const restartReason = ref<RestartReason>('restart')
 
   const devices = computed<Device[]>(() => snapshot.value?.devices ?? [])
   const groups = computed<Group[]>(() => snapshot.value?.groups ?? [])
@@ -60,7 +63,8 @@ export const useBridgeStore = defineStore('bridge', () => {
     void refreshAdapters()
   }
 
-  function initiateRestart() {
+  function initiateRestart(reason: RestartReason = 'restart') {
+    restartReason.value = reason
     restartState.value = 'stopping'
     restartStartedAt.value = Date.now()
   }
@@ -117,6 +121,7 @@ export const useBridgeStore = defineStore('bridge', () => {
     deviceById,
     restartState,
     restartStartedAt,
+    restartReason,
     initiateRestart,
     dismissRestart,
     restart,

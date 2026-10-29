@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Turning an adapter off or rebooting it, importing a configuration, restarting the bridge and updating the bridge now ask first and say what stops (the speakers on the adapter, playback, what is playing).
+- Actions now follow one rule: standby, wake, enable, mute all and power save run at once with Undo, while removing a speaker, forgetting a Bluetooth pairing, resetting an adapter, importing a configuration (with a link to download the current one first), restarting and updating ask first and list what happens. Bluetooth scan, pairing, update and restart show what is running, for how long, Cancel where possible, and a next step when they fail; an update says "Updating… the bridge restarts".
 - Error notifications stay until dismissed, the others pause while hovered or focused, and text fields use the same keyboard focus outline as buttons.
 - Speaker actions and states now have consistent names in English and Russian: Release / Reclaim, Power save, Standby / Wake, Enable / Disable, Speaker latency compensation, and Air-to-sound latency.
 - Messages from the bridge (guidance, recovery cards, the header status, action buttons, event timeline and blocked-control reasons) now follow the chosen language instead of always being English.
