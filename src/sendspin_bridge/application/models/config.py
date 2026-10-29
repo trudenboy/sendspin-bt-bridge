@@ -392,6 +392,10 @@ class BridgeConfig(BaseModel):
     """
     Poll live RSSI for connected BR/EDR speakers via the kernel mgmt socket (opcode 0x0031) every 5 s and surface it in the device card / scan results as a coloured signal-strength chip. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good, negative = weak), LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick, gated by the shared bt_operation_lock. Legacy key ``EXPERIMENTAL_RSSI_BADGE`` is migrated automatically.
     """
+    SHOW_TECHNICAL_DETAILS: bool | None = False
+    """
+    Web UI default for showing technical chips and rows (signal Δ dB, re-anchor counts, Playout, server ID, sync diagnostics, advanced settings). Each browser can override it from the preferences menu. Off for a new install, on for an install that already had speakers when this setting first appeared.
+    """
     HA_INTEGRATION: HAINTEGRATION | None = Field(
         {
             "enabled": False,

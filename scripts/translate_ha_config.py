@@ -284,6 +284,7 @@ def main() -> None:
             "EXPERIMENTAL_PA_MODULE_RELOAD",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
             "RSSI_BADGE",
+            "SHOW_TECHNICAL_DETAILS",
             "AUTH_ENABLED",
             "BRUTE_FORCE_PROTECTION",
             "MA_WEBSOCKET_MONITOR",

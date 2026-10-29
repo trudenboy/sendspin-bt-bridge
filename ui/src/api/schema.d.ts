@@ -3319,6 +3319,12 @@ export interface components {
              */
             SESSION_TIMEOUT_HOURS?: number | null;
             /**
+             * Show Technical Details
+             * @description Web UI default for showing technical chips and rows (signal Δ dB, re-anchor counts, Playout, server ID, sync diagnostics, advanced settings). Each browser can override it from the preferences menu. Off for a new install, on for an install that already had speakers when this setting first appeared.
+             * @default false
+             */
+            SHOW_TECHNICAL_DETAILS?: boolean | null;
+            /**
              * Smooth Restart
              * @description Enable smooth daemon restart (reconnect IPC instead of full restart).
              * @default true

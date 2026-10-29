@@ -2228,6 +2228,19 @@
             "description": "Authenticated session lifetime in hours.",
             "title": "Session Timeout Hours"
           },
+          "SHOW_TECHNICAL_DETAILS": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Web UI default for showing technical chips and rows (signal Δ dB, re-anchor counts, Playout, server ID, sync diagnostics, advanced settings). Each browser can override it from the preferences menu. Off for a new install, on for an install that already had speakers when this setting first appeared.",
+            "title": "Show Technical Details"
+          },
           "SMOOTH_RESTART": {
             "anyOf": [
               {

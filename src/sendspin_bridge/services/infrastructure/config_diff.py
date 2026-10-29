@@ -141,6 +141,8 @@ _IGNORED_FIELDS: frozenset[str] = frozenset(
         "MA_REFRESH_TOKEN",
         "BLUETOOTH_ADAPTERS",
         "UPDATE_CHANNEL",
+        # Web UI preference only.
+        "SHOW_TECHNICAL_DETAILS",
         "AUTO_UPDATE",
         "CHECK_UPDATES",
         "SMOOTH_RESTART",
