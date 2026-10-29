@@ -641,6 +641,13 @@ class PlayoutEngine:
     def _disable_air(self, reason: str) -> None:
         """Stop using the bias for this output; ``_air`` calls it from its ``except`` block."""
         self._air_off_reason = reason
+        if self._pending_air is not None:  # decided in the corrected domain: it must not run without the bias
+            self._pending_air = None
+            try:
+                if self._bias is not None:
+                    self._bias.drop_action()
+            except Exception:  # the bias is being given up anyway
+                pass
         self._bias = None
         self._history = None
         self._warn.warning(

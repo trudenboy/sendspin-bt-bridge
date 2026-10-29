@@ -224,6 +224,15 @@ def test_an_internal_error_disables_the_bias_without_moving_the_audio(caplog, mo
     assert not [m for m in messages(caplog) if "steady" in m]
 
 
+def test_disabling_the_bias_drops_a_pending_air_jump(caplog):
+    from sendspin_bridge.services.audio.playout.air_bias import AirAction
+
+    eng, _port, _raw = _failing_engine(caplog)
+    eng._pending_air = AirAction(jump_us=37_000.0, reason="air_seed")
+    eng._disable_air("internal_error")
+    assert eng._pending_air is None
+
+
 # -- B5b: air jumps, events -------------------------------------------------------------------
 
 TONE = b"\x10\x00" * 2
