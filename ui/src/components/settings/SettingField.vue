@@ -31,8 +31,16 @@ const base = computed(() => `${props.i18nBase}.${props.field.key}`)
 const label = computed(() => t(`${base.value}.label`))
 // ``<key>.addonHelp`` is added under the Home Assistant add-on, whose own
 // options overwrite some bridge settings on every restart (LOG_LEVEL, #476).
+/** A toggle whose precondition is unmet (and that is not already on, so it can still be turned off). */
+const blocked = computed(
+  () =>
+    props.field.kind === 'toggle' &&
+    !!props.field.enabledWhen &&
+    value.value !== true &&
+    !props.field.enabledWhen((configStore.config ?? {}) as Record<string, unknown>),
+)
 const help = computed(() => {
-  const text = t(`${base.value}.help`)
+  const text = blocked.value ? `${t(`${base.value}.help`)} ${t(`${base.value}.disabledReason`)}` : t(`${base.value}.help`)
   const addonKey = `${base.value}.addonHelp`
   return authStore.haAddon && te(addonKey) ? `${text} ${t(addonKey)}` : text
 })
@@ -110,6 +118,7 @@ const inputClass =
       v-if="field.kind === 'toggle'"
       :id="id"
       :model-value="value === true"
+      :disabled="blocked"
       :aria-describedby="helpId"
       @update:model-value="set"
     />

@@ -37,6 +37,12 @@ describe('AirCalibrations', () => {
     vi.clearAllMocks()
   })
 
+  it('uses the real border token, not the non-existent border-border-default', () => {
+    const cls = mountIt(session()).get('[data-air-calibrations]').classes()
+    expect(cls).toContain('border-border')
+    expect(cls).not.toContain('border-border-default')
+  })
+
   it('is not shown without candidates', () => {
     expect(mountIt(session({ air_calibrations: [] })).find('[data-air-calibrations]').exists()).toBe(false)
     expect(mountIt(session({ air_calibrations: undefined })).find('[data-air-calibrations]').exists()).toBe(false)

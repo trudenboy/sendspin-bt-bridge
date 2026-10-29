@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of leaving you on the sign-in page with an error, and opening
   the sign-in page while no sign-in is required goes to the home page
   instead of showing a blank screen.
+- Accessibility and legibility in the web UI: keyboard focus is now visible on every control, warning text and the secondary and tertiary grey text meet WCAG AA contrast in both themes, dialog, drawer and toast close buttons have a 40 px touch target, and the selection volume slider and the phone update badge have accessible names.
+- Diagnostics: the Recovery toolbar wraps on phones instead of widening the page, and the tabs and copy buttons follow the interface language. The air sensor setting stays off until playout sync is in measure or loop mode, and its "seconds ago" value keeps counting.
 
 ## [3.1.0-beta.18] - 2026-10-29
 

@@ -41,6 +41,12 @@ export interface FieldDef {
   /** Hidden until "Show advanced settings" is on. */
   advanced?: boolean
   visible?: (config: ConfigDoc) => boolean
+  /**
+   * Toggle stays shown but cannot be switched on until this holds; the reason
+   * is ``<key>.disabledReason`` in i18n. A value that is already on can still
+   * be turned off.
+   */
+  enabledWhen?: (config: ConfigDoc) => boolean
   /** Extra writes that keep related keys consistent with this one. */
   onChange?: (value: unknown, set: (key: string, value: unknown) => void) => void
 }
@@ -133,7 +139,12 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'PULSE_SINK_RESET_ON_START', kind: 'toggle', advanced: true },
       { key: 'COMPENSATE_OUTPUT_LATENCY', kind: 'toggle', advanced: true },
       { key: 'PLAYOUT_DIAG', kind: 'toggle', advanced: true },
-      { key: 'EXPERIMENTAL_AIR_SENSOR', kind: 'toggle', advanced: true },
+      {
+        key: 'EXPERIMENTAL_AIR_SENSOR',
+        kind: 'toggle',
+        advanced: true,
+        enabledWhen: (c) => ['measure', 'loop'].includes(String(getPath(c, 'PLAYOUT_SYNC') ?? 'off')),
+      },
       { key: 'PLAYOUT_SYNC', kind: 'select', options: ['off', 'measure', 'loop'], offered: ['off', 'measure'], advanced: true },
     ],
     after: ['latencyAssistant'],

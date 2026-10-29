@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
@@ -52,6 +52,18 @@ describe('DeviceTimingPanel air sensor block', () => {
     expect(text).toContain('87 %')
     expect(text).toContain('1.31')
     expect(text).toContain('3 s ago')
+  })
+
+  describe('seconds since the last lock', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('keeps counting while the panel stays open', async () => {
+      const w = mountPanel({ ...locked, last_confirmed_at: new Date(Date.now() - 3000).toISOString() })
+      expect(block(w).text()).toContain('3 s ago')
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(block(w).text()).toContain('33 s ago')
+    })
   })
 
   it('asks for calibration when the air error is not calibrated', () => {

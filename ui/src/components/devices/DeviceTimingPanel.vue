@@ -2,6 +2,7 @@
 import { confirmDialog } from '@/composables/useConfirm'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useNow } from '@/composables/useNow'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected } from '@/utils/deviceBackend'
@@ -176,6 +177,7 @@ const airReason = computed(() => {
   return te(key) ? t(key) : t('timing.air.reasons.unknown', { reason })
 })
 const airHasValues = computed(() => air.value != null && air.value.host_placement_ms != null)
+const now = useNow()
 const airRows = computed(() => {
   const a = air.value
   if (!a || !airHasValues.value) return []
@@ -185,7 +187,7 @@ const airRows = computed(() => {
   if (a.confidence != null) rows.push(['confidence', `${Math.round(a.confidence * 100)} %`])
   if (a.psr != null) rows.push(['psr', a.psr.toFixed(2)])
   if (a.last_confirmed_at) {
-    const ageS = Math.max(0, Math.round((Date.now() - Date.parse(a.last_confirmed_at)) / 1000))
+    const ageS = Math.max(0, Math.round((now.value - Date.parse(a.last_confirmed_at)) / 1000))
     if (Number.isFinite(ageS)) rows.push(['lock', t('timing.air.agoSeconds', { s: ageS })])
   }
   return rows

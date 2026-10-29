@@ -62,7 +62,7 @@ async function pickReference(event: Event) {
   <section
     v-if="candidates.length"
     data-air-calibrations
-    class="flex flex-col gap-3 rounded-(--radius-card) border border-border-default px-4 py-3"
+    class="flex flex-col gap-3 rounded-(--radius-card) border border-border px-4 py-3"
   >
     <h3 class="text-sm font-medium text-text-primary">{{ t('sync.air.title') }}</h3>
     <p class="text-xs text-text-secondary">{{ t('sync.air.help') }}</p>

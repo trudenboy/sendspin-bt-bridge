@@ -914,7 +914,8 @@
       },
       "EXPERIMENTAL_AIR_SENSOR": {
         "label": "Air sensor (SBC speakers)",
-        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure or loop mode, a Bluetooth SBC speaker and CAP_NET_RAW. Measures in measure mode; corrects placement in loop mode."
+        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure or loop mode, a Bluetooth SBC speaker and CAP_NET_RAW. Measures in measure mode; corrects placement in loop mode.",
+        "disabledReason": "Turn on playout sync (measure or loop mode) first."
       },
       "HA_INTEGRATION": {
         "mode": {
