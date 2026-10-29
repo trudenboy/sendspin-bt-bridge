@@ -19,16 +19,16 @@ same thing, the one in the "Use" columns wins.
 
 | Concept | Use (EN) | Use (RU) | Short definition | Do not use |
 |---|---|---|---|---|
-| Bridge stops managing a speaker's Bluetooth so another device can use it | Hand over / Handed over | Передать / Передана | Reversible; the speaker does not reconnect until taken back. | Release, Released, Let go, Give up, Отпустить, Отпущена |
-| Undo of the above | Take back | Забрать обратно | The bridge manages the speaker's Bluetooth again. | Reclaim, Claim, Забрать звук |
-| Automatic hand over after reconnect loops | Handed over automatically | Передана автоматически | The bridge handed the speaker over by itself after repeated connection problems. | Auto-released, Отпущена автоматически |
+| Bridge stops managing a speaker's Bluetooth so another device can use it | Release / Released | Освободить / Освобождена (menu: Освободить колонку) | Reversible; the speaker does not reconnect until reclaimed. | Hand over, Handed over, Let go, Give up, Передать, Передана, Отпустить, Отпущена |
+| Undo of the above | Reclaim | Вернуть (menu: Вернуть колонку) | The bridge manages the speaker's Bluetooth again. | Take back, Claim, Забрать обратно, Забрать звук |
+| Automatic release after reconnect loops | Released automatically | Освобождена автоматически | The bridge released the speaker by itself after repeated connection problems. | Auto-released, Handed over automatically, Передана автоматически, Отпущена автоматически |
 | Make this bridge the active Sendspin source | Use this bridge as the source | Использовать этот мост как источник | Takes playback from another source for this player. | Claim audio, Make this bridge the active source, Забрать звук |
-| Disconnect Bluetooth to save speaker battery | Standby | Ожидание (В ожидание) | Bluetooth disconnects; the player stays configured. | Sleep, Idle disconnect (as an action) |
+| Disconnect Bluetooth to save speaker battery | Standby | Режим ожидания (В режим ожидания) | Bluetooth disconnects; the player stays configured. | Sleep, Idle disconnect (as an action), Ожидание (alone) |
 | Undo of standby | Wake | Разбудить | Reconnects a speaker on standby. | Wake from standby, Resume (that is for output), Вывести из ожидания |
 | Turn a speaker or player off in the configuration | Disable / Enable | Выключить / Включить | A disabled speaker keeps its settings but gets no player. | Turn off, Deactivate, Отключить (that means Disconnect) |
 | Bluetooth link ends | Disconnect | Отключить | Only the Bluetooth connection ends. | Disable (different thing) |
-| Free the audio output while idle, Bluetooth stays connected | Pause output / Resume output | Поставить вывод на паузу / Возобновить вывод (labels: Пауза вывода) | The power-save behaviour. | Suspend, Release audio, Free the audio connection, Приостановить, Отпускать звук |
-| Switch a player between rooms | Room switch | Смена комнаты | Chip showing the player is ready to move to another room. | Transfer, Handoff, Передача (collides with Передать) |
+| Free the audio output while idle, Bluetooth stays connected | Power save (on / off) | Энергосбережение (вкл / выкл) | The power-save behaviour: the audio output is freed after a while without sound. | Pause output, Resume output, Suspend, Release audio, Пауза вывода, Поставить вывод на паузу, Приостановить, Отпускать звук |
+| Switch a player between rooms | Room switch | Смена комнаты | Chip showing the player is ready to move to another room. | Transfer, Handoff, Передача |
 
 ## Timing and sync
 

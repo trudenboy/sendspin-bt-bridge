@@ -255,7 +255,7 @@ describe('blockedHints', () => {
     expect(blockedHints(makeDevice())).toEqual([])
   })
 
-  it('says nothing the state badge already says: handed over, standby, offline, output missing', () => {
+  it('says nothing the state badge already says: released, standby, offline, output missing', () => {
     const actions = { reconnect: cap('Bluetooth is released.'), play_pause: cap('No Sendspin link.'), volume: cap('No sink.') }
     expect(blockedHints(makeDevice({ bluetooth: { management_enabled: false }, capabilities: { actions } }))).toEqual([])
     expect(blockedHints(makeDevice({ bluetooth: { standby: true }, capabilities: { actions } }))).toEqual([])

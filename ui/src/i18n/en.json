@@ -46,14 +46,14 @@
       "recovering": "Reconnecting…",
       "transitioning": "Connecting…",
       "disabled": "Disabled",
-      "released": "Handed over",
+      "released": "Released",
       "output_missing": "Output missing",
       "buffering": "Buffering",
       "sink_muted": "Muted by system",
       "stopping": "Stopping",
       "reconnecting": "Reconnecting",
-      "autoReleased": "Handed over automatically",
-      "autoReleasedTitle": "The bridge handed this speaker over after repeated connection problems. Take it back to retry.",
+      "autoReleased": "Released automatically",
+      "autoReleasedTitle": "The bridge released this speaker after repeated connection problems. Reclaim it to retry.",
       "standbyFor": "{state} · {elapsed}",
       "standbySince": "On standby since {time}"
     },
@@ -69,8 +69,8 @@
       "enableFailed": "Could not enable or disable the player",
       "volumeFailed": "Could not change the volume of {name}",
       "muteFailed": "Could not mute or unmute {name}",
-      "releaseFailed": "Could not hand over {name}",
-      "claimFailed": "Could not take back {name}",
+      "releaseFailed": "Could not release {name}",
+      "claimFailed": "Could not reclaim {name}",
       "forget": "Forget Bluetooth bond",
       "forgetConfirm": "Forget the Bluetooth bond? The speaker must be paired again.",
       "repair": "Pair again",
@@ -131,8 +131,8 @@
           "connected": "Bluetooth connected",
           "disconnected": "Bluetooth disconnected",
           "reconnecting": "Bluetooth reconnecting",
-          "released": "Bluetooth handed over",
-          "autoReleased": "Bluetooth handed over automatically after connection issues",
+          "released": "Bluetooth released",
+          "autoReleased": "Bluetooth released automatically after connection issues",
           "disabled": "Speaker disabled"
         }
       },
@@ -147,7 +147,7 @@
         "reasons": {
           "ready": "ready",
           "disabled": "speaker disabled",
-          "bt_management_disabled": "Bluetooth handed over",
+          "bt_management_disabled": "Bluetooth released",
           "stopping": "stopping",
           "reconnecting": "reconnecting",
           "music_assistant_reconnecting": "Music Assistant reconnecting",
@@ -167,7 +167,7 @@
         "title": {
           "sink_muted": "Muted by the system",
           "reconnect": "Reconnect unavailable",
-          "toggle_bt_management": "Hand-over unavailable",
+          "toggle_bt_management": "Release unavailable",
           "play_pause": "Playback unavailable",
           "volume": "Volume unavailable",
           "queue_control": "Queue controls unavailable"
@@ -367,8 +367,8 @@
     },
     "bulk": {
       "power_save": {
-        "label": "Pause output",
-        "title": "Pause the audio output of {count} of {total} selected (Bluetooth stays connected)"
+        "label": "Power save",
+        "title": "Turn on power save for {count} of {total} selected (Bluetooth stays connected)"
       },
       "standby": {
         "label": "Standby",
@@ -377,10 +377,10 @@
         "confirmMessage": "Bluetooth disconnects and playback stops on: {names}. Wake them from their menu."
       },
       "release": {
-        "label": "Hand over",
-        "title": "Hand {count} of {total} selected over to other devices",
-        "confirmTitle": "Hand over {count} speaker(s)?",
-        "confirmMessage": "The bridge stops managing: {names}. They will not reconnect until you take them back."
+        "label": "Release",
+        "title": "Release {count} of {total} selected so other devices can use them",
+        "confirmTitle": "Release {count} speaker(s)?",
+        "confirmMessage": "The bridge stops managing: {names}. They will not reconnect until you reclaim them."
       },
       "failed": "{action} failed for: {names}",
       "enable": {
@@ -459,10 +459,10 @@
       "pairingDone": "Music Assistant can pair for a while",
       "unmute": "Unmute the audio output",
       "unmuteDone": "Audio output unmuted",
-      "release": "Pause output",
-      "releaseDone": "Output paused",
-      "resume": "Resume output",
-      "resumeDone": "Output resumed"
+      "release": "Turn on power save",
+      "releaseDone": "Power save is on",
+      "resume": "Turn off power save",
+      "resumeDone": "Power save is off"
     },
     "server": {
       "title": "Music Assistant server",
@@ -499,9 +499,9 @@
     "audioCount": "{audio} audio · {total} total",
     "addToFleet": "Add to fleet",
     "info": "Device Info",
-    "release": "Hand over to other devices",
-    "reclaim": "Take back",
-    "released": "Handed over",
+    "release": "Release speaker",
+    "reclaim": "Reclaim speaker",
+    "released": "Released",
     "deviceInfo": "Bluetooth Device Info",
     "noDevices": "No paired devices found"
   },
@@ -584,7 +584,7 @@
   },
   "undo": {
     "label": "Undo",
-    "handedOver": "{name} handed over. It will not reconnect until you take it back.",
+    "handedOver": "{name} released. It will not reconnect until you reclaim it.",
     "disabled": "{name} disabled."
   },
   "restart": {
@@ -805,7 +805,7 @@
       },
       "BT_CHURN_THRESHOLD": {
         "label": "Reconnect loop limit",
-        "help": "Connect/disconnect cycles within the window that make the bridge hand a speaker over. 0 turns this off."
+        "help": "Connect/disconnect cycles within the window that make the bridge release a speaker. 0 turns this off."
       },
       "BT_CHURN_WINDOW": {
         "label": "Reconnect loop window",
@@ -1094,14 +1094,14 @@
         "help": "What the bridge does while nothing plays.",
         "options": {
           "default": "Stay connected",
-          "power_save": "Pause output (power save)",
+          "power_save": "Power save",
           "auto_disconnect": "Disconnect",
           "keep_alive": "Keep the speaker awake"
         }
       },
       "power_save_delay_minutes": {
-        "label": "Pause output after",
-        "help": "Pause the speaker's audio output after this long without sound."
+        "label": "Power save after",
+        "help": "Turn on power save after this long without sound."
       },
       "idle_disconnect_minutes": {
         "label": "Disconnect after",
@@ -1393,8 +1393,8 @@
     "standby": "Put on standby",
     "wake": "Wake",
     "claim": "Use this bridge as the source",
-    "handOver": "Hand over to other devices",
-    "takeBack": "Take back",
+    "handOver": "Release speaker",
+    "takeBack": "Reclaim speaker",
     "disable": "Disable",
     "enable": "Enable",
     "bluetoothInfo": "Bluetooth details",

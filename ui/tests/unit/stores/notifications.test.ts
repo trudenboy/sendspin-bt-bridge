@@ -57,7 +57,7 @@ describe('useNotificationStore', () => {
     setActivePinia(createPinia())
     const store = useNotificationStore()
     const run = vi.fn()
-    store.undo('Handed over', 'Undo', run)
+    store.undo('Released', 'Undo', run)
     const t = store.toasts[0]!
     expect(t.type).toBe('success')
     expect(t.action?.label).toBe('Undo')

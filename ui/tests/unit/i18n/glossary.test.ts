@@ -24,15 +24,18 @@ const allowed = (key: string) => ALLOWLIST.some((p) => (p.endsWith('.') ? key.st
 
 const RETIRED: Record<'en' | 'ru', Array<[RegExp, string]>> = {
   en: [
-    [/\brelease(d|s)?\b|\bauto-released\b/i, 'Release -> Hand over / Take back'],
+    [/\bhand(ed)?[- ]over\b|\btake back\b/i, 'Hand over / Take back -> Release / Reclaim'],
+    [/\bpause output\b|\bresume output\b/i, 'Pause output -> Power save'],
     [/\bclaim(s|ed)?\b/i, 'Claim audio -> Use this bridge as the source'],
     [/\btransfer\b/i, 'Transfer -> Hand-off'],
     [/\bre-?anchor/i, 'Re-anchor -> Resync'],
-    [/\bsuspend(ed)?\b/i, 'Suspend -> Pause output'],
+    [/\bsuspend(ed)?\b/i, 'Suspend -> Power save (the action) / Pause (the output)'],
     [/\bspeaker delay\b|\bstatic delay\b/i, 'Speaker delay -> Speaker latency compensation'],
   ],
   ru: [
-    [/отпуск|отпущ/i, 'Отпустить -> Передать / Забрать'],
+    [/отпуск|отпущ/i, 'Отпустить -> Освободить / Вернуть'],
+    [/передат?ь|передан|забрать обратно/i, 'Передать / Забрать обратно -> Освободить / Вернуть'],
+    [/пауза вывода|вывод на паузу|возобновить вывод/i, 'Пауза вывода -> Энергосбережение'],
     [/забрать звук/i, 'Забрать звук -> Использовать этот мост'],
     [/передач[аиу]\b/i, 'Передача (chip) -> Передача между комнатами'],
     [/подстро[йе]к|подстройк/i, 'Подстройка -> Пересинхронизация'],
@@ -43,7 +46,7 @@ const RETIRED: Record<'en' | 'ru', Array<[RegExp, string]>> = {
 
 const SYNONYM_PAIRS: Array<{ en: [RegExp, RegExp]; why: string }> = [
   { en: [/\bhand(ed)? over\b/i, /\breleas/i], why: 'Hand over vs Release' },
-  { en: [/\bpause output\b/i, /\bsuspend/i], why: 'Pause output vs Suspend' },
+  { en: [/\bpower save\b/i, /\bsuspend/i], why: 'Power save vs Suspend' },
 ]
 
 describe('ux glossary', () => {
@@ -64,11 +67,21 @@ describe('ux glossary', () => {
     expect(hits).toEqual([])
   })
 
-  it('the hand-over action has the same name on every surface', () => {
-    expect((en as any).devices.bulk.release.label).toBe('Hand over')
-    expect((en as any).speaker.handOver).toMatch(/^Hand over/)
-    expect((en as any).bluetooth.release).toMatch(/^Hand over/)
-    expect((ru as any).devices.bulk.release.label).toBe('Передать')
+  it('the release action has the same name on every surface', () => {
+    expect((en as any).devices.bulk.release.label).toBe('Release')
+    expect((en as any).speaker.handOver).toMatch(/^Release/)
+    expect((en as any).bluetooth.release).toMatch(/^Release/)
+    expect((ru as any).devices.bulk.release.label).toBe('Освободить')
+    expect((ru as any).speaker.handOver).toMatch(/^Освободить/)
+    expect((en as any).speaker.takeBack).toMatch(/^Reclaim/)
+    expect((ru as any).speaker.takeBack).toMatch(/^Вернуть/)
+  })
+
+  it('power save has the same name on every surface', () => {
+    expect((en as any).devices.bulk.power_save.label).toBe('Power save')
+    expect((ru as any).devices.bulk.power_save.label).toBe('Энергосбережение')
+    expect((en as any).settings.device.idle_mode.options.power_save).toBe('Power save')
+    expect((ru as any).settings.device.idle_mode.options.power_save).toBe('Энергосбережение')
   })
 
   it('both languages stay in step (same keys)', () => {

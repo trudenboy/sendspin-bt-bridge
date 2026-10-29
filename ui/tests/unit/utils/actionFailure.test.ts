@@ -11,8 +11,8 @@ describe('actionFailure', () => {
   it('names the action and the speaker', () => {
     expect(actionFailure(i18n('en'), 'volume', 'Kitchen', new Error('x'))).toBe('Could not change the volume of Kitchen')
     expect(actionFailure(i18n('en'), 'mute', 'Kitchen', null)).toBe('Could not mute or unmute Kitchen')
-    expect(actionFailure(i18n('en'), 'release', 'Kitchen', null)).toBe('Could not hand over Kitchen')
-    expect(actionFailure(i18n('en'), 'claim', 'Kitchen', null)).toBe('Could not take back Kitchen')
+    expect(actionFailure(i18n('en'), 'release', 'Kitchen', null)).toBe('Could not release Kitchen')
+    expect(actionFailure(i18n('en'), 'claim', 'Kitchen', null)).toBe('Could not reclaim Kitchen')
   })
 
   it('appends the server reason of an ApiError', () => {

@@ -47,15 +47,15 @@ describe('speaker actions', () => {
       'Reconnect',
       'Put on standby',
       'Use this bridge as the source',
-      'Hand over to other devices',
+      'Release speaker',
       'Disable',
       'Bluetooth details',
       'Remove speaker…',
     ])
   })
 
-  it('offers no connection actions for a speaker handed over to other devices', async () => {
+  it('offers no connection actions for a speaker released', async () => {
     const items = await menuItems(makeDevice({ bluetooth: { management_enabled: false } }))
-    expect(items).toEqual(['Take back', 'Disable', 'Bluetooth details', 'Remove speaker…'])
+    expect(items).toEqual(['Reclaim speaker', 'Disable', 'Bluetooth details', 'Remove speaker…'])
   })
 })

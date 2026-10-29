@@ -104,13 +104,13 @@ describe('DeviceStatusBadge: standby time and release kind', () => {
     expect(w.text().trim()).toBe('Standby')
   })
 
-  it('says Handed over automatically (warning) when the bridge let go by itself, Handed over (neutral) otherwise', () => {
+  it('says Released automatically (warning) when the bridge released it by itself, Released (neutral) otherwise', () => {
     const auto = mountWith('released', makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } }))
-    expect(auto.text()).toContain('Handed over automatically')
+    expect(auto.text()).toContain('Released automatically')
     expect(auto.find('.tone-warning').exists()).toBe(true)
     const user = mountWith('released', makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } }))
-    expect(user.text()).toContain('Handed over')
-    expect(user.text()).not.toContain('Handed over automatically')
+    expect(user.text()).toContain('Released')
+    expect(user.text()).not.toContain('Released automatically')
     expect(user.find('.tone-neutral').exists()).toBe(true)
   })
 })

@@ -108,7 +108,7 @@ describe('DeviceCard', () => {
 
     it('shows no Bluetooth details and no handed-over label', () => {
       const w = mountCard(output())
-      expect(w.text()).not.toContain('Handed over')
+      expect(w.text()).not.toContain('Released')
       expect(w.text()).not.toMatch(/dBm|Strong|Fair|Weak/)
     })
   })
@@ -158,12 +158,12 @@ describe('DeviceCard', () => {
 
   it('releases and reclaims through the device store', async () => {
     let items = await openMenu(mountCard())
-    await items.find((b) => b.text() === 'Hand over to other devices')!.trigger('click')
+    await items.find((b) => b.text() === 'Release speaker')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
     expect(notes.undo).toHaveBeenCalledTimes(1)
 
     items = await openMenu(mountCard(makeDevice({ bluetooth: { management_enabled: false } })))
-    await items.find((b) => b.text() === 'Take back')!.trigger('click')
+    await items.find((b) => b.text() === 'Reclaim speaker')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', false)
   })
 
@@ -203,9 +203,9 @@ describe('DeviceCard', () => {
 
   it('tells an automatic release from a hand-over', () => {
     const auto = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()
-    expect(auto).toContain('Handed over automatically')
+    expect(auto).toContain('Released automatically')
     const user = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } })).text()
-    expect(user).toContain('Handed over')
-    expect(user).not.toContain('Handed over automatically')
+    expect(user).toContain('Released')
+    expect(user).not.toContain('Released automatically')
   })
 })

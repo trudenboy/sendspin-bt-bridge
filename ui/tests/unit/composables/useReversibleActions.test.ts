@@ -52,6 +52,6 @@ describe('useReversibleActions', () => {
     await api.handOver('d1', 'Kitchen')
     expect(notes.toasts).toHaveLength(1)
     expect(notes.toasts[0]!.type).toBe('error')
-    expect(notes.toasts[0]!.message).toBe('Could not hand over Kitchen: busy')
+    expect(notes.toasts[0]!.message).toBe('Could not release Kitchen: busy')
   })
 })
