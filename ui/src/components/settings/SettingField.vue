@@ -17,9 +17,13 @@ const props = withDefaults(
     write?: (key: string, value: unknown) => void
     /** Choices for ``optionsFrom`` selects. */
     dynamicOptions?: readonly { value: string; label: string }[]
+    /** Auto-saved fields (the speaker panel): the last save of this field. */
+    saveState?: { kind: 'saved' | 'error'; message?: string; undoable?: boolean }
   }>(),
-  { i18nBase: 'settings.fields', read: undefined, write: undefined, dynamicOptions: undefined },
+  { i18nBase: 'settings.fields', read: undefined, write: undefined, dynamicOptions: undefined, saveState: undefined },
 )
+
+const emit = defineEmits<{ undo: [] }>()
 
 const { t, te } = useI18n()
 const configStore = useConfigStore()
@@ -177,5 +181,14 @@ const inputClass =
     />
 
     <p v-if="error" class="mt-1 text-xs text-error" role="alert">{{ error }}</p>
+    <p v-if="saveState?.kind === 'saved'" data-save-state="saved" role="status" class="mt-1 flex items-center justify-end gap-2 text-xs text-success">
+      {{ t('settings.autosave.saved') }}
+      <button v-if="saveState.undoable" type="button" data-save-undo class="cursor-pointer font-medium underline underline-offset-2" @click="emit('undo')">
+        {{ t('undo.label') }}
+      </button>
+    </p>
+    <p v-else-if="saveState?.kind === 'error'" data-save-state="error" role="alert" class="mt-1 text-xs text-error">
+      {{ t('settings.autosave.failed', { reason: saveState.message ?? '' }) }}
+    </p>
   </SettingsRow>
 </template>

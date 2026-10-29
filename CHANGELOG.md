@@ -20,9 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Speaker actions and states now have consistent names in English and Russian: Release / Reclaim, Power save, Standby / Wake, Enable / Disable, Speaker latency compensation, and Air-to-sound latency.
 - Messages from the bridge (guidance, recovery cards, the header status, action buttons, event timeline and blocked-control reasons) now follow the chosen language instead of always being English.
 - Connection status now uses three separate names everywhere (header, cards, speaker details, Diagnostics): Audio link, Music Assistant account and Bluetooth connection, instead of one "Connected"; the Diagnostics verdict and the header status come from the same list of issues, so Healthy no longer appears above warnings.
+- The speaker panel now has four tabs that fit a phone: Overview (state, the one main action, the audio path and the latest events), Settings, Timing (one value, a link to tune with the group, technical details folded) and History. Settings save as you change them with Saved and Undo (a refused change goes back and shows the reason), recovery tools sit under Troubleshoot (Pair again now asks first), and adapter power and reboot moved to Settings, Bluetooth.
 
 ### Fixed
 
+- An update that never finishes now says so after 3 minutes ("The update did not finish") and points to the logs, instead of showing "Updating…" forever.
 - Signing in with a correct password now takes you to the home page
   instead of leaving you on the sign-in page with an error, and opening
   the sign-in page while no sign-in is required goes to the home page

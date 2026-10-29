@@ -250,7 +250,6 @@
   "config": {
     "ma": "Music Assistant",
     "save": "Save",
-    "saved": "Configuration saved",
     "adapterPowered": "Powered",
     "adapterOff": "Off",
     "noAdapters": "No adapters detected",
@@ -295,7 +294,6 @@
     "copied": "Copied!",
     "copyFailed": "Copy failed",
     "downloadCsv": "Download CSV",
-    "audioRouting": "Audio Routing",
     "audioSink": "Audio Sink",
     "codec": "Codec",
     "sampleRate": "Sample Rate",
@@ -450,11 +448,10 @@
   },
   "drawer": {
     "tabs": {
-      "status": "Status",
+      "overview": "Overview",
       "config": "Settings",
-      "events": "Events",
-      "signal": "Signal Path",
-      "timing": "Timing"
+      "timing": "Timing",
+      "history": "History"
     },
     "status": {
       "playerState": "State",
@@ -472,7 +469,6 @@
       "delay": "Speaker latency compensation",
       "enabled": "Enabled",
       "save": "Save",
-      "saved": "Device configuration saved",
       "saveFailed": "Failed to save configuration",
       "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
       "playoutSync": "Playout sync",
@@ -511,6 +507,14 @@
       "foreign": "The audio link goes to Music Assistant on {where}, not to this bridge’s Music Assistant. Another server took this player first; reconnect the player so this bridge’s Music Assistant can take it.",
       "refusedTitle": "Turned away",
       "refusedCount": "{n} attempts"
+    },
+    "troubleshoot": {
+      "label": "Troubleshoot"
+    },
+    "overview": {
+      "audioPath": "Audio path",
+      "events": "Latest events",
+      "allEvents": "All events →"
     }
   },
   "volume": {
@@ -592,7 +596,6 @@
     "queue": "Queue controls"
   },
   "adapter": {
-    "management": "Adapter Management",
     "turnOff": "Turn off",
     "turnOn": "Turn on",
     "confirmOffTitle": "Turn off adapter {adapter}?",
@@ -1186,7 +1189,11 @@
     "nothingFound": "Nothing matches “{q}”.",
     "changed": "Changed",
     "loadFailed": "Settings could not be loaded.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "autosave": {
+      "saved": "Saved",
+      "failed": "Not saved: {reason}"
+    }
   },
   "timing": {
     "suggestion": "Suggested latency compensation: {value} ms",
@@ -1303,7 +1310,8 @@
         "forgetTitle": "Forget this learned latency?",
         "forgetConfirm": "{name} starts learning its latency for {codec} {rate} kHz on {adapter} again. A calibration for it is forgotten too."
       }
-    }
+    },
+    "details": "Technical details"
   },
   "system": {
     "bridge": "Bridge",
@@ -1444,7 +1452,8 @@
     "remove": "Remove speaker",
     "removeTitle": "Remove {name}?",
     "removeMessage": "Its player disappears from Music Assistant and its Bluetooth pairing is removed. To use it again, add it as a new speaker.",
-    "settings": "Settings"
+    "settings": "Settings",
+    "repairTitle": "Pair {name} again?"
   },
   "sync": {
     "open": "Sync",
@@ -1879,7 +1888,8 @@
       "certificate": "Your phone will warn about the certificate once — accept it to record directly in the browser.",
       "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):",
       "keepsDelay": "Not measured, these keep their current delay: {names}"
-    }
+    },
+    "tuneLink": "Tune with your group →"
   },
   "server": {
     "action": {
@@ -2646,7 +2656,8 @@
     "needsRepair": "The speaker must be paired again.",
     "noReconnect": "The bridge stops managing: {names}. They do not reconnect until you reclaim them.",
     "wakeFromMenu": "Wake them from their menu.",
-    "downloadFirst": "Download current config first"
+    "downloadFirst": "Download current config first",
+    "repairs": "The Bluetooth pairing is removed and created again; the speaker may need to be in pairing mode."
   },
   "longOp": {
     "elapsed": "{seconds}s",

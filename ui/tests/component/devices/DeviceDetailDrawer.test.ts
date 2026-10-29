@@ -85,10 +85,10 @@ describe('DeviceDetailDrawer', () => {
     const w = await mountDrawer()
     expect(w.find('[role="tablist"]').exists()).toBe(true)
     const tabs = w.findAll('[role="tab"]')
-    expect(tabs.map((t) => t.text())).toEqual(['Status', 'Settings', 'Timing', 'Events', 'Signal Path'])
+    expect(tabs.map((t) => t.text())).toEqual(['Overview', 'Settings', 'Timing', 'History'])
   })
 
-  it('shows status tab content by default', async () => {
+  it('shows the overview with the audio path by default', async () => {
     setActivePinia(createPinia())
     const w = await mountDrawer()
     expect(w.text()).toContain('bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink')
@@ -117,7 +117,7 @@ describe('DeviceDetailDrawer', () => {
     const all = mockDevice.supported_actions
     const open = async () => {
       const w = await mountDrawer()
-      const more = w.findAll('button').find((b) => b.attributes('title') === 'More actions')!
+      const more = w.findAll('button').find((b) => b.text() === 'Troubleshoot')!
       await more.trigger('click')
       return w.findAll('[role="menuitem"]').map((i) => i.text())
     }
@@ -160,8 +160,8 @@ describe('DeviceDetailDrawer', () => {
   })
 })
 
-describe('DeviceDetailDrawer config save', () => {
-  it('saves the whole configuration with only this speaker changed', async () => {
+describe('DeviceDetailDrawer config auto-save', () => {
+  it('auto-saves the whole configuration with only this speaker changed', async () => {
     setActivePinia(createPinia())
     const api = await import('@/api/config')
     const stored = {
@@ -186,8 +186,7 @@ describe('DeviceDetailDrawer config save', () => {
     const name = w.findAll('input[type="text"]').find((i) => (i.element as HTMLInputElement).value === 'Test Speaker')!
     await name.setValue('Kitchen')
     await name.trigger('change')
-    await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 800)) // auto-save follows the change
 
     expect(getConfig).toHaveBeenCalled()
     const saved = saveConfig.mock.calls[0]![0] as typeof stored
@@ -214,8 +213,7 @@ describe('DeviceDetailDrawer config save', () => {
     await new Promise((r) => setTimeout(r, 0))
     const adapter = w.findAll('select').find((sel) => sel.findAll('option').some((o) => o.text().startsWith('hci0')))!
     await adapter.setValue('')
-    await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 800)) // auto-save follows the change
     const saved = saveConfig.mock.calls.at(-1)![0] as typeof stored
     expect(Object.keys(saved.players[0]!)).not.toContain('backend.adapter')
     expect(saved.players[0]!.backend).toEqual({ type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF' })

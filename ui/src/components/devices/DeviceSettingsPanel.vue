@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAudioStore } from '@/stores/audio'
 import { useBridgeStore } from '@/stores/bridge'
@@ -39,10 +39,8 @@ type Entry = Record<string, unknown>
 
 const config = ref<Record<string, unknown> | null>(null)
 const entry = ref<Entry | null>(null)
-const original = ref('')
 const loading = ref(false)
 const loadError = ref<string | null>(null)
-const saving = ref(false)
 const showAdvanced = ref(false)
 try {
   showAdvanced.value = localStorage.getItem('sendspin-ui:settings-advanced') === '1'
@@ -52,7 +50,6 @@ try {
 
 // The speaker's entry in the configuration; its runtime id may differ.
 const configId = computed(() => props.device.config_id ?? props.device.id)
-const dirty = computed(() => entry.value !== null && JSON.stringify(entry.value) !== original.value)
 const adapterChoices = computed(() => bridge.adapters.map((a) => ({ value: a.id, label: a.name ? `${a.id} — ${a.name}` : a.id })))
 // Outputs another player already plays to are not offered; the saved one always is.
 const sinkChoices = computed(() => {
@@ -82,7 +79,6 @@ async function load() {
     config.value = doc
     // Deep copy: the backend is nested and edited in place.
     entry.value = found ? (JSON.parse(JSON.stringify(found)) as Entry) : null
-    original.value = JSON.stringify(entry.value)
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : String(e)
   } finally {
@@ -99,32 +95,92 @@ watch(
 )
 
 const read = (key: string) => getPath(entry.value, key)
+
+/*
+ * Auto-save (like Home Assistant's entity settings): a change is applied at
+ * once, saved after a short pause, and answered with "Saved" and Undo next to
+ * the field. A failed save puts the old value back and shows the server's
+ * reason. What is pending is saved when the panel closes.
+ */
+const SAVE_DELAY_MS = 600
+const SAVED_SHOWN_MS = 8000
+type FieldSave = { kind: 'saved' | 'error'; message?: string; undoable?: boolean }
+const fieldSave = reactive<Record<string, FieldSave>>({})
+const pending = new Map<string, unknown>() // key -> the value before this change
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+let queue: Promise<void> = Promise.resolve()
+const clearTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
 function write(key: string, value: unknown) {
   if (!entry.value) return
+  if (!pending.has(key)) pending.set(key, getPath(entry.value, key))
   setPath(entry.value, key, value === null || value === '' ? undefined : value)
+  delete fieldSave[key]
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(flush, SAVE_DELAY_MS)
 }
 
-function visible(f: DeviceField) {
-  return (showAdvanced.value || !f.advanced) && deviceFieldVisible(f, entry.value ?? {})
+function flush() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  if (!pending.size) return
+  const batch = new Map(pending)
+  pending.clear()
+  queue = queue.then(() => persist(batch, true))
+  return queue
 }
 
-/** Writes this speaker's entry back into the full document and saves it. */
-async function save() {
+async function persist(batch: Map<string, unknown>, undoable: boolean) {
   if (!config.value || !entry.value) return
-  saving.value = true
   try {
     // ``_effective_*`` is read-only display data; it is kept for display and dropped here.
     const mine = Object.fromEntries(Object.entries(entry.value).filter(([k]) => !k.startsWith('_')))
     const players = ((config.value.players as Entry[] | undefined) ?? []).map((p) => (p.id === configId.value ? mine : p))
-    const result = await saveConfig({ ...config.value, players } as never)
+    const doc = { ...config.value, players }
+    const result = await saveConfig(doc as never)
+    config.value = doc
     const restart = ((result?.reconfig ?? {}) as { restart_required?: unknown[] }).restart_required?.length
-    notifications.success(t(restart ? 'settings.restartNeeded' : 'drawer.config.saved'))
-    await load()
+    if (restart) notifications.warning(t('settings.restartNeeded'))
+    for (const key of batch.keys()) showSaved(key, undoable ? batch.get(key) : undefined, undoable)
   } catch (e) {
-    notifications.error(e instanceof ApiError ? e.message : t('drawer.config.saveFailed'))
-  } finally {
-    saving.value = false
+    const reason = e instanceof ApiError ? e.message : t('drawer.config.saveFailed')
+    if (!alive) notifications.error(reason) // the panel is gone: nobody sees the field
+    // The server refused: the field goes back to what is saved.
+    for (const [key, before] of batch) {
+      if (entry.value) setPath(entry.value, key, before)
+      fieldSave[key] = { kind: 'error', message: reason }
+    }
   }
+}
+
+function showSaved(key: string, before: unknown, undoable: boolean) {
+  fieldSave[key] = { kind: 'saved', undoable }
+  if (undoable) undoValues.set(key, before)
+  const old = clearTimers.get(key)
+  if (old) clearTimeout(old)
+  clearTimers.set(key, setTimeout(() => delete fieldSave[key], SAVED_SHOWN_MS))
+}
+
+const undoValues = new Map<string, unknown>()
+function undo(key: string) {
+  if (!entry.value || !undoValues.has(key)) return
+  const before = undoValues.get(key)
+  const current = getPath(entry.value, key)
+  undoValues.delete(key)
+  setPath(entry.value, key, before)
+  delete fieldSave[key]
+  queue = queue.then(() => persist(new Map([[key, current]]), false))
+}
+
+let alive = true
+onBeforeUnmount(() => {
+  alive = false
+  clearTimers.forEach(clearTimeout)
+  void flush()
+})
+
+function visible(f: DeviceField) {
+  return (showAdvanced.value || !f.advanced) && deviceFieldVisible(f, entry.value ?? {})
 }
 
 const removing = ref(false)
@@ -213,6 +269,8 @@ async function toggleEnabled(enabled: boolean) {
               :read="read"
               :write="write"
               :dynamic-options="choicesFor(f)"
+              :save-state="fieldSave[f.key]"
+              @undo="undo(f.key)"
             />
           </template>
         </div>
@@ -228,11 +286,6 @@ async function toggleEnabled(enabled: boolean) {
         <p class="mt-0.5 text-[13px] text-text-secondary">{{ t('speaker.removeMessage') }}</p>
         <SbButton class="mt-3" variant="danger" size="sm" :loading="removing" @click="removeSpeaker">{{ t('speaker.remove') }}…</SbButton>
       </section>
-
-      <div class="sticky bottom-0 -mx-1 mt-4 flex justify-end gap-2 bg-surface-card px-1 py-3">
-        <SbButton variant="ghost" size="sm" :disabled="!dirty" @click="load">{{ t('settings.discard') }}</SbButton>
-        <SbButton size="sm" :disabled="!dirty" :loading="saving" @click="save">{{ t('settings.save') }}</SbButton>
-      </div>
     </template>
   </div>
 </template>

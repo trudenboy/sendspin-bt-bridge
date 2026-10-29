@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
-import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
+import AdaptersSection from '@/components/settings/AdaptersSection.vue'
 import en from '@/i18n/en.json'
 import { makeDevice } from '../../fixtures/device'
 
@@ -17,31 +17,19 @@ vi.mock('@/stores/bridge', () => ({
   useBridgeStore: () => ({
     devices: [mine, sibling, other],
     adapters: adapters.list,
-    maConnected: false,
-    deviceById: (id: string) => [mine, sibling, other].find((d) => d.id === id),
     refreshAdapters: vi.fn(),
   }),
 }))
 vi.mock('@/composables/useConfirm', () => confirm)
 vi.mock('@/api/bluetooth', () => bt)
-vi.mock('@/api/config', () => ({ getConfig: vi.fn().mockResolvedValue({ players: [] }), saveConfig: vi.fn() }))
-vi.mock('@/api/calibration', () => ({
-  getLatencyHistory: vi.fn().mockResolvedValue({ samples: [] }),
-  setMetronome: vi.fn(), createSession: vi.fn(), uploadRecording: vi.fn(), endSession: vi.fn(),
-}))
 
-async function settings() {
-  const w = mount(DeviceDetailDrawer, {
-    props: { deviceId: 'dev-1', open: true },
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })], stubs: { Teleport: true } },
+function section() {
+  return mount(AdaptersSection, {
+    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
   })
-  await flushPromises()
-  await w.findAll('[role="tab"]').find((t) => t.text() === en.drawer.tabs.config)!.trigger('click')
-  await flushPromises()
-  return w
 }
 
-describe('DeviceDetailDrawer adapter management', () => {
+describe('Settings, Bluetooth: adapter power and reboot', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -50,7 +38,7 @@ describe('DeviceDetailDrawer adapter management', () => {
 
   it('asks before powering the adapter off and names the speakers on it', async () => {
     confirm.confirmDialog.mockResolvedValue(false)
-    const w = await settings()
+    const w = section()
     await w.get('[data-adapter-power]').trigger('click')
     await flushPromises()
     const o = confirm.confirmDialog.mock.calls[0]![0]
@@ -63,7 +51,7 @@ describe('DeviceDetailDrawer adapter management', () => {
 
   it('powers the adapter off once confirmed', async () => {
     confirm.confirmDialog.mockResolvedValue(true)
-    const w = await settings()
+    const w = section()
     await w.get('[data-adapter-power]').trigger('click')
     await flushPromises()
     expect(bt.setAdapterPower).toHaveBeenCalledWith('hci0', false)
@@ -71,7 +59,7 @@ describe('DeviceDetailDrawer adapter management', () => {
 
   it('asks before a reboot and does nothing when declined', async () => {
     confirm.confirmDialog.mockResolvedValue(false)
-    const w = await settings()
+    const w = section()
     await w.get('[data-adapter-reboot]').trigger('click')
     await flushPromises()
     expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('Bedroom')
@@ -79,10 +67,9 @@ describe('DeviceDetailDrawer adapter management', () => {
   })
 
   it('shows the action the button will take, and turning on needs no confirmation', async () => {
-    const w = await settings()
-    expect(w.get('[data-adapter-power]').text()).toBe(en.adapter.turnOff)
+    expect(section().get('[data-adapter-power]').text()).toBe(en.adapter.turnOff)
     adapters.list[0]!.powered = false
-    const w2 = await settings()
+    const w2 = section()
     expect(w2.get('[data-adapter-power]').text()).toBe(en.adapter.turnOn)
     await w2.get('[data-adapter-power]').trigger('click')
     await flushPromises()

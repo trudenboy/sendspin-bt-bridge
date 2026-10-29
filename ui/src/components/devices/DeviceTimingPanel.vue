@@ -297,9 +297,9 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
 
 <template>
   <div class="py-2">
-    <div class="divide-y divide-border">
+    <div data-timing-main class="divide-y divide-border">
       <template v-for="f in fields" :key="f.key">
-        <SettingField v-if="showAdvanced || !f.advanced" :field="f" i18n-base="settings.device" :read="read" :write="write" />
+        <SettingField v-if="!f.advanced" :field="f" i18n-base="settings.device" :read="read" :write="write" />
       </template>
       <SettingsRow
         v-if="canSuggest"
@@ -312,38 +312,47 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
           @click="apply('static_delay_ms', suggestion!.suggested_static_delay_ms!, suggestion!.source, suggestion!.revision ?? undefined)"
         >{{ t('timing.applySuggestion') }}</SbButton>
       </SettingsRow>
-      <SettingsRow :label="t('timing.clicks.label')" :help="t('timing.clicks.help')">
-        <SbButton variant="outline" size="sm" :loading="metronomeBusy" :disabled="!device.audio.has_sink" @click="toggleMetronome">
-          {{ device.timing.calibration_metronome_active ? t('timing.clicks.stop') : t('timing.clicks.start') }}
-        </SbButton>
-      </SettingsRow>
-      <SettingsRow
-        :label="t('timing.mic.label')"
-        :help="micStep || (canMeasure ? t('timing.mic.help') : microphoneAvailable() ? t('timing.mic.needPeer') : t('timing.mic.needHttps'))"
-      >
-        <div class="flex items-center gap-2">
-          <select
-            v-if="peers.length > 1"
-            v-model="referenceId"
-            :aria-label="t('timing.mic.reference')"
-            class="h-8 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary"
-          >
-            <option v-for="p in peers" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-          <SbButton variant="outline" size="sm" :disabled="!canMeasure" :loading="!!micStep" @click="measure">
-            {{ t('timing.mic.start') }}
-          </SbButton>
-        </div>
-      </SettingsRow>
       <SettingsRow v-if="device.music_assistant.syncgroup_id" :label="t('sync.tuneGroup')" :help="t('sync.tuneGroupHelp')">
         <RouterLink
           :to="{ name: 'sync', params: { groupId: device.music_assistant.syncgroup_id } }"
           class="inline-flex h-8 items-center rounded-(--radius-button) border border-border-strong px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-secondary"
         >
-          {{ t('sync.open') }}
+          {{ t('sync.tuneLink') }}
         </RouterLink>
       </SettingsRow>
     </div>
+
+    <details data-timing-details class="mt-4 rounded-(--radius-card) border border-border">
+      <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-text-primary">{{ t('timing.details') }}</summary>
+      <div class="px-3 pb-3">
+        <div class="divide-y divide-border">
+          <template v-for="f in fields" :key="f.key">
+            <SettingField v-if="f.advanced && showAdvanced" :field="f" i18n-base="settings.device" :read="read" :write="write" />
+          </template>
+          <SettingsRow :label="t('timing.clicks.label')" :help="t('timing.clicks.help')">
+            <SbButton variant="outline" size="sm" :loading="metronomeBusy" :disabled="!device.audio.has_sink" @click="toggleMetronome">
+              {{ device.timing.calibration_metronome_active ? t('timing.clicks.stop') : t('timing.clicks.start') }}
+            </SbButton>
+          </SettingsRow>
+          <SettingsRow
+            :label="t('timing.mic.label')"
+            :help="micStep || (canMeasure ? t('timing.mic.help') : microphoneAvailable() ? t('timing.mic.needPeer') : t('timing.mic.needHttps'))"
+          >
+            <div class="flex items-center gap-2">
+              <select
+                v-if="peers.length > 1"
+                v-model="referenceId"
+                :aria-label="t('timing.mic.reference')"
+                class="h-8 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary"
+              >
+                <option v-for="p in peers" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <SbButton variant="outline" size="sm" :disabled="!canMeasure" :loading="!!micStep" @click="measure">
+                {{ t('timing.mic.start') }}
+              </SbButton>
+            </div>
+          </SettingsRow>
+        </div>
 
     <dl v-if="latencyRows.length" class="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm" data-testid="timing-latency">
       <template v-for="[key, value] in latencyRows" :key="key">
@@ -436,5 +445,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
       <input v-model="showAdvanced" type="checkbox" class="accent-primary" />
       {{ t('settings.showAdvanced') }}
     </label>
+      </div>
+    </details>
   </div>
 </template>

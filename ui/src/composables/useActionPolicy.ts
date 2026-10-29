@@ -23,6 +23,7 @@ export const ACTION_POLICY = {
   'devices.muteAll': 'undo',
   'devices.powerSave': 'undo',
   'speaker.remove': 'confirm',
+  'speaker.repair': 'confirm',
   'devices.removeDisabled': 'confirm',
   'devices.standbyMany': 'confirm',
   'devices.releaseMany': 'confirm',

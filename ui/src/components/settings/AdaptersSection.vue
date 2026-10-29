@@ -4,12 +4,19 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
 import { useBridgeStore } from '@/stores/bridge'
-import { SbBadge } from '@/kit'
+import { SbBadge, SbButton } from '@/kit'
+import { ref } from 'vue'
+import { Power, RotateCw } from 'lucide-vue-next'
+import { setAdapterPower } from '@/api/bluetooth'
+import { confirmAction } from '@/composables/useActionPolicy'
+import { useNotificationStore } from '@/stores/notifications'
+import { speakerName } from '@/utils/speakerName'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
 const bridge = useBridgeStore()
 const route = useRoute()
+const notifications = useNotificationStore()
 
 /** A device card links here with ``?adapter=hci1``; that adapter is highlighted. */
 const linked = computed(() => {
@@ -44,6 +51,54 @@ function setEntry(hci: string, mac: string | null | undefined, patch: AdapterEnt
   if (idx >= 0) list[idx] = entry
   else list.push(entry)
   configStore.updateField('BLUETOOTH_ADAPTERS', list)
+}
+
+/* Power and reboot (moved here from the speaker's panel): they affect every speaker on the adapter. */
+const busy = ref('')
+
+async function powerCycle(hci: string, states: boolean[]) {
+  busy.value = hci
+  const reboot = states.length > 1
+  try {
+    for (const on of states) await setAdapterPower(hci, on)
+    await bridge.refreshAdapters()
+    notifications.success(t(reboot ? 'adapter.rebooted' : 'adapter.powerToggled'))
+  } catch {
+    notifications.error(t(reboot ? 'adapter.rebootFailed' : 'adapter.powerFailed'))
+  } finally {
+    busy.value = ''
+  }
+}
+
+/** Every speaker on this adapter loses its link when it is powered off or rebooted. */
+function consequences(hci: string) {
+  const names = bridge.devices
+    .filter((d) => d.bluetooth?.adapter.hci === hci)
+    .map((d) => speakerName(d.name))
+    .join(', ')
+  return names ? [t('consequence.adapterDisconnects', { names })] : [t('adapter.confirmNone')]
+}
+
+async function onPower(a: { id: string; name?: string | null; powered?: boolean | null }) {
+  const on = !!a.powered
+  if (on) {
+    const ok = await confirmAction('adapter.powerOff', {
+      title: t('adapter.confirmOffTitle', { adapter: a.name || a.id }),
+      consequences: consequences(a.id),
+      confirmLabel: t('adapter.turnOff'),
+    })
+    if (!ok) return
+  }
+  void powerCycle(a.id, [!on])
+}
+
+async function onReboot(a: { id: string; name?: string | null }) {
+  const ok = await confirmAction('adapter.reboot', {
+    title: t('adapter.confirmRebootTitle', { adapter: a.name || a.id }),
+    consequences: consequences(a.id),
+    confirmLabel: t('adapter.reboot'),
+  })
+  if (ok) void powerCycle(a.id, [false, true])
 }
 
 const inputClass =
@@ -89,6 +144,16 @@ const inputClass =
           :value="(entryFor(a.id, a.mac)?.device_class as string) ?? ''"
           @change="setEntry(a.id, a.mac, { device_class: ($event.target as HTMLInputElement).value.trim() })"
         />
+        <div class="flex flex-wrap items-center gap-2 sm:col-span-3">
+          <SbButton variant="outline" size="sm" :loading="busy === a.id" data-adapter-power @click="onPower(a)">
+            <template #icon-left><Power class="h-3.5 w-3.5" /></template>
+            {{ a.powered ? t('adapter.turnOff') : t('adapter.turnOn') }}
+          </SbButton>
+          <SbButton variant="outline" size="sm" :loading="busy === a.id" data-adapter-reboot @click="onReboot(a)">
+            <template #icon-left><RotateCw class="h-3.5 w-3.5" /></template>
+            {{ t('adapter.reboot') }}
+          </SbButton>
+        </div>
       </li>
     </ul>
   </div>

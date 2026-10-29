@@ -11,6 +11,8 @@ interface Tab {
 
 const props = defineProps<{
   tabs: Tab[]
+  /** Tabs share the bar's width and never scroll sideways (a few short labels, phone-safe). */
+  fit?: boolean
 }>()
 
 defineEmits<{
@@ -76,7 +78,8 @@ function onKeydown(event: KeyboardEvent) {
     <div
       ref="tabListRef"
       role="tablist"
-      class="flex overflow-x-auto border-b border-border"
+      class="flex border-b border-border"
+      :class="fit ? '' : 'overflow-x-auto'"
       @keydown="onKeydown"
     >
       <button
@@ -90,8 +93,9 @@ function onKeydown(event: KeyboardEvent) {
         :aria-controls="`panel-${uid}-${tab.id}`"
         :tabindex="currentTab === tab.id ? 0 : -1"
         :disabled="tab.disabled"
-        class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm transition-colors"
+        class="inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-sm transition-colors"
         :class="[
+          fit ? 'min-w-0 flex-1 justify-center px-1 sm:px-3' : 'shrink-0 px-4',
           currentTab === tab.id
             ? 'border-primary font-medium text-primary-text'
             : 'border-transparent text-text-secondary hover:bg-surface-secondary/50',

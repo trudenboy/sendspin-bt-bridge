@@ -13,7 +13,6 @@ import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbDropdo
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import StatusState from '@/components/StatusState.vue'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
-import { setAdapterPower } from '@/api/bluetooth'
 import { openPairingWindow, reconnectDevice, repairDevice, setPowerSave, unmuteSink } from '@/api/devices'
 import { ApiError } from '@/api/client'
 import DeviceSettingsPanel from './DeviceSettingsPanel.vue'
@@ -21,7 +20,7 @@ import DeviceTimingPanel from './DeviceTimingPanel.vue'
 import type { Device } from '@/api/types'
 import { canDo } from '@/utils/supportedActions'
 import { releaseKind } from '@/utils/deviceStatusText'
-import { Power, RotateCw, Info, MoreHorizontal } from 'lucide-vue-next'
+import { ChevronDown } from 'lucide-vue-next'
 
 const props = defineProps<{
   deviceId: string | null
@@ -37,8 +36,7 @@ const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
 
-const activeTab = ref('status')
-const adapterLoading = ref(false)
+const activeTab = ref('overview')
 const managementLoading = ref(false)
 const btInfoOpen = ref(false)
 const reversible = useReversibleActions()
@@ -46,7 +44,6 @@ const reversible = useReversibleActions()
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
 const pulse = computed(() => (device.value ? isPulseSink(device.value) : false))
 const released = computed(() => device.value?.bluetooth?.management_enabled === false)
-const adapterId = computed(() => device.value?.bluetooth?.adapter.hci || '')
 /* A disabled player has no Device: its details are its settings. */
 const disabledPlayer = computed(() =>
   !device.value && props.deviceId ? deviceStore.disabledPlayers.find((p) => p.id === props.deviceId) : undefined,
@@ -68,11 +65,10 @@ watch(() => device.value ?? disabledPlayer.value, (now, before) => {
 })
 
 const tabs = computed(() => [
-  { id: 'status', label: t('drawer.tabs.status') },
+  { id: 'overview', label: t('drawer.tabs.overview') },
   { id: 'settings', label: t('drawer.tabs.config') },
   { id: 'timing', label: t('drawer.tabs.timing') },
-  { id: 'events', label: t('drawer.tabs.events'), badge: events.value.length || undefined },
-  { id: 'signal', label: t('drawer.tabs.signal') },
+  { id: 'history', label: t('drawer.tabs.history') },
 ])
 
 /* Which Music Assistant the player is on, in full; the card's chip is the short form. */
@@ -130,6 +126,8 @@ const timelineEvents = computed(() =>
   }),
 )
 
+const recentEvents = computed(() => timelineEvents.value.slice(0, 3))
+
 function onDrawerUpdate(...args: unknown[]) {
   emit('update:open', Boolean(args[0]))
 }
@@ -139,6 +137,15 @@ const actionBusy = ref(false)
 async function runAction(kind: 'reconnect' | 'repair' | 'pairing' | 'unmute' | 'release' | 'resume') {
   const d = device.value
   if (!d) return
+  if (kind === 'repair') {
+    const name = speakerName(d.name)
+    const ok = await confirmAction('speaker.repair', {
+      title: t('speaker.repairTitle', { name }),
+      consequences: [t('consequence.disconnects', { names: name }), t('consequence.repairs')],
+      confirmLabel: t('drawer.actions.repair'),
+    })
+    if (!ok) return
+  }
   actionBusy.value = true
   try {
     if (kind === 'reconnect') await reconnectDevice(d.id)
@@ -175,54 +182,20 @@ function onBtInfo() {
   btInfoOpen.value = true
 }
 
-async function powerCycle(states: boolean[]) {
-  if (!adapterId.value) return
-  adapterLoading.value = true
-  const reboot = states.length > 1
-  try {
-    for (const on of states) await setAdapterPower(adapterId.value, on)
-    await bridge.refreshAdapters()
-    notifications.success(t(reboot ? 'adapter.rebooted' : 'adapter.powerToggled'))
-  } catch {
-    notifications.error(t(reboot ? 'adapter.rebootFailed' : 'adapter.powerFailed'))
-  } finally {
-    adapterLoading.value = false
-  }
-}
+/** The one thing to do about this speaker right now (the rest is under Troubleshoot). */
+const primary = computed(() => {
+  const d = device.value
+  if (!d || pulse.value) return null
+  if (released.value) return { kind: 'reclaim' as const, label: t('bluetooth.reclaim'), recovery: true }
+  if (!isDeviceConnected(d) && canDo(d, 'reconnect')) return { kind: 'reconnect' as const, label: t('drawer.actions.reconnect'), recovery: true }
+  return { kind: 'release' as const, label: t('bluetooth.release'), recovery: false }
+})
 
-const adapter = computed(() => bridge.adapters.find((a) => a.id === adapterId.value))
-const adapterPowered = computed(() => adapter.value?.powered ?? true)
-/** Every speaker on this adapter loses its link when it is powered off or rebooted. */
-const adapterSpeakers = computed(() =>
-  bridge.devices
-    .filter((d) => d.bluetooth?.adapter.hci === adapterId.value)
-    .map((d) => speakerName(d.name))
-    .join(', '),
-)
-
-function adapterConsequences() {
-  return adapterSpeakers.value ? [t('consequence.adapterDisconnects', { names: adapterSpeakers.value })] : [t('adapter.confirmNone')]
-}
-
-async function onAdapterPower() {
-  if (adapterPowered.value) {
-    const ok = await confirmAction('adapter.powerOff', {
-      title: t('adapter.confirmOffTitle', { adapter: adapter.value?.name || adapterId.value }),
-      consequences: adapterConsequences(),
-      confirmLabel: t('adapter.turnOff'),
-    })
-    if (!ok) return
-  }
-  void powerCycle([!adapterPowered.value])
-}
-
-async function onAdapterReboot() {
-  const ok = await confirmAction('adapter.reboot', {
-    title: t('adapter.confirmRebootTitle', { adapter: adapter.value?.name || adapterId.value }),
-    consequences: adapterConsequences(),
-    confirmLabel: t('adapter.reboot'),
-  })
-  if (ok) void powerCycle([false, true])
+function onPrimary() {
+  const k = primary.value?.kind
+  if (k === 'reclaim') void onRelease(false)
+  else if (k === 'reconnect') void runAction('reconnect')
+  else if (k === 'release') void onRelease(true)
 }
 
 </script>
@@ -236,31 +209,18 @@ async function onAdapterReboot() {
     @update:model-value="onDrawerUpdate"
   >
     <template v-if="device">
-      <SbTabs v-model="activeTab" :tabs="tabs">
-        <!-- Status tab -->
-        <template #status>
-          <div class="space-y-4 py-4">
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.status.playerState') }}</span>
-                <div class="mt-1">
-                  <DeviceStatusBadge :state="deviceState(device)" :device="device" />
-                </div>
-              </div>
-              <div v-if="!pulse">
-                <span class="text-text-secondary">{{ t('drawer.config.adapter') }}</span>
-                <div class="mt-1">
-                  <SbBadge tone="neutral" size="sm">
-                    {{ adapterId || '—' }}
-                  </SbBadge>
-                </div>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.status.audioSink') }}</span>
-                <p class="mt-1 font-mono text-xs text-text-primary">
-                  {{ device.audio.sink_name ?? '—' }}
-                </p>
-              </div>
+      <SbTabs v-model="activeTab" :tabs="tabs" fit>
+        <!-- Overview: state, the one thing to do, the audio path, the latest events -->
+        <template #overview>
+          <div data-overview class="space-y-5 py-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <DeviceStatusBadge :state="deviceState(device)" :device="device" />
+              <SbBadge v-if="!pulse && released" tone="warning" size="sm">
+                {{ releaseKind(device) === 'auto' ? t('device.status.autoReleased') : t('bluetooth.released') }}
+              </SbBadge>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div v-if="device.links.bluetooth">
                 <span class="text-text-secondary">{{ t('status.kind.bluetooth') }}</span>
                 <div class="mt-1"><StatusState kind="bluetooth" :status="device.links.bluetooth" /></div>
@@ -273,21 +233,40 @@ async function onAdapterReboot() {
                 <span class="text-text-secondary">{{ t('status.kind.ma_account') }}</span>
                 <div class="mt-1"><StatusState kind="ma_account" :status="bridge.maAccount" /></div>
               </div>
-              <div v-if="!pulse">
-                <span class="text-text-secondary">{{ t('drawer.status.codec') }}</span>
-                <p class="mt-1 text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</p>
-              </div>
-              <div v-if="!pulse && device.bluetooth?.reported_delay_ms != null" data-reported-delay>
-                <span class="text-text-secondary">{{ t('drawer.status.reportedDelay') }}</span>
-                <p class="mt-1 text-text-primary" :title="t('drawer.status.reportedDelayHint')">
-                  {{ device.bluetooth.reported_delay_ms.toFixed(1) }} ms
-                </p>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.status.sampleRate') }}</span>
-                <p class="mt-1 text-text-primary">{{ device.audio.format ?? '—' }}</p>
-              </div>
             </div>
+
+            <div v-if="device.last_error" class="rounded-lg bg-error/10 p-3 text-sm text-error">
+              {{ device.last_error }}
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <SbButton
+                v-if="primary"
+                :variant="primary.recovery ? 'primary' : 'outline'"
+                size="sm"
+                data-primary-action
+                :loading="managementLoading || actionBusy"
+                @click="onPrimary"
+              >
+                {{ primary.label }}
+              </SbButton>
+              <SbDropdown align="left">
+                <template #trigger>
+                  <SbButton variant="outline" size="sm" :loading="actionBusy" data-troubleshoot>
+                    {{ t('drawer.troubleshoot.label') }}
+                    <template #icon-right><ChevronDown class="h-3.5 w-3.5" /></template>
+                  </SbButton>
+                </template>
+                <SbDropdownItem v-if="canDo(device, 'reconnect')" @click="runAction('reconnect')">{{ t('drawer.actions.reconnect') }}</SbDropdownItem>
+                <SbDropdownItem v-if="canDo(device, 'repair')" @click="runAction('repair')">{{ t('drawer.actions.repair') }}</SbDropdownItem>
+                <SbDropdownItem v-if="canDo(device, 'pairing_window')" @click="runAction('pairing')">{{ t('drawer.actions.pairing') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('unmute')">{{ t('drawer.actions.unmute') }}</SbDropdownItem>
+                <SbDropdownItem v-if="!pulse" @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
+                <SbDropdownItem v-if="!pulse" @click="onBtInfo">{{ t('bluetooth.info') }}</SbDropdownItem>
+              </SbDropdown>
+            </div>
+
             <div v-if="serverInfo" data-server-details class="space-y-2 text-sm">
               <span class="text-text-secondary">{{ t('drawer.server.title') }}</span>
               <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
@@ -309,134 +288,72 @@ async function onAdapterReboot() {
                 </li>
               </ul>
             </div>
-            <div v-if="device.last_error" class="rounded-lg bg-error/10 p-3 text-sm text-error">
-              {{ device.last_error }}
-            </div>
 
-            <!-- Release/Reclaim + BT Info actions -->
-            <div class="flex items-center gap-2 border-t border-border pt-3">
-              <SbButton
-                v-if="!pulse && !released"
-                variant="outline"
-                size="sm"
-                :loading="managementLoading"
-                @click="onRelease(true)"
-              >
-                {{ t('bluetooth.release') }}
-              </SbButton>
-              <SbButton
-                v-else-if="!pulse"
-                variant="outline"
-                size="sm"
-                :loading="managementLoading"
-                @click="onRelease(false)"
-              >
-                {{ t('bluetooth.reclaim') }}
-              </SbButton>
-              <SbButton v-if="!pulse" variant="outline" size="sm" @click="onBtInfo">
-                <template #icon-left>
-                  <Info class="h-3.5 w-3.5" />
-                </template>
-                {{ t('bluetooth.info') }}
-              </SbButton>
-              <SbDropdown align="right" class="ml-auto">
-                <template #trigger>
-                  <SbButton variant="ghost" size="sm" icon :loading="actionBusy" :title="t('drawer.actions.more')">
-                    <MoreHorizontal />
-                  </SbButton>
-                </template>
-                <SbDropdownItem v-if="canDo(device, 'reconnect')" @click="runAction('reconnect')">{{ t('drawer.actions.reconnect') }}</SbDropdownItem>
-                <SbDropdownItem v-if="canDo(device, 'repair')" @click="runAction('repair')">{{ t('drawer.actions.repair') }}</SbDropdownItem>
-                <SbDropdownItem v-if="canDo(device, 'pairing_window')" @click="runAction('pairing')">{{ t('drawer.actions.pairing') }}</SbDropdownItem>
-                <SbDropdownItem @click="runAction('unmute')">{{ t('drawer.actions.unmute') }}</SbDropdownItem>
-                <SbDropdownItem v-if="!pulse" @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
-                <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
-              </SbDropdown>
-              <SbBadge v-if="!pulse && released" tone="warning" size="sm">
-                {{ releaseKind(device) === 'auto' ? t('device.status.autoReleased') : t('bluetooth.released') }}
-              </SbBadge>
-            </div>
-          </div>
-        </template>
-
-        <!-- Settings tab -->
-        <template #settings>
-          <div class="text-sm">
-            <DeviceSettingsPanel :device="device" />
-
-            <!-- Adapter management -->
-            <div v-if="adapterId" class="border-t border-border pt-3">
-              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                {{ t('adapter.management') }}
-              </h4>
-              <div class="flex items-center gap-2">
-                <SbButton
-                  variant="outline"
-                  size="sm"
-                  :loading="adapterLoading"
-                  data-adapter-power
-                  @click="onAdapterPower"
-                >
-                  <template #icon-left>
-                    <Power class="h-3.5 w-3.5" />
-                  </template>
-                  {{ adapterPowered ? t('adapter.turnOff') : t('adapter.turnOn') }}
-                </SbButton>
-                <SbButton
-                  variant="outline"
-                  size="sm"
-                  :loading="adapterLoading"
-                  data-adapter-reboot
-                  @click="onAdapterReboot"
-                >
-                  <template #icon-left>
-                    <RotateCw class="h-3.5 w-3.5" />
-                  </template>
-                  {{ t('adapter.reboot') }}
-                </SbButton>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <!-- Timing tab -->
-        <template #timing>
-          <DeviceTimingPanel :device="device" />
-        </template>
-
-        <!-- Events tab -->
-        <template #events>
-          <div class="py-4">
-            <div v-if="timelineEvents.length === 0" class="py-8 text-center text-text-secondary">
-              {{ t('drawer.events.empty') }}
-            </div>
-            <SbTimeline v-else :events="timelineEvents" :max-items="10" />
-          </div>
-        </template>
-
-        <!-- Signal Path tab -->
-        <template #signal>
-          <div class="space-y-4 py-4">
-            <SbSignalPath :segments="signalSegments" direction="vertical" />
-
-            <!-- Audio routing details -->
-            <div class="border-t border-border pt-4">
+            <!-- The audio path, from Music Assistant to the speaker -->
+            <section data-audio-path class="border-t border-border pt-4">
               <h4 class="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                {{ t('diagnostics.audioRouting') }}
+                {{ t('drawer.overview.audioPath') }}
               </h4>
-              <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <SbSignalPath :segments="signalSegments" direction="vertical" />
+              <dl class="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
                 <dt class="text-text-secondary">{{ t('diagnostics.audioSink') }}</dt>
-                <dd class="font-mono text-xs text-text-primary">{{ device.audio.sink_name ?? '—' }}</dd>
+                <dd class="min-w-0 break-all font-mono text-xs text-text-primary">{{ device.audio.sink_name ?? '—' }}</dd>
                 <template v-if="!pulse">
                   <dt class="text-text-secondary">{{ t('diagnostics.codec') }}</dt>
                   <dd class="text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</dd>
+                  <div v-if="device.bluetooth?.reported_delay_ms != null" data-reported-delay class="contents">
+                    <dt class="text-text-secondary">{{ t('drawer.status.reportedDelay') }}</dt>
+                    <dd class="text-text-primary" :title="t('drawer.status.reportedDelayHint')">{{ device.bluetooth.reported_delay_ms.toFixed(1) }} ms</dd>
+                  </div>
                 </template>
                 <dt class="text-text-secondary">{{ t('diagnostics.sampleRate') }}</dt>
                 <dd class="text-text-primary">{{ device.audio.format ?? '—' }}</dd>
                 <dt class="text-text-secondary">{{ t('diagnostics.reanchorCount') }}</dt>
                 <dd class="text-text-primary">{{ device.timing.reanchor_count > 0 ? t('drawer.signal.corrections', { n: device.timing.reanchor_count }, device.timing.reanchor_count) : '—' }}</dd>
               </dl>
+            </section>
+
+            <section class="border-t border-border pt-4">
+              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                {{ t('drawer.overview.events') }}
+              </h4>
+              <p v-if="recentEvents.length === 0" class="text-sm text-text-secondary">{{ t('drawer.events.empty') }}</p>
+              <ul v-else class="space-y-1.5 text-sm">
+                <li v-for="e in recentEvents" :key="e.id" data-overview-event class="flex flex-col gap-0.5">
+                  <span class="text-text-primary">{{ e.description ?? e.title }}</span>
+                  <span class="text-xs text-text-secondary">{{ e.timestamp }}</span>
+                </li>
+              </ul>
+              <button
+                v-if="timelineEvents.length > recentEvents.length"
+                type="button"
+                data-all-events
+                class="mt-2 cursor-pointer text-sm font-medium text-primary-text underline underline-offset-2"
+                @click="activeTab = 'history'"
+              >
+                {{ t('drawer.overview.allEvents') }}
+              </button>
+            </section>
+          </div>
+        </template>
+
+        <!-- Settings: saved as you change them; adapter tools live in Settings, Bluetooth -->
+        <template #settings>
+          <div class="text-sm">
+            <DeviceSettingsPanel :device="device" />
+          </div>
+        </template>
+
+        <template #timing>
+          <DeviceTimingPanel :device="device" />
+        </template>
+
+        <template #history>
+          <div class="py-4">
+            <div v-if="timelineEvents.length === 0" class="py-8 text-center text-text-secondary">
+              {{ t('drawer.events.empty') }}
             </div>
+            <SbTimeline v-else :events="timelineEvents" :max-items="20" />
           </div>
         </template>
       </SbTabs>
