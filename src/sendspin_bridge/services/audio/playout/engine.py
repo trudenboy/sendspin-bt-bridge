@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, TypeVar
 
-from sendspin_bridge.services.audio.playout.air_bias import AirBias, AirFeed, EHistory
+from sendspin_bridge.services.audio.playout.air_bias import AirAction, AirBias, AirFeed, EHistory
 from sendspin_bridge.services.audio.playout.controller import JUMP_US, LoopController
 from sendspin_bridge.services.audio.playout.scheduler import PlayoutScheduler
 from sendspin_bridge.services.audio.playout.stats import PlayoutStats, RateLimitedLog
@@ -99,7 +99,6 @@ BASELINE_TIMEOUT_READINGS = 60  # 6 s
 BASELINE_WARN_US = 50_000.0
 BASELINE_MIN_US = 2_000.0  # a smaller baseline is taken as 0
 _BASELINE_REASONS = ("underrun", "stall")
-_AIR_JUMP_REASONS = ("air_seed", "air_target")
 
 
 def _wall_iso() -> str:
@@ -154,6 +153,7 @@ class PlayoutEngine:
         self._pending_place: str | None = None  # engine-requested placement not yet carried out
         self._pending_jump_us: float | None = None  # steady or delay jump decided, not yet rendered
         self._pending_jump_reason = "steady"
+        self._pending_air: AirAction | None = None  # an air seed/target jump decided, not yet rendered
         self._settle_x_ns: int | None = None  # the port reaches the last event's audio here
         self._prev_a_minus_t: float | None = None
         self._suspended = False
@@ -189,7 +189,7 @@ class PlayoutEngine:
 
     def set_format(self, fmt: InputFormat) -> None:
         self._sched.set_format(fmt)
-        if self._fmt is not None:
+        if self._fmt is not None and fmt != self._fmt:
             self._air_call(lambda bias: bias.on_format(float(self._sched.x_w_ns)))
         self._fmt = fmt
 
@@ -275,27 +275,36 @@ class PlayoutEngine:
 
         jump = self._pending_jump_us
         jump_reason = self._pending_jump_reason
+        air = self._pending_air
         self._pending_jump_us = None
         self._pending_jump_reason = "steady"
-        if jump is not None and (self._sched.placement_pending or not self._sched.queued):
+        self._pending_air = None
+        if (jump is not None or air is not None) and (self._sched.placement_pending or not self._sched.queued):
             # A placement is due anyway: with program queued it re-aligns the next frame at
-            # this render, so the jump is dropped (passing it would drop audio the placement
-            # then re-aligns, and count it twice). With only silence a steady jump re-anchors
+            # this render, so the jumps are dropped (passing them would drop audio the placement
+            # then re-aligns, and count it twice). With only silence a steady or air jump re-anchors
             # it; a delay jump has nothing to move (the next chunk is placed with o).
-            if not self._sched.queued and jump_reason != "delay":
-                if self._sched.reanchor(target):
-                    if jump_reason == "steady":
+            reanchored = False
+            if not self._sched.queued and (air is not None or jump_reason != "delay"):
+                reanchored = self._sched.reanchor(target)
+                if reanchored:
+                    if jump is not None and jump_reason == "steady":
                         self._record_event(jump, "steady", residual_us=self._baseline_us)
-                    else:
+                    if air is not None:
                         self._controller.placed(t_s, 0.0, quiet_wait=True)
-                        self._record_event(jump, jump_reason, residual_us=0.0)
+                        self._record_event(air.jump_us, air.reason, residual_us=0.0)
                 else:  # an insert is still being written; the next readings decide again
-                    logger.debug("playout: steady jump of %.1f ms dropped (insert owed)", jump / 1000.0)
+                    logger.debug("playout: jump dropped (insert owed)")
             else:
-                logger.debug("playout: %s jump of %.1f ms dropped (placement due)", jump_reason, jump / 1000.0)
-            jump = None
+                logger.debug("playout: jump dropped (placement due)")
+            if air is not None and not reanchored:
+                self._air_call(lambda bias: bias.drop_action())
+            jump = air = None
 
-        block = self._sched.render(audible_us=target, now_us=now_us, rate=0.0, jump_us=jump)
+        total = (jump or 0.0) + (air.jump_us if air is not None else 0.0)
+        block = self._sched.render(
+            audible_us=target, now_us=now_us, rate=0.0, jump_us=total if (jump is not None or air is not None) else None
+        )
         # R10: frames that belong to a jump are not loop corrections. Every insert and drop the
         # scheduler reports today is a jump's (rate corrections arrive in Stage 3).
         jump_dropped, jump_inserted = block.dropped, block.inserted
@@ -305,14 +314,14 @@ class PlayoutEngine:
                 b0 = self._b_dom or 0.0
                 self._controller.placed(t_s, o - self._baseline_us - b0, quiet_wait=True)
                 self._record_event(jump, "delay", residual_us=o - b0)
-            elif jump_reason in _AIR_JUMP_REASONS:
-                # The bias moved the audio onto its target: the residual in the c domain is 0.
-                self._controller.placed(t_s, 0.0, quiet_wait=True)
-                self._record_event(jump, jump_reason, residual_us=0.0)
             else:
                 # The controller reset itself when it decided it; the jump removed e_w - β, so the
                 # raw error it leaves is the baseline.
                 self._record_event(jump, "steady", residual_us=self._baseline_us)
+        if air is not None:
+            # The bias moved the audio onto its target (after any delay part): the residual in the c domain is 0.
+            self._controller.placed(t_s, 0.0, quiet_wait=True)
+            self._record_event(air.jump_us, air.reason, residual_us=0.0)
 
         count = self._sched.placement_count
         if count != self._placements_seen:
@@ -451,7 +460,12 @@ class PlayoutEngine:
             self._stats.error(t_s, r.t_us - s_port)
         self._air_step(r, s_port, t_s)
 
-        if self._pending_place is not None or self._pending_jump_us is not None or self._sched.insert_owed:
+        if (
+            self._pending_place is not None
+            or self._pending_jump_us is not None
+            or self._pending_air is not None
+            or self._sched.insert_owed
+        ):
             return  # an event is on its way into s(x_w); the controller waits for it
         if self._sched.placement_pending and self._sched.queued:
             return
@@ -558,8 +572,9 @@ class PlayoutEngine:
             # Air jumps bypass the 50 ms clamp and the 10 s interval (Q8) and are executed like a steady
             # jump (positive = drop); a pending placement re-aligns anyway, so the action is dropped (S-19).
             if self._pending_place is None and not self._sched.placement_pending:
-                self._pending_jump_us = action.jump_us
-                self._pending_jump_reason = action.reason
+                if self._pending_air is not None:  # superseded before it rendered: it does not count
+                    self._air_call(lambda b: b.drop_action())
+                self._pending_air = action
             else:
                 logger.debug(
                     "playout: %s jump of %.1f ms dropped (placement pending)", action.reason, action.jump_us / 1000.0
@@ -781,6 +796,9 @@ class PlayoutEngine:
         self._pending_place = reason
         self._pending_jump_us = None  # the placement re-aligns; a decided jump is moot
         self._pending_jump_reason = "steady"
+        if self._pending_air is not None:  # a placement re-aligns; the air jump never happens
+            self._pending_air = None
+            self._air_call(lambda bias: bias.drop_action())
 
     def _placement_offset_us(self) -> float:
         """``o``: the raw residual a placement keeps, 0 before the first reading.

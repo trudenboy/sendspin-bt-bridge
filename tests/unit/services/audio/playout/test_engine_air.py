@@ -247,7 +247,7 @@ def test_three_samples_at_plus_37_ms_make_one_air_seed_jump(caplog):
     assert snap["air_bias_state"] == "active"
 
 
-def test_an_air_action_while_a_placement_is_pending_is_dropped():
+def test_an_air_action_while_a_placement_is_pending_is_dropped(caplog):
     feed = make_feed()
     eng, port, raw = engine(feed=feed)
     drive(eng, port, raw, 4.0)
@@ -260,8 +260,13 @@ def test_an_air_action_while_a_placement_is_pending_is_dropped():
     assert eng._pending_jump_us is None
     snap = eng.snapshot()
     assert snap["air_corrections"] == 0  # only executed corrections count
-    drive(eng, port, raw, 3.0)
-    assert eng.snapshot()["last_jump_reason"] != "air_seed"
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        drive(eng, port, raw, 15.0)
+    snap = eng.snapshot()
+    # The placement itself carries the correction: it aligns to audible - o with o = b, so the audio
+    # moves by the 37 ms the air saw, and the c-domain error ends at 0.
+    assert any("jump: clear, 37.0 ms" in m for m in messages(caplog))
+    assert snap["error_ms"] == pytest.approx(0.0, abs=1.5)
 
 
 def marker_run(change_us, caplog=None):
@@ -311,3 +316,126 @@ def test_a_format_change_reseeds_after_three_new_samples():
     assert eng.snapshot()["air_bias_state"] == "seeding"
     seed(eng, port, raw, feed, 1_000.0)
     assert eng.snapshot()["air_bias_state"] == "active"
+
+
+def composed_run(scenario):
+    """A delay change of +30 ms and an air jump decided before one render, in either order.
+
+    ``air_first``: the seed (+37 ms) is decided, then the delay change arrives. ``delay_first``: the
+    delay change arrives, then a target change (+20 ms) is decided (a delay event excludes the windows
+    around it, so a seed cannot follow it at once). ``none``: a dead-band seed only.
+    """
+    feed = make_feed()
+    raw = FakeRaw(1_000_000.0)
+    port = SimulatedPort(raw)
+    eng = PlayoutEngine(settings=PlayoutSettings(mode="loop"), port=port, air_feed=feed)
+    eng.set_format(InputFormat(sample_rate=FS))
+    start = raw.t_us + 1e6
+    eng.submit(int(start), ZERO * FS * 40)
+    eng.submit(int(start + 40e6), TONE * FS)
+    drive(eng, port, raw, 4.0)
+    _, push = windows(feed, eng, raw, 37_000.0 if scenario == "air_first" else 1_000.0)
+    drive(eng, port, raw, 6.5)
+    push()
+    eng.sense(raw.t_us, port.delivered_ns)
+    if scenario == "air_first":
+        eng.resync(-30_000)
+    elif scenario == "delay_first":
+        drive(eng, port, raw, 1.0)
+        eng.resync(-30_000)
+        feed.set_target(latency_ms=LATENCY_MS + 20.0, d_ref_ms=D_REF_MS)
+        eng.sense(raw.t_us, port.delivered_ns)
+    if scenario != "none":
+        assert eng._pending_air is not None and eng._pending_jump_us is not None
+    drive(eng, port, raw, 40.0)
+    return eng, port
+
+
+@pytest.mark.parametrize(("scenario", "total_ms"), [("air_first", 67.0), ("delay_first", 50.0)])
+def test_a_delay_change_and_an_air_jump_before_one_render_both_apply(scenario, total_ms):
+    _, base = composed_run("none")
+    eng, port = composed_run(scenario)
+    heard = base.heard_at_us(first_nonzero=True) - port.heard_at_us(first_nonzero=True)
+    assert heard == pytest.approx(total_ms * 1000.0, abs=700)  # delay and air, exactly
+    assert eng.snapshot()["air_corrections"] == 1
+
+
+def test_a_format_that_equals_the_previous_one_does_not_reseed():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    seed(eng, port, raw, feed, 1_000.0)
+    drive(eng, port, raw, 2.0)
+    eng.set_format(InputFormat(sample_rate=FS))
+    assert eng.snapshot()["air_bias_state"] == "active"
+
+
+def test_a_placement_after_the_air_action_was_decided_undoes_its_count():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    _, push = windows(feed, eng, raw, 37_000.0)
+    drive(eng, port, raw, 6.5)
+    push()
+    eng.sense(raw.t_us, port.delivered_ns)
+    assert eng.snapshot()["air_corrections"] == 1 and eng._pending_air is not None
+    eng.clear()  # the placement re-aligns; the decided air jump never happens
+    eng.submit(int(raw.t_us + 1e6), ZERO * FS * 60)
+    drive(eng, port, raw, 2.0)
+    snap = eng.snapshot()
+    assert snap["air_corrections"] == 0
+    assert snap["last_jump_reason"] != "air_seed"
+
+
+def test_the_air_trim_follows_a_delay_change():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    seed(eng, port, raw, feed, 1_000.0)
+    assert eng.snapshot()["air_trim_ms"] == pytest.approx(0.0)
+    eng.resync(-30_000)
+    assert eng.snapshot()["air_trim_ms"] == pytest.approx(30.0)
+
+
+def test_the_published_error_right_after_a_resume_drops_the_held_baseline():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    seed(eng, port, raw, feed, 1_000.0)
+    drive(eng, port, raw, 2.0)
+    feed.set_lock("no_signal", None)
+    drive(eng, port, raw, 1.0)
+    assert eng.snapshot()["air_bias_state"] == "held"
+    underrun(eng, port, raw, slew_ms=-30.0)
+    drive(eng, port, raw, 12.0)
+    assert eng._baseline_us == pytest.approx(30_000.0, abs=3_000.0)
+    feed.set_lock("locked", 1.0)
+    _, push = windows(feed, eng, raw, 1_000.0)
+    drive(eng, port, raw, 6.5)
+    push()
+    eng.sense(raw.t_us, port.delivered_ns)
+    snap = eng.snapshot()
+    assert eng._baseline_us == 0.0
+    assert snap["air_bias_state"] == "active"
+    assert snap["error_ms"] == pytest.approx(1.0, abs=1.5)  # the 30 ms baseline moved into b
+    assert snap["air_bias_ms"] == pytest.approx(29.0, abs=1.5)
+
+
+def test_a_reseed_with_an_existing_bias_rebases_the_published_error():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    port.skip(-6.0)
+    drive(eng, port, raw, 3.0)
+    seed(eng, port, raw, feed, 1_000.0)  # b = 5 ms
+    drive(eng, port, raw, 3.0)
+    eng.set_format(InputFormat(sample_rate=FS, channels=2, sample_bytes=3))
+    drive(eng, port, raw, 1.5)  # the port passes the format change
+    _, push = windows(feed, eng, raw, 2_000.0)
+    drive(eng, port, raw, 6.5)
+    push()
+    eng.sense(raw.t_us, port.delivered_ns)
+    snap = eng.snapshot()
+    assert snap["air_bias_state"] == "active"
+    assert snap["air_bias_ms"] == pytest.approx(4.0, abs=1.5)
+    assert snap["error_ms"] == pytest.approx(2.0, abs=1.0)  # the air's new reading, not 2 - 5
