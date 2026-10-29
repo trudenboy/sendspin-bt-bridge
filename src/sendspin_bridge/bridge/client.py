@@ -2523,8 +2523,11 @@ class SendspinClient:
 
     def _run_persist(self, key: str, fn, mac: str, value: float) -> None:
         # Runs on the Timer's own thread — the fsync never touches the loop.
-        # Stale entries are replaced by the next ``_schedule_persist`` and
-        # cleared by ``_cancel_persist_timers``, so no cleanup is needed here.
+        # Drop this run's entry (keys with a unique suffix would pile up otherwise);
+        # a newer timer under the same key stays.
+        with self._persist_timers_lock:
+            if self._persist_timers.get(key) is threading.current_thread():
+                del self._persist_timers[key]
         try:
             fn(mac, value)
         except Exception:  # pragma: no cover - best-effort persistence

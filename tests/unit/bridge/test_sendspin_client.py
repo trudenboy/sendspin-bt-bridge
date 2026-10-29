@@ -704,6 +704,17 @@ class TestSchedulePersist:
         time.sleep(0.2)
         assert sorted(calls) == [("delay", 250), ("vol", 40)]
 
+    def test_a_run_timer_leaves_no_entry_behind(self, client):
+        import time
+
+        client._PERSIST_DEBOUNCE_SECS = 0.02
+        calls = []
+        for i in range(3):
+            client._schedule_persist(f"air_learned:{i}", lambda m, v: calls.append(v), "AA:BB", i)
+        time.sleep(0.3)
+        assert sorted(calls) == [0, 1, 2]
+        assert client._persist_timers == {}
+
     def test_cancel_persist_timers_prevents_write(self, client):
         import time
 
