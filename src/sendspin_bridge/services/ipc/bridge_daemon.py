@@ -962,6 +962,8 @@ class BridgeDaemon:
                 self._delay_resync_handle = None
             self._player_delay_ms = float(getattr(client, "output_delay_ms", static_delay_ms))
             self._target_delay_ms = self._player_delay_ms
+            if self._air_feed is not None:
+                self._air_feed.set_output_delay(self._player_delay_ms)
             client.add_output_delay_listener(self._on_output_delay_change)
 
         # Register visualizer listener if available

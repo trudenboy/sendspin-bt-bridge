@@ -403,7 +403,7 @@ def _air_sensor_args(raw: object) -> dict | None:
         learned is not None
         and learned_ref is not None
         and type(starts) is int
-        and starts >= 2
+        and 2 <= starts <= 2**31
         and abs(learned - learned_ref) <= 1000.0
     ):
         out.update(learned_ms=learned, learned_d_ref_ms=learned_ref, learned_starts=starts)

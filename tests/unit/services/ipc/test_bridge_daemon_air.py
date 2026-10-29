@@ -889,3 +889,11 @@ def test_a_delay_change_sets_the_feeds_output_delay(make_daemon):
     d._target_delay_ms = 90.0
     d._apply_output_delay()
     assert d._air_feed.take().d_out_ms == 90.0
+
+
+@pytest.mark.asyncio
+async def test_a_client_built_with_a_differing_output_delay_updates_the_feed(make_daemon):
+    d = _spawned_daemon(make_daemon, LEARNED, static_delay_ms=150.0)
+    await d._load_identity_and_pairing_store()
+    d._create_client(300.0)
+    assert d._air_feed.take().d_out_ms == 300.0
