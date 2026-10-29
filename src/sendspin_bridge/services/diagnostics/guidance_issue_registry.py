@@ -66,6 +66,14 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="info",
         default_reason_codes=("non_sbc_codec",),
     ),
+    # A loop-mode speaker that runs without its air correction (it plays as in measure mode).
+    "air_correction_inactive": GuidanceIssueDefinition(
+        key="air_correction_inactive",
+        layer="audio",
+        priority=92,
+        severity="info",
+        default_reason_codes=("air_switch_off", "air_not_effective", "air_unavailable", "air_not_locked"),
+    ),
     "bluetooth_unavailable": GuidanceIssueDefinition(
         key="bluetooth_unavailable",
         layer="bluetooth",

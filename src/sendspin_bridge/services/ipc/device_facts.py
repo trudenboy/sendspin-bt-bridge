@@ -211,6 +211,11 @@ class DeviceFacts:
         """The air sensor snapshot (``DeviceStatus.air_sensor``); ``None`` with the switch off."""
         return self._dict_fact("air_sensor")
 
+    @property
+    def playout(self) -> dict[str, Any] | None:
+        """The playout engine snapshot (``DeviceStatus.playout``)."""
+        return self._dict_fact("playout")
+
     # -- runtime --------------------------------------------------------
 
     @property

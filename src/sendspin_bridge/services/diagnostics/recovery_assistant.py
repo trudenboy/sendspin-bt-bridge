@@ -431,6 +431,16 @@ def _air_sensor(device: Any) -> dict[str, Any] | None:
     return nested if isinstance(nested, dict) else None
 
 
+def _playout(device: Any) -> dict[str, Any] | None:
+    """The device's ``playout`` snapshot, from a status object or a normalized state model."""
+    direct = getattr(device, "playout", None)
+    if isinstance(direct, dict):
+        return direct
+    audio = _device_state_model(device).get("audio")
+    nested = audio.get("playout") if isinstance(audio, dict) else None
+    return nested if isinstance(nested, dict) else None
+
+
 def _air_unavailable_code(state: str, reason: Any) -> str:
     if state == "unsupported_input":
         return "unsupported_input"
@@ -464,6 +474,74 @@ def _build_air_sensor_issues(devices: list[Any]) -> list[RecoveryIssue]:
         unavailable.setdefault(name, set()).add(_air_unavailable_code(state, reason))
     if unavailable:
         issues.insert(0, _air_unavailable_issue(unavailable))
+    return issues
+
+
+#: How long a loop-mode output must be warm before a bias that never got a value is reported.
+_AIR_NOT_LOCKED_WARM_S = 60.0
+
+
+def _air_correction_reason(device: Any) -> str | None:
+    """Why a loop-mode speaker runs without its air correction, in the spec's order; None when it does."""
+    playout = _playout(device)
+    if not playout or playout.get("mode") != "loop":
+        return None
+    snap = _air_sensor(device)
+    if snap is None:
+        return "air_switch_off"
+    state = str(snap.get("state") or "")
+    if state == "off":
+        return "air_not_effective"
+    if state in {"unavailable", "unsupported_codec", "unsupported_input"} or playout.get("air_bias_reason") == (
+        "internal_error"
+    ):
+        return "air_unavailable"
+    warm_s = playout.get("warm_s")
+    if (
+        isinstance(warm_s, (int, float))
+        and warm_s >= _AIR_NOT_LOCKED_WARM_S
+        and playout.get("air_bias_ms") is None
+        and state not in {"locked", "holding"}
+    ):
+        return "air_not_locked"
+    return None
+
+
+_AIR_CORRECTION_CAUSES = {
+    "air_switch_off": "EXPERIMENTAL_AIR_SENSOR is off, so there is no air data to correct against.",
+    "air_not_effective": "The air sensor is not running for this speaker (it needs a Bluetooth speaker).",
+    "air_unavailable": "The air sensor cannot run for this speaker (see its air sensor state).",
+    "air_not_locked": "The air sensor has not locked onto this speaker's stream since it started.",
+}
+
+
+def _build_air_correction_issues(devices: list[Any]) -> list[RecoveryIssue]:
+    """One info issue per connected, managed loop-mode speaker that runs without its air correction."""
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        reason = _air_correction_reason(device)
+        if reason is None:
+            continue
+        connected, managed = _device_connected_and_managed(device)
+        if not connected or not managed:
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        primary_action, secondary_actions = build_recovery_issue_actions("air_correction_inactive", [name])
+        issues.append(
+            RecoveryIssue(
+                key="air_correction_inactive",
+                severity="info",
+                title=f"{name}: the air correction is not running",
+                summary=(
+                    "This speaker is in loop mode but the air correction is not running; it plays as in "
+                    f"measure mode. {_AIR_CORRECTION_CAUSES[reason]}"
+                ),
+                primary_action=primary_action,
+                secondary_actions=secondary_actions,
+                device_name=name,
+                reason_codes=[reason],
+            )
+        )
     return issues
 
 
@@ -528,6 +606,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
     issues = _build_device_connection_issues(devices)
     issues.extend(_build_sink_suspend_issues(devices))
     issues.extend(_build_air_sensor_issues(devices))
+    issues.extend(_build_air_correction_issues(devices))
     return issues
 
 
