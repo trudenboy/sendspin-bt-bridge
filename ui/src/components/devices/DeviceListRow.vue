@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
+import { actionFailure, type ActionKind } from '@/utils/actionFailure'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
@@ -91,20 +92,23 @@ const batteryColor = computed(() => {
   return 'text-success'
 })
 
-async function run(action: () => Promise<unknown>, failure: string) {
+async function run(action: () => Promise<unknown>, failure: ActionKind | string) {
   try {
     await action()
-  } catch {
-    notifications.error(t(failure))
+  } catch (e) {
+    const kinds: string[] = ['volume', 'mute', 'release', 'claim']
+    notifications.error(
+      kinds.includes(failure) ? actionFailure(t, failure as ActionKind, speakerName(props.device.name), e) : t(failure),
+    )
   }
 }
 
 function onVolumeUpdate(level: number) {
-  void run(() => deviceStore.setVolume(props.device.id, level), 'device.actions.enableFailed')
+  void run(() => deviceStore.setVolume(props.device.id, level), 'volume')
 }
 
 function onMuteUpdate(muted: boolean) {
-  void run(() => deviceStore.setMute(props.device.id, muted), 'device.actions.enableFailed')
+  void run(() => deviceStore.setMute(props.device.id, muted), 'mute')
 }
 
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))

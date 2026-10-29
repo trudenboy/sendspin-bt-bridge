@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
+import { actionFailure } from '@/utils/actionFailure'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
@@ -155,8 +156,8 @@ async function onRelease(release: boolean) {
   managementLoading.value = true
   try {
     await deviceStore.release(d.id, release)
-  } catch {
-    notifications.error(t('device.actions.enableFailed'))
+  } catch (e) {
+    notifications.error(actionFailure(t, release ? 'release' : 'claim', speakerName(d.name), e))
   } finally {
     managementLoading.value = false
   }
