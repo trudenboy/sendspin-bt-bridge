@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of leaving you on the sign-in page with an error, and opening
   the sign-in page while no sign-in is required goes to the home page
   instead of showing a blank screen.
+- Bug report: the minimum title and description lengths are shown up front, a diagnostics load error appears inside the dialog with Retry, and the submit button says what it will do (open a GitHub issue, send, or copy).
+- Logs: a failed load says so with Retry instead of "No log entries", and applying the log level confirms or reports the result.
+- Music Assistant sign-in prefills the server address from the speakers' Sendspin server and says when Auto-Discover finds nothing; the empty Groups page links to Music Assistant to create a group.
+- "No results" on the speaker list offers Clear filters, and filters are cleared when the filter bar hides.
+- Close buttons, the sidebar toggle and the device drawer's signal path are translated (RU) and the sidebar toggle announces its state; about 130 unused texts were removed.
 - Accessibility and legibility in the web UI: keyboard focus is now visible on every control, warning text and the secondary and tertiary grey text meet WCAG AA contrast in both themes, dialog, drawer and toast close buttons have a 40 px touch target, and the selection volume slider and the phone update badge have accessible names.
 - Recovery actions on Diagnostics are buttons you can press, the restart error banner can be dismissed and opens the logs, Cancel works while a speaker is recording or the phone sequence plays, "Require sign-in" cannot be switched on before a password exists, and volume, mute and hand-over failures name the speaker and the reason.
 - Diagnostics: the Recovery toolbar wraps on phones instead of widening the page, and the tabs and copy buttons follow the interface language. The air sensor setting stays off until playout sync is in measure or loop mode, and its "seconds ago" value keeps counting.
