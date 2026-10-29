@@ -743,3 +743,51 @@ def test_stop_removes_the_arrival_probe(monkeypatch):
     assert probe_id > 0
     player.stop()
     assert removed == [handle] and player._arrival_probe is None
+
+
+# -- B5b: the air feed ------------------------------------------------------------------------
+
+
+class _SpyFeed:
+    def __init__(self) -> None:
+        self.reopened: list[int] = []
+
+    def reopen(self, min_tap_gen: int) -> None:
+        self.reopened.append(min_tap_gen)
+
+    def take(self):  # never reached: the engine is built but not driven
+        raise AssertionError
+
+
+class _FakeTap:
+    def __init__(self, feed) -> None:
+        self.gen = 5
+        self.error = None
+        self._feed = feed
+        self.order: list[str] = []
+
+    def reset(self) -> None:
+        self.gen += 1
+        self.order.append(f"reset:{len(self._feed.reopened)}")
+
+
+@requires_gst
+def test_adopt_output_hands_the_feed_to_the_engine_and_reopens_it_after_the_tap_reset():
+    feed = _SpyFeed()
+    tap = _FakeTap(feed)
+    player = _player(settings=PlayoutSettings(mode="loop"), air_tap=tap, air_feed=feed)
+    output = player.prepare_output(PCM_S16_STEREO_48K)
+    player.adopt_output(output, PCM_S16_STEREO_48K)
+    assert player._engine._bias._feed is feed
+    assert tap.order == ["reset:0"]  # the reset came first
+    assert feed.reopened == [6]  # the tap's generation after its reset
+    player.stop()
+
+
+@requires_gst
+def test_a_player_without_a_feed_has_no_bias():
+    player = _player(settings=PlayoutSettings(mode="loop"))
+    output = player.prepare_output(PCM_S16_STEREO_48K)
+    player.adopt_output(output, PCM_S16_STEREO_48K)
+    assert player._engine._bias is None
+    player.stop()

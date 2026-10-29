@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from sendspin_bridge.services.audio.player.player import PcmFormat
+    from sendspin_bridge.services.audio.playout.air_bias import AirFeed
     from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
     from sendspin_bridge.services.audio.playout.scheduler import Block
     from sendspin_bridge.services.audio.playout.sensor import PortClock
@@ -283,6 +284,7 @@ class PlayoutPlayer:
         air_tap: WrittenEnvelope | None = None,
         output_delay_us: Callable[[], float] | None = None,
         on_engine_event: Callable[[str], None] | None = None,
+        air_feed: AirFeed | None = None,
     ) -> None:
         self._sink_factory = sink_factory
         self._settings = settings
@@ -296,6 +298,8 @@ class PlayoutPlayer:
         # The air sensor's listener for output reopens and engine events (feeder or caller
         # thread); None (switch off) = the engine's counters are never even compared.
         self._on_engine_event = on_engine_event
+        # The shared hand-over to every engine this player opens (loop mode); None = no air bias.
+        self._air_feed = air_feed
 
         # Caller-thread state (set by start/adopt/stop only).
         self._out: PlayoutOutput | None = None
@@ -409,7 +413,9 @@ class PlayoutPlayer:
         self._port = _WatchedPort(self._port_factory(output.sink))
         self._arrivals = _ArrivalProbe(self._port_factory(output.sink))
         self._arrival_probe = _attach_arrival_probe(output.appsrc, self._arrivals)
-        self._engine = PlayoutEngine(settings=self._settings, port=self._port, k0_ns=output.k0_ns)
+        self._engine = PlayoutEngine(
+            settings=self._settings, port=self._port, k0_ns=output.k0_ns, air_feed=self._air_feed
+        )
         self._playing_at_us = None
         self._next_sense_us = None
         self._x_w_ns = 0
@@ -453,6 +459,13 @@ class PlayoutPlayer:
                 tap.reset()
             except Exception:
                 self._air_tap_failed(tap)
+        feed = self._air_feed
+        if feed is not None:
+            # Windows of the old output (tap generations below this one) never reach the new engine.
+            try:
+                feed.reopen(0 if tap is None else tap.gen)
+            except Exception:
+                logger.warning("playout: air feed reopen failed", exc_info=True)
         self._emit_engine_event("reopen")
 
     def _emit_engine_event(self, kind: str) -> None:

@@ -99,6 +99,7 @@ BASELINE_TIMEOUT_READINGS = 60  # 6 s
 BASELINE_WARN_US = 50_000.0
 BASELINE_MIN_US = 2_000.0  # a smaller baseline is taken as 0
 _BASELINE_REASONS = ("underrun", "stall")
+_AIR_JUMP_REASONS = ("air_seed", "air_target")
 
 
 def _wall_iso() -> str:
@@ -188,6 +189,8 @@ class PlayoutEngine:
 
     def set_format(self, fmt: InputFormat) -> None:
         self._sched.set_format(fmt)
+        if self._fmt is not None:
+            self._air_call(lambda bias: bias.on_format(float(self._sched.x_w_ns)))
         self._fmt = fmt
 
     def submit(self, play_time_us: int, pcm: bytes) -> None:
@@ -214,6 +217,7 @@ class PlayoutEngine:
             self._request_placement("delay")
             return playing
         playing = self._sched.shift_queue(shift_us)
+        self._air_call(lambda bias: bias.on_delay(-float(shift_us), float(self._sched.x_w_ns)))
         if playing and self._pending_place is None and not self._sched.placement_pending:
             # Two changes before a render add up; a decided steady jump is replaced.
             owed = self._pending_jump_us if self._pending_jump_reason == "delay" else None
@@ -278,9 +282,13 @@ class PlayoutEngine:
             # this render, so the jump is dropped (passing it would drop audio the placement
             # then re-aligns, and count it twice). With only silence a steady jump re-anchors
             # it; a delay jump has nothing to move (the next chunk is placed with o).
-            if not self._sched.queued and jump_reason == "steady":
+            if not self._sched.queued and jump_reason != "delay":
                 if self._sched.reanchor(target):
-                    self._record_event(jump, "steady", residual_us=self._baseline_us)
+                    if jump_reason == "steady":
+                        self._record_event(jump, "steady", residual_us=self._baseline_us)
+                    else:
+                        self._controller.placed(t_s, 0.0, quiet_wait=True)
+                        self._record_event(jump, jump_reason, residual_us=0.0)
                 else:  # an insert is still being written; the next readings decide again
                     logger.debug("playout: steady jump of %.1f ms dropped (insert owed)", jump / 1000.0)
             else:
@@ -297,6 +305,10 @@ class PlayoutEngine:
                 b0 = self._b_dom or 0.0
                 self._controller.placed(t_s, o - self._baseline_us - b0, quiet_wait=True)
                 self._record_event(jump, "delay", residual_us=o - b0)
+            elif jump_reason in _AIR_JUMP_REASONS:
+                # The bias moved the audio onto its target: the residual in the c domain is 0.
+                self._controller.placed(t_s, 0.0, quiet_wait=True)
+                self._record_event(jump, jump_reason, residual_us=0.0)
             else:
                 # The controller reset itself when it decided it; the jump removed e_w - β, so the
                 # raw error it leaves is the baseline.
@@ -509,6 +521,12 @@ class PlayoutEngine:
             self._disable_air("internal_error")
             return default
 
+    def _air_call(self, fn: Callable[[AirBias], None]) -> None:
+        """Run a bias event hook behind the guard; nothing without a bias."""
+        bias = self._bias
+        if bias is not None:
+            self._air(lambda: fn(bias), None)
+
     def _air_break(self, kind: Literal["underrun", "stall", "pa_step"], x_ns: int, t_s: float) -> None:
         bias = self._bias
         if bias is not None:
@@ -535,7 +553,19 @@ class PlayoutEngine:
         got = self._air(lambda: self._air_read(bias, hist, r, s_port, t_s), None)
         if got is None:
             return
-        prev_state, state, value, seeded_now, resume_beta, _action = got  # actions are executed in B5b
+        prev_state, state, value, seeded_now, resume_beta, action = got
+        if action is not None:
+            # Air jumps bypass the 50 ms clamp and the 10 s interval (Q8) and are executed like a steady
+            # jump (positive = drop); a pending placement re-aligns anyway, so the action is dropped (S-19).
+            if self._pending_place is None and not self._sched.placement_pending:
+                self._pending_jump_us = action.jump_us
+                self._pending_jump_reason = action.reason
+            else:
+                logger.debug(
+                    "playout: %s jump of %.1f ms dropped (placement pending)", action.reason, action.jump_us / 1000.0
+                )
+                self._air_call(lambda b: b.drop_action())
+                action = None
         b_eff = self._b_dom
         if prev_state == "held" and state != "held" and value is not None:
             # Resume (C1): b := b + β, β := 0; c = e_w - b - β is unchanged, the published error drops β.
@@ -553,7 +583,7 @@ class PlayoutEngine:
             # Seed (C1): b₀ folds the current β; β := 0 and the baseline collection stops.
             self._stop_baseline()
             self._baseline_us = 0.0
-            if _action is None and self._error_ema_us is not None:
+            if action is None and self._error_ema_us is not None:
                 residual = self._error_ema_us + (b_eff or 0.0) - value
                 self._controller.placed(t_s, residual, quiet_wait=True)
                 self._error_ema_us = residual
@@ -651,7 +681,7 @@ class PlayoutEngine:
             if logger.isEnabledFor(logging.DEBUG):
                 snap = self.snapshot()
                 logger.debug(
-                    "playout summary: e=%s ms p95=%s ms r=%s ppm corrections/s=%s slope=%s ms/s jumps=%s underruns=%s",
+                    "playout summary: e=%s ms p95=%s ms r=%s ppm corrections/s=%s slope=%s ms/s jumps=%s underruns=%s b=%s state=%s",
                     snap["error_ms"],
                     snap["error_p95_ms"],
                     snap["correction_ppm"],
@@ -659,6 +689,8 @@ class PlayoutEngine:
                     snap["error_slope_ms_per_s"],
                     snap["jumps"],
                     snap["underruns"],
+                    snap["air_bias_ms"],
+                    snap["air_bias_state"],
                 )
 
     def snapshot(self) -> dict[str, object]:
@@ -789,3 +821,4 @@ class PlayoutEngine:
         self._error_ema_us = residual_us
         self._degraded = False
         self._settle_x_ns = self._sched.x_w_ns
+        self._air_call(lambda bias: bias.on_event(float(self._sched.x_w_ns)))

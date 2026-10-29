@@ -222,3 +222,92 @@ def test_an_internal_error_disables_the_bias_without_moving_the_audio(caplog, mo
         drive(eng, port, raw, 3.0)
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
     assert not [m for m in messages(caplog) if "steady" in m]
+
+
+# -- B5b: air jumps, events -------------------------------------------------------------------
+
+TONE = b"\x10\x00" * 2
+
+
+def test_three_samples_at_plus_37_ms_make_one_air_seed_jump(caplog):
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    with caplog.at_level(logging.INFO, logger=ENGINE_LOGGER):
+        seed(eng, port, raw, feed, 37_000.0)
+        drive(eng, port, raw, 3.0)
+    snap = eng.snapshot()
+    assert snap["last_jump_reason"] == "air_seed"
+    assert snap["air_corrections"] == 1
+    assert snap["last_jump_ms"] == pytest.approx(37.0, abs=0.05)
+    lines = [m for m in messages(caplog) if "air_seed" in m]
+    assert len(lines) == 1 and "air_seed, 37.0 ms" in lines[0]
+    assert not [m for m in messages(caplog) if "clamped" in m]
+    assert snap["error_ms"] == pytest.approx(0.0, abs=1.5)
+    assert snap["air_bias_state"] == "active"
+
+
+def test_an_air_action_while_a_placement_is_pending_is_dropped():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    _, push = windows(feed, eng, raw, 37_000.0)
+    drive(eng, port, raw, 6.5)
+    eng.clear()
+    eng.submit(int(raw.t_us + 1e6), ZERO * FS * 60)
+    push()
+    eng.sense(raw.t_us, port.delivered_ns)
+    assert eng._pending_jump_us is None
+    snap = eng.snapshot()
+    assert snap["air_corrections"] == 0  # only executed corrections count
+    drive(eng, port, raw, 3.0)
+    assert eng.snapshot()["last_jump_reason"] != "air_seed"
+
+
+def marker_run(change_us, caplog=None):
+    feed = make_feed()
+    raw = FakeRaw(1_000_000.0)
+    port = SimulatedPort(raw)
+    eng = PlayoutEngine(settings=PlayoutSettings(mode="loop"), port=port, air_feed=feed)
+    eng.set_format(InputFormat(sample_rate=FS))
+    start = raw.t_us + 1e6
+    eng.submit(int(start), ZERO * FS * 40)
+    due = start + 40e6
+    eng.submit(int(due), TONE * FS)
+    drive(eng, port, raw, 4.0)
+    seed(eng, port, raw, feed, 1_000.0)
+    drive(eng, port, raw, 3.0)
+    bias_before = eng.snapshot()["air_bias_ms"]
+    if change_us:
+        eng.resync(change_us)
+    drive(eng, port, raw, 40.0)
+    return eng, port, due, bias_before
+
+
+def test_a_delay_change_moves_the_marker_exactly_and_leaves_the_bias(caplog):
+    _, base_port, _, _ = marker_run(0)
+    with caplog.at_level(logging.INFO):
+        eng, port, _, bias_before = marker_run(-30_000)
+    assert base_port.heard_at_us(first_nonzero=True) - port.heard_at_us(first_nonzero=True) == pytest.approx(
+        30_000, abs=500
+    )
+    snap = eng.snapshot()
+    assert snap["air_bias_ms"] == bias_before
+    assert snap["air_corrections"] == 0
+    assert snap["last_jump_reason"] != "air_seed"
+    assert [m for m in messages(caplog) if "Output delay changed" in m]
+
+
+def test_a_format_change_reseeds_after_three_new_samples():
+    feed = make_feed()
+    eng, port, raw = engine(feed=feed)
+    drive(eng, port, raw, 4.0)
+    seed(eng, port, raw, feed, 1_000.0)
+    drive(eng, port, raw, 2.0)
+    assert eng.snapshot()["air_bias_state"] == "active"
+    eng.set_format(InputFormat(sample_rate=FS, channels=2, sample_bytes=3))
+    assert eng.snapshot()["air_bias_state"] == "seeding"
+    drive(eng, port, raw, 1.0)
+    assert eng.snapshot()["air_bias_state"] == "seeding"
+    seed(eng, port, raw, feed, 1_000.0)
+    assert eng.snapshot()["air_bias_state"] == "active"

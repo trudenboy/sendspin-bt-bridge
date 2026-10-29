@@ -220,6 +220,7 @@ class AirBias:
         self._at_prev: float | None = None
         self._corrections = 0
         self._last_correction_us: float | None = None
+        self._prev_last_correction_us: float | None = None
         self._gated = 0
         self._skipped = 0
         self._frozen = False
@@ -260,6 +261,12 @@ class AirBias:
     def resume_beta(self) -> float:
         """The ``beta`` folded into ``b`` by the last update's resume from ``held``; the engine clears it."""
         return self._resume_beta_us
+
+    def drop_action(self) -> None:
+        """The engine did not execute the last action (a placement was pending): it does not count."""
+        if self._corrections:
+            self._corrections -= 1
+            self._last_correction_us = self._prev_last_correction_us
 
     def on_event(self, x_ns: float) -> None:
         """A placement or a delay/steady/air jump written at ``x`` (S-3)."""
@@ -370,6 +377,7 @@ class AirBias:
             self._history[i] = v - delta_l
         if abs(delta_l) <= DEAD_BAND_US:
             return None
+        self._prev_last_correction_us = self._last_correction_us
         self._corrections += 1
         self._last_correction_us = delta_l
         return AirAction(delta_l, "air_target")
@@ -516,6 +524,7 @@ class AirBias:
         )
         if abs(jump) <= DEAD_BAND_US:
             return None
+        self._prev_last_correction_us = self._last_correction_us
         self._corrections += 1
         self._last_correction_us = jump
         return AirAction(jump, "air_seed")
