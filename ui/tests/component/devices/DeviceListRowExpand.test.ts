@@ -123,7 +123,7 @@ describe('DeviceListRow expansion', () => {
     expect(store.reconnect).toHaveBeenCalledWith('dev-1')
     expect(store.standby).toHaveBeenCalledWith('dev-1')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
-    expect(notes.undo).toHaveBeenCalledTimes(1)
+    expect(notes.undo).toHaveBeenCalledTimes(2) // standby and release both offer Undo
   })
 
   it('offers wake and take back where they apply', async () => {

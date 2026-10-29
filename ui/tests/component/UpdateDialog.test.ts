@@ -30,7 +30,7 @@ describe('UpdateDialog "Update Now"', () => {
     confirm.confirmDialog.mockResolvedValue(false)
     await clickApply()
     const opts = confirm.confirmDialog.mock.calls[0]![0]
-    expect(opts.message).toMatch(/Playback stops/)
+    expect(opts.consequences.join(' ')).toMatch(/Playback stops/)
     expect(opts.title).toContain('9.9.9')
     expect(update.doApplyUpdate).not.toHaveBeenCalled()
   })

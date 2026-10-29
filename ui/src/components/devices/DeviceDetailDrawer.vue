@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { useReversibleActions } from '@/composables/useReversibleActions'
 import { actionFailure } from '@/utils/actionFailure'
 import { computed, ref, watch } from 'vue'
@@ -200,13 +200,16 @@ const adapterSpeakers = computed(() =>
     .join(', '),
 )
 
+function adapterConsequences() {
+  return adapterSpeakers.value ? [t('consequence.adapterDisconnects', { names: adapterSpeakers.value })] : [t('adapter.confirmNone')]
+}
+
 async function onAdapterPower() {
   if (adapterPowered.value) {
-    const ok = await confirmDialog({
+    const ok = await confirmAction('adapter.powerOff', {
       title: t('adapter.confirmOffTitle', { adapter: adapter.value?.name || adapterId.value }),
-      message: t('adapter.confirmMessage', { speakers: adapterSpeakers.value }),
+      consequences: adapterConsequences(),
       confirmLabel: t('adapter.turnOff'),
-      danger: true,
     })
     if (!ok) return
   }
@@ -214,11 +217,10 @@ async function onAdapterPower() {
 }
 
 async function onAdapterReboot() {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('adapter.reboot', {
     title: t('adapter.confirmRebootTitle', { adapter: adapter.value?.name || adapterId.value }),
-    message: t('adapter.confirmMessage', { speakers: adapterSpeakers.value }),
+    consequences: adapterConsequences(),
     confirmLabel: t('adapter.reboot'),
-    danger: true,
   })
   if (ok) void powerCycle([false, true])
 }

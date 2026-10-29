@@ -4,7 +4,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
 import { endSessionOnPageHide } from '@/api/sync'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { SbButton, SbCard, SbDialog, SbSpinner, SbTabs } from '@/kit'
 import { ArrowLeft } from 'lucide-vue-next'
 import GroupMembers from '@/components/sync/GroupMembers.vue'
@@ -269,7 +269,7 @@ async function doLeave() {
   // The last edit is written before the profile captures the delays, and never hits an ending session.
   await sync.flushDelays()
   if (manualChanged.value) {
-    const keep = await confirmDialog({
+    const keep = await confirmAction('sync.saveManualOnLeave', {
       title: t('sync.manual.saveOnLeave'),
       message: t('sync.manual.saveOnLeaveHelp'),
       confirmLabel: t('sync.manual.saveConfirm'),
@@ -369,12 +369,11 @@ const endForeignError = ref('')
 async function endForeign() {
   const id = foreignId.value
   if (!id || endingForeign.value) return
-  const ok = await confirmDialog({
+  const ok = await confirmAction('sync.endForeign', {
     title: t('sync.endForeignTitle'),
     message: t('sync.endForeignMessage'),
     confirmLabel: t('sync.endForeign'),
     cancelLabel: t('sync.profiles.cancel'),
-    danger: true,
   })
   if (!ok) return
   endingForeign.value = true

@@ -311,10 +311,10 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
               {{ t('speaker.reconnect') }}
             </SbButton>
             <template v-if="canDo(device, 'standby')">
-              <SbButton v-if="standby" size="sm" variant="secondary" data-quick="wake" @click="quick(() => deviceStore.wake(device.id))">
+              <SbButton v-if="standby" size="sm" variant="secondary" data-quick="wake" @click="reversible.wake(device.id, displayName)">
                 {{ t('speaker.wake') }}
               </SbButton>
-              <SbButton v-else size="sm" variant="secondary" data-quick="standby" @click="quick(() => deviceStore.standby(device.id))">
+              <SbButton v-else size="sm" variant="secondary" data-quick="standby" @click="reversible.standby(device.id, displayName)">
                 {{ t('speaker.standby') }}
               </SbButton>
             </template>

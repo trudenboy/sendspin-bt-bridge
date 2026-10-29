@@ -161,7 +161,7 @@ describe('ConfigView (settings)', () => {
     it('asks first, naming that playback stops, and does nothing when declined', async () => {
       confirm.confirmDialog.mockResolvedValue(false)
       await pendingRestart()
-      expect(confirm.confirmDialog.mock.calls[0]![0].message).toMatch(/Playback stops/)
+      expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toMatch(/Playback stops/)
       expect(restartBridge).not.toHaveBeenCalled()
     })
 

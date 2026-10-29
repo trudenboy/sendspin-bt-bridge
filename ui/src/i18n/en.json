@@ -567,7 +567,6 @@
     "viewRelease": "Release Notes",
     "applyNow": "Update Now",
     "confirmTitle": "Update to v{version}?",
-    "confirmMessage": "Playback stops for about a minute while the bridge restarts. To go back, install the previous version.",
     "applyStarted": "Update started — the bridge will restart shortly",
     "openHa": "Update in HA",
     "copyCommand": "Copy command",
@@ -598,12 +597,12 @@
     "turnOn": "Turn on",
     "confirmOffTitle": "Turn off adapter {adapter}?",
     "confirmRebootTitle": "Reboot adapter {adapter}?",
-    "confirmMessage": "This disconnects every speaker on it, and playback on them stops until they reconnect: {speakers}.",
     "reboot": "Reboot",
     "powerToggled": "Adapter power toggled",
     "powerFailed": "Failed to toggle adapter power",
     "rebooted": "Adapter rebooted",
-    "rebootFailed": "Failed to reboot adapter"
+    "rebootFailed": "Failed to reboot adapter",
+    "confirmNone": "No speakers are using it right now."
   },
   "kit": {
     "closeDialog": "Close dialog",
@@ -622,7 +621,12 @@
   "undo": {
     "label": "Undo",
     "handedOver": "{name} released. It will not reconnect until you reclaim it.",
-    "disabled": "{name} disabled."
+    "disabled": "{name} disabled.",
+    "standby": "{name} on standby: Bluetooth disconnected, playback stopped.",
+    "woke": "{name} woken.",
+    "enabled": "{name} enabled.",
+    "muted": "Muted: {name}.",
+    "powerSave": "Power save on: {name}."
   },
   "restart": {
     "stopping": "Stopping bridge…",
@@ -682,8 +686,6 @@
     "restartNeeded": "Restart the bridge to apply some changes",
     "restartNow": "Restart now",
     "restartConfirmTitle": "Restart the bridge now?",
-    "restartConfirmMessage": "Playback stops on every speaker for about a minute while the bridge restarts.",
-    "restartConfirmPlaying": "Playing now: {names}.",
     "units": {
       "ms": "ms",
       "s": "s",
@@ -1078,7 +1080,6 @@
         "choose": "Choose file",
         "imported": "Configuration imported",
         "confirmTitle": "Replace the configuration?",
-        "confirmMessage": "Importing replaces all settings and speakers with the contents of this file. Export a backup first if you may want to go back.",
         "confirmLabel": "Replace",
         "raw": "Edit as JSON",
         "rawHelp": "For keys this screen does not show. Changes are saved with the Save button.",
@@ -2623,5 +2624,21 @@
         "name": "Bridge startup"
       }
     }
+  },
+  "consequence": {
+    "stopsPlayback": "Playback stops on: {names}.",
+    "disconnects": "Bluetooth disconnects on: {names}.",
+    "leavesMa": "The player disappears from Music Assistant: {names}.",
+    "unpairs": "The Bluetooth pairing is removed. To use it again, add it as a new speaker.",
+    "adapterDisconnects": "Every speaker on it disconnects and playback stops until they reconnect: {names}.",
+    "restartMinute": "Playback stops on every speaker for about a minute while the bridge restarts.",
+    "playingNow": "Playing now: {names}.",
+    "replacesConfig": "All settings and speakers are replaced with the contents of this file.",
+    "noUndo": "This cannot be undone.",
+    "rollback": "To go back, install the previous version.",
+    "needsRepair": "The speaker must be paired again.",
+    "noReconnect": "The bridge stops managing: {names}. They do not reconnect until you reclaim them.",
+    "wakeFromMenu": "Wake them from their menu.",
+    "downloadFirst": "Download current config first"
   }
 }

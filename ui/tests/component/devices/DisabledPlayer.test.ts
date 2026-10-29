@@ -12,7 +12,7 @@ import type { DisabledPlayer } from '@/stores/devices'
 
 const store = vi.hoisted(() => ({ setEnabled: vi.fn(), remove: vi.fn() }))
 const bridge = vi.hoisted(() => ({ value: null as unknown as { adapters: unknown[]; refresh: () => unknown } }))
-const notify = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }))
+const notify = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn(), undo: vi.fn() }))
 
 vi.mock('@/stores/devices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/devices')>()),

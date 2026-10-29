@@ -53,7 +53,8 @@ describe('DeviceDetailDrawer adapter management', () => {
     const w = await settings()
     await w.get('[data-adapter-power]').trigger('click')
     await flushPromises()
-    const msg = confirm.confirmDialog.mock.calls[0]![0].message as string
+    const o = confirm.confirmDialog.mock.calls[0]![0]
+    const msg = [o.message, ...(o.consequences ?? [])].join(' ')
     expect(msg).toContain('Kitchen')
     expect(msg).toContain('Bedroom')
     expect(msg).not.toContain('Garage')
@@ -73,7 +74,7 @@ describe('DeviceDetailDrawer adapter management', () => {
     const w = await settings()
     await w.get('[data-adapter-reboot]').trigger('click')
     await flushPromises()
-    expect(confirm.confirmDialog.mock.calls[0]![0].message).toContain('Bedroom')
+    expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('Bedroom')
     expect(bt.setAdapterPower).not.toHaveBeenCalled()
   })
 

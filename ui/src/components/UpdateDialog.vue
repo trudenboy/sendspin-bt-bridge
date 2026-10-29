@@ -5,7 +5,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUpdateStore } from '@/stores/update'
 import { useBridgeStore } from '@/stores/bridge'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import SbDialog from '@/kit/SbDialog.vue'
 import SbButton from '@/kit/SbButton.vue'
 import SbBadge from '@/kit/SbBadge.vue'
@@ -47,11 +47,10 @@ function checkWithChannel() {
 }
 
 async function applyNow() {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('update.apply', {
     title: t('update.confirmTitle', { version: update.latestVersion }),
-    message: t('update.confirmMessage'),
+    consequences: [t('consequence.restartMinute'), t('consequence.rollback')],
     confirmLabel: t('update.applyNow'),
-    danger: true,
   })
   if (ok) await update.doApplyUpdate()
 }

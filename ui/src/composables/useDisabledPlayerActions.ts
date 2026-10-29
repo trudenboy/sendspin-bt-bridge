@@ -4,7 +4,7 @@ import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore, type DisabledPlayer } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
 import { ApiError } from '@/api/client'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction, undoable } from '@/composables/useActionPolicy'
 import { speakerName } from '@/utils/speakerName'
 
 /** Enable (at once) or remove (after confirmation) a disabled player: card, row and bulk bar alike. */
@@ -29,6 +29,14 @@ export function useDisabledPlayerActions() {
         (r) => r.status === 'fulfilled' && (r.value as { restart_required?: boolean } | undefined)?.restart_required,
       )
       await bridge.refresh()
+      const done = players.filter((_, i) => results[i]!.status === 'fulfilled')
+      if (done.length) {
+        await undoable('speaker.enable', async () => undefined, () => Promise.all(done.map((p) => store.setEnabled(p.id, false))), {
+          doneKey: 'undo.enabled',
+          name: done.map(nameOf).join(', '),
+          failure: message,
+        })
+      }
       if (restart) notifications.warning(t('settings.restartNeeded'))
       if (failed.length === 1) notifications.error(message((results[players.indexOf(failed[0]!)] as PromiseRejectedResult).reason))
       else if (failed.length) notifications.error(t('devices.bulk.failed', { action: t('speaker.enable'), names: failed.map(nameOf).join(', ') }))
@@ -41,11 +49,11 @@ export function useDisabledPlayerActions() {
   async function remove(players: DisabledPlayer[]) {
     if (!players.length) return
     const names = players.map(nameOf)
-    const ok = await confirmDialog({
+    const list = names.join(', ')
+    const ok = await confirmAction('devices.removeDisabled', {
       title: players.length === 1 ? t('speaker.removeTitle', { name: names[0] }) : t('devices.bulk.remove.confirmTitle', { count: players.length }),
-      message: players.length === 1 ? t('speaker.removeMessage') : t('devices.bulk.remove.confirmMessage', { names: names.join(', ') }),
+      consequences: [t('consequence.leavesMa', { names: list }), t('consequence.unpairs')],
       confirmLabel: t('speaker.remove'),
-      danger: true,
     })
     if (!ok) return
     busy.value = true

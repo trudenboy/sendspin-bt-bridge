@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Pencil, Trash2 } from 'lucide-vue-next'
 import { useSyncStore } from '@/stores/sync'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton, SbDialog } from '@/kit'
 import ProfileDiffDialog from './ProfileDiffDialog.vue'
@@ -177,12 +177,11 @@ async function commitRename(profile: SyncProfile) {
 /* -- delete ------------------------------------------------------------------------ */
 
 async function remove(profile: SyncProfile) {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('sync.deleteProfile', {
     title: t('sync.profiles.deleteTitle', { name: profile.name }),
     message: t('sync.profiles.deleteMessage'),
     confirmLabel: t('sync.profiles.delete'),
     cancelLabel: t('sync.profiles.cancel'),
-    danger: true,
   })
   if (!ok) return
   const list = profiles.value

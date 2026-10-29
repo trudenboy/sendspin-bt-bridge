@@ -152,8 +152,8 @@ describe('DeviceCard', () => {
     const items = await openMenu(mountCard(makeDevice({ enabled })))
     await items.find((b) => b.text().includes(item))!.trigger('click')
     expect(store.setEnabled).toHaveBeenCalledWith('dev-1', next)
-    // Disabling is reversible: it runs at once and offers Undo. Enabling needs none.
-    expect(notes.undo).toHaveBeenCalledTimes(enabled ? 1 : 0)
+    // Disabling and enabling are both reversible: they run at once and offer Undo.
+    expect(notes.undo).toHaveBeenCalledTimes(1)
   })
 
   it('releases and reclaims through the device store', async () => {

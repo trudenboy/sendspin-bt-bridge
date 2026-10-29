@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { computed, nextTick, onMounted, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
@@ -134,11 +134,10 @@ async function restartNow() {
     .filter((d) => d.playback?.playing)
     .map((d) => speakerName(d.name))
     .join(', ')
-  const ok = await confirmDialog({
+  const ok = await confirmAction('config.restart', {
     title: t('settings.restartConfirmTitle'),
-    message: t('settings.restartConfirmMessage') + (playing ? ` ${t('settings.restartConfirmPlaying', { names: playing })}` : ''),
+    consequences: [t('consequence.restartMinute'), ...(playing ? [t('consequence.playingNow', { names: playing })] : [])],
     confirmLabel: t('settings.restartNow'),
-    danger: true,
   })
   if (!ok) return
   restartNeeded.value = false
@@ -162,11 +161,10 @@ async function save() {
 
 onBeforeRouteLeave(async () => {
   if (!configStore.isDirty) return true
-  return confirmDialog({
+  return confirmAction('config.leaveUnsaved', {
     title: t('settings.unsaved'),
     message: t('settings.leaveConfirm'),
     confirmLabel: t('settings.leave'),
-    danger: true,
   })
 })
 

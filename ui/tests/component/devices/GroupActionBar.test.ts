@@ -14,7 +14,7 @@ const store = vi.hoisted(() => ({
   release: vi.fn(),
   setPowerSave: vi.fn(),
 }))
-const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }))
+const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
 const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
 
 vi.mock('@/stores/devices', async (importOriginal) => ({
@@ -112,7 +112,7 @@ describe('GroupActionBar bulk power actions', () => {
     await button(w, 'standby').trigger('click')
     await flushPromises()
     expect(confirm.confirmDialog).toHaveBeenCalledTimes(1)
-    expect(confirm.confirmDialog.mock.calls[0]![0].message).toContain('Alpha')
+    expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('Alpha')
     expect(store.standby).not.toHaveBeenCalled()
   })
 

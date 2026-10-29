@@ -12,7 +12,7 @@ import SettingField from '@/components/settings/SettingField.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS, deviceFieldFor, deviceFieldVisible, type DeviceField } from '@/settings/device'
 import { getPath, setPath } from '@/settings/layout'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { speakerName } from '@/utils/speakerName'
 import { useReversibleActions } from '@/composables/useReversibleActions'
 import type { Device } from '@/api/types'
@@ -132,11 +132,14 @@ const removing = ref(false)
 /** The same removal as the speaker menu, at the end of its settings (as on a Home Assistant device page). */
 async function removeSpeaker() {
   const name = speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id)
-  const ok = await confirmDialog({
+  const ok = await confirmAction('speaker.remove', {
     title: t('speaker.removeTitle', { name }),
-    message: t('speaker.removeMessage'),
+    consequences: [
+      t('consequence.stopsPlayback', { names: name }),
+      t('consequence.leavesMa', { names: name }),
+      t('consequence.unpairs'),
+    ],
     confirmLabel: t('speaker.remove'),
-    danger: true,
   })
   if (!ok) return
   removing.value = true

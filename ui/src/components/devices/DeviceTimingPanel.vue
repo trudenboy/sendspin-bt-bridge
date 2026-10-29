@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNow } from '@/composables/useNow'
@@ -100,7 +100,7 @@ async function measure() {
       return
     }
     const late = plan.deviceId === props.device.id ? props.device : reference
-    const ok = await confirmDialog({
+    const ok = await confirmAction('timing.applyMicSuggestion', {
       title: t('timing.mic.resultTitle'),
       message: t('timing.mic.confirm', { offset: plan.median.toFixed(0), spread: plan.spread.toFixed(0), value: plan.value, name: late.name }),
       confirmLabel: t('timing.applySuggestion'),
@@ -220,11 +220,10 @@ const calibrationLine = (c: AirCalibration) =>
   t('timing.air.calibration.line', { ...calibrationParams(c), latency: c.latency_ms.toFixed(1), age: calibrationAge(c.measured_at) })
 const forgetting = ref('')
 async function forgetCalibration(c: AirCalibration) {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('timing.forgetCalibration', {
     title: t('timing.air.calibration.forgetTitle'),
     message: t('timing.air.calibration.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
     confirmLabel: t('timing.air.calibration.forget'),
-    danger: true,
   })
   if (!ok) return
   forgetting.value = calibrationKey(c)
@@ -249,11 +248,10 @@ const learnedLine = (c: AirLearned) =>
     starts: c.starts,
   })
 async function forgetLearned(c: AirLearned) {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('timing.forgetLearned', {
     title: t('timing.air.learned.forgetTitle'),
     message: t('timing.air.learned.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
     confirmLabel: t('timing.air.learned.forget'),
-    danger: true,
   })
   if (!ok) return
   forgetting.value = `learned:${calibrationKey(c)}`

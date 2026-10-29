@@ -20,7 +20,7 @@ import type { SessionPoint, SyncMeasurement, SyncProposal, SyncSession } from '@
 import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SOLO_SETTLE_MS, SyncCaptureError, SyncRecorder, type Capture } from '@/sync/capture'
 import { SbButton, SbSpinner } from '@/kit'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { formatMs } from '@/sync/format'
 import { speakerName } from '@/sync/names'
 import { useCountdown } from '@/sync/countdown'
@@ -946,12 +946,11 @@ async function cancel() {
     Object.values(results).some((r) => r.status !== 'skipped') ||
     Object.values(session.value?.measurements ?? {}).some((r) => r.status !== 'skipped')
   if (applied.value || recorded) {
-    const ok = await confirmDialog({
+    const ok = await confirmAction('sync.cancelMeasurement', {
       title: t(applied.value ? 'sync.cancel.tuneTitle' : 'sync.cancel.title'),
       message: t(applied.value ? 'sync.cancel.tuneMessage' : 'sync.cancel.message'),
       confirmLabel: t('sync.cancel.confirm'),
       cancelLabel: t('sync.cancel.keep'),
-      danger: true,
     })
     if (!ok || id !== sessionId.value) return
   }
