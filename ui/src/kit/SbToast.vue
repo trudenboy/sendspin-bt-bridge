@@ -42,26 +42,33 @@ function dismiss() {
   emit('close', props.id)
 }
 
-onMounted(() => {
-  if (props.duration > 0) {
-    timer = setTimeout(dismiss, props.duration)
-  }
-})
-
-onBeforeUnmount(() => {
+function start() {
+  stop()
+  if (props.duration > 0) timer = setTimeout(dismiss, props.duration)
+}
+function stop() {
   if (timer) clearTimeout(timer)
-})
+  timer = null
+}
+
+onMounted(start)
+
+onBeforeUnmount(stop)
 </script>
 
 <template>
   <div
     v-if="visible"
-    role="alert"
+    :role="type === 'error' ? 'alert' : 'status'"
     :class="[
       'flex min-w-[300px] max-w-[420px] items-center gap-3 rounded-(--radius-card) px-4 py-3 shadow-lg',
       typeStyles,
     ]"
     :data-toast-id="id"
+    @mouseenter="stop"
+    @mouseleave="start"
+    @focusin="stop"
+    @focusout="start"
   >
     <!-- Icon -->
     <span class="shrink-0 text-lg" aria-hidden="true">

@@ -19,7 +19,7 @@ describe('SbToastContainer', () => {
 
   it('renders without toasts', () => {
     const w = mountContainer()
-    expect(w.findAll('[role="alert"]')).toHaveLength(0)
+    expect(w.findAll('[data-toast-id]')).toHaveLength(0)
   })
 
   it('renders toasts from the store', () => {
@@ -33,7 +33,7 @@ describe('SbToastContainer', () => {
       global: { plugins: [pinia] },
     })
 
-    expect(w.findAll('[role="alert"]')).toHaveLength(2)
+    expect(w.findAll('[data-toast-id]')).toHaveLength(2)
     expect(w.text()).toContain('Message 1')
     expect(w.text()).toContain('Message 2')
   })

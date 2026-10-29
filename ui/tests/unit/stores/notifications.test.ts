@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useNotificationStore } from '@/stores/notifications'
 
@@ -32,5 +32,24 @@ describe('useNotificationStore', () => {
       'warning',
       'info',
     ])
+  })
+
+  it('keeps errors until they are dismissed (duration 0), other types time out', () => {
+    setActivePinia(createPinia())
+    const store = useNotificationStore()
+    store.error('e')
+    store.success('s')
+    expect(store.toasts.find((t) => t.type === 'error')!.duration).toBe(0)
+    expect(store.toasts.find((t) => t.type === 'success')!.duration).toBeGreaterThan(0)
+  })
+
+  it('does not remove toasts on its own timer (the toast owns the countdown so hover can pause it)', () => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    const store = useNotificationStore()
+    store.success('s')
+    vi.advanceTimersByTime(60_000)
+    expect(store.toasts).toHaveLength(1)
+    vi.useRealTimers()
   })
 })

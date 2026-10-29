@@ -15,13 +15,11 @@ let nextId = 0
 export const useNotificationStore = defineStore('notifications', () => {
   const toasts = ref<Toast[]>([])
 
+  // The toast component owns the countdown, so hovering or focusing it can
+  // pause it. ``duration`` 0 keeps a toast until it is dismissed (errors).
   function add(type: ToastType, message: string, duration = 4000) {
     const id = nextId++
     toasts.value.push({ id, type, message, duration })
-
-    if (duration > 0) {
-      setTimeout(() => remove(id), duration)
-    }
   }
 
   function remove(id: number) {
@@ -34,7 +32,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     toasts,
     hasToasts,
     success: (msg: string) => add('success', msg),
-    error: (msg: string) => add('error', msg, 6000),
+    error: (msg: string) => add('error', msg, 0),
     warning: (msg: string) => add('warning', msg),
     info: (msg: string) => add('info', msg),
     remove,
