@@ -685,6 +685,11 @@
   "adapter": {
     "management": "Adapter Management",
     "togglePower": "Power",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "confirmOffTitle": "Turn off adapter {adapter}?",
+    "confirmRebootTitle": "Reboot adapter {adapter}?",
+    "confirmMessage": "This disconnects every speaker on it, and playback on them stops until they reconnect: {speakers}.",
     "reboot": "Reboot",
     "powerToggled": "Adapter power toggled",
     "powerFailed": "Failed to toggle adapter power",

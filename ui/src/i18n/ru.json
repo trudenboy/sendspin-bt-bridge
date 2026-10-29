@@ -685,6 +685,11 @@
   "adapter": {
     "management": "Управление адаптером",
     "togglePower": "Питание",
+    "turnOff": "Выключить",
+    "turnOn": "Включить",
+    "confirmOffTitle": "Выключить адаптер {adapter}?",
+    "confirmRebootTitle": "Перезагрузить адаптер {adapter}?",
+    "confirmMessage": "Все колонки на нём отключатся, воспроизведение остановится до переподключения: {speakers}.",
     "reboot": "Перезагрузка",
     "powerToggled": "Питание адаптера переключено",
     "powerFailed": "Не удалось переключить питание адаптера",

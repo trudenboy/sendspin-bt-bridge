@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
+import { confirmDialog } from '@/composables/useConfirm'
 import { actionFailure } from '@/utils/actionFailure'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -182,13 +183,37 @@ async function powerCycle(states: boolean[]) {
   }
 }
 
-function onAdapterPower() {
-  const adapter = bridge.adapters.find((a) => a.id === adapterId.value)
-  void powerCycle([!(adapter?.powered ?? true)])
+const adapter = computed(() => bridge.adapters.find((a) => a.id === adapterId.value))
+const adapterPowered = computed(() => adapter.value?.powered ?? true)
+/** Every speaker on this adapter loses its link when it is powered off or rebooted. */
+const adapterSpeakers = computed(() =>
+  bridge.devices
+    .filter((d) => d.bluetooth?.adapter.hci === adapterId.value)
+    .map((d) => speakerName(d.name))
+    .join(', '),
+)
+
+async function onAdapterPower() {
+  if (adapterPowered.value) {
+    const ok = await confirmDialog({
+      title: t('adapter.confirmOffTitle', { adapter: adapter.value?.name || adapterId.value }),
+      message: t('adapter.confirmMessage', { speakers: adapterSpeakers.value }),
+      confirmLabel: t('adapter.turnOff'),
+      danger: true,
+    })
+    if (!ok) return
+  }
+  void powerCycle([!adapterPowered.value])
 }
 
-function onAdapterReboot() {
-  void powerCycle([false, true])
+async function onAdapterReboot() {
+  const ok = await confirmDialog({
+    title: t('adapter.confirmRebootTitle', { adapter: adapter.value?.name || adapterId.value }),
+    message: t('adapter.confirmMessage', { speakers: adapterSpeakers.value }),
+    confirmLabel: t('adapter.reboot'),
+    danger: true,
+  })
+  if (ok) void powerCycle([false, true])
 }
 
 </script>
@@ -334,17 +359,19 @@ function onAdapterReboot() {
                   variant="outline"
                   size="sm"
                   :loading="adapterLoading"
+                  data-adapter-power
                   @click="onAdapterPower"
                 >
                   <template #icon-left>
                     <Power class="h-3.5 w-3.5" />
                   </template>
-                  {{ t('adapter.togglePower') }}
+                  {{ adapterPowered ? t('adapter.turnOff') : t('adapter.turnOn') }}
                 </SbButton>
                 <SbButton
                   variant="outline"
                   size="sm"
                   :loading="adapterLoading"
+                  data-adapter-reboot
                   @click="onAdapterReboot"
                 >
                   <template #icon-left>
