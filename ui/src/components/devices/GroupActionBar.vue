@@ -204,6 +204,7 @@ watch(
           :max="100"
           :step="1"
           :show-value="true"
+          :aria-label="t('devices.groupVolume')"
           class="flex-1"
           @update:model-value="onGroupVolumeChange"
         />

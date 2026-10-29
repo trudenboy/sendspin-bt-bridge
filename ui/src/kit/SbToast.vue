@@ -75,7 +75,7 @@ onBeforeUnmount(() => {
     <button
       v-if="closable"
       type="button"
-      class="shrink-0 cursor-pointer text-text-secondary transition-colors hover:text-text-primary"
+      class="-my-3 -mr-3 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:text-text-primary"
       aria-label="Dismiss notification"
       data-testid="toast-close-btn"
       @click="dismiss"

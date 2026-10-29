@@ -89,6 +89,7 @@ const iconButton =
           type="button"
           class="inline-flex items-center gap-1.5 rounded-full tone-info px-3 py-1 text-xs font-medium"
           :title="t('update.available')"
+          :aria-label="t('update.badge', { version: update.latestVersion })"
           @click="update.openDialog()"
         >
           <ArrowUpCircle class="size-3.5" aria-hidden="true" />

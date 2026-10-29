@@ -226,3 +226,11 @@ describe('GroupActionBar mute, pause and reconnect all', () => {
     expect(w.find('[data-bulk="pause"]').exists()).toBe(false)
   })
 })
+
+describe('GroupActionBar accessibility', () => {
+  it('gives the selection volume slider an accessible name', () => {
+    const w = mountBar([speaker('a', 'Alpha')])
+    const slider = w.find('input[type="range"]')
+    expect(slider.attributes('aria-label')).toBe(en.devices.groupVolume)
+  })
+})

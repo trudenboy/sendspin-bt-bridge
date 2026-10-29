@@ -103,3 +103,10 @@ describe('SbToast', () => {
     })
   })
 })
+
+describe('SbToast close button', () => {
+  it('has a 40 px hit area', () => {
+    const w = mountToast()
+    expect(w.find('[data-testid="toast-close-btn"]').classes()).toContain('size-10')
+  })
+})
