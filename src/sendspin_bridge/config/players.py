@@ -402,6 +402,22 @@ def resolve_air_latency(
     return None
 
 
+def resolve_air_d_ref(
+    player_cfg: Mapping[str, Any], codec: str | None, rate: int | None, adapter: str | None
+) -> float | None:
+    """The output delay (``D_ref``) the stored calibration for this key was taken at, or None."""
+    if not isinstance(codec, str) or not isinstance(rate, int) or isinstance(rate, bool):
+        return None
+    wanted = (codec.strip().lower(), rate, normalize_mac(adapter))
+    if not wanted[2]:
+        return None
+    for entry in valid_air_latency_entries(player_cfg.get("air_to_sound_latency")):
+        if _air_key(entry) == wanted:
+            d_ref = entry.get("d_ref_ms")
+            return None if d_ref is None else float(d_ref)
+    return None
+
+
 def upsert_air_latency(
     entries: list[dict[str, Any]], entry: dict[str, Any], *, max_entries: int = AIR_LATENCY_MAX_ENTRIES
 ) -> list[dict[str, Any]]:

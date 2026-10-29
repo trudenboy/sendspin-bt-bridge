@@ -514,7 +514,15 @@ def test_save_stores_entry_and_applies_it(sync_air_env):
     assert (entry["codec"], entry["rate"], entry["adapter"]) == ("sbc", 44100, ADAPTER)
     assert (entry["reference"], entry["source"], entry["spread_ms"]) == ("Kiosk (headset)", "sync_wizard", 2.5)
     assert entry["latency_ms"] == pytest.approx(203.0) and entry["measured_at"]
-    assert env.sent("eneby")[-1] == {"cmd": "set_air_calibration", "v": 1, "latency_ms": 203.0, "protocol_version": 2}
+    # Stage B (S-22): the calibration's reference delay goes with it; a stage A wizard entry has
+    # none, so the load backfills the player's static delay (0 here).
+    assert env.sent("eneby")[-1] == {
+        "cmd": "set_air_calibration",
+        "v": 1,
+        "latency_ms": 203.0,
+        "d_ref_ms": 0.0,
+        "protocol_version": 2,
+    }
 
 
 def test_saving_an_ineligible_member_is_refused_and_stores_nothing(sync_air_env):

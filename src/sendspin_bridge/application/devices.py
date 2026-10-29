@@ -308,23 +308,26 @@ def save_air_calibration(device_id: str, entry: dict[str, Any]) -> None:
 def forget_air_calibrations(
     device_id: str, codec: str | None = None, rate: int | None = None, adapter: str | None = None
 ) -> None:
-    """Forget the speaker's air calibration for (codec, rate, adapter), or all of them without *codec*.
+    """Forget the speaker's air calibration and learned latency for (codec, rate, adapter), or all of them
+    without *codec*.
 
-    Applied live: the running daemon gets the entry that still matches (or null). 404 when the
-    speaker or (for one) the calibration is unknown.
+    Applied live: the running daemon gets the entries that still match (or null). 404 when the
+    speaker or (for one) neither kind is known under the key.
     """
-    from sendspin_bridge.config.players import forget_air_latency
+    from sendspin_bridge.config.players import forget_air_latency, forget_air_learned
 
     def _forget(player: dict) -> None:
         remaining, removed = forget_air_latency(player.get("air_to_sound_latency"), codec, rate, adapter)
-        if codec is not None and not removed:
+        learned_left, learned_removed = forget_air_learned(player.get("air_learned_latency"), codec, rate, adapter)
+        if codec is not None and not removed and not learned_removed:
             raise UseCaseError(
                 404, "unknown_calibration", f"No air calibration for {codec} {rate} Hz on adapter {adapter}"
             )
-        if remaining:
-            player["air_to_sound_latency"] = remaining
-        else:
-            player.pop("air_to_sound_latency", None)
+        for field, kept in (("air_to_sound_latency", remaining), ("air_learned_latency", learned_left)):
+            if kept:
+                player[field] = kept
+            else:
+                player.pop(field, None)
 
     _change_player(device_id, _forget)
 

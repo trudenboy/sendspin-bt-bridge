@@ -398,7 +398,7 @@ def calibrated_bridge(monkeypatch, tmp_config):
     thread = threading.Thread(target=loop.run_forever, daemon=True)
     thread.start()
 
-    def build(*, switch: bool = True, entries: list | None = None):
+    def build(*, switch: bool = True, entries: list | None = None, learned: list | None = None):
         entries = [AIR_ENTRY, {**AIR_ENTRY, "rate": 48000, "latency_ms": 150.0}] if entries is None else entries
         pid = player_id_for_mac(MAC)
         tmp_config.write_text(
@@ -413,6 +413,7 @@ def calibrated_bridge(monkeypatch, tmp_config):
                             "name": "Kitchen",
                             "backend": {"type": "bluetooth_a2dp", "mac": MAC},
                             "air_to_sound_latency": entries,
+                            **({"air_learned_latency": learned} if learned else {}),
                         }
                     ],
                     "PLAYER_STATE": {},
@@ -429,6 +430,7 @@ def calibrated_bridge(monkeypatch, tmp_config):
         client = SendspinClient("Kitchen", "localhost", 9000, bt_manager=bt)
         client.config_id = pid
         client.air_to_sound_latency = list(entries)
+        client.air_learned_latency = list(learned or [])
         snapshot = DeviceRegistrySnapshot(active_clients=[client])
         monkeypatch.setattr(status_uc, "get_device_registry_snapshot", lambda: snapshot)
         monkeypatch.setattr(device_registry, "get_device_registry_snapshot", lambda: snapshot)
@@ -459,6 +461,7 @@ def calibrated_bridge(monkeypatch, tmp_config):
             client=client,
             sent=lambda: [json.loads(line) for line in writes],
             stored=lambda: json.loads(tmp_config.read_text())["players"][0].get("air_to_sound_latency"),
+            stored_learned=lambda: json.loads(tmp_config.read_text())["players"][0].get("air_learned_latency"),
         )
         return dev
 
@@ -494,13 +497,67 @@ def test_forget_one_calibration(api_client, calibrated_bridge):
     assert dev.sent()[-1] == _cal(None)
 
 
+def _learned_entry(rate=44100, samples=(228.0, 230.0), delays=(184.0, 190.0)):
+    from sendspin_bridge.services.audio.playout.air_learned import learned_reference
+
+    latency, d_ref = learned_reference(list(samples), list(delays))
+    return {
+        "codec": "sbc",
+        "rate": rate,
+        "adapter": AIR_ADAPTER,
+        "source": "learned",
+        "samples_ms": list(samples),
+        "d_out_ms": list(delays),
+        "latency_ms": latency,
+        "d_ref_ms": d_ref,
+        "starts": len(samples),
+        "measured_at": "2026-10-29T10:00:00+00:00",
+    }
+
+
+def test_forget_clears_the_calibration_and_the_learned_entry(api_client, calibrated_bridge):
+    dev = calibrated_bridge(learned=[_learned_entry()])
+    assert dev.sent()[-1]["learned_starts"] == 2  # the daemon has the learned target alongside 203.4
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/44100/{AIR_ADAPTER}")
+    assert r.status_code == 204, r.text
+    assert not dev.stored_learned()
+    assert [(e["rate"], e["latency_ms"]) for e in dev.stored()] == [(48000, 150.0)]
+    last = dev.sent()[-1]
+    assert last["latency_ms"] is None
+    assert not any(k in last for k in ("learned_ms", "learned_d_ref_ms", "learned_starts"))
+
+
+def test_forget_of_a_learned_only_key_is_204(api_client, calibrated_bridge):
+    dev = calibrated_bridge(entries=[], learned=[_learned_entry()])
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/44100/{AIR_ADAPTER}")
+    assert r.status_code == 204, r.text
+    assert not dev.stored_learned()
+    assert not any(k in dev.sent()[-1] for k in ("learned_ms", "learned_starts"))
+
+
+def test_forget_all_clears_the_learned_entries_too(api_client, calibrated_bridge):
+    dev = calibrated_bridge(learned=[_learned_entry(), _learned_entry(rate=48000)])
+    assert api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations").status_code == 204
+    assert not dev.stored_learned()
+
+
+def test_forget_with_neither_kind_is_404(api_client, calibrated_bridge):
+    dev = calibrated_bridge(learned=[_learned_entry(rate=48000)])
+    r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/32000/{AIR_ADAPTER}")
+    assert r.status_code == 404 and r.json()["code"] == "unknown_calibration"
+    assert len(dev.stored_learned()) == 1
+
+
 def test_forgetting_another_rate_keeps_the_live_value(api_client, calibrated_bridge):
     dev = calibrated_bridge()
-    count = len(dev.sent())
     r = api_client.delete(f"/api/v1/devices/{dev.id}/air-calibrations/sbc/48000/{AIR_ADAPTER.lower()}")
     assert r.status_code == 204, r.text
     assert [e["rate"] for e in dev.stored()] == [44100]
-    assert len(dev.sent()) == count  # the daemon already has 203.4
+    # The daemon keeps 203.4.  Stage B decision (S-22): a calibration's reference delay is sent
+    # with it, and the reload behind the Forget backfills it into this fixture's entry, so the
+    # one resend that can follow carries the same latency plus that reference.
+    assert {c["latency_ms"] for c in dev.sent()} == {203.4}
+    assert len(dev.sent()) <= 2
 
 
 def test_forget_all_calibrations(api_client, calibrated_bridge):

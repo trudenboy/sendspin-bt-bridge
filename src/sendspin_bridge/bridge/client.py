@@ -55,6 +55,8 @@ from sendspin_bridge.config import (
     get_runtime_version,
     load_config,
     load_player_volume,
+    resolve_air_learned,
+    save_air_learned_sample,
     save_device_static_delay,
     save_device_volume,
     save_player_static_delay,
@@ -66,8 +68,11 @@ from sendspin_bridge.config.players import (
     find_player_by_id,
     find_player_by_mac,
     normalize_mac,
+    record_air_learned_sample,
+    resolve_air_d_ref,
     resolve_air_latency,
     valid_air_latency_entries,
+    valid_air_learned_entries,
 )
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
@@ -680,10 +685,15 @@ class SendspinClient:
     # (None), ``air_calibration_ms`` is used as set.
     air_calibration_ms: float | None = None
     air_to_sound_latency: list[dict[str, Any]] | None = None
+    # The player's learned entries (config at spawn and live reconfiguration, plus samples this
+    # process persisted); the daemon gets the one for the current key from the 2nd sample on.
+    air_learned_latency: list[dict[str, Any]] | None = None
+    _air_learned_seen: tuple[object, int] | None = None  # (daemon process, seq) last handled
+    _air_learned_writes: int = 0
     _air_subscribed_to: Any | None = None
     _air_subscribed_mac: str | None = None
     _air_calibrated_proc: object | None = None
-    _air_calibrated_value: float | None = None
+    _air_calibrated_value: tuple | None = None  # the target the daemon has, see _resolve_air_target
     _air_last_seen: dict[str, Any] | None = None  # codec/rate/adapter of the last daemon snapshot
     _air_retired: bool = False
 
@@ -950,6 +960,8 @@ class SendspinClient:
         # ── Sink mute watchdog ────────────────────────────────────────
         if "sink_muted" in updates:
             self._apply_idle_actions(self._idle_machine.on_sink_mute_change(IdlePlaybackState.from_status(self.status)))
+        if "playout" in updates:
+            self._take_air_learned(updates["playout"])
         self.sync_air_subscription()
 
     # ── Air sensor subscription ──────────────────────────────────────────
@@ -1048,13 +1060,31 @@ class SendspinClient:
         self.air_calibration_ms = value
         return value
 
+    def _resolve_air_target(self) -> tuple[float | None, float | None, float | None, float | None, int | None]:
+        """What the daemon should have: ``(latency, d_ref, learned_ms, learned_d_ref_ms, learned_starts)``.
+
+        The daemon replaces the feed's whole target on every command, so the learned three
+        (all or none) go with every calibration whenever known.
+        """
+        latency = self._resolve_air_calibration()
+        codec, rate, adapter = self._air_calibration_key()
+        d_ref = None
+        if latency is not None and self.air_to_sound_latency is not None:
+            d_ref = resolve_air_d_ref({"air_to_sound_latency": self.air_to_sound_latency}, codec, rate, adapter)
+        learned = None
+        if self.air_learned_latency:
+            learned = resolve_air_learned({"air_learned_latency": self.air_learned_latency}, codec, rate, adapter)
+        if learned is None:
+            return latency, d_ref, None, None, None
+        return latency, d_ref, learned[0], learned[1], learned[2]
+
     def _air_calibration_current(self) -> bool:
         """Whether the running daemon already has the current calibration (nothing to schedule)."""
         proc = self._daemon_proc
         return (
             proc is not None
             and proc is self._air_calibrated_proc
-            and self._resolve_air_calibration() == self._air_calibrated_value
+            and self._resolve_air_target() == self._air_calibrated_value
         )
 
     def _send_air_calibration_once(self) -> None:
@@ -1063,12 +1093,13 @@ class SendspinClient:
         if not self.is_running() or AIR_ENVELOPE_VERSION not in self.air_accepts or self._air_retired:
             self._air_calibrated_proc = None
             return
-        value = self._resolve_air_calibration()
-        if proc is self._air_calibrated_proc and value == self._air_calibrated_value:
+        target = self._resolve_air_target()
+        if proc is self._air_calibrated_proc and target == self._air_calibrated_value:
             return
-        changed = value != self._air_calibrated_value
-        if self.send_air_command(SetAirCalibration(latency_ms=value)):
-            self._air_calibrated_proc, self._air_calibrated_value = proc, value
+        changed = target != self._air_calibrated_value
+        value = target[0]
+        if self.send_air_command(SetAirCalibration(*target)):
+            self._air_calibrated_proc, self._air_calibrated_value = proc, target
             if changed:
                 key = self._air_calibration_key()
                 logger.info(
@@ -1077,6 +1108,74 @@ class SendspinClient:
                     "none" if value is None else f"{value:g} ms",
                     *key,
                 )
+
+    def _take_air_learned(self, playout: object) -> None:
+        """A daemon's learned sample (``playout.air_learned``): validate, persist once, use it now.
+
+        One sample per daemon process and sequence number; an invalid one is dropped with a
+        DEBUG line.  The write runs off the loop; the resend follows the subscription sync.
+        """
+        sample = playout.get("air_learned") if isinstance(playout, dict) else None
+        proc = self._daemon_proc
+        if not isinstance(sample, dict) or self._air_retired or proc is None:
+            return
+        seq = sample.get("seq")
+        if not isinstance(seq, int) or isinstance(seq, bool):
+            return
+        seen = self._air_learned_seen
+        if seen is not None and seen[0] is proc and seen[1] == seq:
+            return
+        self._air_learned_seen = (proc, seq)
+        parsed = self._valid_air_learned_sample(sample)
+        if parsed is None:
+            logger.debug("[%s] Ignoring an invalid learned air sample: %r", self.player_name, sample)
+            return
+        key, x_ms, d_out_ms = parsed
+        try:
+            self.air_learned_latency = record_air_learned_sample(
+                self.air_learned_latency,
+                key,
+                x_ms,
+                d_out_ms,
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            )
+        except Exception as exc:  # a sample that makes an invalid entry; nothing to keep
+            logger.debug("[%s] Learned air sample not usable: %s", self.player_name, type(exc).__name__)
+            return
+        if self.config_id:
+            self._air_learned_writes += 1
+            self._schedule_persist(
+                f"air_learned:{self._air_learned_writes}",
+                lambda pid, d_out: save_air_learned_sample(pid, key, x_ms, d_out),
+                self.config_id,
+                d_out_ms,
+            )
+        logger.info(
+            "[%s] Learned air sample %.1f ms at output delay %.1f ms (codec %s, rate %s, adapter %s)",
+            self.player_name,
+            x_ms,
+            d_out_ms,
+            *key,
+        )
+
+    @staticmethod
+    def _valid_air_learned_sample(sample: dict) -> tuple[tuple[str, int, str], float, float] | None:
+        """``(key, x_ms, d_out_ms)`` of a complete, in-range sample, else None."""
+        codec, rate, adapter = sample.get("codec"), sample.get("rate"), normalize_mac(sample.get("adapter"))
+        if not isinstance(codec, str) or not codec.strip() or not adapter:
+            return None
+        if not isinstance(rate, int) or isinstance(rate, bool) or rate <= 0:
+            return None
+        values: list[float] = []
+        for name in ("x_ms", "d_out_ms"):
+            value = sample.get(name)
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                return None
+            values.append(float(value))
+        x_ms, d_out_ms = values
+        if not 0.0 <= d_out_ms <= 5000.0 or abs(x_ms - d_out_ms) > 1000.0:
+            return None
+        return (codec.strip().lower(), rate, adapter), x_ms, d_out_ms
 
     def retire_air_subscription(self) -> None:
         """The player was removed: unsubscribe now and never again (late daemon status included)."""
@@ -2250,6 +2349,7 @@ class SendspinClient:
                     player_cfg, {**spawn_config, "EXPERIMENTAL_AIR_SENSOR": get_air_sensor_service() is not None}
                 )
                 self.air_to_sound_latency = valid_air_latency_entries(player_cfg.get("air_to_sound_latency"))
+                self.air_learned_latency = valid_air_learned_entries(player_cfg.get("air_learned_latency"))
                 if air_reason != "switch_off":
                     # Switch on: a speaker the sensor is not effective for reports why (its daemon
                     # never builds the sensor); an effective one leaves the value to its daemon.
@@ -2259,7 +2359,19 @@ class SendspinClient:
                     )
                 # The calibration for the codec, rate and adapter last seen; the daemon reports
                 # what it actually plays and the parent resends when that picks another entry.
-                spawn_air_latency = self._resolve_air_calibration() if air_effective else None
+                spawn_air_target = self._resolve_air_target() if air_effective else None
+                spawn_air_sensor: dict[str, Any] = {"enabled": True, "latency_ms": None}
+                if spawn_air_target is not None:
+                    latency, d_ref, learned_ms, learned_d_ref, learned_starts = spawn_air_target
+                    spawn_air_sensor["latency_ms"] = latency
+                    for name, value in (
+                        ("d_ref_ms", d_ref),
+                        ("learned_ms", learned_ms),
+                        ("learned_d_ref_ms", learned_d_ref),
+                        ("learned_starts", learned_starts),
+                    ):
+                        if value is not None:
+                            spawn_air_sensor[name] = value
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -2292,11 +2404,7 @@ class SendspinClient:
                             "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
                             # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for
                             # gets the key; without it the daemon builds nothing (switch off).
-                            **(
-                                {"air_sensor": {"enabled": True, "latency_ms": spawn_air_latency}}
-                                if air_effective
-                                else {}
-                            ),
+                            **({"air_sensor": spawn_air_sensor} if air_effective else {}),
                         }
                     )
                 )
@@ -2327,7 +2435,7 @@ class SendspinClient:
                 )
                 if air_effective:
                     # The spawn param already carries it: no command until the value changes.
-                    self._air_calibrated_proc, self._air_calibrated_value = self._daemon_proc, spawn_air_latency
+                    self._air_calibrated_proc, self._air_calibrated_value = self._daemon_proc, spawn_air_target
                 self._update_status({"playing": False})
                 self._clear_ma_reconnecting()
                 self._pending_reconnect_unmute_sync = True
@@ -2389,7 +2497,7 @@ class SendspinClient:
         elif mac:
             self._schedule_persist("static_delay", save_device_static_delay, mac, round(delay))
 
-    def _schedule_persist(self, key: str, fn, mac: str, value: int) -> None:
+    def _schedule_persist(self, key: str, fn, mac: str, value: float) -> None:
         """Debounce a daemon-driven config write and run it off the loop.
 
         Mirrors ``routes/api._schedule_volume_persist``: a ``threading.Timer``
@@ -2407,7 +2515,7 @@ class SendspinClient:
             self._persist_timers[key] = timer
             timer.start()
 
-    def _run_persist(self, key: str, fn, mac: str, value: int) -> None:
+    def _run_persist(self, key: str, fn, mac: str, value: float) -> None:
         # Runs on the Timer's own thread — the fsync never touches the loop.
         # Stale entries are replaced by the next ``_schedule_persist`` and
         # cleared by ``_cancel_persist_timers``, so no cleanup is needed here.
@@ -2785,12 +2893,15 @@ class SendspinClient:
                 # codec, rate and adapter or null.
                 self.air_to_sound_latency = valid_air_latency_entries(value)
                 applied.append(key)
+            elif key == "air_learned_latency":
+                self.air_learned_latency = valid_air_learned_entries(value)
+                applied.append(key)
             elif key in self._RECONFIG_PARENT_ONLY_FIELDS:
                 if hasattr(self, key):
                     setattr(self, key, value)
                     applied.append(key)
 
-        if "air_to_sound_latency" in applied:
+        if "air_to_sound_latency" in applied or "air_learned_latency" in applied:
             self.sync_air_subscription()
 
         if restart_metronome and "static_delay_ms" in applied:
