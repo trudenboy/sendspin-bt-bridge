@@ -422,3 +422,22 @@ def test_the_mad_term_widens_the_gate():
     c, cfeed = seeded()
     run(c, cfeed, FakeHistory(25_000.0), [win(3, H0)], t0=23.0)  # constant history: gate stays 10 ms
     assert c.snapshot()["air_bias_gated"] == 1
+
+
+def test_a_pa_step_before_the_first_seed_does_not_restart_the_triple():
+    # PipeWire's clock sawtooth steps every few seconds; the initial triple is air-only, so a step
+    # must not keep resetting it (found by the closed-loop sawtooth case). Underruns still restart it.
+    h = (D_REF - L_AS) * 1000 + 20_000.0
+    b, feed = bias()
+    hist = FakeHistory()
+    run(b, feed, hist, [win(0, h), win(1, h)])
+    b.on_reading_break("pa_step", 21.5e9, 22.0)
+    acts = run(b, feed, hist, [win(2, h)], t0=22.0)
+    assert b.state == "active"
+    assert [a.reason for a in acts] == ["air_seed"]
+
+    b2, feed2 = bias()
+    run(b2, feed2, hist, [win(0, h), win(1, h)])
+    b2.on_reading_break("underrun", 21.5e9, 22.0)
+    assert run(b2, feed2, hist, [win(2, h)], t0=22.0) == []
+    assert b2.state == "seeding"

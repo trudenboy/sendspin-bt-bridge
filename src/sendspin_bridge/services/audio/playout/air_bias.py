@@ -312,6 +312,8 @@ class AirBias:
             self._reseed_pending = True
             self._def_x = max(self._def_x, x_ns)
             return
+        if self._b is None and kind == "pa_step":
+            return  # the initial triple is air-only; a clock sawtooth (PipeWire) steps every few seconds
         self._restart_triple(x_ns)
         if self._b is None:
             return
