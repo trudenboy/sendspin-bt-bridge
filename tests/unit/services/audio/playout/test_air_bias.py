@@ -134,10 +134,31 @@ def test_learned_sample_once_per_output_from_the_initial_triple():
     s = b.learned
     assert b.state == "none" and s is not None and s.seq == 1
     assert b.snapshot()["air_bias_reason"] == "no_target"
-    assert (s.codec, s.rate, s.adapter) == KEY and s.x_ms == pytest.approx((D_OUT - h) / 1000, abs=0.01)
+    assert (s.codec, s.rate, s.adapter) == KEY and s.x_ms == pytest.approx((D_OUT - h + 5_000.0) / 1000, abs=0.01)
     assert s.d_out_ms == pytest.approx(D_OUT / 1000)
     run(b, feed, FakeHistory(), [win(i + 6, h) for i in range(6)], t0=26.0)
     assert b.learned.seq == 1  # still the one sample
+
+
+def test_learned_sample_is_the_placement_the_loop_holds():
+    # The speaker still plays e = 50 ms late at lock (start transient): learn d - h + e - beta, not the raw d - h.
+    b, feed = bias(latency=None)
+    h = -35_000.0
+    run(b, feed, FakeHistory(50_000.0), [win(i, h) for i in range(3)], beta_us=4_000.0)
+    assert b.learned is not None
+    assert b.learned.x_ms == pytest.approx((D_OUT - h + 50_000.0 - 4_000.0) / 1000, abs=0.01)
+
+
+def test_learned_sample_retries_until_the_key_is_complete():
+    feed = AirFeed()
+    feed.set_lock("locked", 1.0)
+    feed.set_output_delay(D_OUT / 1000)
+    b = AirBias(feed)
+    run(b, feed, FakeHistory(), [win(i, -35_000.0) for i in range(3)])
+    assert b.learned is None
+    feed.set_key(*KEY)
+    run(b, feed, FakeHistory(), [win(i + 3, -35_000.0) for i in range(3)], t0=23.0)
+    assert b.learned is not None and b.learned.seq == 1
 
 
 def test_no_key_no_learned_sample():

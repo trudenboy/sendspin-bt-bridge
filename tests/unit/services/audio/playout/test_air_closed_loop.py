@@ -325,22 +325,27 @@ def _h_median_ms(st: Start, lo_s: float, hi_s: float) -> float:
     return statistics.median(vals) / 1000.0
 
 
-def _h0_for_raw_h(raw_h_ms: float, seed: int, d_out_us: float) -> float:
-    """The hidden ``h0`` that makes a start's RAW placement ``H`` equal ``raw_h_ms``.
+START_TRANSIENT_MS = 50.0
 
-    The start placement reads a noisy clock, so a start's raw H is ``h0`` + the harness offset + that
-    start's placement error (up to ~10 ms for ``noise_us = 4000``). A probe start with the same port
-    seed and no target (nothing corrects before the first sample) reads the raw H the air sees.
-    """
-    probe = start(raw_h_ms - H_OFFSET_MS, seed=seed, d_out_us=d_out_us, target={"latency_ms": None}, feed=AirFeed())
+
+def _run_with_start_transient(st: Start, seconds: float) -> None:
+    """The stand's start transient: the pulsesink reading runs ``START_TRANSIENT_MS`` ahead at the placement
+    and settles over 1.5 s, so the audio truly plays that late and the reading sees it (an untargeted loop
+    removes it with its first steady jump ~10 s in; stand diagnosis b12)."""
+    st.port.slew(START_TRANSIENT_MS, 1.0)
+    st.run(1.5)
+    st.port.slew(-START_TRANSIENT_MS, 1500.0)
+    st.run(seconds - 1.5)
+
+
+def _no_target_settled_h_ms(h0: float, seed: int, d_out_us: float) -> float:
+    """The oracle: H the same start (same hidden path, port seed, transient) settles at with no target."""
+    st = start(h0, seed=seed, d_out_us=d_out_us, target={"latency_ms": None}, feed=AirFeed())
     try:
-        probe.run(14.0)
-        sample = probe.eng.snapshot()["air_learned"]
-        assert sample is not None
-        raw = sample["d_out_ms"] - sample["x_ms"]
+        _run_with_start_transient(st, 30.0)
+        return _h_median_ms(st, 18.0, 26.0)
     finally:
-        probe.close()
-    return raw_h_ms - H_OFFSET_MS - (raw - raw_h_ms)
+        st.close()
 
 
 @pytest.mark.slow
@@ -352,10 +357,14 @@ def test_learned_target_from_the_third_start():
     robust_refs: list[float] = []
     placed: list[float] = []  # heard error median per start
     heard_h: list[float] = []
+    oracle_xs: list[float] = []  # X = D_out - H the uncorrected loop settles at, start by start (independent runs)
+    oracle_ds: list[float] = []
     for n in range(1, 9):
         d_out_us = 214_000.0 if n == 5 else D_OUT_US  # +30 ms delay after start 4
-        # stage A's raw H of this start, shifted by +60 ms so the raw placement is late of any learned target
-        h0 = _h0_for_raw_h(STAGE_A_H_MS[n - 1] + 60.0, n, d_out_us)
+        h0 = STAGE_A_H_MS[n - 1] - H_OFFSET_MS  # hidden path of this start
+        oracle_h = _no_target_settled_h_ms(h0, n, d_out_us)
+        oracle_xs.append(d_out_us / 1000.0 - oracle_h)
+        oracle_ds.append(d_out_us / 1000.0)
         if n >= 3:
             lat, dref = learned_reference(xs, ds)
             target: dict[str, float | int | None] = {
@@ -373,7 +382,7 @@ def test_learned_target_from_the_third_start():
             h_ref = None
         st = start(h0, seed=n, feed=feed, tap_gen=n, d_out_us=d_out_us, target=target)
         try:
-            st.run(26.0)
+            _run_with_start_transient(st, 30.0)
             st.t0_us = first_audio_us(st)
             snap = st.eng.snapshot()
             corrections = snap["air_corrections"]
@@ -381,15 +390,23 @@ def test_learned_target_from_the_third_start():
             assert learned is not None, f"start {n}: no learned sample; {snap}"
             xs.append(learned["x_ms"])
             ds.append(learned["d_out_ms"])
-            h_after = _h_median_ms(st, 16.0, 24.0)
+            h_after = _h_median_ms(st, 18.0, 26.0)
             heard_h.append(h_after)
-            placed.append(st.heard_median_ms(16.0, 24.0))
+            placed.append(st.heard_median_ms(18.0, 26.0))
             if n <= 2:
                 assert corrections == 0, f"start {n}: {st.reasons()}"
             else:
                 assert corrections == 1, f"start {n}: corrections {corrections} {st.reasons()}"
                 assert h_ref is not None
                 assert abs(h_after - h_ref) <= 1.0, f"start {n}: H {h_after:.2f} vs H_ref {h_ref:.2f}"
+                # independent oracle: the estimator fed the placements the uncorrected loop settles at
+                # (no target, same hidden paths), not the probe start's own raw reading
+                lat_o, dref_o = learned_reference(oracle_xs[: n - 1][-8:], oracle_ds[: n - 1][-8:])
+                oracle_ref = -(lat_o - dref_o)
+                # starts 3-4 rest on 2-3 samples that each carry up to ~8 ms of window noise
+                tol = 6.0 if n <= 4 else 3.0
+                assert abs(h_ref - oracle_ref) <= tol, f"start {n}: H_ref {h_ref:.2f} vs oracle {oracle_ref:.2f}"
+                assert abs(h_after - oracle_ref) <= tol + 1.0, f"start {n}: H {h_after:.2f} vs oracle {oracle_ref:.2f}"
         finally:
             st.close()
     sd_robust = statistics.stdev(robust_refs[1:])  # starts 4-8

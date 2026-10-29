@@ -185,7 +185,7 @@ class AirAction:
 @dataclass(frozen=True, slots=True)
 class LearnedSample:
     seq: int
-    x_ms: float  # median(d_out_i - h_i) of the triple
+    x_ms: float  # median(d_out_i - h_i + e_i) - beta of the triple
     d_out_ms: float  # median(d_out_i)
     codec: str
     rate: int
@@ -208,6 +208,7 @@ class AirBias:
         self._seeded_now = False
         self._learned: LearnedSample | None = None
         self._learned_tried = False
+        self._beta_now = 0.0
         self._target = _NO_TARGET
         self._target_taken = False
         self._d_out_latched_ms: float | None = None
@@ -414,6 +415,7 @@ class AirBias:
     def update(self, now_s: float, history: EHistory, *, beta_us: float = 0.0) -> AirAction | None:
         self._seeded_now = False
         self._resume_beta_us = 0.0
+        self._beta_now = beta_us
         view = self._feed.take()
         if self._d_out_latched_ms is None:
             if view.d_out_ms is not None:
@@ -492,11 +494,13 @@ class AirBias:
     def _maybe_learn(self, last: list[tuple[AirSample, float]], key: tuple[str | None, int | None, str | None]) -> None:
         if self._learned is not None or self._learned_tried or self._b is not None:
             return
-        self._learned_tried = True
         codec, rate, adapter = key
         if codec is None or rate is None or adapter is None:
-            return
-        x_us = float(median([c.d_out_us - c.h_us for c, _ in last]))
+            return  # the feed's key is not complete yet: the next agreeing triple retries
+        self._learned_tried = True
+        # The placement the loop holds the speaker at (e = beta): the triple's raw H still carries the start
+        # transient (pulsesink e ~ +50 ms at lock), which an untargeted loop removes with its first steady jump.
+        x_us = float(median([c.d_out_us - c.h_us + e for c, e in last])) - self._beta_now
         d_us = float(median([c.d_out_us for c, _ in last]))
         self._learned = LearnedSample(self._feed.next_learned_seq(), x_us / 1000.0, d_us / 1000.0, codec, rate, adapter)
 
