@@ -241,3 +241,33 @@ def test_the_calibration_reference_backfill_is_clamped(static, expected):
     }
     _clean_air_latency(player)
     assert player["air_to_sound_latency"][0]["d_ref_ms"] == expected
+
+
+def test_the_calibration_reference_backfill_is_persisted_once(tmp_path, monkeypatch):
+    """S-14: a later static-delay change must not drag the calibration's reference with it."""
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    calibration = {
+        "codec": "sbc",
+        "rate": 44100,
+        "adapter": ADAPTER,
+        "latency_ms": 200.0,
+        "measured_at": "2026-10-28T09:00:00+00:00",
+    }
+    player = _player(static_delay_ms=150, air_to_sound_latency=[calibration])
+    (tmp_path / "config.json").write_text(json.dumps({"CONFIG_SCHEMA_VERSION": 6, "players": [player]}))
+
+    loaded = config.load_config()
+    assert loaded["players"][0]["air_to_sound_latency"][0]["d_ref_ms"] == 150.0
+    disk = json.loads((tmp_path / "config.json").read_text())
+    assert disk["players"][0]["air_to_sound_latency"][0]["d_ref_ms"] == 150.0
+
+    def _bump(cfg):
+        cfg["players"][0]["static_delay_ms"] = 200
+
+    config.update_config(_bump)
+    again = config.load_config()
+    assert again["players"][0]["static_delay_ms"] == 200
+    assert again["players"][0]["air_to_sound_latency"][0]["d_ref_ms"] == 150.0

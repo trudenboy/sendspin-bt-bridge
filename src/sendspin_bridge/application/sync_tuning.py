@@ -1042,14 +1042,18 @@ def save_air_calibrations(sid: str, members: list[str]) -> list[AirCalibrationCa
         d_out = member_folds[mid].written_d_out_ms if mid in member_folds else None
         if d_out is not None and 0 <= d_out <= 5000:
             entry["d_ref_ms"] = float(d_out)
-        elif mid in member_folds and not warned_no_d_out:
-            warned_no_d_out = True
-            logger.warning(
-                "Sync session %s: the air fold of %s reported no d_out_ms; saving without d_ref_ms "
-                "(the config load backfills it)",
-                sid,
-                mid,
-            )
+        elif mid in member_folds:
+            # Fixed now, so a later static-delay change cannot move the calibration's reference.
+            current = float(getattr(client, "static_delay_ms", 0.0) or 0.0)
+            entry["d_ref_ms"] = min(5000.0, max(0.0, current))
+            if not warned_no_d_out:
+                warned_no_d_out = True
+                logger.warning(
+                    "Sync session %s: the air fold of %s reported no d_out_ms; saving the speaker's current "
+                    "static delay as d_ref_ms",
+                    sid,
+                    mid,
+                )
         chosen.append((c, str(client.player_id), entry))
     for _c, device_id, entry in chosen:
         devices_uc.save_air_calibration(device_id, entry)

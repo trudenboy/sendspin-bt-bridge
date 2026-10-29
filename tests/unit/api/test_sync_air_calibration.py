@@ -659,6 +659,16 @@ def test_a_save_without_the_folds_delay_warns_once(sync_air_env, caplog):
     assert len(warnings) == 1
 
 
+def test_a_save_without_the_folds_delay_uses_the_speakers_current_static_delay(sync_air_env):
+    env = sync_air_env(**BASE)  # no d_out_ms from the daemon
+    env.bridge.static_delay_ms = 130.0
+    env.record_and_get_session()
+    r = env.client.post(f"/api/v1/sync/sessions/{env.sid}/air-calibrations", json={"members": ["eneby"]})
+    assert r.status_code == 200, r.text
+    assert env.player_config("eneby")["air_to_sound_latency"][0]["d_ref_ms"] == 130.0
+    assert env.sent("eneby")[-1]["d_ref_ms"] == 130.0
+
+
 def test_a_written_fold_over_two_delays_is_air_delay_changed(sync_air_env):
     kw = {**BASE, "written_reason": "air_delay_changed"}
     c = _eneby(sync_air_env(**kw).record_and_get_session())
