@@ -1583,7 +1583,9 @@
       "resetMeasured": "Reset to measured",
       "resetMeasuredMember": "Reset {name} to the measured delay",
       "endedNotice": "Manual tuning ended: the delays stay; the clicks stopped, every speaker is unmuted and the volumes are back.",
-      "prepOf": "Before you listen ({n}/{total}) · {name}"
+      "prepOf": "Before you listen ({n}/{total}) · {name}",
+      "start": "Start tuning by ear",
+      "startHelp": "Starting stops whatever the group is playing, plays a click track on it and lets you move each speaker's delay. Nothing starts until you press the button."
     },
     "capture": {
       "errors": {

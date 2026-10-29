@@ -48,10 +48,17 @@ watch(groupId, () => (preSkip.value = []))
 /** The two ways to tune: by ear (Manual tab) or measured with a microphone, then by ear (Measure tab). */
 const actions = ['manual', 'semi'] as const
 
+/** Switches to a tab and never starts anything: a tuning session begins only on an explicit button. */
 async function choose(action: 'manual' | 'semi') {
   activeTab.value = action === 'manual' ? 'manual' : 'measure'
   await nextTick()
   root.value?.querySelector<HTMLElement>(`[role="tab"][data-tab-id="${activeTab.value}"]`)?.focus()
+}
+
+/** The Group tab's entry buttons: the click is the explicit request, so tuning by ear starts here. */
+async function begin(action: 'manual' | 'semi') {
+  await choose(action)
+  if (action === 'manual') await enterManual()
 }
 
 /*
@@ -125,8 +132,8 @@ const status = computed(() => {
 })
 
 /*
- * Manual tuning is a session (mode "manual"): started when the Manual tab opens, ended when the
- * tab or the page is left, after offering to keep the changed delays as a profile. Ending it
+ * Manual tuning is a session (mode "manual"): started by the "Start tuning by ear" button (opening
+ * the tab alone starts nothing), ended when the tab or the page is left, after offering to keep the changed delays as a profile. Ending it
  * restores the signal and the mutes; the delays stay as they are.
  */
 const liveSession = computed(() => {
@@ -191,6 +198,10 @@ const manualError = ref('')
 const manualStarting = ref(false)
 /** The session ended under the open tab (timeout, another tab, a failure): say so, start again on request. */
 const manualEnded = ref(false)
+/** Nothing runs and nothing blocks: the Manual tab offers an explicit start. */
+const manualIdle = computed(
+  () => !!group.value && !manualSession.value && !foreignManual.value && !manualBusy.value && !manualStarting.value && !manualEnded.value && !manualError.value && !isLeaving.value && !sync.starting,
+)
 let leaving: Promise<void> | null = null
 /** Shown while the leave runs, so the tuning controls go away at once. */
 const isLeaving = ref(false)
@@ -293,14 +304,13 @@ async function doLeave() {
   manualChanged.value = false
 }
 
-/** One leave at a time; coming back to the tab meanwhile starts a fresh session afterwards. */
+/** One leave at a time; coming back to the tab meanwhile shows the start button again. */
 function leaveManual(): Promise<void> {
   if (!leaving) {
     isLeaving.value = true
     leaving = doLeave().finally(() => {
       leaving = null
       isLeaving.value = false
-      if (activeTab.value === 'manual' && !disposed) void enterManual()
     })
   }
   return leaving
@@ -315,20 +325,11 @@ watch(manualSession, (now, prev) => {
 })
 
 watch(activeTab, (tab, prev) => {
-  if (tab === 'manual') {
-    if (!manualEnded.value) void enterManual()
-  } else if (prev === 'manual') {
+  if (tab !== 'manual' && prev === 'manual') {
     manualEnded.value = false
     void leaveManual()
   }
 })
-// The tab may be chosen before the group (and its session) are read.
-watch(
-  () => group.value?.id,
-  (id) => {
-    if (id && activeTab.value === 'manual') void enterManual()
-  },
-)
 
 async function leaveRoute() {
   if (manualSession.value || leaving) await leaveManual()
@@ -533,7 +534,7 @@ watch(groupId, (id) => void load(id), { immediate: true })
                     :data-action="action"
                     :aria-describedby="`sync-action-${action}-help`"
                     :disabled="readOnly"
-                    @click="choose(action)"
+                    @click="begin(action)"
                   >
                     {{ t(`sync.actions.${action}`) }}
                   </SbButton>
@@ -577,6 +578,10 @@ watch(groupId, (id) => void load(id), { immediate: true })
           >
             {{ t('sync.manual.busy') }}
           </p>
+          <div v-else-if="manualIdle" data-manual-idle class="mt-4 flex flex-col items-start gap-2">
+            <p class="text-sm text-text-secondary">{{ t('sync.manual.startHelp') }}</p>
+            <SbButton data-manual-start :disabled="readOnly" @click="enterManual">{{ t('sync.manual.start') }}</SbButton>
+          </div>
           <div v-else-if="manualStarting" class="mt-4 flex items-center gap-2 text-sm text-text-secondary" role="status">
             <SbSpinner size="sm" />{{ t('sync.manual.starting') }}
           </div>
