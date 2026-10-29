@@ -33,7 +33,7 @@ describe('VolumeSlider', () => {
 
   it('shows muted icon when muted', () => {
     const w = mountSlider({ muted: true })
-    expect(w.find('.text-warning').exists()).toBe(true)
+    expect(w.find('.text-warning-text').exists()).toBe(true)
   })
 
   it('emits update:muted on mute toggle', async () => {

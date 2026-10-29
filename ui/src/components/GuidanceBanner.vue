@@ -54,7 +54,7 @@ async function act(issue: IssueGroup) {
       <component
         :is="icon[issue.severity] ?? Info"
         class="mt-0.5 size-5 shrink-0"
-        :class="issue.severity === 'error' ? 'text-error' : issue.severity === 'warning' ? 'text-warning' : 'text-info'"
+        :class="issue.severity === 'error' ? 'text-error' : issue.severity === 'warning' ? 'text-warning-text' : 'text-info'"
         aria-hidden="true"
       />
       <!-- Phones: the action goes under the text so the text keeps its width. -->

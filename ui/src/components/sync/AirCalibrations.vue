@@ -102,7 +102,7 @@ async function pickReference(event: Event) {
             <input v-model="chosen[c.member]" type="checkbox" :data-air-save="c.member" />
             {{ t('sync.air.save') }}
           </label>
-          <span v-else class="text-xs text-warning">{{ t('sync.air.outOfRange', { min: MIN_MS, max: MAX_MS }) }}</span>
+          <span v-else class="text-xs text-warning-text">{{ t('sync.air.outOfRange', { min: MIN_MS, max: MAX_MS }) }}</span>
         </template>
         <span v-else class="text-text-secondary">{{ t(`sync.air.reasons.${c.reason ?? 'not_effective'}`) }}</span>
       </li>

@@ -87,7 +87,7 @@ const batteryColor = computed(() => {
   const level = battery.value
   if (level == null) return ''
   if (level < 20) return 'text-error'
-  if (level <= 50) return 'text-warning'
+  if (level <= 50) return 'text-warning-text'
   return 'text-success'
 })
 
@@ -209,7 +209,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       <div class="flex flex-wrap items-center gap-1.5">
         <DeviceStatusBadge :state="state" :device="device" />
         <SyncChip :device="device" />
-        <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning" :title="blockedTitle">
+        <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning-text" :title="blockedTitle">
           <CircleAlert class="h-4 w-4" aria-hidden="true" />
           <span class="sr-only">{{ t('device.chips.blocked.summary') }}: {{ blockedTitle }}</span>
         </span>

@@ -69,7 +69,7 @@ const bannerClass = computed(() => {
     case 'ready':
       return 'bg-success/10 border-success/20 text-success'
     case 'error':
-      return 'bg-warning/10 border-warning/20 text-warning'
+      return 'bg-warning/10 border-warning/20 text-warning-text'
     default:
       return ''
   }

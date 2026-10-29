@@ -354,7 +354,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
 
     <section v-if="playout" class="mt-4" data-testid="playout-block">
       <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.playout.title') }}</h3>
-      <p v-if="playout.state === 'fallback'" class="mt-1 text-sm text-warning" data-testid="playout-fallback">
+      <p v-if="playout.state === 'fallback'" class="mt-1 text-sm text-warning-text" data-testid="playout-fallback">
         {{ t('timing.playout.fallback', { reason: playout.fallback_reason ?? t('timing.playout.unknownReason') }) }}
       </p>
       <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">

@@ -42,3 +42,27 @@ describe('focus ring', () => {
     expect(contrast(token(scope, 'sb-focus-ring', fb), bg)).toBeGreaterThanOrEqual(3)
   })
 })
+
+describe('warning text token', () => {
+  it.each([
+    ['light', light, ['#ffffff', '#fafafa', '#f0f0f0'], undefined],
+    ['dark', dark, ['#1c1c1c', '#111111', '#282828'], light],
+  ] as const)('--sb-warning-text has AA contrast (%s)', (_n, scope, bgs, fb) => {
+    for (const bg of bgs) expect(contrast(token(scope, 'sb-warning-text', fb), bg)).toBeGreaterThanOrEqual(4.5)
+  })
+  it('exposes the token as a text-warning-text utility and uses it in tone-warning', () => {
+    expect(css).toMatch(/--color-warning-text:\s*var\(--sb-warning-text\)/)
+    expect(css).toMatch(/@utility tone-warning \{[^}]*color:\s*var\(--sb-warning-text\)/)
+  })
+})
+
+describe('secondary and tertiary text', () => {
+  it.each([
+    ['light', light, ['#ffffff', '#fafafa', '#f0f0f0'], undefined],
+    ['dark', dark, ['#1c1c1c', '#111111', '#282828'], light],
+  ] as const)('meet 4.5:1 on surfaces (%s)', (_n, scope, bgs, fb) => {
+    for (const name of ['sb-text-secondary', 'sb-text-tertiary'])
+      for (const bg of bgs)
+        expect(contrast(token(scope, name, fb), bg), `${name} on ${bg}`).toBeGreaterThanOrEqual(4.5)
+  })
+})

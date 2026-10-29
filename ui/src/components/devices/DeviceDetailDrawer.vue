@@ -255,7 +255,7 @@ function onAdapterReboot() {
                   <dd class="min-w-0 break-all text-text-primary" :class="row.mono ? 'font-mono text-xs' : ''">{{ row.value }}</dd>
                 </template>
               </dl>
-              <p v-if="serverInfo.foreign" data-server-warning class="rounded-lg bg-warning/10 p-3 text-warning">
+              <p v-if="serverInfo.foreign" data-server-warning class="rounded-lg bg-warning/10 p-3 text-warning-text">
                 {{ t('drawer.server.foreign', { where: serverInfo.where }) }}
               </p>
             </div>

@@ -44,7 +44,7 @@ const isSkipped = (id: string) => (props.skipped ?? []).includes(id)
     class="flex flex-col gap-3 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
   >
     <p class="flex items-center gap-2 font-medium">
-      <TriangleAlert class="size-4 shrink-0 text-warning" aria-hidden="true" />{{ t('sync.ready.title') }}
+      <TriangleAlert class="size-4 shrink-0 text-warning-text" aria-hidden="true" />{{ t('sync.ready.title') }}
     </p>
     <ul class="flex flex-col gap-2">
       <li v-for="i in issues" :key="i.member.ma_player_id" :data-issue="i.kind" :data-issue-member="i.member.ma_player_id" class="flex flex-col gap-1">

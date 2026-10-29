@@ -87,7 +87,7 @@ function confirmSave() {
       class="rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
     >
       <p class="mb-1 flex items-center gap-2 font-medium">
-        <AlertTriangle class="size-4 text-warning" aria-hidden="true" />{{ t('sync.proposal.warnings') }}
+        <AlertTriangle class="size-4 text-warning-text" aria-hidden="true" />{{ t('sync.proposal.warnings') }}
       </p>
       <ul class="list-disc pl-5">
         <li v-for="w in warnings" :key="w">{{ w }}</li>

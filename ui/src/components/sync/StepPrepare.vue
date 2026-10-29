@@ -39,7 +39,7 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
       role="note"
       class="flex gap-3 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
     >
-      <TriangleAlert class="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+      <TriangleAlert class="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden="true" />
       <div>
         <p class="font-medium">{{ t('sync.wizard.notice.title') }}</p>
         <p class="text-text-secondary">{{ t('sync.wizard.notice.help') }}</p>

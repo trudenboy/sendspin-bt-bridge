@@ -32,7 +32,7 @@ const levelOrder: LogLevel[] = ['ERROR', 'WARNING', 'INFO', 'DEBUG']
 
 const levelColors: Record<LogLevel, string> = {
   ERROR: 'text-error',
-  WARNING: 'text-warning',
+  WARNING: 'text-warning-text',
   INFO: 'text-info',
   DEBUG: 'text-text-secondary',
 }

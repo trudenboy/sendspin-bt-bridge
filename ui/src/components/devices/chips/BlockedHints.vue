@@ -46,7 +46,7 @@ function openDiagnostics() {
       class="rounded-(--radius-button) border border-warning/30 bg-warning/8 px-2.5 py-1.5 text-xs text-text-primary"
     >
       <div class="flex items-center gap-1.5">
-        <CircleAlert class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+        <CircleAlert class="size-3.5 shrink-0 text-warning-text" aria-hidden="true" />
         <span class="min-w-0 flex-1 truncate font-medium">{{ t(`device.chips.blocked.title.${hint.key}`) }}</span>
         <button
           type="button"

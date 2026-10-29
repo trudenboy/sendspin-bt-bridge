@@ -114,7 +114,7 @@ function openHaAddon() {
             </SbBadge>
             <span
               v-if="update.info?.channel_warning"
-              class="text-xs text-warning"
+              class="text-xs text-warning-text"
             >
               {{ update.info.channel_warning }}
             </span>

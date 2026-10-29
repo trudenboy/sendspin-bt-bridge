@@ -53,7 +53,7 @@ const batteryColor = computed(() => {
   const level = battery.value
   if (level == null) return ''
   if (level < 20) return 'text-error'
-  if (level <= 50) return 'text-warning'
+  if (level <= 50) return 'text-warning-text'
   return 'text-success'
 })
 
@@ -95,7 +95,7 @@ function onDetails() {
           <span v-if="battery != null && BatteryIcon" class="inline-flex items-center gap-0.5" :class="batteryColor" :title="t('device.battery', { level: battery })">
             <component :is="BatteryIcon" class="size-3.5" aria-hidden="true" />{{ battery }}%
           </span>
-          <span v-if="releasedNote" class="text-warning">{{ releasedNote }}</span>
+          <span v-if="releasedNote" class="text-warning-text">{{ releasedNote }}</span>
         </p>
       </div>
       <DeviceStatusBadge :state="state" :device="device" class="relative z-10 shrink-0" />

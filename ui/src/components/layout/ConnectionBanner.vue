@@ -45,7 +45,7 @@ onBeforeUnmount(clear)
     class="sticky top-16 z-20 flex items-center justify-center gap-2 border-b border-warning/40 bg-warning/15 px-4 py-2 text-sm text-text-primary"
     role="status"
   >
-    <WifiOff class="size-4 shrink-0 text-warning" aria-hidden="true" />
+    <WifiOff class="size-4 shrink-0 text-warning-text" aria-hidden="true" />
     {{ t('connection.lost') }}
   </div>
 </template>
