@@ -215,7 +215,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: 'security',
     icon: 'shield',
     fields: [
-      { key: 'AUTH_ENABLED', kind: 'toggle' },
+      { key: 'AUTH_ENABLED', kind: 'toggle', enabledWhen: (c) => c._password_set === true },
       { key: 'SESSION_TIMEOUT_HOURS', kind: 'number', min: 1, unit: 'h' },
       { key: 'BRUTE_FORCE_PROTECTION', kind: 'toggle' },
       { key: 'BRUTE_FORCE_MAX_ATTEMPTS', kind: 'number', min: 1, visible: bruteForceOn },

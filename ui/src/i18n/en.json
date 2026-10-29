@@ -1003,7 +1003,8 @@
       },
       "AUTH_ENABLED": {
         "label": "Require sign-in",
-        "help": "Ask for a password or account before showing this interface."
+        "help": "Ask for a password or account before showing this interface.",
+        "disabledReason": "Set a password first."
       },
       "SESSION_TIMEOUT_HOURS": {
         "label": "Session length",
