@@ -68,6 +68,10 @@ _NO_AIR_SNAPSHOT: dict[str, object] = {
 
 # Ruling R5: a forward step of (a - t) larger than this between consecutive readings is a PA step.
 PA_STEP_US = 15_000.0
+# A pulse step is told from one noisy reading (sigma ~4 ms: a single 15 ms jump in 0.8 % of readings)
+# by the median of the readings before it; the air bias reseeds only for a confirmed step.
+PA_STEP_BASELINE_N = 10
+PA_STEP_CONFIRM = 0.6  # of PA_STEP_US
 SUMMARY_EVERY_S = 10.0  # DEBUG summary cadence; 1 s with SENDSPIN_PLAYOUT_DEBUG=1
 SUMMARY_DEBUG_EVERY_S = 1.0
 UNDERRUN_WARN_COUNT = 3  # more than this many underruns within UNDERRUN_WARN_WINDOW_S
@@ -156,6 +160,8 @@ class PlayoutEngine:
         self._pending_air: AirAction | None = None  # an air seed/target jump decided, not yet rendered
         self._settle_x_ns: int | None = None  # the port reaches the last event's audio here
         self._prev_a_minus_t: float | None = None
+        self._recent_a_minus_t: deque[float] = deque(maxlen=PA_STEP_BASELINE_N)
+        self._pa_step_cand: tuple[float, int, float] | None = None  # baseline, x_port_ns, t_s
         self._suspended = False
         self._in_underrun = False
         self._degraded = False
@@ -420,12 +426,22 @@ class PlayoutEngine:
         if r.stalled:
             self._suspended = True
             self._prev_a_minus_t = None
+            self._pa_step_cand = None
+            self._recent_a_minus_t.clear()
         else:
             self._stats.port(t_s, a_minus_t)
+            cand = self._pa_step_cand
+            self._pa_step_cand = None
+            if cand is not None and a_minus_t - cand[0] > PA_STEP_US * PA_STEP_CONFIRM:
+                self._air_break("pa_step", cand[1], cand[2])  # the next reading stays up: a real step
             if self._prev_a_minus_t is not None and not r.recovered and a_minus_t - self._prev_a_minus_t > PA_STEP_US:
                 self._stats.pa_step()
-                self._air_break("pa_step", r.x_port_ns, t_s)
+                if self._recent_a_minus_t:
+                    self._pa_step_cand = (statistics.median(self._recent_a_minus_t), r.x_port_ns, t_s)
                 self._offsets.clear()  # the port moved: older readings no longer date it
+            if r.recovered:
+                self._recent_a_minus_t.clear()
+            self._recent_a_minus_t.append(a_minus_t)
             self._prev_a_minus_t = a_minus_t
         if r.underrun:
             self._stats.underrun()
