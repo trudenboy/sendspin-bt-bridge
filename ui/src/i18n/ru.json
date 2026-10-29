@@ -562,7 +562,11 @@
       "empty": "Нет зарегистрированных событий"
     },
     "signal": {
-      "subprocess": "Подпроцесс"
+      "ma": "Music Assistant",
+      "sendspin": "Sendspin",
+      "port": "порт {port}",
+      "corrections": "{n} коррекция | {n} коррекции | {n} коррекций",
+      "subprocess": "Процесс плеера"
     },
     "actions": {
       "more": "Другие действия",
@@ -700,6 +704,20 @@
     "powerFailed": "Не удалось переключить питание адаптера",
     "rebooted": "Адаптер перезагружен",
     "rebootFailed": "Не удалось перезагрузить адаптер"
+  },
+  "kit": {
+    "closeDialog": "Закрыть окно",
+    "closeDrawer": "Закрыть панель",
+    "dismissNotification": "Закрыть уведомление",
+    "removeBadge": "Убрать",
+    "signalPath": "Путь сигнала",
+    "selectAllRows": "Выбрать все строки",
+    "clearSearch": "Очистить поиск",
+    "loading": "Загрузка"
+  },
+  "sidebar": {
+    "collapse": "Свернуть боковую панель",
+    "expand": "Развернуть боковую панель"
   },
   "undo": {
     "label": "Отменить",

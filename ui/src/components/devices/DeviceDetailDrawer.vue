@@ -99,19 +99,19 @@ const signalSegments = computed(() => {
       ? ('inactive' as const)
       : ('error' as const)
   return [
-    { id: 'ma', label: 'Music Assistant', status: bridge.maConnected ? ('active' as const) : ('inactive' as const) },
+    { id: 'ma', label: t('drawer.signal.ma'), status: bridge.maConnected ? ('active' as const) : ('inactive' as const) },
     {
       id: 'sendspin',
-      label: 'Sendspin',
+      label: t('drawer.signal.sendspin'),
       status: d.playback.server_connected ? ('active' as const) : ('inactive' as const),
-      sublabel: d.sendspin.listen_port ? `port ${d.sendspin.listen_port}` : undefined,
+      sublabel: d.sendspin.listen_port ? t('drawer.signal.port', { port: d.sendspin.listen_port }) : undefined,
     },
     {
       id: 'subprocess',
       label: t('drawer.signal.subprocess'),
       status: d.playback.connected ? ('active' as const) : ('inactive' as const),
     },
-    { id: 'sink', label: d.audio.sink_name ?? 'Audio Sink', status: sinkStatus },
+    { id: 'sink', label: d.audio.sink_name ?? t('diagnostics.audioSink'), status: sinkStatus },
     { id: 'speaker', label: d.name ?? '', status: sinkStatus },
   ]
 })
@@ -425,7 +425,7 @@ async function onAdapterReboot() {
                 <dt class="text-text-secondary">{{ t('diagnostics.sampleRate') }}</dt>
                 <dd class="text-text-primary">{{ device.audio.format ?? '—' }}</dd>
                 <dt class="text-text-secondary">{{ t('diagnostics.reanchorCount') }}</dt>
-                <dd class="text-text-primary">{{ device.timing.reanchor_count > 0 ? `${device.timing.reanchor_count} corrections` : '—' }}</dd>
+                <dd class="text-text-primary">{{ device.timing.reanchor_count > 0 ? t('drawer.signal.corrections', { n: device.timing.reanchor_count }, device.timing.reanchor_count) : '—' }}</dd>
               </dl>
             </div>
           </div>

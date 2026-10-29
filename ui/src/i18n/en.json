@@ -562,7 +562,11 @@
       "empty": "No events recorded"
     },
     "signal": {
-      "subprocess": "Subprocess"
+      "ma": "Music Assistant",
+      "sendspin": "Sendspin",
+      "port": "port {port}",
+      "corrections": "{n} correction | {n} corrections",
+      "subprocess": "Player process"
     },
     "actions": {
       "more": "More actions",
@@ -700,6 +704,20 @@
     "powerFailed": "Failed to toggle adapter power",
     "rebooted": "Adapter rebooted",
     "rebootFailed": "Failed to reboot adapter"
+  },
+  "kit": {
+    "closeDialog": "Close dialog",
+    "closeDrawer": "Close drawer",
+    "dismissNotification": "Dismiss notification",
+    "removeBadge": "Remove",
+    "signalPath": "Signal path",
+    "selectAllRows": "Select all rows",
+    "clearSearch": "Clear search",
+    "loading": "Loading"
+  },
+  "sidebar": {
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
   },
   "undo": {
     "label": "Undo",

@@ -55,7 +55,9 @@ const navLinks = NAV
       <!-- Collapse toggle -->
       <button
         class="flex w-full items-center justify-center rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary"
-        :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :title="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+        :aria-label="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+        :aria-expanded="!collapsed"
         data-testid="sidebar-toggle"
         @click="toggleCollapsed"
       >

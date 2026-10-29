@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router'
-import { computed, watchEffect } from 'vue'
+import { computed, provide, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import AppHeader from '@/components/layout/AppHeader.vue'
@@ -13,6 +13,7 @@ import UpdateDialog from '@/components/UpdateDialog.vue'
 import ConfirmHost from '@/components/ConfirmHost.vue'
 import ShortcutsDialog from '@/components/ShortcutsDialog.vue'
 import { SbToastContainer } from '@/kit'
+import { KIT_LABELS_KEY, kitLabelsFrom } from '@/kit/labels'
 import { useTheme } from '@/composables/useTheme'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import { useMaAutoConnect } from '@/composables/useMaAutoConnect'
@@ -25,6 +26,7 @@ useMaAutoConnect()
 const route = useRoute()
 const { t, locale } = useI18n()
 const bridge = useBridgeStore()
+provide(KIT_LABELS_KEY, computed(() => kitLabelsFrom(t)))
 
 // Screen readers pick the voice from <html lang>; the tab title names the page and bridge.
 watchEffect(() => {

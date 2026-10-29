@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { X, Search } from 'lucide-vue-next'
+
+const labels = useKitLabels()
 
 interface Filter {
   key: string
@@ -49,7 +52,7 @@ function clearSearch() {
         v-if="search"
         type="button"
         class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-secondary transition-colors hover:text-text-primary"
-        aria-label="Clear search"
+        :aria-label="labels.clearSearch"
         @click="clearSearch"
       >
         <X class="h-4 w-4" />

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+
+const labels = useKitLabels()
 
 const props = withDefaults(
   defineProps<{
@@ -100,7 +103,7 @@ onBeforeUnmount(stop)
       v-if="closable"
       type="button"
       class="-my-3 -mr-3 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:text-text-primary"
-      aria-label="Dismiss notification"
+      :aria-label="labels.dismissNotification"
       data-testid="toast-close-btn"
       @click="dismiss"
     >

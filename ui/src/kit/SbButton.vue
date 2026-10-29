@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { computed } from 'vue'
 import SbSpinner from './SbSpinner.vue'
+
+const labels = useKitLabels()
 
 const props = withDefaults(
   defineProps<{
@@ -50,7 +53,7 @@ const isDisabled = computed(() => props.disabled || props.loading)
     ]"
     :disabled="isDisabled"
   >
-    <SbSpinner v-if="loading" size="sm" label="Loading" />
+    <SbSpinner v-if="loading" size="sm" :label="labels.loading" />
     <slot v-if="!loading" name="icon-left" />
     <slot />
     <slot v-if="!loading" name="icon-right" />

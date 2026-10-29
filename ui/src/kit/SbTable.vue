@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { computed } from 'vue'
 import { ArrowUp, ArrowDown } from 'lucide-vue-next'
+
+const labels = useKitLabels()
 
 interface Column {
   key: string
@@ -109,7 +112,7 @@ function toggleAll() {
               type="checkbox"
               :checked="allSelected"
               :indeterminate="selectedRows.length > 0 && !allSelected"
-              aria-label="Select all rows"
+              :aria-label="labels.selectAllRows"
               @change="toggleAll"
             />
           </th>

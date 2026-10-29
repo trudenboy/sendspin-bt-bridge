@@ -123,4 +123,14 @@ describe('AppSidebar', () => {
     const aside = wrapper.find('[data-testid="app-sidebar"]')
     expect(aside.classes()).toContain('w-16')
   })
+
+  it('names and states its collapse toggle in the UI language', async () => {
+    const wrapper = await mountSidebar()
+    const toggle = wrapper.get('[data-testid="sidebar-toggle"]')
+    expect(toggle.attributes('aria-label')).toBe(en.sidebar.collapse)
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-label')).toBe(en.sidebar.expand)
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+  })
 })
