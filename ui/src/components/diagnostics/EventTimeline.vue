@@ -5,6 +5,8 @@ import { useEventStore } from '@/stores/events'
 import { SbFilterBar, SbTimeline, SbSpinner, SbButton, SbEmptyState } from '@/kit'
 import { ClipboardCopy } from 'lucide-vue-next'
 import { copyToClipboard } from '@/utils/clipboard'
+import { tServer } from '@/i18n/server'
+import type { TimelineEntry } from '@/stores/events'
 
 const { t } = useI18n()
 const eventStore = useEventStore()
@@ -15,10 +17,22 @@ const copyLabel = computed(() =>
 
 async function copyEvents() {
   const header = 'Timestamp\tLevel\tSource\tEvent\tSummary'
-  const rows = eventStore.events.map((e) => [e.at, e.level, e.source, e.label, e.summary].join('\t'))
+  const rows = eventStore.events.map((e) => {
+    const s = shown(e)
+    return [e.at, e.level, s.source, s.title, s.summary].join('\t')
+  })
   const ok = await copyToClipboard([header, ...rows].join('\n'))
   copyState.value = ok ? 'copied' : 'failed'
   setTimeout(() => { copyState.value = 'idle' }, 2000)
+}
+
+/** What the page shows for an entry: our words for a known code, the bridge's English otherwise. */
+function shown(e: TimelineEntry) {
+  return {
+    title: tServer('event', e, 'title', e.label),
+    summary: tServer('event', e, 'summary', e.summary),
+    source: e.source_code ? tServer('source', { code: e.source_code }, 'name', e.source) : e.source,
+  }
 }
 
 const searchQuery = ref('')
@@ -45,17 +59,21 @@ const timelineEvents = computed(() =>
     .filter((e) => {
       if (searchQuery.value) {
         const q = searchQuery.value.toLowerCase()
-        if (!`${e.label} ${e.source} ${e.summary}`.toLowerCase().includes(q)) return false
+        const s = shown(e)
+        if (!`${s.title} ${s.source} ${s.summary}`.toLowerCase().includes(q)) return false
       }
       return activeLevels.value.size === 0 || activeLevels.value.has(e.level)
     })
-    .map((e) => ({
-      id: `${e.at}-${e.source}-${e.label}`,
-      timestamp: new Date(e.at).toLocaleString(),
-      title: e.label,
-      description: `${e.source}: ${e.summary}`,
-      type: levelToType(e.level),
-    })),
+    .map((e) => {
+      const s = shown(e)
+      return {
+        id: `${e.at}-${e.source}-${e.label}`,
+        timestamp: new Date(e.at).toLocaleString(),
+        title: s.title,
+        description: `${s.source}: ${s.summary}`,
+        type: levelToType(e.level),
+      }
+    }),
 )
 
 function levelToType(level: string): 'info' | 'success' | 'warning' | 'error' {

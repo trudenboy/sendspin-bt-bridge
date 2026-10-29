@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Turning an adapter off or rebooting it, importing a configuration, restarting the bridge and updating the bridge now ask first and say what stops (the speakers on the adapter, playback, what is playing).
 - Error notifications stay until dismissed, the others pause while hovered or focused, and text fields use the same keyboard focus outline as buttons.
 - Speaker actions and states now have consistent names in English and Russian: Release / Reclaim, Power save, Standby / Wake, Enable / Disable, Speaker latency compensation, and Air-to-sound latency.
+- Messages from the bridge (guidance, recovery cards, the header status, action buttons, event timeline and blocked-control reasons) now follow the chosen language instead of always being English.
 
 ### Fixed
 

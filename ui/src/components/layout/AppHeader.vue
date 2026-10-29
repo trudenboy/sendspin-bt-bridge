@@ -10,6 +10,7 @@ import BugReportDialog from '@/components/BugReportDialog.vue'
 import { shortcutsOpen } from '@/composables/useKeyboardShortcuts'
 import { CircleHelp, SlidersHorizontal, ArrowUpCircle, Heart } from 'lucide-vue-next'
 import logoUrl from '@/assets/bridge-logo.svg'
+import { tServer, type ServerText } from '@/i18n/server'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -26,8 +27,10 @@ const bridgeName = computed(() => bridge.bridge?.name || '')
 
 /** The bridge's own one-line verdict (guidance header), as a pill that opens diagnostics. */
 const status = computed(() => {
-  const header = (bridge.bridge?.guidance as { header_status?: { tone?: string; label?: string } } | null)?.header_status
-  return header?.label ? { tone: header.tone ?? 'neutral', label: header.label } : null
+  const header = (bridge.bridge?.guidance as { header_status?: { tone?: string; label?: string } & ServerText } | null)?.header_status
+  return header?.label
+    ? { tone: header.tone ?? 'neutral', label: tServer('header', header, header.area === 'issue' ? 'title' : 'label', header.label) }
+    : null
 })
 const statusClass: Record<string, string> = {
   success: 'tone-success',

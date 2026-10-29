@@ -1837,5 +1837,756 @@
       "httpFallback": "Без сертификата используйте обычную ссылку (через диктофон телефона):",
       "keepsDelay": "Не измерены, их задержка останется прежней: {names}"
     }
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "Применить задержку {value} мс"
+      },
+      "edit_ma_server": {
+        "label": "Изменить сервер Music Assistant"
+      },
+      "enable_device": {
+        "label": "Включить | Включить {count} колонки | Включить {count} колонок"
+      },
+      "open_adapter_settings": {
+        "label": "Открыть настройки адаптеров"
+      },
+      "open_audio_diagnostics": {
+        "label": "Открыть диагностику"
+      },
+      "open_bluetooth_settings": {
+        "label": "Открыть настройки Bluetooth"
+      },
+      "open_config": {
+        "label": "Открыть настройки"
+      },
+      "open_devices_settings": {
+        "label": "Открыть настройки колонок"
+      },
+      "open_diagnostics": {
+        "label": "Открыть диагностику"
+      },
+      "open_ma_settings": {
+        "label": "Открыть настройки Music Assistant"
+      },
+      "open_output_diagnostics": {
+        "label": "Открыть диагностику"
+      },
+      "open_player_settings": {
+        "label": "Открыть настройки плеера"
+      },
+      "open_runtime_diagnostics": {
+        "label": "Открыть диагностику"
+      },
+      "prefer_sbc_codec": {
+        "label": "Предпочитать кодек SBC"
+      },
+      "recheck_outputs": {
+        "label": "Перепроверить аудиовыходы"
+      },
+      "reclaim_bluetooth": {
+        "label": "Вернуть колонку | Вернуть {count} колонки | Вернуть {count} колонок"
+      },
+      "reconnect_device": {
+        "label": "Переподключить колонку | Переподключить {count} колонки | Переподключить {count} колонок"
+      },
+      "release_bluetooth": {
+        "label": "Освободить колонку"
+      },
+      "repair_speaker": {
+        "label": "Сопрячь колонку заново"
+      },
+      "rerun_checks": {
+        "label": "Запустить проверки снова"
+      },
+      "rerun_preflight": {
+        "label": "Повторить проверку хоста"
+      },
+      "retry_ma_discovery": {
+        "label": "Найти Music Assistant снова"
+      },
+      "revalidate_ma_link": {
+        "label": "Проверить связь с Music Assistant снова"
+      },
+      "review_buffer_settings": {
+        "label": "Проверить настройки буфера"
+      },
+      "review_diagnostics": {
+        "label": "Посмотреть диагностику"
+      },
+      "review_latency_settings": {
+        "label": "Проверить настройки задержки"
+      },
+      "review_pulse_latency": {
+        "label": "Проверить звуковую задержку"
+      },
+      "scan_devices": {
+        "label": "Искать колонки"
+      },
+      "start_pairing": {
+        "label": "Начать сопряжение"
+      },
+      "test_ma_connection": {
+        "label": "Проверить подключение к Music Assistant"
+      },
+      "tune_latency_compensation": {
+        "label": "Настроить компенсацию задержки"
+      },
+      "unmute_speaker": {
+        "label": "Включить звук колонки"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "Аудиоканал с Music Assistant не подключён."
+      },
+      "ma_disconnected": {
+        "message": "Мост не подключён к API Music Assistant."
+      },
+      "ma_queue_unknown": {
+        "message": "У Music Assistant пока нет очереди для этой колонки."
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant переподключается."
+      },
+      "no_sink": {
+        "message": "Аудиовыход не настроен."
+      },
+      "not_paired": {
+        "message": "Колонка больше не сопряжена. Включите на ней режим сопряжения и сопрягите заново."
+      },
+      "reconnecting": {
+        "message": "Переподключение уже идёт."
+      },
+      "released": {
+        "message": "Bluetooth освобождён от моста. Сначала верните колонку."
+      },
+      "stopping": {
+        "message": "Плеер останавливается."
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "Датчик эфира для этой колонки не работает (нужна Bluetooth-колонка)."
+      },
+      "air_not_locked": {
+        "text": "Датчик эфира ещё ни разу не захватил поток этой колонки с момента запуска."
+      },
+      "air_unavailable": {
+        "text": "Датчик эфира не может работать для этой колонки (см. его состояние)."
+      },
+      "cpu_budget": {
+        "text": "Чтение монитора Bluetooth превысило лимит процессора, поэтому датчик эфира выключен до перезапуска моста."
+      },
+      "internal_error": {
+        "text": "В датчике эфира произошла внутренняя ошибка, и он выключился (подробности в журнале)."
+      },
+      "module_suspend_on_idle": {
+        "text": "В PulseAudio загружен module-suspend-on-idle, который отключает простаивающие выходы."
+      },
+      "monitor_error": {
+        "text": "Сокет монитора Bluetooth отказал; мост продолжает попытки."
+      },
+      "no_cap_net_raw": {
+        "text": "Мост не может открыть сокет монитора Bluetooth: ему нужна привилегия NET_RAW (добавьте NET_RAW в cap_add контейнера)."
+      },
+      "observed_suspend": {
+        "text": "Хост отключил аудиовыход этой колонки, пока она была подключена и простаивала."
+      },
+      "playout_fallback": {
+        "text": "Движок воспроизведения вернулся к прежнему плееру, поэтому сравнивать не с чем."
+      },
+      "sink_ambiguous": {
+        "text": "Ему соответствует несколько одинаковых выходов, и их нельзя различить."
+      },
+      "sink_in_use": {
+        "text": "На него уже играет другой плеер."
+      },
+      "sink_unplugged": {
+        "text": "Он отключён или переименован."
+      },
+      "unknown_suspend": {
+        "text": "Хост отключил аудиовыход этой колонки."
+      },
+      "unsupported_input": {
+        "text": "Формат звука потока не поддерживается (датчику эфира нужно 44,1 или 48 кГц)."
+      },
+      "unsupported_platform": {
+        "text": "В этой системе нет сокета монитора Bluetooth (только Linux)."
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber отключает простаивающие Bluetooth-узлы (session.suspend-timeout-seconds)."
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "Воспроизведение идёт, но звукового потока нет",
+        "title": "Звук прервался"
+      },
+      "audio-streaming": {
+        "summary": "Звуковой поток стал активным",
+        "title": "Звук идёт"
+      },
+      "bluetooth-connected": {
+        "summary": "Bluetooth-колонка подключена",
+        "title": "Колонка подключена"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Bluetooth-колонка отключена",
+        "title": "Колонка отключена"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Не удалось переподключить Bluetooth",
+        "title": "Переподключение не удалось"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Bluetooth переподключён",
+        "title": "Колонка переподключена"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "Колонка перешла в режим ожидания после {idle_minutes} мин тишины",
+        "title": "Режим ожидания"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "Колонка выходит из режима ожидания",
+        "title": "Пробуждение"
+      },
+      "bt-management-disabled": {
+        "summary": "Мост освободил Bluetooth этой колонки",
+        "title": "Bluetooth освобождён"
+      },
+      "bt-management-reclaimed": {
+        "summary": "Колонка переподключилась сама, и мост вернул себе её Bluetooth",
+        "title": "Bluetooth возвращён"
+      },
+      "daemon-connected": {
+        "summary": "Плеер подключился к Music Assistant",
+        "title": "Аудиоканал установлен"
+      },
+      "daemon-disconnected": {
+        "summary": "Плеер отключился от Music Assistant",
+        "title": "Аудиоканал потерян"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "Bluetooth-колонка отключена",
+        "title": "Отключена"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Плеер Sendspin не подключён",
+        "title": "Аудиоканал потерян"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "Ошибка"
+      },
+      "health-foreign_server": {
+        "summary": "Подключён к Music Assistant на {host} {name}, а не к Music Assistant этого моста",
+        "title": "Другой Music Assistant"
+      },
+      "health-idle": {
+        "summary": "Простой",
+        "title": "Простой"
+      },
+      "health-ma_reconnecting": {
+        "summary": "Связь с Music Assistant обновляется",
+        "title": "Обновление связи с Music Assistant"
+      },
+      "health-output_missing": {
+        "summary": "Аудиовыход не найден",
+        "title": "Аудиовыход не найден"
+      },
+      "health-playback_without_audio": {
+        "summary": "Воспроизведение идёт, но звукового потока нет",
+        "title": "Звук прервался"
+      },
+      "health-reconnecting": {
+        "summary": "Идёт переподключение Bluetooth",
+        "title": "Переподключение"
+      },
+      "health-released": {
+        "summary": "Bluetooth освобождён от моста",
+        "title": "Освобождена"
+      },
+      "health-resyncing": {
+        "summary": "Идёт пересинхронизация звука",
+        "title": "Пересинхронизация"
+      },
+      "health-sink_muted": {
+        "summary": "Звук аудиовыхода выключен в системе",
+        "title": "Звук аудиовыхода выключен"
+      },
+      "health-stopping": {
+        "summary": "Плеер останавливается",
+        "title": "Остановка"
+      },
+      "ma-monitor-stale": {
+        "summary": "Связь с Music Assistant прервалась: {error}",
+        "title": "Связь с Music Assistant потеряна"
+      },
+      "ma-server-refused": {
+        "summary": "Music Assistant на {host} отклонён: этот мост принадлежит {owner}",
+        "title": "Music Assistant отклонён"
+      },
+      "playback-started": {
+        "summary": "Воспроизведение началось",
+        "title": "Воспроизведение началось"
+      },
+      "playback-stopped": {
+        "summary": "Воспроизведение остановлено",
+        "title": "Воспроизведение остановлено"
+      },
+      "reanchoring": {
+        "summary": "Идёт пересинхронизация потока",
+        "title": "Пересинхронизация"
+      },
+      "reconnecting": {
+        "summary": "Идёт переподключение Bluetooth",
+        "title": "Переподключение"
+      },
+      "runtime-error-cleared": {
+        "summary": "Ошибка устранена",
+        "title": "Ошибка устранена"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "Ошибка"
+      },
+      "sink-lost": {
+        "summary": "Аудиовыход отключён; плеер ждёт на запасном выходе",
+        "title": "Аудиовыход пропал"
+      },
+      "sink-muted": {
+        "summary": "Звук аудиовыхода выключен в системе",
+        "title": "Звук аудиовыхода выключен"
+      },
+      "sink-rematched": {
+        "summary": "Аудиовыход найден под новым именем: {sink}",
+        "title": "Аудиовыход переименован"
+      },
+      "sink-restored": {
+        "summary": "Аудиовыход вернулся: {sink}",
+        "title": "Аудиовыход вернулся"
+      },
+      "sink-unmuted": {
+        "summary": "Звук аудиовыхода включён",
+        "title": "Звук аудиовыхода включён"
+      },
+      "startup-config": {
+        "summary": "Загрузка настроек",
+        "title": "Настройки"
+      },
+      "startup-devices": {
+        "summary": "Список колонок подготовлен",
+        "title": "Колонки"
+      },
+      "startup-failed": {
+        "summary": "Запуск не удался: {message}",
+        "title": "Запуск не удался"
+      },
+      "startup-idle": {
+        "summary": "Запуск начат",
+        "title": "Запуск"
+      },
+      "startup-integrations": {
+        "summary": "Интеграция с Music Assistant запущена",
+        "title": "Интеграции"
+      },
+      "startup-ready": {
+        "summary": "Запуск завершён",
+        "title": "Готово"
+      },
+      "startup-runtime": {
+        "summary": "Среда выполнения подготовлена",
+        "title": "Среда выполнения"
+      },
+      "startup-shutdown": {
+        "summary": "Мост останавливается",
+        "title": "Остановка"
+      },
+      "startup-web": {
+        "summary": "Веб-интерфейс готов",
+        "title": "Веб-интерфейс"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "Добавьте первую колонку"
+      },
+      "all_disabled": {
+        "label": "Все колонки выключены"
+      },
+      "all_released": {
+        "label": "Все колонки освобождены"
+      },
+      "devices_ready": {
+        "label": "Готово колонок: {ready} из {total}"
+      },
+      "first_run": {
+        "label": "Первый запуск"
+      },
+      "issues_attention": {
+        "label": "Требуют внимания: {count}"
+      },
+      "no_playable_speaker": {
+        "label": "Нет доступной колонки"
+      },
+      "setup_progress": {
+        "label": "Настройка {percent}%"
+      },
+      "startup": {
+        "label": "Запуск {percent}%"
+      },
+      "startup_finalizing": {
+        "label": "Запуск 90%"
+      },
+      "waiting_for_setup": {
+        "label": "Ожидание настройки"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "Колонка работает в режиме петли, но коррекция по эфиру не работает; она играет как в режиме измерения. {cause}",
+        "title": "{device}: коррекция по эфиру не работает"
+      },
+      "air_sensor_codec": {
+        "summary": "Колонка получает поток {codec}, а датчик эфира читает только SBC. Включите PREFER_SBC_CODEC и переподключите колонку. Воспроизведение не страдает.",
+        "title": "{device}: датчику эфира нужен кодек SBC"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "Колонка использует параметры SBC, которые датчик эфира не поддерживает ({settings}). Воспроизведение не страдает.",
+        "title": "{device}: датчик эфира не может прочитать SBC-поток этой колонки"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} Воспроизведение не страдает. Чтобы скрыть это сообщение, выключите EXPERIMENTAL_AIR_SENSOR (нужен перезапуск).",
+        "title": "{device}: датчик эфира недоступен | Датчик эфира недоступен у {count} колонок | Датчик эфира недоступен у {count} колонок"
+      },
+      "audio_unavailable": {
+        "summary": "Мост сейчас не может подключиться к звуковой системе.",
+        "summary_all_disabled": "Мост сейчас не может подключиться к звуковой системе. Восстановите доступ к звуку, прежде чем включать колонку, иначе воспроизведение останется недоступным.",
+        "summary_no_server": "Сервер PulseAudio или PipeWire не найден.",
+        "summary_no_server_env": "Сервер PulseAudio или PipeWire не найден: переменная PULSE_SERVER не задана.",
+        "summary_socket_missing": "Аудиосокет {socket} настроен, но на хосте его нет: звуковой сервер его никогда не создавал.",
+        "summary_socket_refused": "Аудиосокет {socket} смонтирован, но звуковой сервер отклонил подключение ({error}).",
+        "summary_socket_unreachable": "Аудиосокет {socket} смонтирован, но мост не может его открыть ({error}).",
+        "title": "Звуковая система недоступна"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "Колонка выключена после повторных неудачных попыток сопряжения. Включите на ней режим сопряжения и нажмите «Включить», чтобы попробовать снова.",
+        "summary_error": "{error}",
+        "title": "{device}: колонка выключена автоматически, так как ни разу не была сопряжена"
+      },
+      "auto_released": {
+        "summary": "Мост освободил Bluetooth этой колонки после повторных сбоев связи. | Верните {devices}, чтобы мост снова ими управлял. | Верните {devices}, чтобы мост снова ими управлял.",
+        "summary_error": "{error}",
+        "title": "{device}: колонка освобождена автоматически | {count} колонки освобождены автоматически | {count} колонок освобождены автоматически"
+      },
+      "bluetooth_unavailable": {
+        "summary": "Мост не нашёл Bluetooth-адаптер. Откройте настройки адаптеров и обновите список.",
+        "summary_all_disabled": "Мост сейчас не может подключиться к Bluetooth-адаптеру. Восстановите доступ к адаптеру, прежде чем включать колонку, иначе воспроизведение останется недоступным.",
+        "summary_daemon_down": "Служба Bluetooth (bluetoothd) на хосте не запущена, поэтому мост не видит адаптер, пока она не стартует.",
+        "title": "Bluetooth-адаптер недоступен"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} После такой паузы колонка заново запускает поток и может сдвинуться на десятки миллисекунд. Мост никогда не меняет звуковые настройки хоста; чтобы это прекратить, запретите хосту отключать простаивающие аудиовыходы: {docs}",
+        "title": "{device}: хост отключает аудиовыход между песнями"
+      },
+      "config_dir_not_writable": {
+        "summary": "Процесс моста (UID {uid}) не может писать в {config_dir}. Не будут сохраняться токен Music Assistant, смена пароля и настройки колонок. Как исправить: {remediation}",
+        "title": "Мост не может писать в {config_dir}"
+      },
+      "config_migration_failed": {
+        "summary": "Мост запущен без колонок. Файл config.json не тронут и остался прежним. Ошибка: {error}. Пожалуйста, отправьте отчёт об ошибке.",
+        "title": "Не удалось обновить настройки до этой версии"
+      },
+      "disconnected": {
+        "summary": "Включите колонку или переподключите её. | Включите или переподключите: {devices}. | Включите или переподключите: {devices}.",
+        "summary_error": "{error}",
+        "title": "{device}: колонка отключена | {count} колонки отключены | {count} колонок отключены"
+      },
+      "duplicate_device": {
+        "summary": "Эта колонка также зарегистрирована в Music Assistant как «{other_bridge}». Работа сразу на двух мостах вызывает циклы переподключения. Выключите её на одном из мостов или остановите второй мост. | Эти колонки также зарегистрированы на другом мосте: {devices}. Выключите их на одном мосте или остановите второй, чтобы избежать циклов переподключения. | Эти колонки также зарегистрированы на другом мосте: {devices}. Выключите их на одном мосте или остановите второй, чтобы избежать циклов переподключения.",
+        "title": "{device}: возможен конфликт с другим мостом | {count} колонки могут конфликтовать с другим мостом | {count} колонок могут конфликтовать с другим мостом"
+      },
+      "latency": {
+        "summary": "Настройку задержки можно улучшить.",
+        "summary_high_latency": "Компенсация задержки задана, но общая звуковая задержка всё ещё высокая.",
+        "summary_multi_no_delays": "Колонок несколько, но ни для одной не задана компенсация задержки.",
+        "summary_repeated_resyncs": "Во время воспроизведения неоднократно была пересинхронизация.",
+        "title": "Нужно настроить задержку"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant ещё не готов.",
+        "summary_no_credentials": "Нет данных для входа в Music Assistant.",
+        "summary_no_url": "Адрес Music Assistant не задан.",
+        "summary_not_connected": "Данные для входа в Music Assistant сохранены, но мост не подключён.",
+        "title": "Music Assistant требует внимания"
+      },
+      "missing_sink": {
+        "summary": "Колонка подключена, но её Bluetooth-аудиовыход ещё не готов. | Переподключите или проверьте звук для: {devices}. | Переподключите или проверьте звук для: {devices}.",
+        "summary_error": "{error}",
+        "title": "{device}: колонка подключена, но аудиовыход не готов | {count} колонки подключены, но аудиовыход не готов | {count} колонок подключены, но аудиовыход не готов"
+      },
+      "needs_attention": {
+        "summary": "Посмотрите последние события и диагностику.",
+        "summary_daemon_disconnected": "Плеер Sendspin не подключён.",
+        "summary_error": "{error}",
+        "summary_foreign_server": "Подключён к Music Assistant на {host} {name}, а не к Music Assistant этого моста.",
+        "summary_playback_without_audio": "Воспроизведение идёт, но звукового потока нет.",
+        "summary_reconnecting": "Идёт переподключение Bluetooth.",
+        "summary_resyncing": "Идёт пересинхронизация звука.",
+        "summary_sink_muted": "Звук аудиовыхода выключен в системе.",
+        "summary_stopping": "Плеер останавливается.",
+        "title": "{device}: нужно внимание"
+      },
+      "never_paired": {
+        "summary": "Колонка добавлена в мост, но ни разу не появлялась в Bluetooth. Включите на ней режим сопряжения и нажмите «Начать сопряжение». | Эти колонки добавлены, но ни разу не появлялись в Bluetooth: {devices}. Включите на них режим сопряжения и начните сопряжение. | Эти колонки добавлены, но ни разу не появлялись в Bluetooth: {devices}. Включите на них режим сопряжения и начните сопряжение.",
+        "summary_error": "{error}",
+        "title": "{device}: колонка ни разу не была сопряжена | {count} колонки ни разу не были сопряжены | {count} колонок ни разу не были сопряжены"
+      },
+      "output_missing": {
+        "summary": "Аудиовыход {sink} недоступен. {cause} Подключите устройство снова или выберите другой аудиовыход в настройках плеера. Пока этого не сделано, плеер остаётся в группах Music Assistant и молчит.",
+        "title": "{device}: аудиовыход не найден"
+      },
+      "output_muted": {
+        "summary": "Звук выхода {sink} выключен в системном микшере, поэтому ничего не слышно. Громкость Music Assistant не может его включить: включите звук в системных настройках. | То же самое у: {others}. | То же самое у: {others}.",
+        "title": "{device}: звук аудиовыхода выключен | {count} аудиовыхода требуют внимания | {count} аудиовыходов требуют внимания"
+      },
+      "output_port_unavailable": {
+        "summary": "Активный порт {port} выхода {sink} сообщает об отсутствии подключения. Проверьте кабель или колонки. | То же самое у: {others}. | То же самое у: {others}.",
+        "title": "{device}: к аудиовыходу ничего не подключено | {count} аудиовыхода требуют внимания | {count} аудиовыходов требуют внимания"
+      },
+      "output_volume_zero": {
+        "summary": "Выход {sink} выставлен на 0 % в системном микшере. Громкость Music Assistant не может его поднять: поднимите громкость в системных настройках. | То же самое у: {others}. | То же самое у: {others}.",
+        "title": "{device}: громкость аудиовыхода 0 % | {count} аудиовыхода требуют внимания | {count} аудиовыходов требуют внимания"
+      },
+      "pa_socket_missing": {
+        "summary": "Аудиосокет {socket} настроен, но его на хосте ещё нет: сервер PipeWire или PulseAudio его не создал. Обычно так выглядит хост без экрана и без lingering для пользовательской сессии.",
+        "title": "Звуковой сервер недоступен: включите lingering для пользователя"
+      },
+      "pa_socket_refused": {
+        "summary": "Аудиосокет {socket} смонтирован, но сервер PipeWire или PulseAudio на хосте отклонил подключение. Обычно так выглядит хост без экрана и без lingering для пользовательской сессии.",
+        "title": "Звуковой сервер недоступен: включите lingering для пользователя"
+      },
+      "repair_required": {
+        "summary": "Колонка больше не сопряжена, поэтому попытки переподключения не удаются. Включите на ней режим сопряжения и сопрягите заново. | Эти колонки больше не сопряжены. Сопрягите заново: {devices}, включив режим сопряжения. | Эти колонки больше не сопряжены. Сопрягите заново: {devices}, включив режим сопряжения.",
+        "summary_error": "{error}",
+        "title": "{device}: колонку нужно сопрячь заново | {count} колонки нужно сопрячь заново | {count} колонок нужно сопрячь заново"
+      },
+      "runtime_access": {
+        "summary": "Мост не может подключиться к службам D-Bus хоста, которые нужны для управления Bluetooth. Откройте «Диагностику» и проверьте монтирования и права контейнера.",
+        "summary_all_disabled": "Мост сейчас не может подключиться к нужным службам хоста. Восстановите доступ к хосту, прежде чем включать колонку, иначе воспроизведение останется недоступным.",
+        "title": "Мост не достаёт до нужных служб хоста"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} отправил запрос на подключение, колонка отклонила его с ошибкой «Limited Resources». Саундбары Samsung серии Q фильтруют сопряжение по Bluetooth Class of Device инициатора. Задайте device_class 0x00010c для {adapter} в настройках Bluetooth и сопрягите заново.",
+        "summary_no_adapter": "Bluetooth-адаптер отправил запрос на подключение, колонка отклонила его с ошибкой «Limited Resources». Саундбары Samsung серии Q фильтруют сопряжение по Bluetooth Class of Device инициатора. Задайте device_class 0x00010c для адаптера в настройках Bluetooth и сопрягите заново.",
+        "title": "{device}: колонка отклонила сопряжение из-за фильтра Class of Device"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "Плеер подключается, но его отключают (или он сам отключается) по стабильному таймеру ({interval} с). Проверьте сервер и порт Music Assistant, затем запустите «Проверить подключение».",
+        "title": "{device}: плеер Sendspin завершается каждые {interval} с | {count} колонки: плеер Sendspin завершается через равные промежутки | {count} колонок: плеер Sendspin завершается через равные промежутки"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} Проверьте, что SENDSPIN_PORT в настройках моста совпадает с портом Sendspin в Music Assistant.",
+        "summary_error_only": "{error}",
+        "title": "{device}: нет связи с сервером Sendspin"
+      },
+      "sendspin_url_malformed": {
+        "summary": "Измените сервер Music Assistant в настройках. Нужно указать только имя хоста или IP-адрес, без http://, порта и пути.",
+        "title": "{device}: неверный адрес сервера Music Assistant | Неверный адрес сервера Music Assistant | Неверный адрес сервера Music Assistant"
+      },
+      "setup_audio": {
+        "summary_no_server": "Сервер PulseAudio или PipeWire не найден.",
+        "summary_no_server_env": "Сервер PulseAudio или PipeWire не найден: переменная PULSE_SERVER не задана.",
+        "summary_no_sinks": "Звуковой сервер доступен, но аудиовыходов у него пока нет.",
+        "summary_socket_missing": "Аудиосокет {socket} настроен, но на хосте его нет: звуковой сервер его никогда не создавал.",
+        "summary_socket_refused": "Аудиосокет {socket} смонтирован, но звуковой сервер отклонил подключение ({error}).",
+        "summary_socket_unreachable": "Аудиосокет {socket} смонтирован, но мост не может его открыть ({error}).",
+        "title": "Проверьте звуковую систему"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "Служба Bluetooth (bluetoothd) на хосте не запущена, поэтому мост не видит адаптер, пока она не стартует.",
+        "summary_no_controller": "Мост не нашёл Bluetooth-адаптер.",
+        "summary_no_paired": "Мосту не доступна ни одна сопряжённая Bluetooth-колонка.",
+        "summary_no_paired_disabled": "Нет доступных сопряжённых Bluetooth-колонок, а сохранённая колонка выключена.",
+        "title": "Проверьте доступ к Bluetooth"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "Мосту не доступна ни одна сопряжённая Bluetooth-колонка.",
+        "summary_no_paired_disabled": "Нет доступных сопряжённых Bluetooth-колонок, а сохранённая колонка выключена.",
+        "title": "Сопрягите или найдите колонку"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "Все настроенные колонки сейчас выключены.",
+        "summary_all_released": "Все настроенные колонки сейчас освобождены от моста.",
+        "summary_all_released_auto": "Мост автоматически освободил все настроенные колонки после сбоев связи.",
+        "title": "Сделайте колонку доступной"
+      },
+      "setup_latency": {
+        "summary_high_latency": "Компенсация задержки задана, но общая звуковая задержка довольно высокая.",
+        "summary_multi_no_delays": "Колонок несколько, но ни для одной не задана компенсация задержки.",
+        "title": "Проверьте настройку задержки"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Нет данных для входа в Music Assistant.",
+        "summary_no_url": "Адрес Music Assistant не задан.",
+        "summary_not_connected": "Данные для входа в Music Assistant сохранены, но мост не подключён.",
+        "title": "Подключите Music Assistant"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "Мост не может подключиться к службам D-Bus хоста, которые нужны для управления Bluetooth.",
+        "title": "Проверьте доступ к хосту"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "У некоторых подключённых колонок нет готового Bluetooth-аудиовыхода.",
+        "summary_none_configured": "Плееров пока не настроено.",
+        "summary_none_connected_bluetooth": "Плееры настроены, но ни одна колонка сейчас не подключена по Bluetooth.",
+        "summary_none_connected_mixed": "Плееры настроены, но ни одна колонка не подключена по Bluetooth и ни один аудиовыход не найден.",
+        "summary_none_connected_outputs": "Плееры настроены, но ни одного из их аудиовыходов нет.",
+        "title": "Подключите первую колонку"
+      },
+      "setup_step": {
+        "summary": "В списке настройки остался незавершённый шаг.",
+        "title": "Завершите настройку"
+      },
+      "sink_system_muted": {
+        "summary": "Звук аудиовыхода выключен. Пока его не включить, воспроизведения не будет. Так бывает после сбоя или перезапуска.",
+        "summary_error": "{error}",
+        "title": "{device}: звук аудиовыхода выключен в системе"
+      },
+      "transport_down": {
+        "summary": "Колонка подключена, но её плеер Sendspin не работает. | Переподключите {devices}, чтобы вернуть аудиоканал. | Переподключите {devices}, чтобы вернуть аудиоканал.",
+        "summary_error": "{error}",
+        "title": "{device}: потерян аудиоканал | {count} колонки потеряли аудиоканал | {count} колонок потеряли аудиоканал"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "Колонка уже в режиме ожидания."
+      },
+      "bad_request": {
+        "detail": "Запрос некорректен."
+      },
+      "bluetooth_busy": {
+        "detail": "Bluetooth занят другой операцией. Повторите чуть позже."
+      },
+      "conflict": {
+        "detail": "Это противоречит текущему состоянию."
+      },
+      "forbidden": {
+        "detail": "У вас нет прав на это действие."
+      },
+      "http_error": {
+        "detail": "Запрос не удался."
+      },
+      "internal_error": {
+        "detail": "В мосте произошла внутренняя ошибка."
+      },
+      "invalid_credentials": {
+        "detail": "Данные для входа неверны."
+      },
+      "invalid_mac": {
+        "detail": "Bluetooth-адрес неверен."
+      },
+      "invalid_request": {
+        "detail": "Некоторые значения неверны."
+      },
+      "job_in_progress": {
+        "detail": "Такая же операция уже выполняется."
+      },
+      "login_failed": {
+        "detail": "Не удалось войти."
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant ещё не настроен."
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant недоступен."
+      },
+      "ma_unreachable": {
+        "detail": "Мост не может связаться с Music Assistant."
+      },
+      "method_not_allowed": {
+        "detail": "Это действие здесь недоступно."
+      },
+      "network_error": {
+        "detail": "Мост недоступен. Проверьте соединение."
+      },
+      "no_bluetooth": {
+        "detail": "Нет доступного Bluetooth-адаптера."
+      },
+      "not_connected": {
+        "detail": "Колонка не подключена."
+      },
+      "not_found": {
+        "detail": "Не найдено."
+      },
+      "not_in_standby": {
+        "detail": "Колонка не в режиме ожидания."
+      },
+      "not_ready": {
+        "detail": "Ещё не готово. Повторите чуть позже."
+      },
+      "pairing_disabled": {
+        "detail": "Сопряжение отключено."
+      },
+      "pairing_failed": {
+        "detail": "Не удалось сопрячь."
+      },
+      "payload_too_large": {
+        "detail": "Слишком большой объём данных."
+      },
+      "scan_in_progress": {
+        "detail": "Поиск уже идёт."
+      },
+      "session_expired": {
+        "detail": "Сессия истекла. Войдите снова."
+      },
+      "timeout": {
+        "detail": "Операция заняла слишком много времени."
+      },
+      "too_many_requests": {
+        "detail": "Слишком много запросов. Подождите немного и повторите."
+      },
+      "unauthorized": {
+        "detail": "Войдите, чтобы продолжить."
+      },
+      "unavailable": {
+        "detail": "Сейчас недоступно."
+      },
+      "unknown_check": {
+        "detail": "Такой проверки нет."
+      },
+      "unknown_device": {
+        "detail": "Мост не знает такой колонки."
+      },
+      "unknown_job": {
+        "detail": "Такой операции нет (возможно, она устарела)."
+      },
+      "upstream_error": {
+        "detail": "Служба, от которой зависит мост, ответила ошибкой."
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "другого сервера"
+      },
+      "attempt": {
+        "open": "Идёт попытка переподключения {attempt}.",
+        "with_limit": "Попытка переподключения {attempt}/{max}. Осталось попыток до автоматического освобождения колонки: {remaining}."
+      },
+      "list": {
+        "more": "{first}, {second} и ещё {count}"
+      },
+      "recovered": {
+        "text": "(восстановлено)"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "Запуск моста"
+      }
+    }
   }
 }

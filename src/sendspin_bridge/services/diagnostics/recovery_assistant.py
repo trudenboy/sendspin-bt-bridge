@@ -586,7 +586,7 @@ def _air_unavailable_issue(unavailable: dict[str, set[str]]) -> RecoveryIssue:
         secondary_actions=secondary_actions,
         device_name=names[0] if len(names) == 1 else None,
         reason_codes=codes,
-        params={"count": len(names), "device": names[0], "cause_codes": codes},
+        params={"count": len(names), "device": names[0], "causes_codes": codes},
     )
 
 

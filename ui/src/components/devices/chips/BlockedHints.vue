@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { CircleAlert } from 'lucide-vue-next'
 import { blockedHints } from '@/utils/deviceChips'
+import { tServer } from '@/i18n/server'
 import type { Device } from '@/api/types'
 
 /** Up to two controls the speaker cannot use now, each with a "Why?" that tells the bridge's reason. */
@@ -21,8 +22,9 @@ function toggle(key: string) {
   open.value = { ...open.value, [key]: !open.value[key] }
 }
 
-function reason(hint: { key: string; message: string }) {
-  return hint.key === 'sink_muted' ? t('device.chips.blocked.sinkMutedReason') : hint.message
+function reason(hint: { key: string; message: string; code: string | null }) {
+  if (hint.key === 'sink_muted') return t('device.chips.blocked.sinkMutedReason')
+  return tServer('blocked', { code: hint.code }, 'message', hint.message)
 }
 
 function needs(dependsOn: string[]) {

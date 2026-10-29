@@ -1393,7 +1393,7 @@ def _build_header_status(
         return GuidanceHeaderStatus(
             tone="neutral",
             label="Bluetooth released",
-            code="all_handed_over",
+            code="all_released",
             summary="All configured devices are intentionally released from bridge management.",
         )
     if active_devices and configured_devices > 0 and str(checklist.get("overall_status") or "") != "ok":

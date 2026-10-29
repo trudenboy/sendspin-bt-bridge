@@ -18,6 +18,8 @@ function flatten(tree: Tree, prefix = ''): Array<[string, string]> {
 const ALLOWLIST = [
   'update.', // software "Release Notes"
   'settings.fields.UPDATE_CHANNEL.', // "Release candidate"
+  'server.cause.module_suspend_on_idle.', // names the PulseAudio module
+  'server.cause.wireplumber_suspend_timeout.', // names the WirePlumber option
 ]
 
 const allowed = (key: string) => ALLOWLIST.some((p) => (p.endsWith('.') ? key.startsWith(p) : key === p))

@@ -20,7 +20,7 @@ function flat(o: Record<string, unknown>, prefix = ''): string[] {
 }
 
 /** Keys read through a runtime prefix the scan cannot see (SettingField's i18n-base). */
-const DYNAMIC = ['settings.device.']
+const DYNAMIC = ['settings.device.', 'server.'] // server.* is built from the bridge's codes (i18n/server.ts)
 
 describe('i18n keys', () => {
   it('every English key is used by the app (delete dead ones; add a prefix above for runtime-built keys)', () => {

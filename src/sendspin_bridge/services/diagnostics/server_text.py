@@ -163,6 +163,8 @@ _area(
         "list": ("more",),
         # Appended to an error that was cleared later.
         "recovered": ("text",),
+        # Stands in for the owner's name when a refusal does not carry one.
+        "another_server": ("text",),
     },
 )
 
@@ -274,7 +276,7 @@ _area(
         "first_run": _L,
         "add_first_speaker": _L,
         "issues_attention": _L,
-        "all_handed_over": _L,
+        "all_released": _L,
         "setup_progress": _L,
         "devices_ready": _L,
         "waiting_for_setup": _L,
@@ -384,7 +386,6 @@ PROBLEM_CODES: tuple[str, ...] = (
     "internal_error",
     "upstream_error",
     "unavailable",
-    "rate_limited",
     "session_expired",
     "invalid_credentials",
     "login_failed",
@@ -401,7 +402,6 @@ PROBLEM_CODES: tuple[str, ...] = (
     "ma_not_configured",
     "ma_unavailable",
     "ma_unreachable",
-    "ma_token_invalid",
     "job_in_progress",
     "unknown_job",
     "unknown_check",

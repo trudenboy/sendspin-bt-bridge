@@ -7,10 +7,14 @@ import { useNotificationStore } from '@/stores/notifications'
 import { reconnectDevice, unmuteSink } from '@/api/devices'
 import { rerunCheck } from '@/api/diagnostics'
 import { api, unwrap, ApiError } from '@/api/client'
+import { tAction } from '@/i18n/server'
 
 export interface GuidanceAction {
   key: string
   label: string
+  /** Stable id and values of the label (the UI translates them). */
+  code?: string | null
+  params?: Record<string, unknown> | null
   device_names?: string[]
   check_key?: string
   value?: unknown
@@ -96,7 +100,7 @@ export function useGuidanceActions() {
           await router.push('/diagnostics')
           return
       }
-      notifications.success(t('guidance.done', { action: action.label }))
+      notifications.success(t('guidance.done', { action: tAction(action) }))
     } catch (e) {
       notifications.error(e instanceof ApiError ? e.message : t('common.error'))
     }
