@@ -755,3 +755,137 @@ def test_the_raw_clock_is_public_and_shared():
 
     assert callable(gst_output.raw_now_us)
     assert bridge_daemon.raw_now_us is gst_output.raw_now_us
+
+
+# -- stage B: the air feed in loop mode ---------------------------------------------------
+
+LEARNED = {"enabled": True, "latency_ms": None, "learned_ms": 226.0, "learned_d_ref_ms": 184.0, "learned_starts": 2}
+
+
+def _spawned_daemon(make_daemon, raw, mode="loop", **overrides):
+    """A daemon built the way a spawn builds it: the param goes through ``_air_sensor_args``."""
+    return make_daemon(playout_mode=mode, air_sensor=daemon_process._air_sensor_args(raw), **overrides)
+
+
+@pytest.mark.parametrize(
+    ("raw", "kept"),
+    [
+        (LEARNED, True),
+        ({**LEARNED, "learned_starts": 1}, False),
+        ({**LEARNED, "learned_starts": True}, False),
+        ({**LEARNED, "learned_d_ref_ms": 6000.0}, False),
+        ({**LEARNED, "learned_ms": 1300.0, "learned_d_ref_ms": 100.0}, False),
+        ({"enabled": True, "latency_ms": None, "learned_ms": 226.0}, False),
+    ],
+)
+def test_air_sensor_args_keeps_or_drops_the_learned_three(raw, kept):
+    out = daemon_process._air_sensor_args(raw)
+    assert out is not None and out["enabled"] is True
+    assert ("learned_ms" in out) is kept
+    if kept:
+        assert (out["learned_ms"], out["learned_d_ref_ms"], out["learned_starts"]) == (226.0, 184.0, 2)
+    else:
+        assert not {"learned_ms", "learned_d_ref_ms", "learned_starts"} & out.keys()
+
+
+def test_air_sensor_args_passes_d_ref_and_drops_a_bad_one():
+    assert daemon_process._air_sensor_args({"enabled": True, "latency_ms": 200.0, "d_ref_ms": 184.0}) == {
+        "enabled": True,
+        "latency_ms": 200.0,
+        "d_ref_ms": 184.0,
+    }
+    assert daemon_process._air_sensor_args({"enabled": True, "latency_ms": 200.0, "d_ref_ms": 6000.0}) == {
+        "enabled": True,
+        "latency_ms": 200.0,
+    }
+
+
+def test_loop_daemon_feeds_the_learned_target(make_daemon):
+    d = _spawned_daemon(make_daemon, LEARNED, static_delay_ms=150.0)
+    view = d._air_feed.take()
+    assert (view.target.source, view.target.latency_ms, view.target.d_ref_ms) == ("learned", 226.0, 184.0)
+    assert view.d_out_ms == 150.0
+
+
+def test_loop_daemon_feeds_a_calibrated_target(make_daemon):
+    d = _spawned_daemon(make_daemon, {"enabled": True, "latency_ms": 200.0, "d_ref_ms": 180.0})
+    target = d._air_feed.take().target
+    assert (target.source, target.latency_ms, target.d_ref_ms) == ("calibrated", 200.0, 180.0)
+
+
+def test_measure_daemon_has_no_feed(make_daemon):
+    d = _spawned_daemon(make_daemon, LEARNED, mode="measure")
+    assert d._air_feed is None
+    assert d._make_player("bluez_sink.X")._air_feed is None
+
+
+def test_every_player_of_a_loop_daemon_gets_the_same_feed(make_daemon):
+    d = _spawned_daemon(make_daemon, LEARNED)
+    assert d._make_player("a")._air_feed is d._air_feed is d._make_player("b")._air_feed
+    assert d._air_feed is not None
+
+
+def test_an_accepted_window_reaches_the_feed_as_a_sample(make_daemon):
+    from sendspin_bridge.services.audio.playout.air_sensor import AirWindow
+
+    d = _spawned_daemon(make_daemon, LEARNED)
+    d._air_feed.take()
+    win = AirWindow(
+        at_us=5e6, lag=3.0, h_us=-1500.0, d_out_us=150_000.0, psr=9.0, s_mid=1.0, x_lo_ns=1e9, x_hi_ns=2e9, gen=0
+    )
+    d._air_sensor._accept(win)
+    (sample,) = d._air_feed.take().samples
+    assert (sample.x_lo_ns, sample.x_hi_ns, sample.tap_gen) == (1e9, 2e9, 0)
+    assert (sample.h_us, sample.d_out_us, sample.at_us) == (-1500.0, 150_000.0, 5e6)
+    assert 0.0 <= sample.confidence <= 1.0
+
+
+def test_set_air_calibration_reaches_sensor_and_feed(make_daemon):
+    d = _spawned_daemon(make_daemon, {"enabled": True, "latency_ms": None})
+    daemon_process._dispatch_air_command(
+        d, {"cmd": "set_air_calibration", "v": 1, "latency_ms": 228.7, "d_ref_ms": 184}
+    )
+    target = d._air_feed.take().target
+    assert (target.source, target.latency_ms, target.d_ref_ms) == ("calibrated", 228.7, 184.0)
+    assert d._air_sensor._latency_ms == 228.7
+
+
+def test_a_learned_only_calibration_command_sets_a_learned_target(make_daemon):
+    d = _spawned_daemon(make_daemon, {"enabled": True, "latency_ms": 100.0, "d_ref_ms": 90.0})
+    d.air_intake(SetAirCalibration(None, None, 226.0, 184.0, 3))
+    target = d._air_feed.take().target
+    assert (target.source, target.latency_ms) == ("learned", 226.0)
+    assert d._air_sensor._latency_ms is None
+
+
+@pytest.mark.asyncio
+async def test_air_step_publishes_lock_and_key_to_the_feed(make_daemon):
+    from sendspin_bridge.services.ipc.commands import AirSource
+
+    d = _spawned_daemon(make_daemon, LEARNED)
+    d.air_intake(
+        AirSource(
+            state="streaming",
+            reason=None,
+            codec="sbc",
+            adapter="C0:FB:F9:62:D6:9D",
+            index=0,
+            handle=1,
+            in_step=False,
+            monitor_drops=0,
+            ipc_dropped=0,
+        )
+    )
+    await d.air_step()
+    view = d._air_feed.take()
+    assert view.lock == d._air_sensor.lock_state()
+    assert view.key == d._air_sensor.key()
+    assert view.key[0] == "sbc" and view.key[2] == "C0:FB:F9:62:D6:9D"
+
+
+def test_a_delay_change_sets_the_feeds_output_delay(make_daemon):
+    d = _spawned_daemon(make_daemon, LEARNED, static_delay_ms=150.0)
+    d._player_delay_ms = 150.0
+    d._target_delay_ms = 90.0
+    d._apply_output_delay()
+    assert d._air_feed.take().d_out_ms == 90.0

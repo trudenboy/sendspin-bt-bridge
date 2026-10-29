@@ -370,6 +370,20 @@ def _read_playout(audio_handler: object) -> dict | None:
 _AIR_LATENCY_MAX_MS = 2000.0
 
 
+_AIR_D_REF_MAX_MS = 5000.0
+
+
+def _air_number(value: object, low: float, high: float) -> float | None:
+    """A finite number within ``low``…``high`` as a float, else None (the field is dropped)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) and low <= number <= high else None
+
+
 def _air_sensor_args(raw: object) -> dict | None:
     """The spawn's ``air_sensor`` param, validated: None unless it asks for the sensor."""
     if not isinstance(raw, dict) or raw.get("enabled") is not True:
@@ -378,7 +392,22 @@ def _air_sensor_args(raw: object) -> dict | None:
     latency_ms: float | None = None
     if isinstance(latency, int | float) and not isinstance(latency, bool) and math.isfinite(latency):
         latency_ms = min(_AIR_LATENCY_MAX_MS, max(0.0, float(latency)))
-    return {"enabled": True, "latency_ms": latency_ms}
+    out: dict = {"enabled": True, "latency_ms": latency_ms}
+    d_ref = _air_number(raw.get("d_ref_ms"), 0.0, _AIR_D_REF_MAX_MS)
+    if d_ref is not None:
+        out["d_ref_ms"] = d_ref
+    learned = _air_number(raw.get("learned_ms"), -math.inf, math.inf)
+    learned_ref = _air_number(raw.get("learned_d_ref_ms"), 0.0, _AIR_D_REF_MAX_MS)
+    starts = raw.get("learned_starts")
+    if (
+        learned is not None
+        and learned_ref is not None
+        and type(starts) is int
+        and starts >= 2
+        and abs(learned - learned_ref) <= 1000.0
+    ):
+        out.update(learned_ms=learned, learned_d_ref_ms=learned_ref, learned_starts=starts)
+    return out
 
 
 def _air_step_done(task: asyncio.Future) -> None:

@@ -32,14 +32,15 @@ from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
 from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory, playout_pulsesink_factory
 from sendspin_bridge.services.audio.player.player import InPlaceShift, PcmFormat, StreamPlayer
-from sendspin_bridge.services.audio.playout.air_sensor import AirSensor
+from sendspin_bridge.services.audio.playout.air_bias import AirFeed, AirSample
+from sendspin_bridge.services.audio.playout.air_sensor import AirSensor, AirWindow
 from sendspin_bridge.services.audio.playout.air_tap import INTERNAL_ERROR as _AIR_INTERNAL_ERROR
 from sendspin_bridge.services.audio.playout.air_tap import WrittenEnvelope
 from sendspin_bridge.services.audio.playout.engine import PlayoutSettings
 from sendspin_bridge.services.audio.playout.gst_output import LEAD_MS as _PLAYOUT_LEAD_MS
 from sendspin_bridge.services.audio.playout.gst_output import PlayoutPlayer, raw_now_us
 from sendspin_bridge.services.audio.playout.stats import RateLimitedLog
-from sendspin_bridge.services.ipc.commands import AIR_ENVELOPE_VERSION
+from sendspin_bridge.services.ipc.commands import AIR_ENVELOPE_VERSION, SetAirCalibration
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
 from sendspin_bridge.services.ipc.status_store import StatusStore
 
@@ -133,6 +134,26 @@ class DaemonArgs:
     # The spawn's ``air_sensor`` dict ({"enabled": True, "latency_ms": …}), sent only when the
     # sensor is effective for this speaker; None (switch off) = no sensor, no tap, no air commands.
     air_sensor: dict | None = None
+
+
+class _AirCalibrationTee:
+    """The air sink: every command goes to the sensor; a calibration also sets the feed's target."""
+
+    def __init__(self, sensor: AirSensor, calibrate: Callable[..., None]) -> None:
+        self._sensor = sensor
+        self._calibrate = calibrate
+
+    def submit(self, command: AirCommand) -> None:
+        if isinstance(command, SetAirCalibration):
+            self._calibrate(
+                command.latency_ms,
+                command.d_ref_ms,
+                command.learned_ms,
+                command.learned_d_ref_ms,
+                command.learned_starts,
+            )
+        else:
+            self._sensor.submit(command)
 
 
 class AirSink(Protocol):
@@ -245,6 +266,7 @@ class BridgeDaemon:
         # every playout player of this daemon writes into, and the loop its events run on.
         self._air_tap: WrittenEnvelope | None = None
         self._air_sensor: AirSensor | None = None
+        self._air_feed: AirFeed | None = None
         self._air_loop: asyncio.AbstractEventLoop | None = None
         self._air_no_loop_logged = False
         self._build_air_sensor()
@@ -257,11 +279,65 @@ class BridgeDaemon:
         if self._args.playout_mode not in ("measure", "loop"):
             return
         self._air_tap = WrittenEnvelope()
-        self._air_sensor = AirSensor(tap=self._air_tap, now_us=raw_now_us, output_delay_ms=self._air_output_delay_ms)
+        if self._args.playout_mode == "loop":
+            self._air_feed = AirFeed()
+            self._air_feed.set_output_delay(self._air_output_delay_ms())
+        self._air_sensor = AirSensor(
+            tap=self._air_tap,
+            now_us=raw_now_us,
+            output_delay_ms=self._air_output_delay_ms,
+            on_window=self._air_feed_push if self._air_feed is not None else None,
+        )
         latency = params.get("latency_ms")
-        if isinstance(latency, int | float) and not isinstance(latency, bool):
-            self._air_sensor.set_calibration(float(latency))
-        self.attach_air_sink(self._air_sensor)
+        self._air_calibrate(
+            float(latency) if isinstance(latency, int | float) and not isinstance(latency, bool) else None,
+            params.get("d_ref_ms"),
+            params.get("learned_ms"),
+            params.get("learned_d_ref_ms"),
+            params.get("learned_starts"),
+            sensor_unset_is_noop=True,
+        )
+        self.attach_air_sink(_AirCalibrationTee(self._air_sensor, self._air_calibrate))
+
+    def _air_calibrate(
+        self,
+        latency_ms: float | None,
+        d_ref_ms: float | None = None,
+        learned_ms: float | None = None,
+        learned_d_ref_ms: float | None = None,
+        learned_starts: int | None = None,
+        *,
+        sensor_unset_is_noop: bool = False,
+    ) -> None:
+        """The calibration to the sensor and, in loop mode, the target to the feed."""
+        sensor = self._air_sensor
+        if sensor is not None and not (sensor_unset_is_noop and latency_ms is None):
+            sensor.set_calibration(latency_ms)
+        if self._air_feed is not None:
+            self._air_feed.set_target(
+                latency_ms=latency_ms,
+                d_ref_ms=d_ref_ms,
+                learned_ms=learned_ms,
+                learned_d_ref_ms=learned_d_ref_ms,
+                learned_starts=learned_starts,
+            )
+
+    def _air_feed_push(self, win: AirWindow, confidence: float | None) -> None:
+        """The sensor's ``on_window`` hook (daemon loop): one accepted window to the engine's feed."""
+        feed = self._air_feed
+        if feed is None or confidence is None or not (win.x_lo_ns < win.x_hi_ns):
+            return
+        feed.push(
+            AirSample(
+                tap_gen=win.gen,
+                x_lo_ns=win.x_lo_ns,
+                x_hi_ns=win.x_hi_ns,
+                at_us=win.at_us,
+                h_us=win.h_us,
+                d_out_us=win.d_out_us,
+                confidence=confidence,
+            )
+        )
 
     def _air_output_delay_ms(self) -> float:
         """``D_out``: the output delay the queued audio is timed with (the static delay before the client runs)."""
@@ -306,6 +382,10 @@ class BridgeDaemon:
             return
         try:
             await sensor.step()
+            feed = self._air_feed
+            if feed is not None:
+                feed.set_lock(*sensor.lock_state())
+                feed.set_key(*sensor.key())
         except Exception:
             with contextlib.suppress(Exception):
                 sensor.fail()
@@ -626,6 +706,7 @@ class BridgeDaemon:
                 "air_tap": self._air_tap,
                 "output_delay_us": self._air_output_delay_us,
                 "on_engine_event": self._air_engine_event,
+                "air_feed": self._air_feed,
             }
         return PlayoutPlayer(
             sink_factory=playout_pulsesink_factory(
@@ -1286,6 +1367,8 @@ class BridgeDaemon:
             return
         shift_us = round((old_ms - new_ms) * 1000)
         self._player_delay_ms = new_ms
+        if self._air_feed is not None:
+            self._air_feed.set_output_delay(float(new_ms))
         if self._pending_play_time_us is not None:
             self._pending_play_time_us += shift_us
         if self._next_play_time_us is not None:

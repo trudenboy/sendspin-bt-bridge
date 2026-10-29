@@ -687,3 +687,55 @@ async def test_an_overlong_line_split_across_reads_is_dropped_whole_and_counted_
     )
     assert [c.kwargs["volume"] for c in daemon.apply_bridge_volume.call_args_list] == [30]
     assert daemon_process.stdin_drop_counters["overlong"] == before + 1
+
+
+# ── Stage B: reference delay and learned target on set_air_calibration ───────
+
+
+def _cal(**extra):
+    return {"cmd": "set_air_calibration", "v": 1, **extra}
+
+
+def test_calibration_takes_a_reference_delay():
+    assert dec(_cal(latency_ms=228.7, d_ref_ms=184.0)) == SetAirCalibration(228.7, 184.0)
+
+
+def test_calibration_takes_a_learned_target_without_a_latency():
+    cmd = dec(_cal(latency_ms=None, learned_ms=226.0, learned_d_ref_ms=184.0, learned_starts=3))
+    assert cmd == SetAirCalibration(None, None, 226.0, 184.0, 3)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"latency_ms": 1.0, "d_ref_ms": 6000},
+        {"latency_ms": 1.0, "d_ref_ms": -1},
+        {"latency_ms": 1.0, "d_ref_ms": "5"},
+        {"latency_ms": None, "learned_ms": 1300.0, "learned_d_ref_ms": 100.0, "learned_starts": 3},
+        {"latency_ms": None, "learned_ms": 1.0, "learned_d_ref_ms": 1100.0, "learned_starts": 3},
+        {"latency_ms": None, "learned_ms": 226.0, "learned_d_ref_ms": 184.0, "learned_starts": 1},
+        {"latency_ms": None, "learned_ms": 226.0, "learned_d_ref_ms": 184.0, "learned_starts": "3"},
+        {"latency_ms": None, "learned_ms": 226.0, "learned_d_ref_ms": 184.0, "learned_starts": True},
+        {"latency_ms": None, "learned_ms": 226.0},
+        {"latency_ms": None, "learned_d_ref_ms": 184.0, "learned_starts": 3},
+        {"latency_ms": None, "learned_ms": 226.0, "learned_starts": 3},
+    ],
+)
+def test_calibration_rejects_bad_new_fields(extra):
+    with pytest.raises(InvalidCommand):
+        dec(_cal(**extra))
+
+
+def test_calibration_encoder_sends_new_fields_only_when_known():
+    assert encode_command(SetAirCalibration(203.0)) == {
+        "cmd": "set_air_calibration",
+        "v": 1,
+        "latency_ms": 203.0,
+        "protocol_version": 2,
+    }
+    cmd = SetAirCalibration(None, None, 226.0, 184.0, 3)
+    wire = encode_command(cmd)
+    assert wire["learned_ms"] == 226.0 and wire["learned_starts"] == 3 and "d_ref_ms" not in wire
+    assert wire["v"] == AIR_ENVELOPE_VERSION == 1
+    assert decode_command(wire) == cmd
+    assert decode_command(encode_command(SetAirCalibration(228.7, 184.0))) == SetAirCalibration(228.7, 184.0)

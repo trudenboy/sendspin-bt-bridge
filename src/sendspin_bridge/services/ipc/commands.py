@@ -178,6 +178,10 @@ AIR_MAX_HCI_INDEX = 0xFFFF
 AIR_MAX_ACL_HANDLE = 0x0FFF
 AIR_MAX_DROPS = 2**63
 AIR_CALIBRATION_RANGE_MS = (0.0, 2000.0)
+AIR_D_REF_RANGE_MS = (0.0, 5000.0)
+AIR_LEARNED_MAX_OFFSET_MS = 1000.0
+AIR_LEARNED_MIN_STARTS = 2
+AIR_LEARNED_MAX_STARTS = 2**31
 AIR_FOLD_MAX_SPAN_US = 30e6
 AIR_FOLD_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _MAC_RE = re.compile(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}")
@@ -223,6 +227,12 @@ class AirSource:
 class SetAirCalibration:
     #: Air-to-sound latency for the current codec and adapter; ``None`` = uncalibrated.
     latency_ms: float | None
+    #: The output delay the calibration was taken at (``D_ref``); ``None`` = latch at the first update.
+    d_ref_ms: float | None = None
+    #: The learned target (all three together): its latency, reference delay and start count.
+    learned_ms: float | None = None
+    learned_d_ref_ms: float | None = None
+    learned_starts: int | None = None
 
 
 @dataclass(frozen=True)
@@ -414,13 +424,33 @@ def _decode_air_source(message: dict) -> AirSource:
     )
 
 
+def _air_learned_fields(message: dict, name: str) -> tuple[float | None, float | None, int | None]:
+    keys = ("learned_ms", "learned_d_ref_ms", "learned_starts")
+    present = [message.get(k) is not None for k in keys]
+    if not any(present):
+        return None, None, None
+    if not all(present):
+        raise InvalidCommand(f"{name} got an incomplete learned target")
+    learned = _air_float(message, name, "learned_ms")
+    learned_ref = _air_float(message, name, "learned_d_ref_ms", *AIR_D_REF_RANGE_MS)
+    starts = _air_int(message, name, "learned_starts", AIR_LEARNED_MIN_STARTS, AIR_LEARNED_MAX_STARTS)
+    if abs(learned - learned_ref) > AIR_LEARNED_MAX_OFFSET_MS:
+        raise InvalidCommand(f"{name} got a bad 'learned_ms'")
+    return learned, learned_ref, starts
+
+
 def _decode_set_air_calibration(message: dict) -> SetAirCalibration:
-    _air_version(message, "set_air_calibration")
-    latency = _air_float(message, "set_air_calibration", "latency_ms", nullable=True)
-    if latency is None:
-        return SetAirCalibration(latency_ms=None)
-    low, high = AIR_CALIBRATION_RANGE_MS
-    return SetAirCalibration(latency_ms=max(low, min(high, latency)))
+    name = "set_air_calibration"
+    _air_version(message, name)
+    latency = _air_float(message, name, "latency_ms", nullable=True)
+    d_ref = None
+    if message.get("d_ref_ms") is not None:
+        d_ref = _air_float(message, name, "d_ref_ms", *AIR_D_REF_RANGE_MS)
+    learned, learned_ref, starts = _air_learned_fields(message, name)
+    if latency is not None:
+        low, high = AIR_CALIBRATION_RANGE_MS
+        latency = max(low, min(high, latency))
+    return SetAirCalibration(latency, d_ref, learned, learned_ref, starts)
 
 
 def _decode_air_fold(message: dict) -> AirFold:
@@ -581,7 +611,19 @@ def encode_command(command: Command) -> dict:
             ipc_dropped=command.ipc_dropped,
         )
     if isinstance(command, SetAirCalibration):
-        return build_command_envelope("set_air_calibration", v=AIR_ENVELOPE_VERSION, latency_ms=command.latency_ms)
+        optional = {
+            key: value
+            for key, value in (
+                ("d_ref_ms", command.d_ref_ms),
+                ("learned_ms", command.learned_ms),
+                ("learned_d_ref_ms", command.learned_d_ref_ms),
+                ("learned_starts", command.learned_starts),
+            )
+            if value is not None
+        }
+        return build_command_envelope(
+            "set_air_calibration", v=AIR_ENVELOPE_VERSION, latency_ms=command.latency_ms, **optional
+        )
     if isinstance(command, AirFold):
         return build_command_envelope(
             "air_fold", v=AIR_ENVELOPE_VERSION, id=command.id, from_us=command.from_us, to_us=command.to_us
