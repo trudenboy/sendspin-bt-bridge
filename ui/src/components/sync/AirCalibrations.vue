@@ -92,17 +92,16 @@ async function pickReference(event: Event) {
         <span class="font-medium text-text-primary">{{ nameOf(c.member) }}</span>
         <template v-if="c.eligible && c.latency_ms != null">
           <span class="text-text-primary">
-            {{ t('sync.air.value', { ms: Math.round(c.latency_ms) }) }}
+            {{ t(saved[c.member] ? 'sync.air.valueSaved' : 'sync.air.value', { ms: Math.round(c.latency_ms) }) }}
             <span v-if="c.delay_report_ms != null" class="text-xs text-text-secondary">
               · {{ t('sync.air.hint', { ms: Math.round(c.delay_report_ms) }) }}
             </span>
           </span>
-          <span v-if="saved[c.member]" class="text-xs text-success">{{ t('sync.air.saved') }}</span>
-          <label v-else-if="saveable(c)" class="flex items-center gap-2 text-text-primary">
+          <label v-if="!saved[c.member] && saveable(c)" class="flex items-center gap-2 text-text-primary">
             <input v-model="chosen[c.member]" type="checkbox" :data-air-save="c.member" />
             {{ t('sync.air.save') }}
           </label>
-          <span v-else class="text-xs text-warning-text">{{ t('sync.air.outOfRange', { min: MIN_MS, max: MAX_MS }) }}</span>
+          <span v-else-if="!saved[c.member]" class="text-xs text-warning-text">{{ t('sync.air.outOfRange', { min: MIN_MS, max: MAX_MS }) }}</span>
         </template>
         <span v-else class="text-text-secondary">{{ t(`sync.air.reasons.${c.reason ?? 'not_effective'}`) }}</span>
       </li>

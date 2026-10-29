@@ -51,10 +51,10 @@ describe('AirCalibrations', () => {
   it('shows an eligible member with its value, the delay report as a hint and a save checkbox', () => {
     const row = mountIt(session()).get('[data-air-row="eneby"]')
     expect(row.text()).toContain('ENEBY')
-    expect(row.text()).toContain('203 ms')
+    expect(row.text()).toContain('Bluetooth latency measured: 203 ms')
     expect(row.text()).toContain('reports 150 ms')
     expect(row.get('[data-air-save="eneby"]').element).toBeInstanceOf(HTMLInputElement)
-    expect(row.text()).toContain("Save as this speaker's air-to-sound latency")
+    expect(row.text()).toContain('Save this Bluetooth latency')
   })
 
   it('shows an ineligible member with its reason in words and nothing to save', () => {
@@ -74,7 +74,7 @@ describe('AirCalibrations', () => {
         expect(text.length).toBeGreaterThan(r.length + 5)
       }
     }
-    expect(mountIt(session(), 'ru').text()).toContain('Сохранить как задержку эфир → звук этой колонки')
+    expect(mountIt(session(), 'ru').text()).toContain('Сохранить эту задержку Bluetooth')
   })
 
   it('a value outside the stored range cannot be saved', () => {
@@ -91,7 +91,8 @@ describe('AirCalibrations', () => {
     await w.get('[data-air-save-button]').trigger('click')
     await flushPromises()
     expect(api.saveAirCalibrations).toHaveBeenCalledWith('s1', ['eneby'])
-    expect(w.get('[data-air-row="eneby"]').text()).toContain('Saved')
+    expect(w.get('[data-air-row="eneby"]').text()).toContain('Bluetooth latency measured: 203 ms, saved')
+    expect(w.find('[data-air-save="eneby"]').exists()).toBe(false)
   })
 
   it('a refused save shows the problem', async () => {

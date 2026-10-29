@@ -39,7 +39,7 @@ same thing, the one in the "Use" columns wins.
 | Difference between this speaker and the group | Sync error | Ошибка синхронизации | Measured offset in ms. | Drift, Skew |
 | Stream timing is re-established | Resync / Resyncing | Пересинхронизация | The stream timing was corrected after a glitch. | Re-anchor, Re-anchoring, Подстройка, Routing corrections |
 | Feature that watches Bluetooth packets leaving the adapter | Air sensor | Датчик эфира | Experimental SBC-only measurement. | Air probe, Радиодатчик |
-| Time from the audio leaving the air to sound | Air-to-sound latency | Задержка эфир → звук | A measurement result, per speaker, codec, rate and adapter. It does not change the compensation by itself. | Speaker latency (air → sound), Измеренная задержка колонки |
+| Time from the audio leaving the air to sound | Bluetooth latency measured (stored: air-to-sound latency) | Измерена задержка Bluetooth | A measurement result shown in the wizard result as "Bluetooth latency measured: N ms, saved", per speaker, codec, rate and adapter. Never presented as a second kind of delay; it does not change the compensation by itself. | Air-to-sound latency in the default UI, Speaker latency (air → sound) |
 | Correction the loop applies from the air sensor | Air correction | Коррекция по эфиру | What playout sync adds from the air measurement. | Air bias as a name for the whole feature |
 | One measurement path, three ways | Calibrate (the air sensor's stored result) / Tune by ear (adjust while listening) / Measure (record with a microphone) | Калибровка / Настроить на слух / Измерить | Calibrate = stored air result; Tune by ear = manual; Measure = microphone recording. | Mixing "calibrate" for by-ear tuning |
 

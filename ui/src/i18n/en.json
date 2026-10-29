@@ -1712,17 +1712,16 @@
       "saveConfirm": "Save and finish"
     },
     "air": {
-      "title": "Air-to-sound latency",
-      "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is measured against a reference: a member whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much.",
+      "title": "Bluetooth latency measured",
+      "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is compared with a reference whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much. Saved values are used by the bridge on its own; they are not the speaker's delay setting.",
       "reference": "Reference",
       "referencePick": "Choose a reference…",
       "referenceHint": "Pick a headset, wired output or another reference that plays on schedule. It also becomes the reference for the proposed delays.",
       "referenceFailed": "Could not set the reference ({code}).",
-      "value": "{ms} ms",
+      "value": "Bluetooth latency measured: {ms} ms",
       "hint": "the speaker reports {ms} ms",
-      "save": "Save as this speaker's air-to-sound latency",
-      "saveButton": "Save latencies",
-      "saved": "Saved",
+      "save": "Save this Bluetooth latency",
+      "saveButton": "Save",
       "saveFailed": "Could not save ({code}).",
       "outOfRange": "outside {min}–{max} ms, cannot be saved",
       "reasons": {
@@ -1736,7 +1735,8 @@
         "no_written_clicks": "Its clicks were not found in what the bridge wrote",
         "fold_failed": "The air measurement for this speaker could not be completed",
         "no_air_frames": "No Bluetooth audio from this speaker was seen on the air during its turn"
-      }
+      },
+      "valueSaved": "Bluetooth latency measured: {ms} ms, saved"
     },
     "cancel": {
       "title": "Stop measuring?",
