@@ -148,7 +148,7 @@ usb-devices==0.5.1
     #   bluetooth-auto-recovery
 waitress==3.0.2
     # via sendspin-bt-bridge
-websockets==17.0.1
+websockets==17.3
     # via sendspin-bt-bridge
 werkzeug==3.1.9
     # via flask
