@@ -74,6 +74,14 @@ _MAX_OPENING_CHUNKS = 2048
 # An open still running after this long is abandoned (its output is closed if it
 # ever finishes); the next stream start or chunk opens anew.
 _OPEN_TIMEOUT_S = 5.0
+# #555: opening a Bluetooth output costs ~1.0-1.5 s, and a stream start that pays it
+# while the first chunk is already due loses that chunk's head (110-210 ms dropped)
+# and starts late. The daemon opens the output right after it starts instead, when the
+# sink is known, and holds it until audio comes; a stream that starts in that window
+# finds an open output. The hold ends when the output has been idle this long (the
+# speaker can idle out again) or when the stream starts.
+_PREOPEN_DELAY_S = 1.5
+_PREOPEN_HOLD_S = 180.0
 # A failed open is retried no sooner than this, doubling per failure up to the max.
 _OPEN_RETRY_MIN_S = 0.5
 _OPEN_RETRY_MAX_S = 10.0
@@ -131,6 +139,9 @@ class DaemonArgs:
     playout_mode: str = "off"
     # The spawn's ``playout`` dict: PlayoutSettings fields beyond the mode.
     playout: dict | None = None
+    # The player's idle mode: ``power_save``/``auto_disconnect`` mean the speaker is meant to
+    # sleep, so the output is not pre-opened (#555) and held against its idle timers.
+    idle_mode: str = "default"
     # The spawn's ``air_sensor`` dict ({"enabled": True, "latency_ms": …}), sent only when the
     # sensor is effective for this speaker; None (switch off) = no sensor, no tap, no air commands.
     air_sensor: dict | None = None
@@ -251,6 +262,12 @@ class BridgeDaemon:
         self._opening_began = 0.0
         self._loop_block_ms = 0.0
         self._opening_from_start = False
+        # A pre-open (#555): the output is opened before any stream, so no input format is set at
+        # adopt; the first start(format) does that. Its hold timers are cancelled by that start.
+        self._opening_from_preopen = False
+        self._opening_set_format = True
+        self._preopen_handle: asyncio.TimerHandle | None = None
+        self._preopen_expiry: asyncio.TimerHandle | None = None
         self._opening_watchdog: asyncio.TimerHandle | None = None
         self._open_failures = 0
         self._open_retry_at = 0.0
@@ -473,6 +490,7 @@ class BridgeDaemon:
         sink_name = self._args.sink_name or self._bluetooth_sink_name
         self._player = self._make_player(sink_name)
         self._audio_handler = self._player
+        self._schedule_preopen()
         self._clock_diag_task = asyncio.create_task(self._clock_diag_loop())
         # Loaded on the first FLAC stream/start, PyAV's import would hold the
         # loop (0.07 s warm, seconds from a cold disk); load it in a worker
@@ -769,6 +787,8 @@ class BridgeDaemon:
         self._forget_open()
         self._player = self._make_player(self._sink_name)
         self._audio_handler = self._player
+        self._cancel_preopen()
+        self._schedule_preopen()
         if old is not None:
             self._retire_player(old)
         if self._scales_stream:
@@ -1582,6 +1602,7 @@ class BridgeDaemon:
         channels = int(getattr(player_cfg, "channels", 2))
         header = getattr(player_cfg, "codec_header", None)
         began = _monotonic()
+        self._cancel_preopen()
         self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
@@ -1602,7 +1623,7 @@ class BridgeDaemon:
         self._loop_block_ms = (_monotonic() - began) * 1000.0
         self._on_stream_event("start")
 
-    def _output_state(self, fmt: PcmFormat, *, from_start: bool = False) -> str:
+    def _output_state(self, fmt: PcmFormat, *, from_start: bool = False, from_preopen: bool = False) -> str:
         """Where audio for ``fmt`` goes now: ``ready`` (the player, opening its
         output on the loop if it must: no loop to come back to), ``opening``
         (wait for the output being opened in a worker thread, starting that
@@ -1621,6 +1642,8 @@ class BridgeDaemon:
         self._opening_chunks.clear()
         self._opening_discard = False
         self._opening_from_start = from_start
+        self._opening_from_preopen = from_preopen
+        self._opening_set_format = not from_preopen
         self._opening_began = _monotonic()
         self._first_arrival_lead_us = None
         opening = asyncio.ensure_future(loop.run_in_executor(None, player.prepare_output, fmt))
@@ -1628,6 +1651,59 @@ class BridgeDaemon:
         self._opening_watchdog = loop.call_later(_OPEN_TIMEOUT_S, self._abandon_open, opening)
         opening.add_done_callback(lambda done: self._on_output_opened(done, player, fmt))
         return "opening"
+
+    # -- pre-open (#555) ----------------------------------------------------------------
+
+    def _schedule_preopen(self) -> None:
+        """Open the output soon after the daemon starts, before any stream asks for it."""
+        if not self._playout_active or self._player is None or self._sink_name is None:
+            return
+        if getattr(self._args, "idle_mode", "default") in ("power_save", "auto_disconnect"):
+            return
+        if getattr(self, "_preopen_handle", None) is not None or self._preopen_expiry is not None:
+            return
+        with contextlib.suppress(RuntimeError):
+            loop = asyncio.get_running_loop()
+            self._preopen_handle = loop.call_later(_PREOPEN_DELAY_S, self._preopen_output)
+
+    def _preopen_output(self) -> None:
+        """Start the open without a stream; the first start(format) applies the real format."""
+        self._preopen_handle = None
+        player = self._player
+        if player is None or not self._playout_active or self._player is not player:
+            return
+        status = self._bridge_status
+        if status.get("bt_standby") or status.get("playing") or self._opening is not None:
+            return
+        if not isinstance(player, PlayoutPlayer) or player.needs_output() is not True:
+            return
+        # The format is not applied for a pre-open (prepare_output ignores it): any placeholder works.
+        placeholder = PcmFormat(sample_rate=48000, channels=2, bit_depth=16)
+        if self._output_state(placeholder, from_preopen=True) != "opening":
+            return
+        with contextlib.suppress(RuntimeError):
+            loop = asyncio.get_running_loop()
+            self._preopen_expiry = loop.call_later(_PREOPEN_HOLD_S, self._expire_preopen)
+
+    def _expire_preopen(self) -> None:
+        """No stream came while the output was held: close it so the speaker can idle out."""
+        self._preopen_expiry = None
+        player = self._player
+        if player is None or not self._playout_active or not isinstance(player, PlayoutPlayer):
+            return
+        if self._bridge_status.get("playing") or player.needs_output() is True:
+            return
+        logger.info("playout output closed after the pre-open hold: no stream arrived")
+        player.stop("pre-open hold expired")
+
+    def _cancel_preopen(self) -> None:
+        """A stream started (or the player changed): the hold no longer applies."""
+        if self._preopen_handle is not None:
+            self._preopen_handle.cancel()
+            self._preopen_handle = None
+        if self._preopen_expiry is not None:
+            self._preopen_expiry.cancel()
+            self._preopen_expiry = None
 
     def _forget_open(self) -> None:
         """Stop waiting for the open in flight; its output is closed when it finishes."""
@@ -1680,8 +1756,16 @@ class BridgeDaemon:
         self._open_failures = 0
         self._open_retry_at = 0.0
         opened_ms = (_monotonic() - self._opening_began) * 1000.0
-        player.adopt_output(output, fmt)
-        self._start_cost = {"output_open_ms": opened_ms}
+        preopened = self._opening_from_preopen
+        if isinstance(player, PlayoutPlayer):
+            player.adopt_output(output, fmt, set_format=self._opening_set_format)
+        else:
+            player.adopt_output(output, fmt)
+        if preopened:
+            # Not this start's cost: the stream will find an open output (no open, no drop).
+            logger.info("playout output pre-opened in %.0f ms (no stream yet)", opened_ms)
+        else:
+            self._start_cost = {"output_open_ms": opened_ms}
         if self._opening_from_start:
             self._start_cost["loop_block_ms"] = self._loop_block_ms
         self._schedule_start_timing_line()

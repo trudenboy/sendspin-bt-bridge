@@ -403,8 +403,12 @@ class PlayoutPlayer:
             pipeline=pipeline, appsrc=appsrc, sink=sink, out_rate=rate, k0_ns=k0_ns, buffer_time_us=buffer_time_us
         )
 
-    def adopt_output(self, output: PlayoutOutput, audio_format: PcmFormat) -> None:
-        """Make a prepared output the current one and start its feeder thread."""
+    def adopt_output(self, output: PlayoutOutput, audio_format: PcmFormat, *, set_format: bool = True) -> None:
+        """Make a prepared output the current one and start its feeder thread.
+
+        ``set_format=False`` is the pre-open path (#555): the output is opened before a stream
+        exists, so there is no input format to apply yet; the first ``start(format)`` sets it.
+        """
         self.stop("replaced by a new output")
         self._out = output
         self._pipeline = output.pipeline
@@ -437,7 +441,8 @@ class PlayoutPlayer:
         with self._cmd_lock:
             self._commands.clear()
         self._reopen_air_tap()
-        self._enqueue_format(audio_format)
+        if set_format:
+            self._enqueue_format(audio_format)
         if self._volume is not None:
             self._enqueue(("volume", *self._volume))
         logger.info(

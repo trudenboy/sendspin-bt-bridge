@@ -409,3 +409,93 @@ async def test_an_open_started_by_a_chunk_reports_no_loop_block(tmp_path):
 
     assert daemon._start_cost is not None
     assert "loop_block_ms" not in daemon._start_cost
+
+
+class _StubPlayoutPlayer:
+    """A PlayoutPlayer stand-in for the pre-open (#555): opens fast, records the adopt."""
+
+    stream_generation = 0
+
+    def __init__(self) -> None:
+        self.output: object | None = None
+        self.stopped: list[str] = []
+        self.set_format: bool | None = None
+        self.started_with: list[object] = []
+
+    def needs_output(self) -> bool:
+        return self.output is None
+
+    def now_us(self) -> int:
+        return 10_000_000
+
+    def prepare_output(self, fmt):
+        time.sleep(0.01)
+        return object()
+
+    def adopt_output(self, output, fmt, *, set_format: bool = True) -> None:
+        self.output = output
+        self.set_format = set_format
+
+    def discard_output(self, output) -> None:
+        self.output = None
+
+    def start(self, fmt) -> None:
+        assert self.output is not None, "the output must be adopted before audio is handed on"
+        self.started_with.append(fmt)
+
+    def submit(self, play_time_us: int, payload: bytes) -> None:
+        pass
+
+    def stop(self, reason: str = "stop") -> None:
+        self.output = None
+        self.stopped.append(reason)
+
+
+def _with_stub_playout(monkeypatch, tmp_path):
+    import sendspin_bridge.services.ipc.bridge_daemon as bd
+
+    monkeypatch.setattr(bd, "PlayoutPlayer", _StubPlayoutPlayer)
+    daemon = _daemon(tmp_path)
+    daemon._schedule_start_timing_line = MagicMock()  # type: ignore[method-assign]
+    daemon._args = replace(daemon._args, playout_mode="loop")
+    daemon._playout_fell_back = False
+    player = _StubPlayoutPlayer()
+    daemon._player = player  # type: ignore[assignment]
+    daemon._sink_name = SINK
+    return daemon, player
+
+
+@pytest.mark.asyncio
+async def test_the_output_is_preopened_without_a_stream_and_adopted_without_a_format(monkeypatch, tmp_path):
+    daemon, player = _with_stub_playout(monkeypatch, tmp_path)
+
+    daemon._preopen_output()
+    await _wait_for(lambda: player.output is not None)
+
+    assert player.set_format is False  # the first start() applies the real format
+    assert daemon._preopen_expiry is not None
+
+
+@pytest.mark.asyncio
+async def test_a_preopened_output_closes_when_no_stream_comes(monkeypatch, tmp_path):
+    daemon, player = _with_stub_playout(monkeypatch, tmp_path)
+
+    daemon._preopen_output()
+    await _wait_for(lambda: player.output is not None)
+    daemon._expire_preopen()
+
+    assert player.stopped == ["pre-open hold expired"]
+    assert daemon._preopen_expiry is None
+
+
+@pytest.mark.asyncio
+async def test_a_stream_start_uses_the_preopened_output_and_ends_the_hold(monkeypatch, tmp_path):
+    daemon, player = _with_stub_playout(monkeypatch, tmp_path)
+
+    daemon._preopen_output()
+    await _wait_for(lambda: player.output is not None)
+    daemon._on_stream_start(_start_message())
+
+    assert daemon._preopen_expiry is None
+    assert player.started_with  # the stream started on the already-open output
+    assert daemon._start_cost is None or "output_open_ms" in daemon._start_cost

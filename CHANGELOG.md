@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A speaker's playout output is now opened as soon as its bridge player starts, before any stream, so the first stream does not pay the one second a Bluetooth output takes to open: nothing of the first second is dropped and the sound starts with the group. The output is closed again when no stream arrives within three minutes, and the pre-open is skipped for speakers set to power save or auto-disconnect.
+
 - The sync badge keeps its green and yellow tones for errors that are actually audible: green up to 20 ms (25 ms in measure mode) and yellow up to 40 ms (50 ms) instead of 1/5 ms, which painted working Bluetooth speakers red. The Timing panel's history badge uses the same tones.
 - With no stored air calibration the air sensor block shows the learned target ("Air target ≈219 ms (learned)") instead of "Needs calibration": the loop is correcting, there is simply no calibrated figure to report.
 

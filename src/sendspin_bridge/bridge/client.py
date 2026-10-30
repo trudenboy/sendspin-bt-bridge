@@ -2413,6 +2413,8 @@ class SendspinClient:
                             # PLAYOUT_SYNC: off (legacy player) / measure / loop.
                             # A speaker that opted out (playout_sync_enabled=false) always runs "off".
                             "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
+                            # The pre-open (#555) is skipped when the speaker is meant to sleep.
+                            "idle_mode": str(getattr(self, "idle_mode", "default") or "default"),
                             # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for
                             # gets the key; without it the daemon builds nothing (switch off).
                             **({"air_sensor": spawn_air_sensor} if air_effective else {}),
