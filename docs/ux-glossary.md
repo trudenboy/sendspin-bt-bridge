@@ -57,6 +57,12 @@ each state and its reason as codes (`services/diagnostics/status_model.py`);
 the API carries them as `bridge.music_assistant_account` and `device.links`.
 State words never repeat across the account and the audio link.
 
+## Interface
+
+| Concept | Use (EN) | Use (RU) | Short definition | Do not use |
+|---|---|---|---|---|
+| The preference that shows or hides signal levels, sync counters, server IDs, the signal path and advanced settings | Show technical details (the preference); Technical details (a folded group of rows or a setting group heading) | Показывать технические подробности; Технические подробности | Off by default for new installs, on for installs that already had speakers; each browser can choose. | Advanced mode, Expert mode, Developer mode, Show advanced, Расширенный режим, Режим эксперта |
+
 ## Allowed exceptions
 
 - A software release: "Release notes", "Release candidate" (update dialog and
