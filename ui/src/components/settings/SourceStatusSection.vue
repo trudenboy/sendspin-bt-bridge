@@ -18,7 +18,8 @@ onMounted(async () => {
 })
 
 const state = computed(() => {
-  if (!source.value) return 'off'
+  // Configured but not running yet (settings saved, bridge not restarted): still off.
+  if (!source.value || !source.value.enabled) return 'off'
   if (source.value.error) return 'error'
   if (source.value.streaming) return 'streaming'
   return 'waiting'

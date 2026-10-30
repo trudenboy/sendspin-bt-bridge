@@ -196,7 +196,10 @@ def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
         return None
     from sendspin_bridge.services.source.bt_source import source_status
 
-    return SendspinSourceStatus(**source_status())
+    state = source_status()
+    if state.get("port") is None:
+        state["port"] = config.get("SENDSPIN_SOURCE_PORT")
+    return SendspinSourceStatus(**state)
 
 
 def find_client(device_id: str):

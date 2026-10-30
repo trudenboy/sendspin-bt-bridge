@@ -1118,7 +1118,7 @@
       "sourceStatus": {
         "label": "Bluetooth source",
         "off": "Off",
-        "waiting": "Waiting on port {port}: pair a phone and play",
+        "waiting": "Waiting for a phone on port {port}: pair one and play",
         "streaming": "Phone {phone} is playing to port {port}",
         "error": "The port is in use — choose another one"
       }
