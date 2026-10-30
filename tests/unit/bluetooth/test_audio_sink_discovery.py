@@ -19,13 +19,22 @@ _MAC = "6C:5C:3D:35:17:99"
 
 @pytest.fixture
 def no_sinks(monkeypatch):
-    """The host knows no Bluetooth sink yet, and no profile switch helps."""
+    """The host knows no Bluetooth sink yet, and no profile switch helps.
+
+    ``list_cards``/``set_card_profile`` are faked too: these tests must never
+    reach the host's real PulseAudio, where switching a live card's profile
+    drops the speaker.
+    """
     monkeypatch.setattr(audio, "list_sinks", lambda: [{"name": "sendspin_fallback"}])
     monkeypatch.setattr(audio, "get_sink_volume", lambda _name: None)
     monkeypatch.setattr(audio, "sink_name_candidates", lambda _address: ["bluez_output.6C_5C_3D_35_17_99.1"])
+    monkeypatch.setattr(audio, "list_cards", lambda: [])
+    monkeypatch.setattr(audio, "set_card_profile", lambda _name, _profile: True)
 
 
-def _configure(*, waits, link_alive):
+def _configure(*, waits, link_alive, allow_hfp: bool = True):
+    # allow_hfp keeps the early headset-profile switch out of these sink-search
+    # tests; the switch has its own tests below.
     return audio.configure_bluetooth_audio(
         mac_address=_MAC,
         prefer_sbc=False,
@@ -34,6 +43,7 @@ def _configure(*, waits, link_alive):
         wait_with_cancel=waits,
         device=None,
         link_alive=link_alive,
+        allow_hfp=allow_hfp,
     )
 
 
@@ -73,3 +83,60 @@ def test_a_live_link_still_gets_the_full_retry_budget(no_sinks):
         assert _configure(waits=_wait, link_alive=lambda: True) is False
 
     assert pauses == [audio._A2DP_PROFILE_DELAY] + [audio._SINK_RETRY_DELAY] * (audio._SINK_RETRY_COUNT - 1)
+
+
+# ---------------------------------------------------------------------------
+# A2DP-only playback: PipeWire/WirePlumber restore the last card profile, so a
+# speaker that once landed in HFP comes back in HFP on every reconnect (#476).
+# ---------------------------------------------------------------------------
+
+_HFP_CARD = {
+    "name": "bluez_card.6C_5C_3D_35_17_99",
+    "active_profile": "headset-head-unit-cvsd",
+    "profiles": ["a2dp-sink", "headset-head-unit-cvsd", "off"],
+    "available_profiles": ["a2dp-sink", "headset-head-unit-cvsd", "off"],
+}
+
+
+def _configure_with_card(monkeypatch, *, allow_hfp: bool, card=_HFP_CARD):
+    pauses: list[float] = []
+    switched: list[tuple[str, str]] = []
+    sinks = ["bluez_output.6C_5C_3D_35_17_99.1"]
+
+    monkeypatch.setattr(audio, "list_cards", lambda: [dict(card)])
+    monkeypatch.setattr(audio, "set_card_profile", lambda name, profile: switched.append((name, profile)) or True)
+    monkeypatch.setattr(audio, "list_sinks", lambda: [{"name": name} for name in sinks])
+    monkeypatch.setattr(audio, "get_sink_volume", lambda _name: 50)
+    monkeypatch.setattr(audio, "sink_name_candidates", lambda _address: sinks)
+    monkeypatch.setattr(audio, "save_device_sink", lambda *_args, **_kwargs: None)
+
+    def _wait(seconds: float) -> bool:
+        pauses.append(seconds)
+        return True
+
+    ok = audio.configure_bluetooth_audio(
+        mac_address=_MAC,
+        prefer_sbc=False,
+        on_sink_found=None,
+        host=None,
+        wait_with_cancel=_wait,
+        device=None,
+        allow_hfp=allow_hfp,
+    )
+    return ok, pauses, switched
+
+
+def test_a_restored_headset_profile_is_switched_back_to_a2dp(monkeypatch, no_sinks):
+    ok, pauses, switched = _configure_with_card(monkeypatch, allow_hfp=False)
+
+    assert switched == [("bluez_card.6C_5C_3D_35_17_99", "a2dp-sink")]
+    # The switch gets the A2DP settle pause, then the sink is found.
+    assert pauses == [audio._A2DP_PROFILE_DELAY]
+    assert ok is True
+
+
+def test_a_speaker_allowed_the_headset_profile_keeps_it(monkeypatch, no_sinks):
+    ok, _pauses, switched = _configure_with_card(monkeypatch, allow_hfp=True)
+
+    assert switched == []
+    assert ok is True

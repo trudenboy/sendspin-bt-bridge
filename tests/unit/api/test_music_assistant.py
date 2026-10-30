@@ -153,8 +153,9 @@ def test_reload_reconnects_the_monitor_and_refreshes_groups(
 ):
     tmp_config.write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
     reloaded: list[tuple] = []
+    # Reload now also starts the monitor when the bridge booted without one.
     monkeypatch.setattr(
-        ma_groups, "reload_monitor_credentials", lambda loop, url, token: reloaded.append((url, token)) or True
+        ma_groups, "ensure_monitor_started", lambda loop, url, token: reloaded.append((url, token)) or True
     )
 
     resp = api_client.post("/api/v1/music-assistant/reload")

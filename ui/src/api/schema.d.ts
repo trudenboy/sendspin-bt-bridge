@@ -4687,6 +4687,8 @@ export interface components {
             air_learned_latency?: components["schemas"]["AirLearnedEntry"][] | null;
             /** Air To Sound Latency */
             air_to_sound_latency?: components["schemas"]["AirLatencyEntry"][] | null;
+            /** Allow Hfp Profile */
+            allow_hfp_profile?: boolean | null;
             /** Backend */
             backend: components["schemas"]["BluetoothBackend"] | components["schemas"]["PulseSinkBackend"];
             /**

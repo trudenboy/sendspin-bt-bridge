@@ -154,6 +154,7 @@ class BluetoothManager:
         prefer_sbc: bool = False,
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
+        allow_hfp: bool = False,
         on_sink_found: Callable[[str, int | None], None] | None = None,
         on_connected: Callable[[], None] | None = None,
         on_disconnected: Callable[[], None] | None = None,
@@ -202,6 +203,10 @@ class BluetoothManager:
         self.last_check: float = 0
         # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
+        # Per-speaker permission for the headset (HFP/HSP) card profile. Off by
+        # default: playback stays A2DP and the card is switched back when
+        # PipeWire restores a saved headset profile (#476 follow-up).
+        self.allow_hfp = bool(allow_hfp)
         # The early role flip (#476) runs once per connection, from whichever
         # path sees the link first: the connect loop or the monitor.
         # Held for the whole attempt, so a caller that may wait can.  The
@@ -792,6 +797,7 @@ class BluetoothManager:
             wait_with_cancel=self._wait_with_cancel,
             device=self.device,
             link_alive=self.is_device_connected,
+            allow_hfp=self.allow_hfp,
             logger=logger,
         )
         return self.audio_sink_ready

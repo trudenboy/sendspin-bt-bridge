@@ -105,7 +105,10 @@ async function addToBridge() {
   saving.value = true
   error.value = ''
   try {
-    await bt.addToBridge(chosen.value.mac, name.value.trim() || chosen.value.mac, hciOf(chosen.value), { room: room.value })
+    await bt.addToBridge(chosen.value.mac, name.value.trim() || chosen.value.mac, hciOf(chosen.value), {
+      room: room.value,
+      allowHfpProfile: options.value.allowHfpProfile,
+    })
     step.value = 'test'
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : String(e)

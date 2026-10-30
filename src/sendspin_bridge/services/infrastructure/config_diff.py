@@ -39,6 +39,8 @@ _DEVICE_HOT_FIELDS: frozenset[str] = frozenset(
         "keepalive_interval",
         "room_id",
         "room_name",
+        # Read by the BT manager on its next connect: no daemon restart needed.
+        "allow_hfp_profile",
         # Air sensor calibrations: the matching entry is resent to the running daemon.
         "air_to_sound_latency",
         "air_learned_latency",

@@ -165,18 +165,16 @@ def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager, a
     card_name = f"bluez_card.{pa_mac}"
     sink_name = f"bluez_sink.{pa_mac}.a2dp_sink"
 
-    list_sinks_calls = {"count": 0}
-
     def _list_sinks():
-        list_sinks_calls["count"] += 1
-        # Sink appears only after profile switch
-        if list_sinks_calls["count"] >= bt_audio_retry_threshold():
+        # With the headset profile not allowed the bridge switches the card to
+        # A2DP before it looks for the sink, so the sink is there on the first
+        # scan. (It used to be looked for first and switched after.)
+        if set_profile_calls:
             return [{"name": sink_name, "description": "AKG Y500"}]
         return []
 
     def _get_sink_volume(name):
-        # Sink only resolvable after profile switch
-        if list_sinks_calls["count"] >= bt_audio_retry_threshold():
+        if set_profile_calls:
             return 50 if name == sink_name else None
         return None
 

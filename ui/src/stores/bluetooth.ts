@@ -147,7 +147,12 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
    * Make a paired device a bridge speaker: append it to the configuration
    * (the whole document is saved; the bridge starts the player live).
    */
-  async function addToBridge(mac: string, name: string, adapter = '', extra: { room?: string } = {}) {
+  async function addToBridge(
+    mac: string,
+    name: string,
+    adapter = '',
+    extra: { room?: string; allowHfpProfile?: boolean } = {},
+  ) {
     const config = (await getConfig()) as Record<string, unknown>
     const players = (config.players as Record<string, unknown>[] | undefined) ?? []
     const taken = players.some((p) => {
@@ -162,6 +167,8 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
       backend: { type: 'bluetooth_a2dp', mac: mac.toUpperCase(), adapter },
     }
     if (extra.room?.trim()) player.room_name = extra.room.trim()
+    // Persisted per speaker: off means playback stays on A2DP (#476 follow-up).
+    if (extra.allowHfpProfile) player.allow_hfp_profile = true
     await saveConfig({ ...config, players: [...players, player] } as never)
     return true
   }

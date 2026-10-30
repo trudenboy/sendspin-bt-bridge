@@ -193,6 +193,10 @@ class Player(BaseModel):
     # false = this speaker runs the way it did before playout sync (legacy player,
     # not held warm, no automatic offset); null / true follow PLAYOUT_SYNC.
     playout_sync_enabled: StrictBool | None = None
+    # Allow this speaker's headset (HFP/HSP) card profile, e.g. for calls. Off by
+    # default: playback is A2DP-only and the bridge switches the card back when
+    # PipeWire restores a saved headset profile (#476 follow-up).
+    allow_hfp_profile: StrictBool | None = None
     # Air sensor calibrations, one per (codec, SBC rate, adapter); applied live.
     air_to_sound_latency: list[AirLatencyEntry] | None = Field(None, max_length=AIR_LATENCY_MAX_ENTRIES)
     # Learned air latency per (codec, SBC rate, adapter); written by the bridge, applied live.

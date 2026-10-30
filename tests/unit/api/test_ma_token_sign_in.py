@@ -73,9 +73,11 @@ def _clean(tmp_config, monkeypatch):
 
 @pytest.fixture
 def reloads(monkeypatch, bridge_loop):
-    """The monitor reload and group rediscovery every sign-in path triggers."""
+    """The monitor start/reload and group rediscovery every sign-in path triggers."""
     calls: list[tuple] = []
-    monkeypatch.setattr(ma_auth, "reload_monitor_credentials", lambda loop, url, token: calls.append((url, token)))
+    # Sign-in also starts a monitor the bridge booted without (see
+    # ma_monitor.ensure_monitor_started); the seam moved there.
+    monkeypatch.setattr(ma_auth, "ensure_monitor_started", lambda loop, url, token: calls.append((url, token)))
 
     async def _no_rediscover(*_a):
         calls.append(("rediscover",))

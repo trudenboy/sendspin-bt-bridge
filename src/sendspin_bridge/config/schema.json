@@ -755,6 +755,18 @@
           "default": true,
           "description": "false runs this speaker the way it worked before playout sync (legacy player, not held warm, no automatic offset); true or null follows PLAYOUT_SYNC."
         },
+        "allow_hfp_profile": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "true keeps this speaker's headset (HFP/HSP) card profile, e.g. for calls; false or null keeps playback on A2DP and switches the card back when the host restores a saved headset profile."
+        },
         "air_to_sound_latency": {
           "anyOf": [
             {

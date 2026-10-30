@@ -570,6 +570,7 @@ def activate_device(
             churn_threshold=context.bt_churn_threshold,
             churn_window=context.bt_churn_window,
             enable_a2dp_dance=context.enable_a2dp_sink_recovery_dance,
+            allow_hfp=bool(device.get("allow_hfp_profile")),
             enable_pa_module_reload=context.enable_pa_module_reload,
             enable_adapter_auto_recovery=context.enable_adapter_auto_recovery,
             adapter_device_class_hex=adapter_device_class_hex,

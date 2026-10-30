@@ -186,6 +186,7 @@ def configure_bluetooth_audio(
     *,
     device: BluetoothDevice | None = None,
     link_alive: Callable[[], bool] | None = None,
+    allow_hfp: bool = False,
     logger: logging.Logger = logger,
 ) -> bool:
     """Configure PipeWire/PulseAudio to use a Bluetooth device as audio output.
@@ -214,6 +215,17 @@ def configure_bluetooth_audio(
 
         cached_sink = load_player_state_for_mac(mac_address).get("sink")
 
+        # Playback is A2DP-only unless this speaker is allowed the headset
+        # profile (calls). PipeWire/WirePlumber restore the last profile it saw,
+        # so a speaker that once landed in HFP comes back in HFP on every
+        # reconnect — and `bluez_output.<MAC>.1` exists in both profiles, so the
+        # sink lookup below cannot tell them apart (#476 follow-up).
+        switched_from_headset = False
+        if not allow_hfp and _switch_card_profile_to_a2dp(pa_mac):
+            switched_from_headset = True
+            if not wait_with_cancel(_A2DP_PROFILE_DELAY):
+                return False
+
         fast_path_taken = False
         configured_sink: str | None = None
         success = False
@@ -222,7 +234,7 @@ def configure_bluetooth_audio(
         # caller's business — only a link that dies *during* the wait is worth
         # aborting for.
         watch_link = link_alive is not None and link_alive()
-        if cached_sink and get_sink_volume(cached_sink) is not None:
+        if cached_sink and not switched_from_headset and get_sink_volume(cached_sink) is not None:
             # Even when the PA/PipeWire sink object exists, BlueZ's AVDTP
             # transport may still be settling after the reconnect. If the
             # peer has *already* brought the transport to "active" (an
@@ -250,8 +262,9 @@ def configure_bluetooth_audio(
         if not fast_path_taken:
             if cached_sink:
                 logger.debug("Cached sink %s not available, falling back to discovery", cached_sink)
-            # Wait for PipeWire/PulseAudio to register the device.
-            if not wait_with_cancel(_A2DP_PROFILE_DELAY):
+            # Wait for PipeWire/PulseAudio to register the device. After the
+            # early profile switch the card already had its settle pause.
+            if not switched_from_headset and not wait_with_cancel(_A2DP_PROFILE_DELAY):
                 return False
 
             # Log available sinks for diagnostics

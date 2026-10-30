@@ -5630,6 +5630,17 @@
             ],
             "title": "Air To Sound Latency"
           },
+          "allow_hfp_profile": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Hfp Profile"
+          },
           "backend": {
             "discriminator": {
               "mapping": {

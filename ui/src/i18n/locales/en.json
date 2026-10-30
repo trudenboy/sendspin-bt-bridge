@@ -1186,6 +1186,10 @@
       "required_lead_time_ms": {
         "label": "Start-up lead time",
         "help": "Time the speaker needs before the first sound plays."
+      },
+      "allow_hfp_profile": {
+        "label": "Allow the headset profile (calls)",
+        "help": "Off keeps the speaker on A2DP for music and switches the card back if the host restores a headset profile. On lets another app use the speaker's microphone for calls; sound drops to 8 kHz mono while that profile is active."
       }
     },
     "deviceGroups": {
