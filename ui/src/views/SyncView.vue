@@ -2,10 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
+import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
+import { stopMusicAndStartClicks } from '@/sync/startClicks'
+import { speakerName } from '@/sync/names'
+import type { SyncSound } from '@/api/types'
 import { endSessionOnPageHide } from '@/api/sync'
 import { confirmAction } from '@/composables/useActionPolicy'
-import { SbButton, SbCard, SbDialog, SbSpinner, SbTabs } from '@/kit'
+import { SbButton, SbCard, SbSpinner, SbTabs } from '@/kit'
 import { ArrowLeft } from 'lucide-vue-next'
 import GroupMembers from '@/components/sync/GroupMembers.vue'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
@@ -13,7 +16,7 @@ import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import ProfilesPanel from '@/components/sync/ProfilesPanel.vue'
 import ReadinessWarnings from '@/components/sync/ReadinessWarnings.vue'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const route = useRoute()
 const sync = useSyncStore()
 
@@ -55,11 +58,8 @@ async function choose(action: 'manual' | 'semi') {
   root.value?.querySelector<HTMLElement>(`[role="tab"][data-tab-id="${activeTab.value}"]`)?.focus()
 }
 
-/** The Group tab's entry buttons: the click is the explicit request, so tuning by ear starts here. */
-async function begin(action: 'manual' | 'semi') {
-  await choose(action)
-  if (action === 'manual') await enterManual()
-}
+/** The Group tab's entry buttons open the tab; tuning by ear starts with "Start clicks" there. */
+const begin = choose
 
 /*
  * A pending restore publishes no ``sync`` events: poll until it clears, then read the group again.
@@ -132,9 +132,10 @@ const status = computed(() => {
 })
 
 /*
- * Manual tuning is a session (mode "manual"): started by the "Start tuning by ear" button (opening
- * the tab alone starts nothing), ended when the tab or the page is left, after offering to keep the changed delays as a profile. Ending it
- * restores the signal and the mutes; the delays stay as they are.
+ * Manual tuning is a session (mode "manual"): started by "Start clicks" on the Manual tab (opening the
+ * tab alone starts nothing), ended by Save (the delays stay) or Discard changes (the delays from the
+ * start come back), or when the tab or the page is left, after asking about unsaved changes. Ending it
+ * restores the signal, the mutes and the volumes.
  */
 const liveSession = computed(() => {
   const s = sync.session
@@ -195,13 +196,16 @@ function takeActiveFlag(): { group: string; kind: string } | null {
 }
 const manualChanged = ref(false)
 const manualError = ref('')
+const manualStartError = ref('')
 const manualStarting = ref(false)
 /** The session ended under the open tab (timeout, another tab, a failure): say so, start again on request. */
 const manualEnded = ref(false)
-/** Nothing runs and nothing blocks: the Manual tab offers an explicit start. */
-const manualIdle = computed(
-  () => !!group.value && !manualSession.value && !foreignManual.value && !manualBusy.value && !manualStarting.value && !manualEnded.value && !manualError.value && !isLeaving.value && !sync.starting,
-)
+/** The delays were just saved: the Manual tab says so until the next start. */
+const manualSaved = ref(false)
+/** This page ended the session itself (Save, Discard, leaving): its end is no surprise. */
+let endedByUs = false
+/** The delays when this tuning started: what "Discard changes" and a declined leave put back. */
+let baseline: Record<string, number> = {}
 let leaving: Promise<void> | null = null
 /** Shown while the leave runs, so the tuning controls go away at once. */
 const isLeaving = ref(false)
@@ -210,9 +214,14 @@ async function enterManual() {
   if (leaving || manualStarting.value || manualSession.value || foreignManual.value || manualBusy.value || !group.value) return
   manualError.value = ''
   manualEnded.value = false
+  manualSaved.value = false
+  endedByUs = false
   leftNotice.value = ''
   manualStarting.value = true
   const id = groupId.value
+  baseline = Object.fromEntries(
+    (group.value?.members ?? []).filter((m) => m.adjustable && m.delay_ms != null).map((m) => [m.ma_player_id, m.delay_ms as number]),
+  )
   try {
     await sync.start(id, 'manual')
     manualChanged.value = false
@@ -224,75 +233,40 @@ async function enterManual() {
   } finally {
     manualStarting.value = false
   }
-  if (activeTab.value !== 'manual' || groupId.value !== id) await leaveManual()
+  if (activeTab.value !== 'manual' || groupId.value !== id) await endManual('leave')
 }
 
-/* "Save as profile?" → a name → save; resolves once the operator saved or skipped. */
-const saveOpen = ref(false)
-const profileName = ref('')
-const nameMissing = ref(false)
-const saveFailure = ref('')
-const saving = ref(false)
-let saveDone: (() => void) | null = null
-
-function askProfileName(): Promise<void> {
-  const date = new Intl.DateTimeFormat(locale.value, { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
-  profileName.value = t('sync.manual.defaultName', { date })
-  nameMissing.value = false
-  saveFailure.value = ''
-  saveOpen.value = true
-  return new Promise((resolve) => {
-    saveDone = resolve
-  })
-}
-
-function finishSave() {
-  saveOpen.value = false
-  const done = saveDone
-  saveDone = null
-  done?.()
-}
-
-async function saveManualProfile() {
-  const name = profileName.value.trim()
-  if (!name) {
-    nameMissing.value = true
-    return
+/** Put the delays this tuning started with back (only the speakers that moved are written). */
+async function restoreBaseline() {
+  for (const m of group.value?.members ?? []) {
+    const was = baseline[m.ma_player_id]
+    if (was !== undefined && m.delay_ms !== was) sync.setDelay(m.ma_player_id, was)
   }
-  saving.value = true
-  try {
-    await sync.saveProfile(name)
-    finishSave()
-  } catch (e) {
-    saveFailure.value = t('sync.profiles.failed', { code: errorCode(e) })
-  } finally {
-    saving.value = false
-  }
-}
-
-// Closed by Escape or the backdrop: the same as skipping.
-watch(saveOpen, (open) => {
-  if (!open) finishSave()
-})
-
-async function doLeave() {
-  if (!manualSession.value) return
-  // The last edit is written before the profile captures the delays, and never hits an ending session.
   await sync.flushDelays()
-  if (manualChanged.value) {
-    const keep = await confirmAction('sync.saveManualOnLeave', {
+}
+
+type EndKind = 'save' | 'discard' | 'leave'
+
+async function doEnd(kind: EndKind) {
+  if (!manualSession.value) return
+  // The last edit is written before anything is decided, and never hits an ending session.
+  await sync.flushDelays()
+  let keep = kind !== 'discard'
+  if (kind === 'leave' && manualChanged.value) {
+    keep = await confirmAction('sync.saveManualOnLeave', {
       title: t('sync.manual.saveOnLeave'),
       message: t('sync.manual.saveOnLeaveHelp'),
       confirmLabel: t('sync.manual.saveConfirm'),
       cancelLabel: t('sync.manual.saveDecline'),
     })
-    if (keep) await askProfileName()
   }
-  await sync.flushDelays()
+  if (!keep) await restoreBaseline()
+  endedByUs = true
   try {
-    // Finished, not cancelled: the delays stay; the bridge unmutes and stops the clicks.
+    // Finished, not cancelled: the delays stay; the bridge unmutes, puts the volumes back and stops the clicks.
     await sync.finish()
-    leftNotice.value = t('sync.manual.endedNotice')
+    if (kind === 'leave') leftNotice.value = t('sync.manual.endedNotice')
+    else manualSaved.value = kind === 'save'
   } catch {
     /* the failure is kept in the store's error; the session times out on the bridge */
   }
@@ -304,11 +278,11 @@ async function doLeave() {
   manualChanged.value = false
 }
 
-/** One leave at a time; coming back to the tab meanwhile shows the start button again. */
-function leaveManual(): Promise<void> {
+/** One ending at a time (Save, Discard changes, or leaving the tab or page). */
+function endManual(kind: EndKind): Promise<void> {
   if (!leaving) {
     isLeaving.value = true
-    leaving = doLeave().finally(() => {
+    leaving = doEnd(kind).finally(() => {
       leaving = null
       isLeaving.value = false
     })
@@ -316,9 +290,41 @@ function leaveManual(): Promise<void> {
   return leaving
 }
 
+/** "Start clicks" on the Manual tab: opens the tuning session if none runs, stops the music, plays the clicks. */
+async function startManual(sound: SyncSound) {
+  if (leaving || manualStarting.value || foreignManual.value || manualBusy.value || !group.value) return
+  manualStartError.value = ''
+  if (manualSession.value?.state === 'restoring') {
+    manualStartError.value = t('sync.manual.stillRestoring')
+    return
+  }
+  const created = !manualSession.value
+  if (created) await enterManual()
+  const s = manualSession.value
+  if (!s) return
+  try {
+    // The sound picked before the start: set first, so the clicks do not start over.
+    if (sound !== (s.sound ?? 'clicks')) await sync.sound(sound)
+    const started = await stopMusicAndStartClicks(sync, { state: s.group_state ?? null, clickerPlaying: !!s.clicker_playing })
+    // Declined: nothing was changed, so a session this press opened is closed again.
+    if (!started && created) {
+      endedByUs = true
+      await sync.end()
+    }
+  } catch (e) {
+    const code = errorCode(e)
+    manualStartError.value =
+      code === 'group_playing'
+        ? t('sync.prep.clicker.groupPlaying')
+        : code === 'sync_mute_unsupported'
+          ? t('sync.mute.unsupportedManual', { name: speakerName(group.value?.members.find((m) => m.ma_player_id === errorMember(e))?.name, errorMember(e) ?? '') })
+          : t('sync.listen.failed', { code })
+  }
+}
+
 watch(manualSession, (now, prev) => {
   if (now) manualEnded.value = false
-  if (prev && !now && activeTab.value === 'manual' && !isLeaving.value && prev.group_id === groupId.value) {
+  if (prev && !now && activeTab.value === 'manual' && !isLeaving.value && !endedByUs && prev.group_id === groupId.value) {
     manualEnded.value = true
     manualChanged.value = false
   }
@@ -327,12 +333,12 @@ watch(manualSession, (now, prev) => {
 watch(activeTab, (tab, prev) => {
   if (tab !== 'manual' && prev === 'manual') {
     manualEnded.value = false
-    void leaveManual()
+    void endManual('leave')
   }
 })
 
 async function leaveRoute() {
-  if (manualSession.value || leaving) await leaveManual()
+  if (manualSession.value || leaving) await endManual('leave')
 }
 onBeforeRouteLeave(leaveRoute)
 onBeforeRouteUpdate((to, from) => (to.params.groupId !== from.params.groupId ? leaveRoute() : undefined))
@@ -556,44 +562,44 @@ watch(groupId, (id) => void load(id), { immediate: true })
               {{ t('sync.switchToMeasure') }}
             </button>
           </p>
-          <ManualTuning
-            v-if="activeTab === 'manual' && manualSession && !isLeaving"
-            :key="manualSession.id"
-            @changed="manualChanged = $event"
-          />
-          <div
-            v-else-if="manualEnded"
-            data-manual-ended
-            role="status"
-            class="mt-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
-          >
-            <span class="min-w-0 flex-1">{{ t('sync.manual.ended') }}</span>
-            <SbButton variant="outline" size="sm" data-manual-restart @click="enterManual">{{ t('sync.manual.startAgain') }}</SbButton>
-          </div>
           <p
-            v-else-if="manualBusy"
+            v-if="manualBusy"
             data-manual-busy
             role="status"
             class="mt-4 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
           >
             {{ t('sync.manual.busy') }}
           </p>
-          <div v-else-if="manualIdle" data-manual-idle class="mt-4 flex flex-col items-start gap-2">
-            <p class="text-sm text-text-secondary">{{ t('sync.manual.startHelp') }}</p>
-            <SbButton data-manual-start :disabled="readOnly" @click="enterManual">{{ t('sync.manual.start') }}</SbButton>
-          </div>
-          <div v-else-if="manualStarting" class="mt-4 flex items-center gap-2 text-sm text-text-secondary" role="status">
-            <SbSpinner size="sm" />{{ t('sync.manual.starting') }}
-          </div>
-          <div
-            v-else-if="manualError"
-            data-manual-error
-            role="alert"
-            class="mt-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
-          >
-            <span class="min-w-0 flex-1">{{ t('sync.manual.startFailed', { code: manualError }) }}</span>
-            <SbButton variant="outline" size="sm" @click="enterManual">{{ t('common.retry') }}</SbButton>
-          </div>
+          <template v-else-if="!foreignManual">
+            <div
+              v-if="manualEnded"
+              data-manual-ended
+              role="status"
+              class="mt-4 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+            >
+              {{ t('sync.manual.ended') }}
+            </div>
+            <div
+              v-if="manualError"
+              data-manual-error
+              role="alert"
+              class="mt-4 rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
+            >
+              {{ t('sync.manual.startFailed', { code: manualError }) }}
+            </div>
+            <ManualTuning
+              v-if="activeTab === 'manual'"
+              simple
+              :starting="manualStarting"
+              :saved="manualSaved"
+              :start-error="manualStartError"
+              :disabled="readOnly || isLeaving"
+              @changed="manualChanged = $event; if ($event) manualSaved = false"
+              @start="startManual"
+              @save="endManual('save')"
+              @discard="endManual('discard')"
+            />
+          </template>
         </template>
         <template #measure>
           <p class="mt-4 text-sm text-text-secondary">
@@ -615,41 +621,5 @@ watch(groupId, (id) => void load(id), { immediate: true })
         </template>
       </SbTabs>
     </template>
-
-    <SbDialog v-model="saveOpen" :title="t('sync.manual.saveTitle')">
-      <div class="flex flex-col gap-3">
-        <div class="flex flex-col gap-1">
-          <label for="sync-manual-profile-name" class="text-sm font-medium text-text-primary">{{ t('sync.profiles.name') }}</label>
-          <input
-            id="sync-manual-profile-name"
-            v-model="profileName"
-            data-manual-profile-name
-            type="text"
-            required
-            maxlength="100"
-            :aria-invalid="nameMissing || undefined"
-            :aria-describedby="nameMissing ? 'sync-manual-profile-name-error' : undefined"
-            :class="[
-              'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary',
-              nameMissing && 'border-error',
-            ]"
-            @input="nameMissing = false"
-            @keydown.enter.prevent="saveManualProfile"
-          />
-          <p v-if="nameMissing" id="sync-manual-profile-name-error" role="alert" class="text-xs text-error">
-            {{ t('sync.profiles.nameRequired') }}
-          </p>
-        </div>
-        <p v-if="saveFailure" role="alert" class="text-sm text-error">{{ saveFailure }}</p>
-        <div class="flex justify-end gap-3">
-          <SbButton type="button" variant="outline" data-manual-profile-skip @click="finishSave">
-            {{ t('sync.manual.skip') }}
-          </SbButton>
-          <SbButton type="button" data-manual-profile-save :loading="saving" @click="saveManualProfile">
-            {{ t('sync.profiles.save') }}
-          </SbButton>
-        </div>
-      </div>
-    </SbDialog>
   </div>
 </template>

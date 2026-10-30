@@ -94,7 +94,7 @@ function confirmSave() {
       </ul>
     </div>
 
-    <ManualTuning skip-prep :measured="measured" :before="before" />
+    <ManualTuning :measured="measured" :before="before" />
 
     <AirCalibrations :session="session" />
 

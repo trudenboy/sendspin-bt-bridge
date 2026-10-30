@@ -14,6 +14,8 @@ const props = defineProps<{
   soloed: string | null
   /** The pair taking turns, while A/B runs. */
   alternating?: readonly [string, string] | null
+  /** The Start/Stop clicks button lives elsewhere (the Manual tab): offer only solo and compare. */
+  hideSignal?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -47,6 +49,7 @@ const selectClass =
 <template>
   <div class="flex flex-col gap-3">
     <SbButton
+      v-if="!hideSignal"
       type="button"
       data-signal
       :variant="signalRunning ? 'outline' : 'primary'"
@@ -59,7 +62,7 @@ const selectClass =
       </template>
       {{ t(signalRunning ? 'sync.listen.stop' : 'sync.listen.play') }}
     </SbButton>
-    <p data-play-help class="-mt-2 text-xs text-text-secondary">{{ t('sync.listen.playHelp') }}</p>
+    <p v-if="!hideSignal" data-play-help class="-mt-2 text-xs text-text-secondary">{{ t('sync.listen.playHelp') }}</p>
 
     <p class="text-xs text-text-secondary">{{ t('sync.listen.soloHelp') }}</p>
     <div role="group" :aria-label="t('sync.listen.solo')" class="flex min-w-0 flex-wrap gap-1">
