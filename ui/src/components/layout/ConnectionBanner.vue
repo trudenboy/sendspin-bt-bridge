@@ -11,17 +11,23 @@ import { WifiOff } from 'lucide-vue-next'
  * has its own banner.
  */
 const GRACE_MS = 4000
+/** After this long without a stream, offer a manual page reload. */
+const RELOAD_AFTER_MS = 30000
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
 const lost = ref(false)
+const stale = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
+let staleTimer: ReturnType<typeof setTimeout> | null = null
 
 const restarting = computed(() => bridge.restartState === 'stopping' || bridge.restartState === 'restarting')
 
 function clear() {
   if (timer) clearTimeout(timer)
   timer = null
+  if (staleTimer) clearTimeout(staleTimer)
+  staleTimer = null
 }
 
 watch(
@@ -30,11 +36,17 @@ watch(
     clear()
     if (connected) {
       lost.value = false
+      stale.value = false
       return
     }
     timer = setTimeout(() => (lost.value = true), GRACE_MS)
+    staleTimer = setTimeout(() => (stale.value = true), RELOAD_AFTER_MS)
   },
 )
+
+function reload() {
+  window.location.reload()
+}
 
 onBeforeUnmount(clear)
 </script>
@@ -47,5 +59,13 @@ onBeforeUnmount(clear)
   >
     <WifiOff class="size-4 shrink-0 text-warning-text" aria-hidden="true" />
     {{ t('connection.lost') }}
+    <button
+      v-if="stale"
+      type="button"
+      class="rounded-md border border-warning/60 px-2 py-0.5 font-medium hover:bg-warning/20"
+      @click="reload"
+    >
+      {{ t('connection.reload') }}
+    </button>
   </div>
 </template>

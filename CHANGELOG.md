@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The web UI reconnects by itself after Home Assistant ingress idles; no more stale "connection lost". It polls meanwhile, retries with backoff, reconnects when the tab or network returns, reloads once if the session expired, and offers a Reload button after 30 seconds.
+
 ## [3.1.0-beta.19] - 2026-10-30
 
 ### Added
