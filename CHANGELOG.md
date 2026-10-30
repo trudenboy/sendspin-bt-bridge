@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.21] - 2026-10-30
+
 ### Changed
 
 - Manual tuning in group sync is now one screen with no steps: Start clicks (stops the group's music after asking, then plays the clicks) with the click type, a volume slider and a latency compensation control per speaker, and Save. Opening the tab starts nothing; changes are heard live, Save keeps them and ends the session, Discard changes puts the old values back, and leaving with unsaved changes asks whether to keep them. Solo and compare-two moved into a collapsed section, and the save-as-profile offer on leaving is gone (profiles are still saved from the Group tab).
@@ -6706,7 +6708,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.18...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.20...HEAD
+[3.1.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.18...v3.1.0-beta.19
 [3.1.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.17...v3.1.0-beta.18
 [3.1.0-beta.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.16...v3.1.0-beta.17
 [3.1.0-beta.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.15...v3.1.0-beta.16
