@@ -18,7 +18,7 @@ from sendspin_bridge.application.music_assistant.common import (
 from sendspin_bridge.application.runtime import bridge_loop
 from sendspin_bridge.config import load_config
 from sendspin_bridge.services.ha.ha_addon import get_ma_addon_discovery_candidates
-from sendspin_bridge.services.music_assistant.ma_monitor import reload_monitor_credentials
+from sendspin_bridge.services.music_assistant.ma_monitor import ensure_monitor_started
 from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_api_credentials,
     get_ma_groups,
@@ -162,11 +162,15 @@ def start_group_refresh() -> Job:
 
 
 def reload() -> dict:
-    """Reconnect the Music Assistant monitor with the saved credentials and refresh groups."""
+    """Reconnect the Music Assistant monitor with the saved credentials and refresh groups.
+
+    Also starts the monitor when the bridge booted without credentials, so
+    "Reconnect" works instead of silently reporting ``monitor_reloaded: false``.
+    """
     loop = bridge_loop()
     ma_url, ma_token = _configured_credentials()
     set_ma_api_credentials(ma_url, ma_token)
-    monitor_reloaded = reload_monitor_credentials(loop, ma_url, ma_token)
+    monitor_reloaded = ensure_monitor_started(loop, ma_url, ma_token)
     job = start_group_refresh()
     return {"monitor_reloaded": monitor_reloaded, "job": job}
 

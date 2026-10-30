@@ -1141,6 +1141,9 @@ class MaMonitor:
 # Module-level singleton access for send_queue_cmd from Flask routes
 # ---------------------------------------------------------------------------
 _monitor_instance: MaMonitor | None = None
+# The task of a monitor started *after* boot (credentials pasted or signed in
+# later). The boot-time task belongs to the orchestrator's runtime set.
+_monitor_task: asyncio.Task[None] | None = None
 
 
 def get_monitor() -> MaMonitor | None:
@@ -1152,6 +1155,43 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
     global _monitor_instance
     _monitor_instance = MaMonitor(ma_url, ma_token)
     return _monitor_instance
+
+
+def ensure_monitor_started(loop: asyncio.AbstractEventLoop | None, ma_url: str, ma_token: str) -> bool:
+    """Reload the monitor's credentials, starting it when the bridge booted without them.
+
+    The websocket monitor is created during startup only, so a token saved
+    later left the header saying "not connected" until a restart: the reload
+    path found no monitor and did nothing. Returns ``True`` when a monitor is
+    running or was just started.
+    """
+    global _monitor_task
+    if _monitor_instance is not None:
+        return reload_monitor_credentials(loop, ma_url, ma_token)
+    if loop is None:
+        logger.debug("Cannot start the MA monitor: no running loop")
+        return False
+
+    def _start() -> None:
+        global _monitor_task
+        _monitor_task = asyncio.ensure_future(start_monitor(ma_url, ma_token).run())
+        logger.info("MA monitor started after credentials were saved")
+
+    try:
+        loop.call_soon_threadsafe(_start)
+    except Exception:
+        logger.debug("Could not start the MA monitor", exc_info=True)
+        return False
+    return True
+
+
+def stop_monitor() -> None:
+    """Cancel a monitor this module started after boot (shutdown)."""
+    global _monitor_task
+    task = _monitor_task
+    _monitor_task = None
+    if task is not None and not task.done():
+        task.cancel()
 
 
 def reload_monitor_credentials(loop: asyncio.AbstractEventLoop | None, ma_url: str, ma_token: str) -> bool:

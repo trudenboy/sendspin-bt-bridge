@@ -39,7 +39,7 @@ from sendspin_bridge.services.infrastructure.url_safety import (
     safe_urlopen,
 )
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
-from sendspin_bridge.services.music_assistant.ma_monitor import reload_monitor_credentials
+from sendspin_bridge.services.music_assistant.ma_monitor import ensure_monitor_started
 from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_api_credentials,
     set_ma_api_credentials,
@@ -299,7 +299,10 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
 
     loop = get_main_loop()
     if loop:
-        reload_monitor_credentials(loop, ma_url, ma_token)
+        # Starts the monitor too when the bridge booted without credentials:
+        # otherwise the header kept saying "not connected" until a restart.
+        if load_config().get("MA_WEBSOCKET_MONITOR", True):
+            ensure_monitor_started(loop, ma_url, ma_token)
         try:
             asyncio.run_coroutine_threadsafe(
                 _rediscover_after_login(ma_url, ma_token, _bridge_players_snapshot()), loop
