@@ -99,7 +99,7 @@ const playoutRows = computed(() => {
     ['underruns', String(p.underruns ?? 0)],
     ['hostLatency', fmt(p.host_latency_ms, 'ms')],
     ['sinkRate', fmt(p.sink_rate_ppm, 'ppm', 0)],
-    ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.warming', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
+    ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.settling', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
   ] as [string, string][]
 })
 /* Air sensor: null (switch off) shows nothing. */

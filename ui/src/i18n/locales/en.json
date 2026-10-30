@@ -151,8 +151,8 @@
         "countTitle": "Resyncs: {count} this session · {m5} in 5 min · {m30} in 30 min",
         "playout": "Playout",
         "playoutTitle": "Measured playout error at the speaker output",
-        "warming": "Warming {s} s",
-        "warmingTitle": "Stream warming up; playout measurement ready in {s} s",
+        "settling": "Settling",
+        "settlingTitle": "Sync is settling; the error is shown as measured and counts as steady within {s} s at most",
         "jumpsTitle": "Playout jumps: {count} this session"
       },
       "signal": {
@@ -1218,7 +1218,7 @@
       "title": "Playout",
       "yes": "Yes",
       "no": "No",
-      "warming": "in {s} s",
+      "settling": "settling, {s} s at most",
       "fallback": "Playout sync fell back to the plain output: {reason}",
       "unknownReason": "unknown reason",
       "rows": {

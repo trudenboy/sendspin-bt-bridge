@@ -70,7 +70,7 @@ def test_underrun_places_once_and_the_error_returns_to_zero():
     assert snap["jumps"] == before["jumps"] + 1 and snap["last_jump_reason"] == "underrun"
     assert snap["k_ns"] > before["k_ns"]
     assert abs(snap["error_ms"]) < 1.0 and snap["error_p95_ms"] < 1.0
-    assert snap["warm_s"] < 3.0  # reset by the underrun
+    assert snap["warm_s"] > 3.0  # a sub-second underrun no longer restarts the warm clock
     assert snap["state"] == "playing"
 
 
@@ -108,7 +108,7 @@ def test_stall_suspends_and_places_on_recovery():
     assert snap["jumps"] == before["jumps"] + 1 and snap["last_jump_reason"] == "stall"
     assert snap["underruns"] == 0 and snap["pa_steps"] == 0
     assert abs(snap["error_ms"]) < 1.0 and snap["error_p95_ms"] < 1.0
-    assert snap["warm_s"] < 3.0
+    assert snap["warm_s"] > 3.0  # a sub-second stall no longer restarts the warm clock
 
 
 def test_persistent_late_offset_gives_one_steady_jump():

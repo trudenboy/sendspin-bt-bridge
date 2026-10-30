@@ -6222,6 +6222,12 @@
             "title": "Rejected Samples",
             "type": "integer"
           },
+          "settling": {
+            "default": false,
+            "description": "Not warm yet and the error is out of tolerance or a jump happened in this warm-up period.",
+            "title": "Settling",
+            "type": "boolean"
+          },
           "sink_rate_ppm": {
             "anyOf": [
               {
@@ -6264,6 +6270,18 @@
             "default": false,
             "title": "Warm",
             "type": "boolean"
+          },
+          "warm_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the stream counts as warm: converged (sync settled) or timeout; null while warming.",
+            "title": "Warm Reason"
           },
           "warm_s": {
             "anyOf": [
@@ -6312,6 +6330,8 @@
           "warm",
           "warm_s",
           "warmup_s",
+          "warm_reason",
+          "settling",
           "hold_reason",
           "hold_left_s",
           "late_start_ms",

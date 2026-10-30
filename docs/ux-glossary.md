@@ -38,6 +38,7 @@ same thing, the one in the "Use" columns wins.
 | What the speaker reports about itself over Bluetooth | Reported latency | Заявленная задержка | A2DP delay report; advisory, not measured. | Reported delay |
 | Difference between this speaker and the group | Sync error | Ошибка синхронизации | Measured offset in ms. | Drift, Skew |
 | Stream timing is re-established | Resync / Resyncing | Пересинхронизация | The stream timing was corrected after a glitch. | Re-anchor, Re-anchoring, Подстройка, Routing corrections |
+| Sync has not yet held steady after a start, underrun or jump | Settling | Стабилизация | Chip/row shown while the error is out of tolerance or a jump happened in the current warm-up; the error value is always shown with it. | Warming up, Warm-up (in the UI), Прогрев |
 | Feature that watches Bluetooth packets leaving the adapter | Air sensor | Датчик эфира | Experimental SBC-only measurement. | Air probe, Радиодатчик |
 | Time from the audio leaving the air to sound | Bluetooth latency measured (stored: air-to-sound latency) | Измерена задержка Bluetooth | A measurement result shown in the wizard result as "Bluetooth latency measured: N ms, saved", per speaker, codec, rate and adapter. Never presented as a second kind of delay; it does not change the compensation by itself. | Air-to-sound latency in the default UI, Speaker latency (air → sound) |
 | Correction the loop applies from the air sensor | Air correction | Коррекция по эфиру | What playout sync adds from the air measurement. | Air bias as a name for the whole feature |
