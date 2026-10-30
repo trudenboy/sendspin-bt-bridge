@@ -27,11 +27,10 @@ def learned_reference(samples_ms: Sequence[float], d_out_ms: Sequence[float]) ->
         raise ValueError("learned offset out of range")
     centre = median(offs)
     band = [o for o in offs if abs(o - centre) <= LEARN_BAND_MS]
-    if not band:
-        # Every sample is more than the band away from the median: they do not
-        # describe one placement (a sample taken before a delay change, say),
-        # so there is no reference to learn from this set.
-        raise ValueError("learned samples disagree")
-    off_ref = mean(band)
+    # Starts of a cheap speaker scatter by tens of milliseconds (a start taken
+    # while the speaker is still settling), so the band can hold nothing at all.
+    # The median is then the reference: it is what the band would be centred on,
+    # and refusing the sample would keep the speaker without a target for ever.
+    off_ref = mean(band) if band else centre
     d_ref = float(median(d_out_ms))
     return d_ref + off_ref, d_ref

@@ -50,11 +50,13 @@ def test_d_ref_is_the_median_of_the_sample_delays(ds, expected):
     assert d_ref == pytest.approx(expected)
 
 
-def test_samples_that_disagree_raise_instead_of_a_statistics_error():
-    """Two placements 120 ms apart describe no single reference.
+def test_samples_with_no_sample_in_the_band_fall_back_to_the_median():
+    """A start that is 120 ms off leaves the robust band empty.
 
-    The empty robust band used to surface as ``StatisticsError`` from
-    ``mean([])``; it is now a plain ``ValueError`` the caller can act on.
+    It used to raise (``StatisticsError`` from ``mean([])``, then a
+    ``ValueError``), which kept a cheap speaker without any learned target for
+    ever. The median is the reference then: that is what the band is centred on.
     """
-    with pytest.raises(ValueError, match="disagree"):
-        learned_reference([243.8, 120.0], [0.0, 0.0])
+    latency, d_ref = learned_reference([243.8, 120.0], [0.0, 0.0])
+    assert d_ref == 0.0
+    assert latency == pytest.approx(statistics.median([243.8, 120.0]))

@@ -504,18 +504,7 @@ def record_air_learned_sample(
     previous = next((e for e in valid if _air_key(e) == wanted), None)
     samples = [*(previous["samples_ms"] if previous else []), float(x_ms)][-AIR_LEARNED_MAX_SAMPLES:]
     delays = [*(previous["d_out_ms"] if previous else []), float(d_out_ms)][-AIR_LEARNED_MAX_SAMPLES:]
-    restarted = False
-    try:
-        latency, d_ref = learned_reference(samples, delays)
-    except ValueError:
-        if previous is None:
-            raise
-        # The stored pairs and this one do not describe one placement (a pair
-        # from before a delay change, say). Start the reference again from this
-        # sample: keeping the old one would fail every later sample the same way.
-        samples, delays = [float(x_ms)], [float(d_out_ms)]
-        latency, d_ref = learned_reference(samples, delays)
-        restarted = True
+    latency, d_ref = learned_reference(samples, delays)
     new = AirLearnedEntry.model_validate(
         {
             "codec": wanted[0],
@@ -526,7 +515,7 @@ def record_air_learned_sample(
             "d_out_ms": delays,
             "latency_ms": latency,
             "d_ref_ms": d_ref,
-            "starts": 1 if restarted else (int(previous["starts"]) if previous else 0) + 1,
+            "starts": (int(previous["starts"]) if previous else 0) + 1,
             "measured_at": now_iso,
         }
     )
