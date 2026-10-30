@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import LogsViewer from '@/components/diagnostics/LogsViewer.vue'
 import { useAuthStore } from '@/stores/auth'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/diagnostics', () => ({
   getLogs: vi.fn(async () => ({ lines: [] })),

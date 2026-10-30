@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { playClick } from '@/api/calibration'
 import { makeDevice } from '../../fixtures/device'
 

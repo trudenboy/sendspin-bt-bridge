@@ -483,6 +483,10 @@ uv run python scripts/lint_changelog.py CHANGELOG.md --fix-footer --dry-run
 
 ---
 
+## Translations
+
+The web interface is translated through JSON files in `ui/src/i18n/locales/` (English is the source, Russian must be complete, other languages fall back to English per key). Add or fix a language by editing its file, or through Weblate once it is set up, then run `npm run check:locales` in `ui/`. Details, the Weblate setup and the Home Assistant language rule: [docs/translations.md](docs/translations.md).
+
 ## Branching Strategy
 
 - `main` — stable, always releasable

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 /* Paused at 0:50 of 3:20: the clock stands still. */

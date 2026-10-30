@@ -14,6 +14,7 @@ import logoUrl from '@/assets/bridge-logo.svg'
 import { tServer, type ServerText } from '@/i18n/server'
 import { fleetSummary } from '@/utils/fleetSummary'
 import { describeStatus } from '@/composables/useStatusState'
+import { availableLocales, chooseLocale, languageName } from '@/i18n'
 
 const { t, te, locale } = useI18n()
 const router = useRouter()
@@ -70,12 +71,7 @@ const statusClass: Record<string, string> = {
 }
 
 function setLocale(next: string) {
-  locale.value = next
-  try {
-    localStorage.setItem('sendspin-ui:locale', next)
-  } catch {
-    /* remembered for this visit only */
-  }
+  void chooseLocale(next)
 }
 
 function open(url: string) {
@@ -174,8 +170,8 @@ const iconButton =
             </button>
           </template>
           <p class="px-3 pt-1.5 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.language') }}</p>
-          <SbDropdownItem v-for="l in ['en', 'ru']" :key="l" @click="setLocale(l)">
-            <span :class="locale === l ? 'font-medium text-primary-text' : ''">{{ l === 'en' ? 'English' : 'Русский' }}</span>
+          <SbDropdownItem v-for="l in availableLocales()" :key="l" @click="setLocale(l)">
+            <span :class="locale === l ? 'font-medium text-primary-text' : ''">{{ languageName(l) }}</span>
           </SbDropdownItem>
           <p class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.theme') }}</p>
           <SbDropdownItem v-for="m in ['auto', 'light', 'dark'] as const" :key="m" @click="mode = m">

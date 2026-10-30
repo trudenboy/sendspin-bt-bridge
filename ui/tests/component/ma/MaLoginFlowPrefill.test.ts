@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import MaLoginFlow from '@/components/ma/MaLoginFlow.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const bridge = vi.hoisted(() => ({ bridge: { ma_web_url: null as string | null }, devices: [] as unknown[] }))
 const api = vi.hoisted(() => ({

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 const flatten = (o: unknown, prefix = ''): Record<string, unknown> =>
   Object.fromEntries(

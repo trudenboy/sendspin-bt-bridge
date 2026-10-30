@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import MaNowPlaying from '@/components/ma/MaNowPlaying.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { getNowPlaying, queueCommand } from '@/api/ma'
 
 const byGroup: Record<string, Record<string, unknown>> = {

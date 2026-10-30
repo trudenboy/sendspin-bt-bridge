@@ -6,7 +6,7 @@ import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import { useSyncStore } from '@/stores/sync'
 import { ApiError } from '@/api/client'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({
   createSession: vi.fn(), getSession: vi.fn(), sessionSignal: vi.fn(), sessionSolo: vi.fn(), uploadRecording: vi.fn(),

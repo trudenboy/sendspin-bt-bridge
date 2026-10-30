@@ -5,7 +5,7 @@ import { createApp } from 'vue'
 import { useReversibleActions } from '@/composables/useReversibleActions'
 import { useNotificationStore } from '@/stores/notifications'
 import { ApiError } from '@/api/client'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const store = vi.hoisted(() => ({ release: vi.fn(), setEnabled: vi.fn() }))
 vi.mock('@/stores/devices', () => ({ useDeviceStore: () => store }))

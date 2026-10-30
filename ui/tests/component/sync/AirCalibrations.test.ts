@@ -5,8 +5,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import AirCalibrations from '@/components/sync/AirCalibrations.vue'
 import { useSyncStore } from '@/stores/sync'
 import { ApiError } from '@/api/client'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 vi.mock('@/api/sync', () => ({ sessionReference: vi.fn(), saveAirCalibrations: vi.fn() }))
 import * as api from '@/api/sync'

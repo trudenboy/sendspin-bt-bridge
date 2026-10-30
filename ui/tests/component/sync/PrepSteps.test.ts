@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import StepVolume from '@/components/sync/StepVolume.vue'
 import StepClicker from '@/components/sync/StepClicker.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 const members = [

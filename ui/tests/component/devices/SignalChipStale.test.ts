@@ -3,7 +3,7 @@ import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import SignalChip from '@/components/devices/chips/SignalChip.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 const NOW = Date.parse('2026-10-14T10:00:00Z')

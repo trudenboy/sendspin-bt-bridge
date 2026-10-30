@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const SRC = resolve(__dirname, '../../../src')
 

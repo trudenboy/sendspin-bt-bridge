@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import AdaptersSection from '@/components/settings/AdaptersSection.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 const mine = makeDevice({ id: 'dev-1', name: 'Kitchen' } as never)

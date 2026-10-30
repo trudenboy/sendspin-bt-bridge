@@ -4,8 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import RecoveryPanel from '@/components/diagnostics/RecoveryPanel.vue'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 const run = vi.hoisted(() => vi.fn())
 vi.mock('@/composables/useGuidanceActions', () => ({ useGuidanceActions: () => ({ run }) }))

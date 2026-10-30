@@ -6,8 +6,8 @@ import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import { useSyncStore } from '@/stores/sync'
 import { SyncCaptureError } from '@/sync/capture'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 vi.mock('@/api/sync', () => ({ createSession: vi.fn(), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), uploadRecording: vi.fn(), sessionSkip: vi.fn().mockResolvedValue({}), sessionReference: vi.fn(), getProposal: vi.fn(), endSession: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn() }))
 import * as api from '@/api/sync'

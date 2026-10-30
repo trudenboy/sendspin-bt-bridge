@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { i18n } from '@/i18n'
 import { listNames, tAction, tProblem, tServer } from '@/i18n/server'
 import keys from '../../fixtures/server-text-keys.json'

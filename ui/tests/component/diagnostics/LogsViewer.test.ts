@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import LogsViewer from '@/components/diagnostics/LogsViewer.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const api = vi.hoisted(() => ({ getLogs: vi.fn(), downloadLogs: vi.fn(), setLogLevel: vi.fn() }))
 const notes = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))

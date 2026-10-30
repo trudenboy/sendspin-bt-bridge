@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { reactive, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ConnectionBanner from '@/components/layout/ConnectionBanner.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const bridge = reactive({ sseConnected: true, restartState: 'idle' })
 vi.mock('@/stores/bridge', () => ({ useBridgeStore: () => bridge }))

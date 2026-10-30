@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import PhoneCapture from '@/components/sync/PhoneCapture.vue'
 import { useSyncStore } from '@/stores/sync'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({
   createSession: vi.fn(), getSession: vi.fn(), sessionSignal: vi.fn(), sessionSolo: vi.fn(), sessionSkip: vi.fn(),

@@ -6,8 +6,8 @@ import SbDialog from '@/kit/SbDialog.vue'
 import SbDrawer from '@/kit/SbDrawer.vue'
 import SbToast from '@/kit/SbToast.vue'
 import { KIT_LABELS_KEY, kitLabelsFrom } from '@/kit/labels'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 const stubs = { Teleport: true }
 

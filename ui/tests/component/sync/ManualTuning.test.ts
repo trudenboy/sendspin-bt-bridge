@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
 import { useSyncStore } from '@/stores/sync'
 import { settleConfirm } from '@/composables/useConfirm'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), sessionSound: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
 import * as api from '@/api/sync'

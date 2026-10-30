@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import AppHeader from '@/components/layout/AppHeader.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/stores/bridge', () => ({ useBridgeStore: () => ({ bridge: null, fetchBridge: vi.fn(), fetch: vi.fn() }) }))

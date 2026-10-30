@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 const api = vi.hoisted(() => ({ repairDevice: vi.fn().mockResolvedValue(undefined), reconnectDevice: vi.fn(), openPairingWindow: vi.fn(), setPowerSave: vi.fn(), unmuteSink: vi.fn() }))

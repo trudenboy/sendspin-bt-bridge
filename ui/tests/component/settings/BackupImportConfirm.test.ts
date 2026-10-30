@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 import BackupSection from '@/components/settings/BackupSection.vue'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
 import { useConfigStore } from '@/stores/config'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 describe('Import', () => {
   beforeEach(() => setActivePinia(createPinia()))

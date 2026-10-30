@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 // Enforces docs/ux-glossary.md: one term per concept, retired terms stay out of
 // user-facing strings. Technical keys that legitimately keep a word (a software

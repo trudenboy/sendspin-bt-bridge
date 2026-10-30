@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The web interface now starts in your Home Assistant language when you have not picked one, loads only the language you use, and its translations are ready for community contributions (see `docs/translations.md`).
 - Playout sync can now be set to "Measure and correct" in Settings; it corrects each start's placement using the experimental air sensor and behaves like measure without it.
 - Handing over or disabling a single speaker now runs at once and shows an Undo button in the confirmation toast.
 

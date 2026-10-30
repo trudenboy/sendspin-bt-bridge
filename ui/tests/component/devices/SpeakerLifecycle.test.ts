@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import SpeakerActionsMenu from '@/components/devices/SpeakerActionsMenu.vue'
 import { makeDevice } from '../../fixtures/device'
 

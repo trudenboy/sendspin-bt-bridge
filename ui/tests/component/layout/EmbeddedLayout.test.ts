@@ -8,7 +8,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import RuntimeRow from '@/components/layout/RuntimeRow.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useBridgeStore } from '@/stores/bridge'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 import { makeStatus } from '../../fixtures/status'
 

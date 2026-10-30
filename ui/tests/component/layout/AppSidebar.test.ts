@@ -4,7 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const SIDEBAR_KEY = 'sendspin-ui:sidebar-collapsed'
 

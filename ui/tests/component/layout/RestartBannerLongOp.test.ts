@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import RestartBanner from '@/components/layout/RestartBanner.vue'
 import { useBridgeStore } from '@/stores/bridge'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 import { vi } from 'vitest'

@@ -3,8 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceTimingPanel from '@/components/devices/DeviceTimingPanel.vue'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { makeDevice } from '../../fixtures/device'
 
 vi.mock('@/api/devices', () => ({ setLatency: vi.fn(), forgetAirCalibration: vi.fn().mockResolvedValue(undefined) }))

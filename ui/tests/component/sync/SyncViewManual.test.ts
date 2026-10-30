@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SyncView from '@/views/SyncView.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { defineComponent, h, nextTick, ref } from 'vue'
 
 vi.mock('@/api/sync', () => ({

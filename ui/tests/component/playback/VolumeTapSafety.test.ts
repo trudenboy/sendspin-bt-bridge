@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import VolumeSlider, { tapStep } from '@/components/playback/VolumeSlider.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 describe('tapStep', () => {
   it('moves one step toward the tapped side', () => {

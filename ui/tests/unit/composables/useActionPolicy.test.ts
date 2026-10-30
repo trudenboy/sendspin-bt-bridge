@@ -6,7 +6,7 @@ import { confirmAction, undoable } from '@/composables/useActionPolicy'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
 import { useReversibleActions } from '@/composables/useReversibleActions'
 import { useNotificationStore } from '@/stores/notifications'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const store = vi.hoisted(() => ({ standby: vi.fn(), wake: vi.fn(), setPowerSave: vi.fn(), setEnabled: vi.fn(), release: vi.fn() }))
 const playback = vi.hoisted(() => ({ setMute: vi.fn() }))

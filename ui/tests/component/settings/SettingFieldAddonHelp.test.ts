@@ -5,7 +5,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import SettingField from '@/components/settings/SettingField.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 // #476 — the Home Assistant add-on's own `log_level` option is written over
 // the bridge's LOG_LEVEL on every restart, so the setting says so there.

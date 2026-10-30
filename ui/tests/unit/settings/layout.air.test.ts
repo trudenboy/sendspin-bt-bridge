@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { ALL_FIELDS, SECTIONS } from '@/settings/layout'
 
 const get = (m: unknown, path: string) => path.split('.').reduce<any>((o, k) => o?.[k], m)

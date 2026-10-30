@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "postbuild": "node scripts/check-locale-chunks.mjs",
     "preview": "vite preview",
     "test": "vitest run",
+    "check:locales": "node scripts/check-locales.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src/",

@@ -6,8 +6,8 @@ import SbDialog from '@/kit/SbDialog.vue'
 import ConfirmConsequences from '@/kit/ConfirmConsequences.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
 import BugReportDialog from '@/components/BugReportDialog.vue'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { seriousViolations } from '../helpers/axe'
 
 // Regression guard (UX stage 8): dialogs have a role, a name and labelled

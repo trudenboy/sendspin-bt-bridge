@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import AdaptersSection from '@/components/settings/AdaptersSection.vue'
 import { useBridgeStore } from '@/stores/bridge'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const route = { query: {} as Record<string, string>, hash: '' }
 vi.mock('vue-router', () => ({ useRoute: () => route }))

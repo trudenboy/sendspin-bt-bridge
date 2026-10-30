@@ -5,8 +5,8 @@ import { setActivePinia, createPinia } from 'pinia'
 import SettingField from '@/components/settings/SettingField.vue'
 import { useConfigStore } from '@/stores/config'
 import { ALL_FIELDS } from '@/settings/layout'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 const field = ALL_FIELDS.find((f) => f.key === 'AUTH_ENABLED')!
 

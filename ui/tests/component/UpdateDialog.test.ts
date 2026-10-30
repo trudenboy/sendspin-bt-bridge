@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import UpdateDialog from '@/components/UpdateDialog.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const update = vi.hoisted(() => ({
   showDialog: true, info: { update_available: true, version: '9.9.9' }, latestVersion: '9.9.9', channel: 'stable',

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import BackupSection from '@/components/settings/BackupSection.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const store = vi.hoisted(() => ({ uploadConfig: vi.fn(), downloadConfig: vi.fn(), config: {} }))
 const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))

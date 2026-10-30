@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import BugReportDialog from '@/components/BugReportDialog.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const api = vi.hoisted(() => ({
   getBugreport: vi.fn(), checkProxyAvailable: vi.fn(), submitBugreport: vi.fn(), downloadBugreport: vi.fn(),

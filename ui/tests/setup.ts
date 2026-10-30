@@ -9,3 +9,10 @@ config.global.stubs = { ...config.global.stubs, teleport: true }
 import { beforeEach } from 'vitest'
 import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 beforeEach(() => setTechnicalDetails(true))
+
+// Russian is a lazy chunk in the app; tests that switch the shared instance to it expect it loaded.
+import { beforeAll } from 'vitest'
+import { loadLocale } from '@/i18n'
+beforeAll(async () => {
+  await loadLocale('ru')
+})
