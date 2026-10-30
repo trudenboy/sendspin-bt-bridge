@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.24] - 2026-10-30
+
 ### Added
 
 - Playout sync can remove small timing drift by playing a hair faster or slower (400 ppm at most, under a cent of pitch) instead of by a corrective jump every half a minute. It is off by default for now: set `PLAYOUT_RATE=1` in the bridge's environment to try it, and the Diagnostics timing panel shows the applied rate as ppm.
@@ -6737,7 +6739,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.21...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.23...HEAD
+[3.1.0-beta.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.21...v3.1.0-beta.23
 [3.1.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.19...v3.1.0-beta.21
 [3.1.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.18...v3.1.0-beta.19
 [3.1.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.17...v3.1.0-beta.18
