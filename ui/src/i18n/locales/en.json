@@ -1123,7 +1123,7 @@
         "error": "The port is in use — choose another one",
         "pair": "Pair a phone",
         "cancelPairing": "Stop pairing",
-        "pairing": "Open for pairing: {time} left — pair the phone now",
+        "pairing": "Open for pairing: {time} left. Pair the phone now; if it says the PIN is wrong, first Forget this bridge on the phone (a stale pairing).",
         "startNow": "Start now",
         "stop": "Stop",
         "attach": "Play the phone here",
