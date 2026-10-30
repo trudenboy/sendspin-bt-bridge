@@ -43,7 +43,7 @@ const emit = defineEmits<{
   restart: []
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const ready = computed(() => props.clickerPlaying ?? true)
 const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
@@ -58,7 +58,17 @@ const left = computed(
     }).length,
 )
 /** What to do about a result that does not count (not heard, unstable). */
+/** The estimator's reason, when the recording itself explains the failure (#553). */
+const REASON_HINTS: Record<string, string> = {
+  clipped: 'sync.wizard.hint.reason.clipped',
+  quiet: 'sync.wizard.hint.reason.quiet',
+  low_snr: 'sync.wizard.hint.reason.lowSnr',
+  no_clicks: 'sync.wizard.hint.reason.noClicks',
+  too_few_clicks: 'sync.wizard.hint.reason.tooFewClicks',
+}
 function hint(m: SyncMember, r: SyncMeasurement) {
+  const key = r.reason ? REASON_HINTS[r.reason] : undefined
+  if (key && te(key)) return t(key, { name: nameOf(m) })
   if (r.status === 'not_heard') return t('sync.wizard.hint.notHeard', { name: nameOf(m) })
   if (r.status === 'unstable') return t('sync.wizard.hint.unstable', { name: nameOf(m) })
   return ''

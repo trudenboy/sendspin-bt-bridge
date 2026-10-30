@@ -269,3 +269,29 @@ def test_production_windows_in_a_noisy_room_are_measured(duration_s, snr_db, sta
     m = est.estimate(rec)
     assert m.status == "ok", m
     assert _err_ms(m.phase_ms, 310.0) <= 1.0
+
+
+def _gain(recording: Recording, gain: float) -> Recording:
+    n = len(recording.pcm) // 2
+    vals = struct.unpack(f"<{n}h", recording.pcm)
+    pcm = struct.pack(f"<{n}h", *[max(-32768, min(32767, int(v * gain))) for v in vals])
+    return Recording(member=recording.member, start_time_s=recording.start_time_s, sample_rate=recording.sample_rate, pcm=pcm)
+
+
+def test_a_clipped_recording_says_so_instead_of_no_clicks():
+    """#553: the phone sat too close to a loud speaker; "not heard" was not actionable."""
+    m = est.estimate_per_click(_gain(_window(lag_s=0.0, snr_db=-5), 30.0))
+    assert m.status == "not_heard"
+    assert m.reason == "clipped"
+
+
+def test_an_almost_silent_recording_says_quiet():
+    m = est.estimate_per_click(_gain(_window(lag_s=0.0, snr_db=-5), 1 / 1000.0))
+    assert m.status == "not_heard"
+    assert m.reason == "quiet"
+
+
+def test_a_clean_recording_keeps_the_estimator_reason():
+    m = est.estimate_per_click(_gain(_window(lag_s=0.0, snr_db=-10), 0.2))
+    assert m.status == "not_heard"
+    assert m.reason in ("no_clicks", "low_snr")

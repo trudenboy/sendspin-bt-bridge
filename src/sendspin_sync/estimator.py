@@ -76,6 +76,29 @@ def _invalid(member: str) -> Measurement:
     return Measurement(member=member, status="not_heard", reason="invalid_recording")
 
 
+#: A recording with this share of samples at full scale is clipped (a phone close to a loud speaker):
+#: the wizard can then ask for distance or a lower volume instead of "not heard".
+CLIPPED_FRACTION = 0.002
+#: A peak below this (-48 dBFS) means the phone heard almost nothing: hold it closer.
+QUIET_PEAK = 0.004
+
+
+def _recording_issue(x: list[float]) -> str | None:
+    """``clipped`` / ``quiet`` when the recording itself explains a failed measurement, else None."""
+    if not x:
+        return None
+    peak = max(abs(v) for v in x)
+    if 0.0 < peak < QUIET_PEAK:
+        return "quiet"  # digital silence is "no clicks", not a level problem
+    clipped = sum(1 for v in x if abs(v) >= 0.995) / len(x)
+    return "clipped" if clipped >= CLIPPED_FRACTION else None
+
+
+def _not_heard(member: str, reason: str, x: list[float], *, clicks: int = 0) -> Measurement:
+    """A failed measurement whose reason names the recording's own problem when it has one."""
+    return Measurement(member=member, status="not_heard", reason=_recording_issue(x) or reason, clicks=clicks)
+
+
 @dataclass(frozen=True)
 class _Chirp:
     pos: int  # sample offset of the chirp start
@@ -226,9 +249,9 @@ def _per_click(
         events = sorted(sorted(events, key=lambda e: e[1], reverse=True)[:plausible])
     pairs = _click_sequence(_clusters(_chirps(x, sr, events, frame), sr), sr)
     if not pairs:  # in a crowded room "no clicks" means they did not stand out of the noise
-        return Measurement(member=member, status="not_heard", reason="low_snr" if crowded else "no_clicks"), None
+        return _not_heard(member, "low_snr" if crowded else "no_clicks", x), None
     if len(pairs) < MIN_CLICKS:
-        return Measurement(member=member, status="not_heard", reason="too_few_clicks", clicks=len(pairs)), None
+        return _not_heard(member, "too_few_clicks", x, clicks=len(pairs)), None
     cycle_ms = ct.CYCLE_S * 1000.0
     phases = [
         ((recording.start_time_s + a.pos / sr - ct.LEAD_IN_S - k * ct.PERIOD_S - epoch_s) * 1000.0) % cycle_ms
@@ -239,7 +262,7 @@ def _per_click(
     snr_db = snrs[len(snrs) // 2]
     mean, spread = circular_mean_ms(phases, cycle_ms)
     if snr_db < MIN_SNR_DB:
-        return Measurement(member=member, status="not_heard", reason="low_snr", clicks=len(pairs)), mean
+        return _not_heard(member, "low_snr", x, clicks=len(pairs)), mean
     confidence = round(max(0.0, min(1.0, (snr_db - MIN_SNR_DB) / 20.0)) * (1.0 if spread <= 1.0 else 0.7), 3)
     if spread > MAX_SPREAD_MS:
         return Measurement(

@@ -1677,7 +1677,14 @@
       },
       "hint": {
         "notHeard": "Not heard: turn {name} up or move closer, then Repeat — or Skip it.",
-        "unstable": "Unstable: keep the room quiet and the phone still, then Repeat — or Skip it."
+        "unstable": "Unstable: keep the room quiet and the phone still, then Repeat — or Skip it.",
+        "reason": {
+          "clipped": "The recording is clipped: the phone was too close or {name} too loud. Move it back or turn {name} down, then Repeat.",
+          "quiet": "The recording is almost silent: hold the phone closer to {name}, then Repeat.",
+          "lowSnr": "The clicks were lost in the room's noise: keep the room quiet or move the phone closer to {name}, then Repeat.",
+          "noClicks": "No clicks of {name} were found in the recording: check that it plays the clicks and hold the phone closer, then Repeat.",
+          "tooFewClicks": "Too few clicks of {name} were heard: the phone may have missed part of the window — Repeat."
+        }
       },
       "holdNear": "Hold the phone 30–50 cm from {name}",
       "stayPut": "Stay where you are",

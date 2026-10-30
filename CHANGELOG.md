@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Group tuning now says why a member was not heard: a clipped phone recording ("the phone was too close or the speaker too loud") and an almost silent one ("hold the phone closer") get their own hints instead of the generic "Not heard", and the clicks lost in room noise say so too.
+
 - A speaker whose Bluetooth clock reads a false ±25 ms offset (another speaker on the same adapter disconnecting does that) no longer gets pushed around by it: a steady jump is now refused when the air sensor says the speaker is in time (within 10 ms). Logged as "steady jump … refused — the air error is …".
 
 ## [3.1.0-beta.23] - 2026-10-30
