@@ -208,6 +208,14 @@ class PlayoutTiming(ResponseModel):
     warm: bool = False
     warm_s: float | None = None
     warmup_s: float | None = None
+    warm_reason: str | None = Field(
+        default=None,
+        description="Why the stream counts as warm: converged (sync settled) or timeout; null while warming.",
+    )
+    settling: bool = Field(
+        default=False,
+        description="Not warm yet and the error is out of tolerance or a jump happened in this warm-up period.",
+    )
     hold_reason: str | None = None
     hold_left_s: float | None = None
     late_start_ms: float | None = None

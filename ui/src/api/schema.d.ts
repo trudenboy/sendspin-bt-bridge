@@ -4877,6 +4877,12 @@ export interface components {
              * @default 0
              */
             rejected_samples: number;
+            /**
+             * Settling
+             * @description Not warm yet and the error is out of tolerance or a jump happened in this warm-up period.
+             * @default false
+             */
+            settling: boolean;
             /** Sink Rate Ppm */
             sink_rate_ppm: number | null;
             /** State */
@@ -4893,6 +4899,11 @@ export interface components {
              * @default false
              */
             warm: boolean;
+            /**
+             * Warm Reason
+             * @description Why the stream counts as warm: converged (sync settled) or timeout; null while warming.
+             */
+            warm_reason: string | null;
             /** Warm S */
             warm_s: number | null;
             /** Warmup S */

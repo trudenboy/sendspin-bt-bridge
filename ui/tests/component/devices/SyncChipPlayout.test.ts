@@ -28,9 +28,18 @@ describe('SyncChip playout', () => {
     expect(mountChip(base).get('[data-chip="sync"]').text()).toContain('0.4 ms')
   })
 
-  it('shows the warming label with the seconds left', () => {
-    const w = mountChip({ ...base, warm: false, warm_s: 25 })
-    expect(w.get('[data-chip="sync"]').text()).toContain('Warming 35 s')
+  it('shows the error value at once while warming', () => {
+    const w = mountChip({ ...base, warm: false, warm_s: 5, settling: false })
+    expect(w.get('[data-chip="sync"]').text()).toContain('0.4 ms')
+    expect(w.get('[data-chip="sync"]').text()).not.toContain('Settling')
+  })
+
+  it('shows Settling with the error value when the engine says settling', () => {
+    const w = mountChip({ ...base, warm: false, warm_s: 25, settling: true, error_ms: 31.2 })
+    const chip = w.get('[data-chip="sync"]')
+    expect(chip.text()).toContain('Settling')
+    expect(chip.text()).toContain('31.2 ms')
+    expect(chip.attributes('title')).toContain('35 s')
   })
 
   it('titles the count as jumps, not re-anchors', () => {

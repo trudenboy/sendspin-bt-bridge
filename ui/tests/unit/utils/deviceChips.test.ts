@@ -81,8 +81,18 @@ describe('syncBadge', () => {
       expect(syncBadge(playout({ jumps: 11 }))).toMatchObject({ count: 11, countTone: 'warning' })
     })
 
-    it('says warming with the seconds left until the stream is warm', () => {
-      expect(syncBadge(playout({ warm: false, warm_s: 25 }))).toMatchObject({ kind: 'warming', tone: 'neutral', warmInS: 35 })
+    it('shows the number at once while warming, in the normal tone when nothing is unsettled', () => {
+      expect(syncBadge(playout({ warm: false, warm_s: 5, settling: false, mode: 'loop', error_ms: 0.4 })))
+        .toMatchObject({ kind: 'playout', tone: 'success', errorMs: 0.4, pulse: false })
+    })
+
+    it('shows the number with the settling tone while warming and the engine says settling', () => {
+      expect(syncBadge(playout({ warm: false, warm_s: 25, settling: true, error_ms: -31.2 })))
+        .toMatchObject({ kind: 'playout', tone: 'info', pulse: true, settling: true, errorMs: 31.2, warmInS: 35 })
+    })
+
+    it('ignores settling once the stream is warm', () => {
+      expect(syncBadge(playout({ warm: true, settling: true, error_ms: 12 }))).toMatchObject({ tone: 'warning', errorMs: 12 })
     })
 
     it('keeps the legacy badge when mode is off, state is fallback or playout is null', () => {
