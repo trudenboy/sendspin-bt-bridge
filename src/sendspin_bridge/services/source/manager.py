@@ -34,6 +34,9 @@ async def start(config: dict[str, Any], config_dir: Any) -> dict[str, Any]:
     )
     await source.start()
     _source = source
+    from sendspin_bridge.services.source.pairing import ensure_agent
+
+    await ensure_agent()
     return {"started": True, "port": configuration.port}
 
 
@@ -43,4 +46,10 @@ async def stop() -> dict[str, Any]:
     if source is None:
         return {"started": False, "already": True}
     await source.stop()
+    from sendspin_bridge.services.source import relay
+    from sendspin_bridge.services.source.pairing import close_agent
+
+    await relay.stop_all()
+
+    await close_agent()
     return {"started": False}

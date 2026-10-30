@@ -162,8 +162,9 @@ class BtSendspinSource:
         self._identity_path = identity_path
         self._pairing_path = pairing_path
         self._server: Any = None
-        self._group: Any = None
-        self._stream: Any = None
+        # One push stream per group: the server makes a group per connection and a stream
+        # belongs to exactly one group, so every player needs its own.
+        self._streams: dict[int, tuple[Any, Any]] = {}
         self._capture: PwCapture | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -212,30 +213,39 @@ class BtSendspinSource:
         self._identity_path.chmod(0o600)
         return identity
 
-    def _open_stream(self) -> bool:
-        """Create the push stream on the first connected player, then keep the group whole."""
+    def _sync_streams(self) -> bool:
+        """Give every connected player a push stream on its own group; True when one exists."""
         assert self._server is not None
         players = self._server.connected_clients
-        if self._stream is not None:
-            # The server makes a one-client group per connection: a player that comes later
-            # must join ours, or it hears nothing.
-            joined = False
-            for player in players:
-                if player not in self._group.clients:
-                    self._group.add_client(player)
-                    joined = True
-            if joined:
-                _set_state(players=len(self._group.clients))
-                logger.info("Bluetooth source: %d player(s) on the stream", len(self._group.clients))
-            return True
         if not players:
             return False
-        self._group = players[0].group
-        self._stream = self._group.start_stream()
-        self._stream.set_live_source(True)
-        _set_state(players=len(players), streaming=True)
-        logger.info("Bluetooth source: a player connected, streaming to it")
-        return True
+        alive = False
+        for player in players:
+            group = player.group
+            key = id(group)
+            if key in self._streams:
+                alive = True
+                continue
+            try:
+                stream = group.start_stream()
+                stream.set_live_source(True)
+                # A player holds its role until it reports client/state; release the hold, and
+                # join the roles that were already active before this stream existed (the group
+                # only joins roles activated later).
+                with contextlib.suppress(Exception):
+                    player.release_all_role_holds()
+                for role in player.active_roles:
+                    with contextlib.suppress(Exception):
+                        if role.get_audio_requirements() is not None:
+                            stream.on_role_join(role)
+            except Exception:
+                logger.warning("Bluetooth source: could not start a stream for a player", exc_info=True)
+                continue
+            self._streams[key] = (group, stream)
+            logger.info("Bluetooth source: streaming to a player (group %s)", getattr(group, "group_id", "?"))
+            alive = True
+        _set_state(players=len(players), streaming=alive)
+        return alive
 
     async def _watch(self) -> None:
         """Follow the phone: capture while it streams, wait while it does not."""
@@ -244,7 +254,7 @@ class BtSendspinSource:
         audio_format = AudioFormat(sample_rate=self._config.sample_rate, bit_depth=16, channels=self._config.channels)
         while True:
             try:
-                if not self._open_stream():
+                if not self._sync_streams():
                     await asyncio.sleep(1.0)
                     continue
                 node = self._config.node or await find_bluez_input_on_host()
@@ -252,32 +262,35 @@ class BtSendspinSource:
                     await asyncio.sleep(NODE_POLL_S)
                     continue
                 await self._pump(node, audio_format)
-                # The stream ended (the player left): wait for the next one.
-                self._stream = None
+                self._streams.clear()
                 await asyncio.sleep(0.5)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.warning("Bluetooth source: capture failed, retrying", exc_info=True)
-                self._stream = None
+                self._streams.clear()
                 await asyncio.sleep(NODE_POLL_S)
 
     async def _pump(self, node: str, audio_format: Any) -> None:
         from aiosendspin.server.push_stream import StreamStoppedError
 
-        assert self._stream is not None
+        assert self._streams
         self._capture = PwCapture(node, self._config)
         await self._capture.start()
         _set_state(phone=node)
         sent = 0
         try:
             async for chunk in self._capture.chunks():
-                self._stream.prepare_audio(chunk, audio_format)
-                try:
-                    await self._stream.commit_audio()
-                except StreamStoppedError:
-                    logger.info("Bluetooth source: the stream stopped (player gone)")
+                if not self._streams:
+                    logger.info("Bluetooth source: no players left")
                     return
+                for key, (_group, stream) in list(self._streams.items()):
+                    try:
+                        stream.prepare_audio(chunk, audio_format)
+                        await stream.commit_audio()
+                    except StreamStoppedError:
+                        logger.info("Bluetooth source: a stream stopped (player gone)")
+                        self._streams.pop(key, None)
                 sent += 1
                 if sent % 500 == 0:  # ~5 s of 10 ms chunks
                     logger.info("Bluetooth source: %.0f s pushed to the stream", sent * CHUNK_MS / 1000)
@@ -297,10 +310,10 @@ class BtSendspinSource:
             self._task = None
         if self._capture is not None:
             await self._capture.stop()
-        if self._stream is not None:
+        for _group, stream in self._streams.values():
             with contextlib.suppress(Exception):
-                self._stream.stop()
-            self._stream = None
+                stream.stop()
+        self._streams.clear()
         if self._server is not None:
             await self._server.close()
             self._server = None

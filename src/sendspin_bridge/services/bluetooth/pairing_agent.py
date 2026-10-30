@@ -261,6 +261,7 @@ class PairingAgent:
         pin: str = "0000",
         allow_hfp: bool = False,
         target_mac: str = "",
+        path: str = AGENT_PATH,
     ) -> None:
         if capability not in _VALID_CAPABILITIES:
             raise ValueError(f"Invalid agent capability: {capability}")
@@ -268,6 +269,8 @@ class PairingAgent:
         self._pin = pin
         self._allow_hfp = bool(allow_hfp)
         self._target_mac = str(target_mac or "").strip().upper()
+        # A second, long-lived agent (the phone source, #563) needs its own object path.
+        self._path = path
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         # Typed as Any so mypy doesn't require an eager dbus_fast import at
@@ -408,15 +411,15 @@ class PairingAgent:
             target_mac=self._target_mac,
         )
         self._bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-        self._bus.export(AGENT_PATH, self._iface)
+        self._bus.export(self._path, self._iface)
         introspect = await self._bus.introspect(_BLUEZ_BUS, _AGENT_MANAGER_PATH)
         proxy = self._bus.get_proxy_object(_BLUEZ_BUS, _AGENT_MANAGER_PATH, introspect)
         mgr = proxy.get_interface(_AGENT_MANAGER_IFACE)
-        await mgr.call_register_agent(AGENT_PATH, self._capability)
-        await mgr.call_request_default_agent(AGENT_PATH)
+        await mgr.call_register_agent(self._path, self._capability)
+        await mgr.call_request_default_agent(self._path)
         logger.info(
             "PairingAgent registered (path=%s capability=%s)",
-            AGENT_PATH,
+            self._path,
             self._capability,
         )
 
@@ -427,7 +430,7 @@ class PairingAgent:
         try:
             introspect = await bus.introspect(_BLUEZ_BUS, _AGENT_MANAGER_PATH)
             mgr = bus.get_proxy_object(_BLUEZ_BUS, _AGENT_MANAGER_PATH, introspect).get_interface(_AGENT_MANAGER_IFACE)
-            await mgr.call_unregister_agent(AGENT_PATH)
+            await mgr.call_unregister_agent(self._path)
         finally:
             bus.disconnect()
             try:

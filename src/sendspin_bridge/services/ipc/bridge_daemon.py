@@ -576,6 +576,11 @@ class BridgeDaemon:
                 await self._client.connect(url)
                 # connect() returns once the server admitted us.
                 self._mark_server_connected(None, url=url)
+                # The player role waits for the first client/state: aiosendspin sends none on
+                # its own, so a plain Sendspin server (the bridge's own source, #563) would
+                # never start the stream. Sent a moment later: a state pushed in the same tick
+                # as the admission is dropped before the server's handshake finishes.
+                asyncio.get_running_loop().call_later(1.0, self._report_player_state)
                 error_backoff = 1.0
                 disconnect_event = asyncio.Event()
                 unsubscribe = self._client.add_disconnect_listener(disconnect_event.set)
@@ -1576,7 +1581,9 @@ class BridgeDaemon:
         """
         client = self._client
         if client is None or not getattr(client, "connected", False):
+            logger.debug("player state report skipped: client not connected")
             return
+        logger.debug("player state report: available, volume %s, muted %s", self._volume, self._muted)
         task = asyncio.get_running_loop().create_task(
             client.send_player_state(available=True, volume=self._volume, muted=self._muted)
         )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -112,14 +113,28 @@ async def set_source_enabled(body: SourceEnabledIn) -> dict[str, Any]:
 async def set_source_player(body: SourcePlayerIn) -> dict[str, Any]:
     """Point a speaker's player at the source, or send it back to Music Assistant (#563)."""
     from sendspin_bridge.application.status import find_client
-    from sendspin_bridge.config import load_config
+    from sendspin_bridge.services.source import relay
 
-    config = load_config()
-    port = config.get("SENDSPIN_SOURCE_PORT") or 8940
     client = find_client(body.device_id)
-    url = f"ws://127.0.0.1:{int(port)}/sendspin" if body.enabled else None
-    await client.use_source_stream(url)
-    return {"device_id": body.device_id, "playing_source": bool(url)}
+    if not body.enabled:
+        await relay.stop(body.device_id)
+        return {"device_id": body.device_id, "playing_source": False}
+    # The speaker the bridge drives itself: relay the phone's capture straight to its sink.
+    from sendspin_bridge.services.source.bt_source import find_bluez_input_on_host
+
+    node = None
+    for _ in range(15):  # the capture node appears a moment after the phone connects
+        node = await find_bluez_input_on_host()
+        if node:
+            break
+        await asyncio.sleep(0.2)
+    sink = getattr(client, "bluetooth_sink_name", None) or getattr(client, "sink_name", None)
+    if not node:
+        raise ApiError(409, "source_phone_missing", "No phone is streaming into the bridge yet")
+    if not sink:
+        raise ApiError(409, "source_sink_missing", "That speaker has no audio output")
+    await relay.start(body.device_id, node, str(sink))
+    return {"device_id": body.device_id, "playing_source": True}
 
 
 @router.post("/bridge/source/pairing", summary="Open a Bluetooth pairing window for a phone")
