@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.22] - 2026-10-30
+
 ### Fixed
 
 - An Echo-style speaker now gets its audio sink on the first connect after pairing: when BlueZ answers "busy", the bridge asks again a few seconds later on a growing schedule instead of waiting for a signal that never comes. It also asks for the sink before switching the sound card profile on a reconnect, which used to fail with "Input/output error".
@@ -6718,7 +6720,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.20...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.21...HEAD
+[3.1.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.19...v3.1.0-beta.21
 [3.1.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.18...v3.1.0-beta.19
 [3.1.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.17...v3.1.0-beta.18
 [3.1.0-beta.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.16...v3.1.0-beta.17

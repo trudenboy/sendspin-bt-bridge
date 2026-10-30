@@ -5420,7 +5420,27 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.20...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.20...HEAD
+[3.1.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.18...v3.1.0-beta.19
+[3.1.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.17...v3.1.0-beta.18
+[3.1.0-beta.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.16...v3.1.0-beta.17
+[3.1.0-beta.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.15...v3.1.0-beta.16
+[3.1.0-beta.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.14...v3.1.0-beta.15
+[3.1.0-beta.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.13...v3.1.0-beta.14
+[3.1.0-beta.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.12...v3.1.0-beta.13
+[3.1.0-beta.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.11...v3.1.0-beta.12
+[3.1.0-beta.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.10...v3.1.0-beta.11
+[3.1.0-beta.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.9...v3.1.0-beta.10
+[3.1.0-beta.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.8...v3.1.0-beta.9
+[3.1.0-beta.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.7...v3.1.0-beta.8
+[3.1.0-beta.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.6...v3.1.0-beta.7
+[3.1.0-beta.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.5...v3.1.0-beta.6
+[3.1.0-beta.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.4...v3.1.0-beta.5
+[3.1.0-beta.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.3...v3.1.0-beta.4
+[3.1.0-beta.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.2...v3.1.0-beta.3
+[3.1.0-beta.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.1...v3.1.0-beta.2
+[3.1.0-beta.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.21...v3.1.0-beta.1
+[3.0.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.20...v3.0.0-beta.21
 [3.0.0-beta.20]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.19...v3.0.0-beta.20
 [3.0.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.18...v3.0.0-beta.19
 [3.0.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.17...v3.0.0-beta.18
