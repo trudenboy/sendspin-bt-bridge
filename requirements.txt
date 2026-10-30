@@ -87,6 +87,8 @@ music-assistant-models==1.1.152
     # via music-assistant-client
 noiseprotocol==0.3.1
     # via aiosendspin
+numpy==2.5.4
+    # via sendspin-bt-bridge
 opentelemetry-api==1.45.1
     # via fastapi
 orjson==3.13.0

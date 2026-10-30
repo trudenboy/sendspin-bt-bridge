@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The bridge can act as a **Sendspin source**: a phone paired to it over Bluetooth becomes a live stream that other Sendspin players can play. It is off by default; set `SENDSPIN_SOURCE=1` and players connect to port 8940 (`ws://<bridge>:8940/sendspin`). The capture is PipeWire-native because PulseAudio never exports the phone's input as a source.
+
 ### Fixed
 
 - A speaker that is also an audio source (an Amazon Echo) gets its audio sink back without a lucky second connect: the bridge asks for the sink profile first, retries the profile switch while BlueZ answers "Input/output error" (a known BlueZ ordering bug, [bluez/bluez#1898](https://github.com/bluez/bluez/issues/1898)), and reconnects a speaker whose link is up without a sink up to twice in ten minutes. The whole recovery is on by default now (it was the "Recover a missing audio sink" experiment); a speaker that never offers a sink does not loop.

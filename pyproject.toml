@@ -9,6 +9,8 @@ requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
     "aiosendspin==10.2.1",
+    # aiosendspin[server] (the Sendspin source, #563) needs numpy for its audio pipeline.
+    "numpy>=2.3.0",
     "av>=16.1.0",
     "PyGObject>=3.48",
     # API v1 (ADR-0001): FastAPI on uvicorn inside the bridge loop.

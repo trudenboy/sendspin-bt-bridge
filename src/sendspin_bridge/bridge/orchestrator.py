@@ -558,7 +558,42 @@ class BridgeOrchestrator:
     async def _stop_air_sensor(self) -> None:
         started = getattr(self, "_air_sensor", None)
         self._air_sensor = None
+        # The Sendspin source (#563): a phone's Bluetooth audio offered as a live stream.
+        self._bt_source: Any = None
         await _stop_air_sensor_service(started)
+
+    async def start_bt_source(self, config: dict[str, Any]) -> None:
+        """Start the Sendspin source (#563) when ``SENDSPIN_SOURCE`` is on.
+
+        Off by default: it opens a second Sendspin server on the bridge, which an operator opts
+        into once a phone is paired to the adapter as an audio source.
+        """
+        if os.environ.get("SENDSPIN_SOURCE", "").strip().lower() not in ("1", "true", "yes"):
+            return
+        from sendspin_bridge.services.source.bt_source import BtSendspinSource, SourceConfig
+
+        config_dir = _resolve_config_dir()
+        source_config = SourceConfig.from_env()
+        self._bt_source = BtSendspinSource(
+            source_config,
+            identity_path=config_dir / "source_identity.key",
+            pairing_path=config_dir / "source_pairing.json",
+        )
+        try:
+            await self._bt_source.start()
+        except Exception:
+            logger.exception("The Sendspin source could not start")
+            self._bt_source = None
+
+    async def _stop_bt_source(self) -> None:
+        source = getattr(self, "_bt_source", None)
+        if source is None:
+            return
+        try:
+            await source.stop()
+        except Exception:
+            logger.warning("Stopping the Sendspin source failed", exc_info=True)
+        self._bt_source = None
 
     async def graceful_shutdown(
         self,
@@ -614,6 +649,7 @@ class BridgeOrchestrator:
             client.running = False
             await client.stop_sendspin()
 
+        await self._stop_bt_source()
         await self._shutdown_sync_tuning()
 
         await self._stop_suspend_probe()
@@ -1230,6 +1266,7 @@ class BridgeOrchestrator:
                 bootstrap.config, clients, server_host=bootstrap.server_host
             )
             await self.start_sync_tuning()
+            await self.start_bt_source(bootstrap.config)
             # Non-blocking cross-bridge duplicate device check
             await self._run_duplicate_device_check(bootstrap.config, loop)
         except Exception as exc:
