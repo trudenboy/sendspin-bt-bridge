@@ -600,3 +600,23 @@ def test_hidden_step_is_absorbed_then_corrected(seed):
         assert (rows[0][0] - t_step) / 1e6 - t_absorbed <= 10.0
     finally:
         st.close()
+
+
+def test_a_steady_jump_is_refused_when_the_air_says_the_speaker_is_in_time():
+    """#562: the shared adapter's clock square wave vs a stable air placement.
+
+    The engine subtracts the bias from the raw reading, so the controller sees ``e_rel`` while the
+    audible error is ``e_rel + b_dom``. A jump the raw reading asks for but the air does not see is
+    refused; one the air agrees with still goes through.
+    """
+    from sendspin_bridge.services.audio.playout.engine import air_vetoes_steady_jump
+
+    # The air says 1 ms: the raw reading's 25 ms is a clock artifact, no jump.
+    assert air_vetoes_steady_jump(1_000.0, 25_000.0) is True
+    # The air also sees 25 ms: the jump is allowed.
+    assert air_vetoes_steady_jump(25_000.0, 25_000.0) is False
+    # No eligible air window (or no bias): the reading is all there is.
+    assert air_vetoes_steady_jump(None, 25_000.0) is False
+    # Inside the tolerance either way.
+    assert air_vetoes_steady_jump(-9_000.0, -20_000.0) is True
+    assert air_vetoes_steady_jump(11_000.0, -20_000.0) is False

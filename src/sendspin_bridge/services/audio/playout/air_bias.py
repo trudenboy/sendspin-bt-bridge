@@ -222,6 +222,9 @@ class AirBias:
         self._at_prev: float | None = None
         self._corrections = 0
         self._last_correction_us: float | None = None
+        # The air-domain error (E) of the newest eligible window: what the sensor says the speaker
+        # is doing, which the engine uses to veto a clock-artifact jump (#562).
+        self._last_air_error_us: float | None = None
         self._prev_last_correction_us: float | None = None
         self._gated = 0
         self._skipped = 0
@@ -238,6 +241,11 @@ class AirBias:
     @property
     def value_us(self) -> float | None:
         return self._b
+
+    @property
+    def air_error_us(self) -> float | None:
+        """The newest air-domain error E (None until a window was eligible)."""
+        return self._last_air_error_us
 
     @property
     def seeded_now(self) -> bool:
@@ -387,6 +395,7 @@ class AirBias:
         return AirAction(delta_l, "air_target")
 
     def _lose_lock(self, lock_state: str) -> None:
+        self._last_air_error_us = None
         if self._b is None or self._state in ("none", "held"):
             return  # initial seeding waits
         self._reseed_pending = self._state == "seeding"
@@ -526,6 +535,7 @@ class AirBias:
         self._history.extend(bs)
         self._enter_active(last[-1][0])
         jump = float(median(es))
+        self._last_air_error_us = jump
         self._log.info(
             "air bias seeded at %.1f ms (E %+.1f ms, %d windows within %.1f ms)",
             self._b / 1000.0,
@@ -541,6 +551,7 @@ class AirBias:
         return AirAction(jump, "air_seed")
 
     def _track(self, s: AirSample, e_hat: float) -> None:
+        self._last_air_error_us = self._e_equiv(s.h_us)
         assert self._b is not None
         b_i = e_hat - self._e_equiv(s.h_us)
         dt = 0.0 if self._at_prev is None else min(max((s.at_us - self._at_prev) / 1e6, 0.0), DT_MAX_S)

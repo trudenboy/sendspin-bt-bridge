@@ -68,9 +68,27 @@ _NO_AIR_SNAPSHOT: dict[str, object] = {
 
 # Ruling R5: a forward step of (a - t) larger than this between consecutive readings is a PA step.
 PA_STEP_US = 15_000.0
+
 # A pulse step is told from one noisy reading (sigma ~4 ms: a single 15 ms jump in 0.8 % of readings)
 # by the median of the readings before it; the air bias reseeds only for a confirmed step.
 PA_STEP_BASELINE_N = 10
+
+# A steady jump also has to be visible in the air once the bias knows the air error: a shared
+# adapter's clock can read a +-25 ms square wave for longer than the 5 s persistence (#562) while
+# the air placement moves by 3-6 ms, so such a jump would only chase the reading.
+AIR_JUMP_MIN_US = 10_000.0
+
+
+def air_vetoes_steady_jump(air_error_us: float | None, jump_us: float) -> bool:
+    """Is a steady jump refused because the air sensor says the speaker is in time?
+
+    The raw pulsesink reading can carry a clock artifact (a +-25 ms square wave on a shared adapter,
+    #562) that the loop's own reading cannot tell from a real error; the air-domain error can. With
+    no bias value, or no eligible window yet, the controller's reading is all there is.
+    """
+    if air_error_us is None:
+        return False
+    return abs(air_error_us) < AIR_JUMP_MIN_US
 PA_STEP_CONFIRM = 0.6  # of PA_STEP_US
 SUMMARY_EVERY_S = 10.0  # DEBUG summary cadence; 1 s with SENDSPIN_PLAYOUT_DEBUG=1
 SUMMARY_DEBUG_EVERY_S = 1.0
@@ -548,6 +566,19 @@ class PlayoutEngine:
                     d.clamped_from_us / 1000.0,
                     d.jump_us / 1000.0,
                 )
+            air_error: float | None = None
+            air_bias = self._bias
+            if air_bias is not None:
+                air_error = self._air(lambda: air_bias.air_error_us, None)
+            if air_vetoes_steady_jump(air_error, d.jump_us):
+                logger.info(
+                    "playout: steady jump of %.1f ms refused — the air error is %.1f ms",
+                    d.jump_us / 1000.0,
+                    (air_error or 0.0) / 1000.0,
+                )
+                self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
+                self._update_warm(r.t_us)
+                return
             self._pending_jump_us = d.jump_us
             self._pending_jump_reason = "steady"
         self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
