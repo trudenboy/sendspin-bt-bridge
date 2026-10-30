@@ -16,7 +16,14 @@ def test_the_source_block_reports_the_state(monkeypatch):
     monkeypatch.setattr(
         bt_source,
         "source_status",
-        lambda: {"enabled": True, "port": 8940, "phone": "bluez_input.1", "players": 1, "streaming": True, "error": None},
+        lambda: {
+            "enabled": True,
+            "port": 8940,
+            "phone": "bluez_input.1",
+            "players": 1,
+            "streaming": True,
+            "error": None,
+        },
     )
     block = status._sendspin_source({"SENDSPIN_SOURCE": True})
     assert block is not None

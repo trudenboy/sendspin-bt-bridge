@@ -2242,6 +2242,8 @@
           "SENDSPIN_SOURCE_PORT": {
             "anyOf": [
               {
+                "maximum": 65535.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
