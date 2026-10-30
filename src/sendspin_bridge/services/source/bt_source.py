@@ -159,7 +159,16 @@ class BtSendspinSource:
         )
         # Groups are made by the server around connected players: the stream is created once a
         # player is there (a group cannot exist without one).
-        await self._server.start_server(port=self._config.port, host=self._config.host)
+        try:
+            await self._server.start_server(port=self._config.port, host=self._config.host)
+        except OSError as exc:
+            # A player's listen port or another service may hold it: say so instead of a traceback.
+            await self._server.close()
+            self._server = None
+            raise RuntimeError(
+                f"the Sendspin source port {self._config.port} is already in use ({exc.strerror or exc}); "
+                "set SENDSPIN_SOURCE_PORT to a free port"
+            ) from exc
         logger.info(
             "Sendspin source listening on %s:%d (players connect to ws://<bridge>:%d/sendspin)",
             self._config.host,

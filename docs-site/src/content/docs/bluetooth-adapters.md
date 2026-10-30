@@ -239,3 +239,16 @@ Proxmox Host
 
 See [Devices & Adapters](/sendspin-bt-bridge/devices/) for adapter naming,
 binding speakers to specific controllers, and managing the device fleet.
+
+## A phone as an audio source (experimental)
+
+The bridge can also be the other side of Sendspin: a phone paired to it over Bluetooth streams into the adapter, and the bridge offers that audio as a live stream other Sendspin players can play.
+
+```bash
+SENDSPIN_SOURCE=1 SENDSPIN_SOURCE_PORT=8940
+```
+
+- Players connect to `ws://<bridge>:8940/sendspin`. The port must not collide with the players' own listen ports (they start at 8928).
+- It needs **PipeWire**: PulseAudio never exports the phone's input as a capture source, while PipeWire's `bluez_input.*` node is captured natively.
+- Pair the phone once while the adapter is discoverable and pairable. If the phone shows the bridge as "calls only", remove the pairing on both sides and pair again with **Media audio** enabled.
+- There is no UI switch yet; the logs say `Bluetooth source: a player connected, streaming to it` and `N s pushed to the stream` while audio flows.
