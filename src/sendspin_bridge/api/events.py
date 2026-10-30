@@ -34,7 +34,9 @@ DEFAULT_TYPES = frozenset({"status", "job", "sync"})
 ALL_TYPES = frozenset({"status", "job", "log", "sync"})
 _QUEUE_SIZE = 64
 _HEARTBEAT_S = 15.0
-_MAX_LIFETIME_S = 1800.0
+# Short enough that a reconnect (which renews the HA ingress session) happens
+# while the session is still fresh, instead of after it has idled out.
+_MAX_LIFETIME_S = 600.0
 _MAX_LISTENERS = 16
 
 

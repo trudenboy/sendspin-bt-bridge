@@ -1415,7 +1415,8 @@
     "errorNext": "Check that the speaker is in pairing mode and close to the adapter, then try again."
   },
   "connection": {
-    "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."
+    "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date.",
+    "reload": "Reload"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",
