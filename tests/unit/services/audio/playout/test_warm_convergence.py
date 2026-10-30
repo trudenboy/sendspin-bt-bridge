@@ -105,3 +105,14 @@ def test_loop_with_an_air_bias_waits_for_the_seed():
     snap = eng.snapshot()
     assert snap["warm"] is True and snap["warm_reason"] == "converged"
     assert snap["warm_s"] < 20.0
+
+
+def test_loop_with_a_feed_but_no_target_does_not_wait_for_a_seed():
+    from sendspin_bridge.services.audio.playout.air_bias import AirFeed
+    from tests.unit.services.audio.playout.test_engine_air import engine as air_engine
+
+    eng, port, raw = air_engine(feed=AirFeed())  # no key, no target: the bias stays "none"
+    drive(eng, port, raw, 8.0)
+    snap = eng.snapshot()
+    assert snap["air_bias_state"] == "none"
+    assert snap["warm"] is True and snap["warm_reason"] == "converged"

@@ -573,7 +573,9 @@ class PlayoutEngine:
         if self._warm_converged:
             return
         bias = self._bias
-        seeded = bias is None or self._air(lambda: bias.state == "active", False)
+        # Wait for the bias only while it can still seed or has broken (seeding/held need a
+        # target); "none" (no target, internal_error) never seeds, so it does not block.
+        seeded = bias is None or self._air(lambda: bias.state not in ("seeding", "held"), True)
         if not (seeded and self._baseline_samples is None and self._error_in_tolerance()):
             self._conv_since_us = None
             return
