@@ -48,3 +48,13 @@ def test_d_ref_is_the_median_of_the_sample_delays(ds, expected):
     xs = [d + 40.0 for d in ds]
     _, d_ref = learned_reference(xs, ds)
     assert d_ref == pytest.approx(expected)
+
+
+def test_samples_that_disagree_raise_instead_of_a_statistics_error():
+    """Two placements 120 ms apart describe no single reference.
+
+    The empty robust band used to surface as ``StatisticsError`` from
+    ``mean([])``; it is now a plain ``ValueError`` the caller can act on.
+    """
+    with pytest.raises(ValueError, match="disagree"):
+        learned_reference([243.8, 120.0], [0.0, 0.0])

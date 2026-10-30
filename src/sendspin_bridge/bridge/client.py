@@ -1142,7 +1142,12 @@ class SendspinClient:
                         datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     )
                 except Exception as exc:  # a sample that makes an invalid entry; nothing to keep
-                    logger.debug("[%s] Learned air sample not usable: %s", self.player_name, type(exc).__name__)
+                    logger.debug(
+                        "[%s] Learned air sample not usable: %s (%r)",
+                        self.player_name,
+                        type(exc).__name__,
+                        sample,
+                    )
                     return
         if parsed is None:
             logger.debug("[%s] Ignoring an invalid learned air sample: %r", self.player_name, sample)

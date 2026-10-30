@@ -26,6 +26,12 @@ def learned_reference(samples_ms: Sequence[float], d_out_ms: Sequence[float]) ->
     if any(abs(o) > LEARN_OFFSET_MAX_MS for o in offs):
         raise ValueError("learned offset out of range")
     centre = median(offs)
-    off_ref = mean(o for o in offs if abs(o - centre) <= LEARN_BAND_MS)
+    band = [o for o in offs if abs(o - centre) <= LEARN_BAND_MS]
+    if not band:
+        # Every sample is more than the band away from the median: they do not
+        # describe one placement (a sample taken before a delay change, say),
+        # so there is no reference to learn from this set.
+        raise ValueError("learned samples disagree")
+    off_ref = mean(band)
     d_ref = float(median(d_out_ms))
     return d_ref + off_ref, d_ref
