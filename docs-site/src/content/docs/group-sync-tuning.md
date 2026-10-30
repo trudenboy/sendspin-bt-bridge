@@ -44,20 +44,20 @@ Since 3.1.0-beta.7 the bridge takes the audio buffer's latency out of the schedu
 | **Manual tuning** | No microphone needed. Best for small fixes you can hear. |
 | **Measure with a microphone** | About a minute per speaker. You hear and adjust the measured delays before you finish. |
 
-The **Group** tab's **Manual tuning** and **Measure with a microphone** buttons are the way in; the **Manual** and **Measure** tabs link to each other. Opening a tab never starts anything: **Manual tuning** on the Group tab, or **Start tuning by ear** on the Manual tab, starts a tuning session, and the measurement wizard starts only from its own button.
+The **Group** tab's **Manual tuning** and **Measure with a microphone** buttons are the way in; the **Manual** and **Measure** tabs link to each other. Opening a tab never starts anything: the Manual tab's **Start clicks** starts a tuning session, and the measurement wizard starts only from its own button.
 
 ### Manual tuning
 
-Before you listen, the tab walks two preparation steps (*Before you listen (n/2)*): **Stop the music, start the clicks** and **Set the volume** (see below). Clicks that already play go straight to listening.
+The Manual tab is one screen, with no steps. Opening it starts nothing; the controls below **Start clicks** wait until you press it.
 
-Listening controls:
+- **Start clicks** stops whatever the group is playing and plays the 3-minute click track on every speaker; *Clicks: 2:41 left* counts it down. When the group plays music, a confirmation says that playback stops and the group's queue is replaced by the click track, and nothing is stopped before you agree. While the clicks play the button reads **Stop clicks**, which stops only the click track (music someone started meanwhile plays on).
+- **Sound**: what the clicks play — **Clicks**, **Clicks with accent** or **Noise** (see *Which sound to listen to*). Switching while it plays starts the new sound from the start.
+- **Volume**: a slider per speaker, so the clicks are clearly audible where you sit. A speaker at 0 % is flagged *Silent: turn it up to measure it*. *Volumes go back to what they were when you finish.*
+- **Latency compensation**: each speaker has a field, a slider and −10/−1/+1/+10 ms buttons. Larger plays earlier. Changes are written to Music Assistant at once, so you hear them while the clicks play.
+- **Save** keeps the delays, ends the session (the clicks stop, every speaker the bridge muted is unmuted, the volumes go back) and shows *Saved*. **Discard changes** puts back the delays from the start of this tuning and ends the session the same way.
+- **Listen to one speaker / compare two**, collapsed below: **Only this speaker** (the others are muted; **Everyone** undoes it) and **Compare two**, where two speakers take turns every four seconds.
 
-- **Play clicks** starts the 3-minute click track on the whole group again from the start; *Clicks: 2:41 left* counts it down. **Stop clicks** stops only the click track (music someone started meanwhile plays on).
-- **Only this speaker**: pick a speaker to hear it alone (the others are muted), or **Everyone**.
-- **Compare two**: two speakers take turns every four seconds.
-- **Sound**: what the clicks play — **Clicks**, **Clicks with accent** or **Noise** (see *Which sound to listen to*). Switching while it plays starts the new sound from the start; the speakers you muted or soloed stay that way.
-
-Each member has a delay field, a slider and −10/−1/+1/+10 ms buttons. Changes are written to Music Assistant at once. **Put back the delays from the start** returns every changed speaker to where this tuning started.
+Leaving the tab or the page while the tuning has unsaved changes asks first: **Keep changes** leaves the delays as they are, **Discard changes** puts the old ones back. Either way the session ends. To keep a snapshot, save a profile from the **Group** tab.
 
 #### Which sound to listen to
 
@@ -71,7 +71,6 @@ How an offset sounds: up to about 1 ms the speakers sound as one, in the middle;
 
 A good order: **Clicks with accent** while the speakers are far apart, **Clicks** until every speaker's click is one, then **Noise** for each pair of speakers (hear only the two, with **Only this speaker** or **Compare two**): stand midway and nudge 1 ms at a time until the hiss sits in the middle as one solid sound. While speakers are being measured (with a microphone or the phone) the measurement's own click track plays; the choice of sound returns once the measured delays are applied.
 
-Leaving the tab finishes the tuning: the delays stay; the clicks stop, every speaker the bridge muted is unmuted and the volumes go back to what they were. If anything changed, the screen first offers to save the delays as a profile.
 
 ### Measure with a microphone
 

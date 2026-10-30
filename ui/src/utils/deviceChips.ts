@@ -16,12 +16,14 @@ export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 /* ---------------------------------------------------------------- sync -- */
 
 export interface SyncBadge {
-  kind: 'sync' | 'reanchoring' | 'playout' | 'warming'
+  kind: 'sync' | 'reanchoring' | 'playout'
   tone: Tone
   pulse: boolean
   /** |sync error| (or the last correction while re-anchoring), rounded ms. */
   errorMs: number | null
-  /** warming: seconds until the stream counts as warm. */
+  /** playout: not warm yet and the error is out of tolerance or a jump happened (shown as "Settling"). */
+  settling?: boolean
+  /** playout settling: the longest the stream stays "not warm", in seconds. */
   warmInS?: number | null
   count: number
   countTone: Tone
@@ -43,16 +45,16 @@ export function syncBadge(d: Device, held = false): SyncBadge | null {
   if (playout && playout.mode !== 'off' && playout.state !== 'fallback') {
     const jumps = playout.jumps ?? 0
     const jc = { count: jumps, countTone: (jumps > 10 ? 'warning' : jumps > 0 ? 'success' : 'neutral') as Tone, count5m: null, count30m: null }
-    if (!playout.warm && playout.warm_s != null && playout.warmup_s != null) {
-      return {
-        kind: 'warming', tone: 'neutral', pulse: true, errorMs: null,
-        warmInS: Math.max(0, Math.ceil(playout.warmup_s - playout.warm_s)), ...jc,
-      }
-    }
     const err = playout.error_ms == null ? null : Math.round(Math.abs(playout.error_ms) * 10) / 10
     /* measure reports a noisy EMA (±2–3 ms on PA bluez5); loop holds ~1 ms. */
     const [good, fair] = playout.mode === 'measure' ? [5, 20] : [1, 5]
     const tone: Tone = err == null ? 'neutral' : err <= good ? 'success' : err <= fair ? 'warning' : 'error'
+    /* While warming the number shows at once; the settling tone only when the error is out of
+       tolerance or a jump happened in this warm-up period (the engine decides). */
+    if (!playout.warm && playout.settling) {
+      const warmInS = playout.warm_s != null && playout.warmup_s != null ? Math.max(0, Math.ceil(playout.warmup_s - playout.warm_s)) : null
+      return { kind: 'playout', tone: 'info', pulse: true, errorMs: err, settling: true, warmInS, ...jc }
+    }
     return { kind: 'playout', tone, pulse: false, errorMs: err, ...jc }
   }
   const common = { count, countTone, count5m: timing.reanchor_count_5m, count30m: timing.reanchor_count_30m }

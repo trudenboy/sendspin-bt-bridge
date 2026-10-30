@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Manual tuning in group sync is now one screen with no steps: Start clicks (stops the group's music after asking, then plays the clicks) with the click type, a volume slider and a latency compensation control per speaker, and Save. Opening the tab starts nothing; changes are heard live, Save keeps them and ends the session, Discard changes puts the old values back, and leaving with unsaved changes asks whether to keep them. Solo and compare-two moved into a collapsed section, and the save-as-profile offer on leaving is gone (profiles are still saved from the Group tab).
+- The speaker's sync error is now shown from the first second instead of a "Warming" chip; a "Settling" tone appears only while the error is out of tolerance or a jump happened, and warm-up ends as soon as the sync has held steady for about 3 seconds (60 seconds at most) instead of always after 60 seconds. A short underrun under one second no longer restarts the warm-up.
+
+### Fixed
+
+- The web UI reconnects by itself after Home Assistant ingress idles; no more stale "connection lost". It polls meanwhile, retries with backoff, reconnects when the tab or network returns, reloads once if the session expired, and offers a Reload button after 30 seconds.
+
 ## [3.1.0-beta.19] - 2026-10-30
 
 ### Added

@@ -151,8 +151,8 @@
         "countTitle": "Resyncs: {count} this session · {m5} in 5 min · {m30} in 30 min",
         "playout": "Playout",
         "playoutTitle": "Measured playout error at the speaker output",
-        "warming": "Warming {s} s",
-        "warmingTitle": "Stream warming up; playout measurement ready in {s} s",
+        "settling": "Settling",
+        "settlingTitle": "Sync is settling; the error is shown as measured and counts as steady within {s} s at most",
         "jumpsTitle": "Playout jumps: {count} this session"
       },
       "signal": {
@@ -1218,7 +1218,7 @@
       "title": "Playout",
       "yes": "Yes",
       "no": "No",
-      "warming": "in {s} s",
+      "settling": "settling, {s} s at most",
       "fallback": "Playout sync fell back to the plain output: {reason}",
       "unknownReason": "unknown reason",
       "rows": {
@@ -1415,7 +1415,8 @@
     "errorNext": "Check that the speaker is in pairing mode and close to the adapter, then try again."
   },
   "connection": {
-    "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."
+    "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date.",
+    "reload": "Reload"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",
@@ -1566,35 +1567,37 @@
     },
     "manual": {
       "title": "Latency compensation",
-      "help": "A larger value makes a speaker play earlier. Changes are written at once.",
+      "help": "A larger value makes a speaker play earlier. Changes are heard at once; Save keeps them.",
       "reset": "Put back the delays from the start",
       "resetDone": "Delays are back to where this tuning started.",
       "minus": "−{n} ms (later)",
       "plus": "+{n} ms (earlier)",
       "valueLabel": "Latency compensation of {name} in ms",
       "departed": "Left the group",
-      "starting": "Starting manual tuning…",
       "startFailed": "Could not start manual tuning ({code}).",
       "busy": "A measurement is running for this group. Finish it on the Measure tab first.",
-      "saveOnLeave": "Save these delays as a profile?",
-      "saveOnLeaveHelp": "The delays stay as they are either way.",
-      "saveConfirm": "Save as profile",
-      "saveDecline": "Don't save",
-      "saveTitle": "Save as profile",
-      "skip": "Skip",
-      "defaultName": "Manual {date}",
+      "saveOnLeave": "Keep your delay changes?",
+      "saveOnLeaveHelp": "You changed the speaker latency compensation and did not save it. Keep the changes, or put back the values from the start of this tuning.",
+      "saveConfirm": "Keep changes",
+      "saveDecline": "Discard changes",
       "nudges": "Adjust {name}",
       "writeForbidden": "Music Assistant refused to change {name}: this account has no permission to change player settings.",
       "writeFailed": "Could not change {name} ({code}). The delay shown is what Music Assistant holds.",
-      "ended": "This tuning ended (it timed out, or was closed on another device). The delays stay as they are.",
-      "startAgain": "Start again",
+      "ended": "This tuning ended (it timed out, or was closed on another device). The delays stay as they are. Press Start clicks to tune again.",
       "measured": "Measured: {ms} ms ({change})",
       "resetMeasured": "Reset to measured",
       "resetMeasuredMember": "Reset {name} to the measured delay",
-      "endedNotice": "Manual tuning ended: the delays stay; the clicks stopped, every speaker is unmuted and the volumes are back.",
-      "prepOf": "Before you listen ({n}/{total}) · {name}",
-      "start": "Start tuning by ear",
-      "startHelp": "Starting stops whatever the group is playing, plays a click track on it and lets you move each speaker's delay. Nothing starts until you press the button."
+      "endedNotice": "Manual tuning ended: the clicks stopped, every speaker is unmuted and the volumes are back.",
+      "startHelp": "Starting stops whatever the group is playing and plays a click track on it. Nothing starts until you press the button.",
+      "startClicks": "Start clicks",
+      "volumes": "Volume",
+      "needStart": "Press Start clicks to adjust.",
+      "save": "Save",
+      "saved": "Saved",
+      "discard": "Discard changes",
+      "unsaved": "Unsaved changes",
+      "listenOne": "Listen to one speaker / compare two",
+      "stillRestoring": "The group is still being restored after the last tuning. Try again in a moment."
     },
     "capture": {
       "errors": {

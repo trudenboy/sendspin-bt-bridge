@@ -53,4 +53,22 @@ describe('ConnectionBanner', () => {
     await nextTick()
     expect(w.text()).toBe('')
   })
+
+  it('offers a Reload button only after the outage has lasted about 30 s', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    const w = mountBanner()
+    bridge.sseConnected = false
+    await nextTick()
+    vi.advanceTimersByTime(10000)
+    await nextTick()
+    expect(w.find('button').exists()).toBe(false)
+    vi.advanceTimersByTime(21000)
+    await nextTick()
+    const button = w.find('button')
+    expect(button.text()).toBe('Reload')
+    await button.trigger('click')
+    expect(reload).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
 })

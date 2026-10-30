@@ -45,8 +45,8 @@ const badge = computed(() => syncBadge(props.device, holdUntil.value != null))
 const baseTitle = computed(() => {
   const kind = badge.value?.kind
   if (kind === 'reanchoring') return t('device.chips.sync.reanchoringTitle')
+  if (kind === 'playout' && badge.value?.settling) return t('device.chips.sync.settlingTitle', { s: badge.value?.warmInS ?? 0 })
   if (kind === 'playout') return t('device.chips.sync.playoutTitle')
-  if (kind === 'warming') return t('device.chips.sync.warmingTitle', { s: badge.value?.warmInS ?? 0 })
   return t('device.chips.sync.title')
 })
 /* One extra line when the air sensor is on and not "off". */
@@ -61,12 +61,12 @@ const titleKey = computed(() => {
 const labelText = computed(() => {
   const kind = badge.value?.kind
   if (kind === 'reanchoring') return t('device.chips.sync.reanchoring')
+  if (kind === 'playout' && badge.value?.settling) return t('device.chips.sync.settling')
   if (kind === 'playout' && technicalDetails.value) return t('device.chips.sync.playout')
-  if (kind === 'warming' && technicalDetails.value) return t('device.chips.sync.warming', { s: badge.value?.warmInS ?? 0 })
   return t('device.chips.sync.label')
 })
 const dash = (n: number | null) => (n == null ? '—' : String(n))
-const isPlayout = computed(() => badge.value?.kind === 'playout' || badge.value?.kind === 'warming')
+const isPlayout = computed(() => badge.value?.kind === 'playout')
 const countTitle = computed(() =>
   badge.value && isPlayout.value
     ? t('device.chips.sync.jumpsTitle', { count: badge.value.count })

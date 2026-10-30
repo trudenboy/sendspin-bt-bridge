@@ -102,6 +102,12 @@ BASELINE_STABLE_US = 5_000.0
 BASELINE_TIMEOUT_READINGS = 60  # 6 s
 BASELINE_WARN_US = 50_000.0
 BASELINE_MIN_US = 2_000.0  # a smaller baseline is taken as 0
+# Warm-up ends early once the sync has converged: the baseline is settled, the air bias (loop
+# with a feed) is seeded, and the error has stayed within the mode's tolerance (JUMP_US) for
+# WARM_CONVERGED_S of consecutive readings. ``warmup_s`` stays as the upper timeout. An
+# underrun or stall shorter than WARM_OUTAGE_S does not restart the warm clock.
+WARM_CONVERGED_S = 3.0
+WARM_OUTAGE_S = 1.0
 _BASELINE_REASONS = ("underrun", "stall")
 
 
@@ -177,6 +183,10 @@ class PlayoutEngine:
         # the port for placements, so one glitched reading does not move one.
         self._offsets: deque[float] = deque(maxlen=PREDICT_READINGS)
         self._warm_from_us: float | None = None
+        self._warm_converged = False  # latched until the warm clock restarts
+        self._conv_since_us: float | None = None  # start of the current in-tolerance run
+        self._outage_from_us: float | None = None  # first reading of the current stall/underrun
+        self._warm_jumps = 0  # placements/jumps (not the start placement) in this warm period
         self._now_us: float | None = None
         self._late_start_us: float | None = None
         self._started = False  # the start placement was requested
@@ -452,13 +462,17 @@ class PlayoutEngine:
         if not (r.stalled or self._in_underrun):
             self._offsets.append(r.x_port_ns / 1000.0 - r.t_us)
         if r.stalled or self._in_underrun:
-            self._warm_from_us = r.t_us
+            self._conv_since_us = None
+            if self._outage_from_us is None:
+                self._outage_from_us = r.t_us
+            if r.t_us - self._outage_from_us >= WARM_OUTAGE_S * 1e6:
+                self._restart_warm(r.t_us)  # a short outage keeps the warm state
         if r.recovered:
+            self._outage_from_us = None
             # Place once the port runs on our data again, with k final (not at the underrun
             # reading itself: data that resumes later than it would be placed off by the gap).
             reason = "stall" if self._suspended else "underrun"
             self._suspended = self._in_underrun = False
-            self._warm_from_us = r.t_us
             self._started = True
             self._request_placement(reason)
             return
@@ -491,6 +505,7 @@ class PlayoutEngine:
         rho = self._controller.rate_estimate
         e_w = r.t_us + (self._reading_x_w_ns - r.x_port_ns) / 1000.0 * (1.0 + rho) - s_w
         if self._baseline_samples is not None:
+            self._conv_since_us = None
             if self._settle_x_ns is not None and r.x_port_ns < self._settle_x_ns:
                 return  # the port still plays audio from before the placement
             if not self._measure_baseline(e_w - (self._b_dom or 0.0)):
@@ -536,6 +551,38 @@ class PlayoutEngine:
             self._pending_jump_us = d.jump_us
             self._pending_jump_reason = "steady"
         self._error_ema_us = None if d.error_us is None else d.error_us + self._baseline_us
+        self._update_warm(r.t_us)
+
+    # -- warm-up --------------------------------------------------------------------------
+
+    def _restart_warm(self, t_us: float) -> None:
+        self._warm_from_us = t_us
+        self._warm_converged = False
+        self._conv_since_us = None
+        self._warm_jumps = 0
+
+    def _error_in_tolerance(self) -> bool:
+        e = self._error_ema_us
+        return e is not None and abs(e) <= JUMP_US[self._settings.mode]
+
+    def _error_in_tolerance_or_unknown(self) -> bool:
+        return self._error_ema_us is None or self._error_in_tolerance()
+
+    def _update_warm(self, t_us: float) -> None:
+        """Latch ``converged`` after WARM_CONVERGED_S of in-tolerance readings (spec: warm-up)."""
+        if self._warm_converged:
+            return
+        bias = self._bias
+        # Wait for the bias only while it can still seed or has broken (seeding/held need a
+        # target); "none" (no target, internal_error) never seeds, so it does not block.
+        seeded = bias is None or self._air(lambda: bias.state not in ("seeding", "held"), True)
+        if not (seeded and self._baseline_samples is None and self._error_in_tolerance()):
+            self._conv_since_us = None
+            return
+        if self._conv_since_us is None:
+            self._conv_since_us = t_us
+        elif t_us - self._conv_since_us >= WARM_CONVERGED_S * 1e6:
+            self._warm_converged = True
 
     # -- the air bias ---------------------------------------------------------------------
 
@@ -737,6 +784,12 @@ class PlayoutEngine:
         warm_s = None
         if self._warm_from_us is not None and self._now_us is not None:
             warm_s = round(max(0.0, self._now_us - self._warm_from_us) / 1e6, 1)
+        warm_reason: str | None = None
+        if self._warm_converged:
+            warm_reason = "converged"
+        elif warm_s is not None and warm_s >= self._settings.warmup_s:
+            warm_reason = "timeout"
+        settling = warm_reason is None and (self._warm_jumps > 0 or not self._error_in_tolerance_or_unknown())
         host_latency_ms = None
         if self._reading is not None:
             host_latency_ms = round((self._reading_x_w_ns - self._reading.x_port_ns) / 1e6, 3)
@@ -753,9 +806,11 @@ class PlayoutEngine:
             "pa_latency_ms": None,
             "clock_slew_ppm": None,
             "k_ns": self._observer.k_ns,
-            "warm": warm_s is not None and warm_s >= self._settings.warmup_s,
+            "warm": warm_reason is not None,
             "warm_s": warm_s,
             "warmup_s": self._settings.warmup_s,
+            "warm_reason": warm_reason,
+            "settling": settling,
             "hold_reason": None,
             "hold_left_s": None,
             "late_start_ms": None if self._late_start_us is None else round(self._late_start_us / 1000.0, 3),
@@ -858,6 +913,9 @@ class PlayoutEngine:
         ``residual_us`` and in-flight audio settles."""
         logger.info("playout jump: %s, %.1f ms", reason, size_us / 1000.0)
         self._stats.jump(self._wall_iso(), size_us, reason)
+        if reason != "start":
+            self._warm_jumps += 1
+            self._conv_since_us = None
         self._stats.reset_window()
         self._error_ema_us = residual_us
         self._degraded = False

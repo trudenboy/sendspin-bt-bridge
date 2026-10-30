@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RotateCcw } from 'lucide-vue-next'
+import { CircleStop, Play, RotateCcw } from 'lucide-vue-next'
 import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
@@ -11,13 +11,22 @@ import type { SyncSound } from '@/api/types'
 import { speakerName } from '@/sync/names'
 import { useCountdown } from '@/sync/countdown'
 import { formatClock } from '@/sync/format'
-import { stopMusicAndStartClicks } from '@/sync/startClicks'
-import StepClicker from './StepClicker.vue'
-import StepVolume from './StepVolume.vue'
+import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 
 const props = defineProps<{
-  /** The group is ready already (the measurement prepared it): straight to listening and editing. */
-  skipPrep?: boolean
+  /**
+   * The Manual tab's one-screen layout: start/stop clicks, sound, volumes, delays, Save. Without it
+   * (the measurement's tune step) the group is ready already: listening and editing only.
+   */
+  simple?: boolean
+  /** Simple layout: the session is being created. */
+  starting?: boolean
+  /** Simple layout: the delays were just saved (the session ended). */
+  saved?: boolean
+  /** Simple layout: why starting failed, already translated. */
+  startError?: string
+  /** Simple layout: nothing here may start or change anything (another client tunes this group). */
+  disabled?: boolean
   /** Member id -> the delay the measurement found (semi-automatic): shown next to the field, with a reset. */
   measured?: Record<string, number>
   /** Member id -> the delay before this session changed anything: "Reset" goes back to it. */
@@ -27,6 +36,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** Whether any delay differs from where this session started (the view offers a profile on leaving). */
   changed: [boolean]
+  /** Simple layout: Start clicks (with the sound picked): the view starts the session and the clicks. */
+  start: [sound: SyncSound]
+  save: []
+  discard: []
 }>()
 
 const { t } = useI18n()
@@ -37,7 +50,7 @@ const AB_MS = 4000
 
 const session = computed(() => sync.session)
 const departed = computed(() => new Set(session.value?.departed ?? []))
-const members = computed(() => session.value?.members ?? [])
+const members = computed(() => session.value?.members ?? (props.simple ? (sync.group?.members ?? []) : []))
 const present = computed(() => members.value.filter((m) => !departed.value.has(m.ma_player_id)))
 const nameOf = (id: string) => speakerName(members.value.find((m) => m.ma_player_id === id)?.name, id)
 
@@ -45,7 +58,7 @@ const nameOf = (id: string) => speakerName(members.value.find((m) => m.ma_player
 
 /** What is on screen (and written), and where the session started; seeded once per member. */
 const values = reactive<Record<string, number>>({})
-const initial: Record<string, number> = {}
+const initial = reactive<Record<string, number>>({})
 
 watch(
   members,
@@ -64,6 +77,21 @@ watch(
   },
   { immediate: true },
 )
+
+/*
+ * Simple layout: "unsaved" is measured against where the session started; when a session starts or
+ * ends, what is on screen is the new starting point (after Save the delays are the held ones).
+ */
+/** The session while it runs (a finished one that is restoring the group no longer edits anything). */
+const running = computed(() => {
+  const s = session.value
+  return s && !ENDED.has(s.state) && s.state !== 'restoring' ? s : null
+})
+const activeId = computed(() => running.value?.id ?? null)
+watch(activeId, () => {
+  if (!props.simple) return
+  for (const id of Object.keys(initial)) initial[id] = values[id] ?? initial[id]!
+})
 
 /** A live write Music Assistant refused: say so, and show what it really holds. */
 const writeError = ref('')
@@ -107,14 +135,13 @@ function reset() {
   note.value = t('sync.manual.resetDone')
 }
 
-/* -- getting the group ready: stop it, start the clicker, set the volumes ----------------- */
+/** Simple layout: put the session-start delays back, then the view ends the session. */
+function discard() {
+  reset()
+  emit('discard')
+}
 
-type Prep = 'clicker' | 'volume' | 'ready'
-const PREP_STEPS = ['clicker', 'volume'] as const
-/** Where the preparation stands; a session whose clicks play already goes straight to tuning. */
-const prep = ref<Prep>(props.skipPrep || session.value?.clicker_playing ? 'ready' : 'clicker')
-const prepBusy = ref(false)
-const prepError = ref('')
+/* -- volumes (simple layout) ------------------------------------------------------- */
 
 function failText(e: unknown) {
   const code = errorCode(e)
@@ -124,32 +151,18 @@ function failText(e: unknown) {
   return t('sync.listen.failed', { code })
 }
 
-async function prepCall(call: () => Promise<unknown>) {
-  if (prepBusy.value) return
-  prepBusy.value = true
-  prepError.value = ''
-  try {
-    await call()
-  } catch (e) {
-    prepError.value = failText(e)
-  } finally {
-    prepBusy.value = false
-  }
-}
-
-function toPrep(next: Prep) {
-  prepError.value = ''
-  prep.value = next
-}
-
+const volumeError = ref('')
 async function setVolume(member: string, level: number) {
-  prepError.value = ''
+  volumeError.value = ''
   try {
     await sync.volume(member, level)
   } catch (e) {
-    prepError.value = failText(e)
+    volumeError.value = failText(e)
   }
 }
+/** Music Assistant's volume of a member: the session's reading once it runs, the group's before. */
+const volumeOf = (id: string, fallback: number | null | undefined) =>
+  running.value ? (running.value.volumes?.[id] ?? null) : (fallback ?? null)
 
 /* -- listening --------------------------------------------------------------------- */
 
@@ -188,6 +201,11 @@ watch(
 )
 
 function onSignal(action: 'start' | 'stop') {
+  if (action === 'start' && props.simple) {
+    failure.value = ''
+    emit('start', sound.value)
+    return
+  }
   if (action === 'stop') stopAb()
   signalWanted.value = action === 'start'
   // "Stop clicks" stops our clicker only: music someone started meanwhile plays on
@@ -209,9 +227,13 @@ watch(
     soundWanted.value = null
   },
 )
+watch(activeId, (id) => {
+  if (!id && props.simple) soundWanted.value = null
+})
 
 function onSound(next: SyncSound) {
   soundWanted.value = next
+  if (props.simple && !running.value) return  // picked before the start: Start clicks carries it
   void run(sync.sound(next)).then((ok) => {
     if (!ok) soundWanted.value = null
   })
@@ -265,36 +287,65 @@ const listenStatus = computed(() => {
 </script>
 
 <template>
-  <div class="mt-4 flex flex-col gap-4">
-    <SbCard v-if="prep !== 'ready'" data-manual-prep>
-      <h2 class="mb-3 text-sm font-medium text-text-secondary">
-        {{ t('sync.manual.prepOf', { n: (PREP_STEPS as readonly string[]).indexOf(prep) + 1, total: PREP_STEPS.length, name: t(`sync.wizard.steps.${prep}`) }) }}
-      </h2>
-      <StepClicker
-        v-if="prep === 'clicker'"
-        :group-state="session?.group_state ?? null"
-        :clicker-playing="!!session?.clicker_playing"
-        :started="(session?.clicker_starts ?? 0) > 0"
-        :left-s="leftS"
-        :busy="prepBusy"
-        :error="prepError"
-        @start="prepCall(() => stopMusicAndStartClicks(sync, { state: session?.group_state ?? null, clickerPlaying: !!session?.clicker_playing }))"
-        @next="toPrep('volume')"
-        cancel-label="skip"
-        @cancel="toPrep('ready')"
-      />
-      <StepVolume
-        v-else
-        :members="present"
-        :volumes="session?.volumes ?? {}"
-        :error="prepError"
-        @volume="setVolume"
-        @next="toPrep('ready')"
-        @back="toPrep('clicker')"
-        cancel-label="skip"
-        @cancel="toPrep('ready')"
-      />
-    </SbCard>
+  <div class="mt-4 flex flex-col gap-4" :data-manual-simple="simple || undefined">
+    <template v-if="simple">
+      <SbCard>
+        <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.listen.title') }}</h2>
+        <div class="flex flex-col gap-3">
+          <SbButton
+            v-if="!signalRunning"
+            type="button"
+            data-manual-start
+            data-signal
+            :loading="starting"
+            :disabled="disabled || starting"
+            @click="onSignal('start')"
+          >
+            <template #icon-left><Play aria-hidden="true" /></template>
+            {{ t('sync.manual.startClicks') }}
+          </SbButton>
+          <SbButton v-else type="button" variant="outline" data-manual-stop data-signal :disabled="disabled" @click="onSignal('stop')">
+            <template #icon-left><CircleStop aria-hidden="true" /></template>
+            {{ t('sync.listen.stop') }}
+          </SbButton>
+          <p class="text-xs text-text-secondary">{{ t('sync.manual.startHelp') }}</p>
+          <SoundPicker :model-value="sound" :disabled="disabled" @update:model-value="onSound" />
+        </div>
+        <p data-listen-status role="status" aria-live="polite" class="mt-3 text-sm text-text-secondary">
+          {{ listenStatus }}<template v-if="signalRunning && leftS != null"> {{ t('sync.prep.clicker.left', { time: formatClock(leftS) }) }}</template><template v-if="note"> {{ note }}</template>
+        </p>
+        <p v-if="startError || failure" data-listen-error role="alert" class="mt-2 text-sm text-error">{{ startError || failure }}</p>
+      </SbCard>
+
+      <SbCard>
+        <h2 class="mb-1 text-sm font-medium text-text-secondary">{{ t('sync.manual.volumes') }}</h2>
+        <p class="mb-2 text-xs text-text-secondary">
+          {{ running ? t('sync.prep.volume.back') : t('sync.manual.needStart') }}
+        </p>
+        <ul class="flex flex-col gap-2">
+          <li v-for="m in present" :key="m.ma_player_id" :data-volume-row="m.ma_player_id" class="flex flex-col gap-1">
+            <span class="flex flex-wrap items-center gap-2">
+              <span :title="m.name" class="min-w-0 truncate text-sm font-medium text-text-primary">{{ nameOf(m.ma_player_id) }}</span>
+              <SbBadge v-if="volumeOf(m.ma_player_id, m.volume) === 0" :data-silent="m.ma_player_id" tone="warning" size="sm">
+                {{ t('sync.prep.volume.silent') }}
+              </SbBadge>
+            </span>
+            <VolumeSlider
+              v-if="volumeOf(m.ma_player_id, m.volume) != null"
+              :mac="m.ma_player_id"
+              :name="nameOf(m.ma_player_id)"
+              :volume="volumeOf(m.ma_player_id, m.volume)!"
+              :muted="false"
+              :mutable="false"
+              :disabled="!running || disabled"
+              @update:volume="setVolume(m.ma_player_id, $event)"
+            />
+            <span v-else class="text-xs text-text-secondary">{{ t('sync.prep.volume.noVolume') }}</span>
+          </li>
+        </ul>
+        <p v-if="volumeError" data-volume-error role="alert" class="mt-2 text-sm text-error">{{ volumeError }}</p>
+      </SbCard>
+    </template>
 
     <SbCard v-else>
       <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.listen.title') }}</h2>
@@ -318,12 +369,13 @@ const listenStatus = computed(() => {
     <SbCard>
       <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-sm font-medium text-text-secondary">{{ t('sync.manual.title') }}</h2>
-        <SbButton type="button" size="sm" variant="outline" data-reset :disabled="changedIds.length === 0" @click="reset">
+        <SbButton v-if="!simple" type="button" size="sm" variant="outline" data-reset :disabled="changedIds.length === 0" @click="reset">
           <template #icon-left><RotateCcw aria-hidden="true" /></template>
           {{ t('sync.manual.reset') }}
         </SbButton>
       </div>
       <p class="mb-2 text-xs text-text-secondary">{{ t('sync.manual.help') }}</p>
+      <p v-if="simple && !running" data-needs-start class="mb-2 text-xs text-text-secondary">{{ t('sync.manual.needStart') }}</p>
       <p v-if="writeError" data-write-error role="alert" class="mb-2 text-sm text-error">{{ writeError }}</p>
       <ul class="divide-y divide-border">
         <li v-for="m in members" :key="m.ma_player_id">
@@ -341,6 +393,7 @@ const listenStatus = computed(() => {
             :model-value="values[m.ma_player_id] ?? 0"
             :measured="measured?.[m.ma_player_id]"
             :before="initial[m.ma_player_id]"
+            :disabled="simple && (!running || disabled)"
             @update:model-value="write(m.ma_player_id, $event)"
           />
           <div v-else data-fixed-row class="flex items-center justify-between gap-3 py-3">
@@ -349,6 +402,35 @@ const listenStatus = computed(() => {
           </div>
         </li>
       </ul>
+      <template v-if="simple">
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <SbButton type="button" data-manual-save :disabled="!running || disabled" @click="emit('save')">
+            {{ t('sync.manual.save') }}
+          </SbButton>
+          <SbButton type="button" variant="outline" data-manual-discard :disabled="!running || disabled" @click="discard">
+            {{ t('sync.manual.discard') }}
+          </SbButton>
+          <span v-if="saved && !running" data-manual-saved role="status" class="text-sm text-success">{{ t('sync.manual.saved') }}</span>
+          <span v-else-if="changedIds.length" data-manual-unsaved class="text-sm text-text-secondary">{{ t('sync.manual.unsaved') }}</span>
+        </div>
+      </template>
     </SbCard>
+
+    <details v-if="simple" data-manual-extras class="rounded-(--radius-card) border border-border bg-surface-card px-4 py-3">
+      <summary class="cursor-pointer text-sm font-medium text-text-secondary">{{ t('sync.manual.listenOne') }}</summary>
+      <div class="mt-3">
+        <ListeningBar
+          hide-signal
+          :members="present"
+          :signal-running="signalRunning"
+          :solo-ready="soloReady"
+          :soloed="session?.soloed ?? null"
+          :alternating="abPair"
+          @signal="onSignal"
+          @solo="onSolo"
+          @ab="onAb"
+        />
+      </div>
+    </details>
   </div>
 </template>

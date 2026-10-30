@@ -74,22 +74,45 @@ describe('SyncView manual tuning', () => {
   })
   afterEach(() => { document.body.innerHTML = '' })
 
-  it('never starts a session by just opening the manual tab; the start button does', async () => {
+  it('shows the whole manual screen at once but starts nothing until Start clicks is pressed', async () => {
     const { w } = await mountView()
     await openTab(w)
     expect(api.createSession).not.toHaveBeenCalled()
-    expect(w.find('[data-delay-row]').exists()).toBe(false)
+    expect(api.sessionSignal).not.toHaveBeenCalled()
+    expect(w.findAll('[data-delay-row]')).toHaveLength(1)
+    expect(w.get('[data-delay-row] input[type="number"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-volume-row]').exists()).toBe(true)
+    expect(w.find('[data-manual-save]').exists()).toBe(true)
     await w.get('[data-manual-start]').trigger('click'); await flushPromises()
     expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'manual', point: 'device' })
-    expect(w.findAll('[data-delay-row]')).toHaveLength(1)
+    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'start')
+    expect(w.get('[data-delay-row] input[type="number"]').attributes('disabled')).toBeUndefined()
     w.unmount()
   })
 
-  it('starts the session from the Group tab entry button (an explicit request)', async () => {
+  it('the Group tab entry button only opens the Manual tab', async () => {
     const { w } = await mountView()
     await w.get('[data-action="manual"]').trigger('click'); await flushPromises()
-    expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'manual', point: 'device' })
-    expect(w.findAll('[data-delay-row]')).toHaveLength(1)
+    expect(api.createSession).not.toHaveBeenCalled()
+    expect(w.get('[role="tab"][data-tab-id="manual"]').attributes('aria-selected')).toBe('true')
+    expect(w.find('[data-manual-start]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('asks before stopping a playing group; declining changes nothing and leaves no session open', async () => {
+    vi.mocked(api.createSession).mockResolvedValue({ ...structuredClone(session), group_state: 'playing' } as never)
+    vi.mocked(confirmDialog).mockResolvedValue(false)
+    const { w } = await mountView()
+    await openTab(w)
+    await w.get('[data-manual-start]').trigger('click'); await flushPromises()
+    expect(confirmDialog).toHaveBeenCalledTimes(1)
+    expect(api.sessionSignal).not.toHaveBeenCalled()
+    expect(api.endSession).toHaveBeenCalledWith('s1')
+    expect(w.find('[data-manual-ended]').exists()).toBe(false)
+    // accepted: the group is stopped, then the clicks start
+    vi.mocked(confirmDialog).mockResolvedValue(true)
+    await w.get('[data-manual-start]').trigger('click'); await flushPromises()
+    expect(vi.mocked(api.sessionSignal).mock.calls.map((c) => c[1])).toEqual(['stop', 'start'])
     w.unmount()
   })
 
@@ -137,46 +160,52 @@ describe('SyncView manual tuning', () => {
     w.unmount()
   })
 
-  it('offers to save the changed delays as a profile, then ends the session', async () => {
+  it('Save keeps the delays, ends the session and says Saved', async () => {
+    const { w } = await mountView()
+    await openManual(w)
+    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
+    await w.get('[data-manual-save]').trigger('click'); await flushPromises()
+    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 130)
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
+    expect(confirmDialog).not.toHaveBeenCalled()
+    expect(w.get('[data-manual-saved]').text()).toBe('Saved')
+    expect(w.find('[data-manual-ended]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('Discard changes puts the start delays back and ends the session', async () => {
+    const { w } = await mountView()
+    await openManual(w)
+    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
+    await w.get('[data-manual-discard]').trigger('click'); await flushPromises()
+    expect(api.sessionDelay).toHaveBeenLastCalledWith('s1', 'a', 120)
+    expect(api.finishSession).toHaveBeenCalledWith('s1')
+    expect(w.find('[data-manual-saved]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('asks about unsaved changes when the tab is left: keep ends the session, the delays stay', async () => {
     const { w } = await mountView()
     await openManual(w)
     await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
     await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
     await flushPromises()
     expect(confirmDialog).toHaveBeenCalledTimes(1)
-    expect(api.finishSession).not.toHaveBeenCalled()
-    const name = document.body.querySelector<HTMLInputElement>('[data-manual-profile-name]')!
-    name.value = 'Evening'
-    name.dispatchEvent(new Event('input'))
-    ;(document.body.querySelector('[data-manual-profile-save]') as HTMLElement).click()
-    await flushPromises()
-    expect(api.captureProfile).toHaveBeenCalledWith('g', { name: 'Evening', kind: 'device' })
+    expect(api.sessionDelay).toHaveBeenCalledTimes(1)
+    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 130)
     expect(api.finishSession).toHaveBeenCalledWith('s1')
     w.unmount()
   })
 
-  it('ends the session when the save offer is declined', async () => {
+  it('puts the start delays back when the unsaved changes are declined on leaving', async () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
     const { w } = await mountView()
     await openManual(w)
     await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
     await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
     await flushPromises()
-    expect(api.captureProfile).not.toHaveBeenCalled()
+    expect(api.sessionDelay).toHaveBeenLastCalledWith('s1', 'a', 120)
     expect(api.finishSession).toHaveBeenCalledWith('s1')
-    w.unmount()
-  })
-
-  it('offers to save before the page is left, then ends the session', async () => {
-    vi.mocked(confirmDialog).mockResolvedValue(false)
-    const { w, router } = await mountView()
-    await openManual(w)
-    await w.get('[data-delay-row] [aria-label="+10 ms (earlier)"]').trigger('click')
-    await router.push('/groups')
-    await flushPromises()
-    expect(confirmDialog).toHaveBeenCalledTimes(1)
-    expect(api.finishSession).toHaveBeenCalledWith('s1')
-    expect(router.currentRoute.value.name).toBe('groups')
     w.unmount()
   })
 
@@ -186,14 +215,13 @@ describe('SyncView manual tuning', () => {
     const store = useSyncStore()
     store.applyEvent({ ...store.session!, state: 'cancelled' } as never)
     await flushPromises()
-    expect(w.find('[data-delay-row]').exists()).toBe(false)
-    const ended = w.get('[data-manual-ended]')
+    expect(w.get('[data-manual-ended]').text()).toContain('This tuning ended')
+    expect(w.get('[data-delay-row] input[type="number"]').attributes('disabled')).toBeDefined()
     expect(api.createSession).toHaveBeenCalledTimes(1)
-    await ended.get('button').trigger('click')
+    await w.get('[data-manual-start]').trigger('click')
     await flushPromises()
     expect(api.createSession).toHaveBeenCalledTimes(2)
     expect(w.find('[data-manual-ended]').exists()).toBe(false)
-    expect(w.findAll('[data-delay-row]')).toHaveLength(1)
     w.unmount()
   })
 
