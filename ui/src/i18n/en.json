@@ -9,6 +9,7 @@
     "github": "GitHub repository",
     "help": "Help",
     "preferences": "Preferences",
+    "display": "Display",
     "language": "Language",
     "theme": "Theme",
     "themes": {
@@ -686,7 +687,7 @@
   },
   "settings": {
     "title": "Settings",
-    "showAdvanced": "Show advanced settings",
+    "showAdvanced": "Show technical details",
     "unsaved": "Unsaved changes",
     "save": "Save",
     "discard": "Discard",
@@ -701,6 +702,10 @@
       "h": "h"
     },
     "auto": "Automatic",
+    "embedded": {
+      "security": "Signed in through Home Assistant. Sign-in and access are managed there.",
+      "updates": "Updates come from the Home Assistant add-on store."
+    },
     "sections": {
       "general": {
         "title": "General",
@@ -845,6 +850,10 @@
       "BT_MAX_RECONNECT_FAILS": {
         "label": "Reconnect attempts",
         "help": "Failed reconnects in a row before the bridge stops trying. 0 keeps trying."
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "Technical details by default",
+        "help": "Show signal levels, sync counters, server IDs and advanced settings in browsers that have not chosen. Each browser can change this from its preferences menu."
       },
       "RSSI_BADGE": {
         "label": "Signal strength",

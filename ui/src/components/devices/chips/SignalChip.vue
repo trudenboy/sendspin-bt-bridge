@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { signalInfo } from '@/utils/deviceChips'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { useNow } from '@/composables/useNow'
 import type { Device } from '@/api/types'
 
@@ -21,7 +22,7 @@ const HEIGHTS = ['h-1', 'h-1.5', 'h-2', 'h-2.5']
 
 <template>
   <span
-    v-if="info"
+    v-if="technicalDetails && info"
     data-chip="signal"
     class="inline-flex items-center gap-1 text-xs"
     :class="color"

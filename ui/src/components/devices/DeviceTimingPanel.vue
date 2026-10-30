@@ -12,6 +12,7 @@ import { SbBadge, SbButton } from '@/kit'
 import SettingField from '@/components/settings/SettingField.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS } from '@/settings/device'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { signedMs } from '@/utils/deviceChips'
 import type { Device } from '@/api/types'
 
@@ -22,7 +23,7 @@ const bridge = useBridgeStore()
 const notifications = useNotificationStore()
 
 const fields = DEVICE_GROUPS.find((g) => g.id === 'sync')!.fields
-const showAdvanced = ref(false)
+const showAdvanced = technicalDetails
 
 /* Live values: timing edits are applied at once, no save step. */
 function read(key: string) {
@@ -266,7 +267,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
       </SettingsRow>
     </div>
 
-    <details data-timing-details class="mt-4 rounded-(--radius-card) border border-border">
+    <details v-if="technicalDetails" data-timing-details class="mt-4 rounded-(--radius-card) border border-border">
       <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-text-primary">{{ t('timing.details') }}</summary>
       <div class="px-3 pb-3">
         <div class="divide-y divide-border">
@@ -362,10 +363,6 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
       </p>
     </section>
 
-    <label class="mt-4 flex items-center gap-2 text-sm text-text-secondary">
-      <input v-model="showAdvanced" type="checkbox" class="accent-primary" />
-      {{ t('settings.showAdvanced') }}
-    </label>
       </div>
     </details>
   </div>

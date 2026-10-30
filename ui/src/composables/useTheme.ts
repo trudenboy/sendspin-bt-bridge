@@ -1,4 +1,4 @@
-import { ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { hostDocument, readHomeAssistantTheme, type HomeAssistantTheme } from './haTheme'
 
 type ThemeMode = 'light' | 'dark' | 'auto'
@@ -18,6 +18,9 @@ const mode = ref<ThemeMode>(storedMode())
 const resolved = ref<'light' | 'dark'>('light')
 /** Home Assistant's theme when the page runs in its ingress panel. */
 const homeAssistant = ref<HomeAssistantTheme | null>(null)
+
+/** Running inside Home Assistant's panel (ingress). */
+const embedded = computed(() => homeAssistant.value !== null)
 
 function applyTheme() {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -75,5 +78,5 @@ export function useTheme() {
     watchEffect(applyTheme)
   }
 
-  return { mode, resolved, homeAssistant, toggleTheme }
+  return { mode, resolved, homeAssistant, embedded, toggleTheme }
 }

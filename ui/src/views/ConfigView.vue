@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTheme } from '@/composables/useTheme'
+import { technicalDetails, setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { speakerName } from '@/utils/speakerName'
 import { confirmAction } from '@/composables/useActionPolicy'
 import { computed, nextTick, onMounted, ref, type Component } from 'vue'
@@ -64,23 +66,11 @@ const PARTS: Record<SectionComponent, Component> = {
   backup: BackupSection,
 }
 
-const ADVANCED_KEY = 'sendspin-ui:settings-advanced'
-function readAdvanced() {
-  try {
-    return localStorage.getItem(ADVANCED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-const showAdvanced = ref(readAdvanced())
-function setAdvanced(v: boolean) {
-  showAdvanced.value = v
-  try {
-    localStorage.setItem(ADVANCED_KEY, v ? '1' : '0')
-  } catch {
-    /* remembered for this visit only */
-  }
-}
+const { embedded } = useTheme()
+/* Inside Home Assistant these two sections are Home Assistant's business, not the bridge's. */
+const HA_OWNED: Record<string, string> = { security: 'settings.embedded.security', updates: 'settings.embedded.updates' }
+const showAdvanced = technicalDetails
+const setAdvanced = (v: boolean) => setTechnicalDetails(v)
 
 const doc = computed(() => (configStore.config ?? {}) as ConfigDoc)
 
@@ -271,7 +261,10 @@ onMounted(async () => {
               <p class="mt-1 text-sm text-text-secondary">{{ t(`settings.sections.${s.id}.description`) }}</p>
             </div>
           </header>
-          <div class="divide-y divide-border px-4 pb-1 sm:px-5">
+          <p v-if="embedded && HA_OWNED[s.id]" class="px-4 py-4 text-sm text-text-primary sm:px-5" :data-embedded-note="s.id">
+            {{ t(HA_OWNED[s.id]!) }}
+          </p>
+          <div v-else class="divide-y divide-border px-4 pb-1 sm:px-5">
             <template v-if="partsShown(s)">
               <component :is="PARTS[part]" v-for="part in s.before ?? []" :key="part" />
             </template>

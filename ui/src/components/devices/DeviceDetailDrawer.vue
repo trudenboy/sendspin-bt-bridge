@@ -18,6 +18,7 @@ import { ApiError } from '@/api/client'
 import DeviceSettingsPanel from './DeviceSettingsPanel.vue'
 import DeviceTimingPanel from './DeviceTimingPanel.vue'
 import type { Device } from '@/api/types'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { canDo } from '@/utils/supportedActions'
 import { releaseKind } from '@/utils/deviceStatusText'
 import { ChevronDown } from 'lucide-vue-next'
@@ -267,9 +268,9 @@ function onPrimary() {
               </SbDropdown>
             </div>
 
-            <div v-if="serverInfo" data-server-details class="space-y-2 text-sm">
-              <span class="text-text-secondary">{{ t('drawer.server.title') }}</span>
-              <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <div v-if="serverInfo && (technicalDetails || serverInfo.foreign)" data-server-details class="space-y-2 text-sm">
+              <span v-if="technicalDetails" class="text-text-secondary">{{ t('drawer.server.title') }}</span>
+              <dl v-if="technicalDetails" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                 <template v-for="row in serverInfo.rows" :key="row.key">
                   <dt class="text-text-secondary">{{ t(`drawer.server.${row.key}`) }}</dt>
                   <dd class="min-w-0 break-all text-text-primary" :class="row.mono ? 'font-mono text-xs' : ''">{{ row.value }}</dd>
@@ -290,7 +291,7 @@ function onPrimary() {
             </div>
 
             <!-- The audio path, from Music Assistant to the speaker -->
-            <section data-audio-path class="border-t border-border pt-4">
+            <section v-if="technicalDetails" data-audio-path class="border-t border-border pt-4">
               <h4 class="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
                 {{ t('drawer.overview.audioPath') }}
               </h4>

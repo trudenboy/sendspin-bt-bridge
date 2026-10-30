@@ -185,3 +185,10 @@ body {
     transition-duration: 1ms !important;
   }
 }
+
+:root {
+  --sb-header-h: 4rem;
+}
+:root[data-embedded] {
+  --sb-header-h: 2.75rem;
+}

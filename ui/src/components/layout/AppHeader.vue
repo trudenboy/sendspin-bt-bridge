@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { technicalDetails, setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { useTheme } from '@/composables/useTheme'
 import { useBridgeStore } from '@/stores/bridge'
 import { useUpdateStore } from '@/stores/update'
@@ -11,11 +12,12 @@ import { shortcutsOpen } from '@/composables/useKeyboardShortcuts'
 import { CircleHelp, SlidersHorizontal, ArrowUpCircle, Heart } from 'lucide-vue-next'
 import logoUrl from '@/assets/bridge-logo.svg'
 import { tServer, type ServerText } from '@/i18n/server'
+import { fleetSummary } from '@/utils/fleetSummary'
 import { describeStatus } from '@/composables/useStatusState'
 
 const { t, te, locale } = useI18n()
 const router = useRouter()
-const { mode } = useTheme()
+const { mode, embedded } = useTheme()
 const bridge = useBridgeStore()
 const update = useUpdateStore()
 
@@ -38,6 +40,26 @@ const statusTitle = computed(() => {
   const account = bridge.maAccount
   const line = account ? describeStatus('ma_account', account, { t: (k, p) => t(k, p ?? {}), te }).full : ''
   return line ? `${t('header.openDiagnostics')} · ${line}` : t('header.openDiagnostics')
+})
+/* Inside Home Assistant the runtime row folds into this pill: its title carries where the bridge runs. */
+const fleet = computed(() => fleetSummary(bridge.devices))
+const runtimeFacts = computed(() => {
+  const info = bridge.bridge
+  if (!info) return ''
+  const runtime = (info.runtime || '').replace(/-/g, '_')
+  const key = `header.runtime.${runtime}`
+  const parts = [
+    runtime && runtime !== 'unknown' ? (te(key) ? t(key) : runtime) : '',
+    info.hostname,
+    info.ip_address,
+    info.uptime ? t('header.upFor', { uptime: info.uptime }) : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+})
+const embeddedPill = computed(() => {
+  const speakers = fleet.value.total > 0 ? t('header.speakersConnected', { n: fleet.value.connected, total: fleet.value.total }) : ''
+  const label = [status.value?.label, speakers].filter(Boolean).join(' · ')
+  return { tone: status.value?.tone ?? 'neutral', label, title: [statusTitle.value, runtimeFacts.value].filter(Boolean).join('\n') }
 })
 const statusClass: Record<string, string> = {
   success: 'tone-success',
@@ -70,8 +92,8 @@ const iconButton =
 
 <template>
   <header class="fixed top-0 right-0 left-0 z-30 border-b border-border bg-surface-card">
-    <div class="flex h-16 items-center gap-2 px-4 sm:gap-3 sm:px-6">
-      <router-link to="/" class="flex min-w-0 shrink items-center gap-2.5" :aria-label="t('app.title')">
+    <div class="flex items-center gap-2 px-4 sm:gap-3 sm:px-6" :class="embedded ? 'h-11' : 'h-16'">
+      <router-link v-if="!embedded" to="/" class="flex min-w-0 shrink items-center gap-2.5" :aria-label="t('app.title')">
         <img :src="logoUrl" alt="" class="h-7 w-auto shrink-0" width="53" height="28" />
         <span class="min-w-0 truncate text-base font-semibold text-text-primary sm:shrink-0 sm:text-lg">{{ t('app.title') }}</span>
         <span
@@ -81,9 +103,21 @@ const iconButton =
         >{{ bridgeName }}</span>
       </router-link>
 
-      <div class="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+      <div class="ml-auto flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
         <button
-          v-if="status"
+          v-if="embedded && embeddedPill.label"
+          type="button"
+          data-status-pill
+          class="inline-flex min-w-0 max-w-[60vw] items-center gap-1.5 truncate rounded-full px-3 py-1 text-xs font-medium"
+          :class="statusClass[embeddedPill.tone] ?? 'tone-neutral'"
+          :title="embeddedPill.title"
+          @click="router.push('/diagnostics')"
+        >
+          <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
+          <span class="truncate">{{ embeddedPill.label }}</span>
+        </button>
+        <button
+          v-else-if="status"
           type="button"
           class="hidden max-w-64 items-center gap-1.5 truncate rounded-full px-3 py-1 text-xs font-medium md:inline-flex"
           :class="statusClass[status.tone] ?? 'tone-neutral'"
@@ -107,6 +141,7 @@ const iconButton =
         </button>
 
         <a
+          v-if="!embedded"
           :href="SPONSOR_URL"
           target="_blank"
           rel="noopener noreferrer"
@@ -145,6 +180,10 @@ const iconButton =
           <p class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.theme') }}</p>
           <SbDropdownItem v-for="m in ['auto', 'light', 'dark'] as const" :key="m" @click="mode = m">
             <span :class="mode === m ? 'font-medium text-primary-text' : ''">{{ t(`header.themes.${m}`) }}</span>
+          </SbDropdownItem>
+          <p class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.display') }}</p>
+          <SbDropdownItem data-technical-toggle role="menuitemcheckbox" :aria-checked="technicalDetails" @click="setTechnicalDetails(!technicalDetails)">
+            <span :class="technicalDetails ? 'font-medium text-primary-text' : ''">{{ t('settings.showAdvanced') }}</span>
           </SbDropdownItem>
         </SbDropdown>
       </div>

@@ -18,6 +18,7 @@ import ServerChip from './chips/ServerChip.vue'
 import StatusState from '@/components/StatusState.vue'
 import BlockedHints from './chips/BlockedHints.vue'
 import { SbBadge } from '@/kit'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { transferChip } from '@/utils/deviceChips'
 import { apiUrl } from '@/api/client'
 import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1 } from 'lucide-vue-next'
@@ -143,13 +144,13 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   <!-- Where it plays through, its group, sync and signal -->
   <div class="relative z-10 flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
     <LinkChip :device="device" />
-    <StatusState kind="bluetooth" :status="device.links.bluetooth" />
-    <StatusState kind="audio_link" :status="device.links.audio_link" />
+    <StatusState kind="bluetooth" :status="device.links.bluetooth" only-if-not-ok />
+    <StatusState kind="audio_link" :status="device.links.audio_link" only-if-not-ok />
     <GroupChip :device="device" />
     <ServerChip :device="device" />
     <SyncChip :device="device" />
     <SignalChip :device="device" />
-    <span v-if="transfer" data-chip="transfer" class="inline-flex" :title="transferTitle">
+    <span v-if="technicalDetails && transfer" data-chip="transfer" class="inline-flex" :title="transferTitle">
       <SbBadge :tone="transfer.tone" size="sm">
         {{ transfer.ready ? t('device.chips.transfer.ready') : t('device.chips.transfer.notReady') }}
       </SbBadge>

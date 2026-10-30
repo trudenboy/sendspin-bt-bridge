@@ -107,6 +107,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'TZ', kind: 'text', placeholder: 'Europe/Berlin' },
       { key: 'WEB_PORT', kind: 'number', min: 1, max: 65535, nullable: true, placeholder: '8080', advanced: true },
       { key: 'LOG_LEVEL', kind: 'select', options: ['DEBUG', 'INFO', 'WARNING', 'ERROR'] },
+      { key: 'SHOW_TECHNICAL_DETAILS', kind: 'toggle' },
     ],
   },
   {

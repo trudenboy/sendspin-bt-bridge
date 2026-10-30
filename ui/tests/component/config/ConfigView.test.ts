@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import en from '@/i18n/en.json'
 import ConfigView from '@/views/ConfigView.vue'
 import { getConfig, saveConfig } from '@/api/config'
+import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { useConfigStore } from '@/stores/config'
 
 const BASE = {
@@ -98,6 +99,7 @@ describe('ConfigView (settings)', () => {
   })
 
   it('hides advanced settings until asked', async () => {
+    setTechnicalDetails(false)
     const w = await mountView()
     expect(labels(w)).toContain('Bridge name')
     expect(labels(w)).not.toContain('Web port')

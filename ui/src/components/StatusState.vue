@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge } from '@/kit'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { describeStatus, type StatusKind } from '@/composables/useStatusState'
 import type { LinkStatus } from '@/api/types'
 
@@ -17,8 +18,10 @@ const props = withDefaults(
     kind: StatusKind
     status: Pick<LinkStatus, 'state' | 'tone' | 'reason'> | null | undefined
     variant?: 'chip' | 'full'
+    /** On cards and rows: show only when not OK, unless technical details are on. */
+    onlyIfNotOk?: boolean
   }>(),
-  { variant: 'chip' },
+  { variant: 'chip', onlyIfNotOk: false },
 )
 
 const { t, te } = useI18n()
@@ -27,7 +30,7 @@ const look = computed(() => (props.status ? describeStatus(props.kind, props.sta
 
 <template>
   <span
-    v-if="look"
+    v-if="look && (!onlyIfNotOk || technicalDetails || look.tone !== 'success')"
     class="inline-flex max-w-full"
     :data-status-state="kind"
     :data-state="look.state"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAudioStore } from '@/stores/audio'
@@ -41,12 +42,7 @@ const config = ref<Record<string, unknown> | null>(null)
 const entry = ref<Entry | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
-const showAdvanced = ref(false)
-try {
-  showAdvanced.value = localStorage.getItem('sendspin-ui:settings-advanced') === '1'
-} catch {
-  /* default off */
-}
+const showAdvanced = technicalDetails
 
 // The speaker's entry in the configuration; its runtime id may differ.
 const configId = computed(() => props.device.config_id ?? props.device.id)
@@ -289,11 +285,6 @@ async function toggleEnabled(enabled: boolean) {
           </template>
         </div>
       </section>
-
-      <label class="mt-4 flex items-center gap-2 text-sm text-text-secondary">
-        <SbToggle v-model="showAdvanced" size="sm" />
-        {{ t('settings.showAdvanced') }}
-      </label>
 
       <section class="mt-6 rounded-(--radius-card) border border-error/30 p-4">
         <p class="text-sm font-medium text-text-primary">{{ t('speaker.remove') }}</p>

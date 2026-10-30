@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { fleetSummary } from '@/utils/fleetSummary'
+import { useTheme } from '@/composables/useTheme'
 import StatusState from '@/components/StatusState.vue'
 
 /**
@@ -12,6 +13,7 @@ import StatusState from '@/components/StatusState.vue'
 const { t, te } = useI18n()
 const bridge = useBridgeStore()
 
+const { embedded } = useTheme()
 const info = computed(() => bridge.bridge)
 const fleet = computed(() => fleetSummary(bridge.devices))
 
@@ -37,7 +39,7 @@ const pill = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-x
 
 <template>
   <div
-    v-if="info"
+    v-if="info && !embedded"
     class="border-b border-border bg-surface-card px-4 py-1.5 text-xs text-text-secondary sm:px-6"
     :aria-label="t('header.runtimeRow')"
     role="group"

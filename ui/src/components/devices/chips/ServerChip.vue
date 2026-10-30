@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Server, TriangleAlert } from 'lucide-vue-next'
 import { SbBadge } from '@/kit'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { serverChip } from '@/utils/deviceChips'
 import type { Device } from '@/api/types'
 
@@ -22,7 +23,7 @@ const title = computed(() =>
 </script>
 
 <template>
-  <span v-if="chip" data-chip="server" class="inline-flex max-w-full" :title="title">
+  <span v-if="chip && (technicalDetails || chip.foreign)" data-chip="server" class="inline-flex max-w-full" :title="title">
     <SbBadge :tone="chip.tone" size="sm" class="max-w-full">
       <TriangleAlert v-if="chip.foreign" class="size-3 shrink-0" aria-hidden="true" />
       <Server v-else class="size-3 shrink-0" aria-hidden="true" />
