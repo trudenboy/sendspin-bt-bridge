@@ -270,6 +270,8 @@ class BtSendspinSource:
         finally:
             await self._capture.stop()
             self._capture = None
+            players = len(self._server.connected_clients) if self._server is not None else 0
+            _set_state(phone=None, streaming=False, players=players)
             logger.info("Bluetooth source: capture ended")
 
     async def stop(self) -> None:
