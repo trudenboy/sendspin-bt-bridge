@@ -208,8 +208,10 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         if not sink_ok:
             # #476: a link with no A2DP sink has nowhere to play. Starting the
             # daemon anyway parks it on the ``default`` null sink and the
-            # device looks healthy while it is silent.
-            _report_missing_sink(mgr)
+            # device looks healthy while it is silent. When the link itself
+            # went away there is nothing to report — the reconnect path does.
+            if mgr.connected:
+                _report_missing_sink(mgr)
             return True
         _clear_missing_sink_error(mgr)
         mgr.host.update_status(
@@ -488,6 +490,13 @@ async def _inner_dbus_monitor(
             # set from the offline or released period would make the wait
             # below return at once, every iteration (#470).
             if disconnect_event.is_set():
+                if not mgr.connected:
+                    # The link died while audio was being configured, so the
+                    # signal arrived mid-iteration and nothing consumed it.
+                    # Waiting here would idle a whole heartbeat before the
+                    # reconnect (#476: 30 s after a just-paired speaker dropped
+                    # the link).
+                    continue
                 disconnect_event.clear()
 
             # Wait for disconnect signal or heartbeat timeout

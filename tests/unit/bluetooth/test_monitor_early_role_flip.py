@@ -240,6 +240,7 @@ async def test_a_link_without_a_sink_does_not_start_the_player(installed_bluez):
     attach(mgr, bluez_knowing(mgr, connected=True, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID)))
     mgr.host = MagicMock()
     mgr.host.start_subprocess = AsyncMock()
+    mgr._apply_connected_state(True)  # the link is up; only its sink is missing
 
     with patch.object(mgr, "configure_bluetooth_audio", return_value=False):
         assert await _start_player_on_established_link(mgr, asyncio.get_running_loop()) is True

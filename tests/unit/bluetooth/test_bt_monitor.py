@@ -1079,3 +1079,67 @@ async def test_a_speaker_in_standby_is_not_started_by_the_link_check(bt_manager)
         await _inner_dbus_monitor(bt_manager, AsyncMock(), asyncio.Event(), asyncio.Event(), loop)
 
     bt_manager.host.start_subprocess.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_link_that_dies_during_audio_setup_reconnects_without_waiting(bt_manager):
+    """The disconnect that arrives mid-setup must not be swallowed (#476).
+
+    A just-paired speaker drops the link while ``configure_bluetooth_audio``
+    is still running.  The signal is set, but the connected branch clears it
+    before waiting — and the heartbeat never re-raises it because
+    ``mgr.connected`` is already False.  Reported as a 30 s gap before the
+    first reconnect.
+    """
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = True
+    bt_manager.management_enabled = True
+    bt_manager._early_flip_seq = bt_manager._transition_seq  # no role flip in this test
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+    bt_manager.host.start_subprocess = AsyncMock()
+
+    disconnect_event = asyncio.Event()
+    order: list[str] = []
+
+    def _link_drops_while_configuring() -> bool:
+        bt_manager.connected = False
+        disconnect_event.set()
+        return False
+
+    async def _mock_run_in_executor(executor, fn, *args):
+        return fn(*args)
+
+    async def _no_wait(*_args, **_kwargs):
+        order.append("wait")
+        raise TimeoutError
+
+    loop = asyncio.get_running_loop()
+
+    with (
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
+        patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
+        patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_link_drops_while_configuring),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(
+            bt_manager, "handle_reconnect_failure", side_effect=lambda _attempt: order.append("connect") or True
+        ),
+        patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_no_wait),
+        patch("sendspin_bridge.bluetooth.monitor._correct_other_devices_routing", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
+    ):
+        await _inner_dbus_monitor(
+            bt_manager,
+            attach(bt_manager, bluez_knowing(bt_manager, connected=True)),
+            disconnect_event,
+            asyncio.Event(),
+            loop,
+        )
+
+    # The reconnect happens before any heartbeat wait.
+    assert order == ["connect"]
+    bt_manager.host.start_subprocess.assert_not_awaited()

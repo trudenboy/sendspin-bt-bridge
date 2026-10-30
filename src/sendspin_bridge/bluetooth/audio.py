@@ -185,6 +185,7 @@ def configure_bluetooth_audio(
     wait_with_cancel: Callable[[float], bool],
     *,
     device: BluetoothDevice | None = None,
+    link_alive: Callable[[], bool] | None = None,
     logger: logging.Logger = logger,
 ) -> bool:
     """Configure PipeWire/PulseAudio to use a Bluetooth device as audio output.
@@ -196,6 +197,13 @@ def configure_bluetooth_audio(
     speaker's device module; when provided, it gates the
     LAST_SINKS fast-path on the A2DP transport state to avoid the issue #269
     AVDTP collision window.
+
+    *link_alive* answers "is the link still up?"; when it goes down during the
+    search, the search stops instead of spending its retry budget on a speaker
+    that is gone (#476: a just-paired ENEBY drops the link, and five 3-second
+    retries then delayed the reconnect that would have fixed it by 12 s). It
+    is only consulted when the link was up as the search began, so a caller
+    that could not tell gets the old behaviour.
     """
     try:
         address = DeviceAddress.require(mac_address)
@@ -209,6 +217,11 @@ def configure_bluetooth_audio(
         fast_path_taken = False
         configured_sink: str | None = None
         success = False
+        link_dropped = False
+        # A speaker that was already down when the search started is the
+        # caller's business — only a link that dies *during* the wait is worth
+        # aborting for.
+        watch_link = link_alive is not None and link_alive()
         if cached_sink and get_sink_volume(cached_sink) is not None:
             # Even when the PA/PipeWire sink object exists, BlueZ's AVDTP
             # transport may still be settling after the reconnect. If the
@@ -266,6 +279,13 @@ def configure_bluetooth_audio(
                         logger.debug("Sink %s not found, trying next...", sink_name)
                 if success:
                     break
+                if watch_link and link_alive is not None and not link_alive():
+                    link_dropped = True
+                    logger.warning(
+                        "Link to %s went away while looking for its audio sink — stopping the search",
+                        mac_address,
+                    )
+                    break
                 if attempt < _SINK_RETRY_COUNT - 1:
                     logger.info(
                         "Sink not yet available, retrying in 3s... (attempt %s/%s)",
@@ -281,7 +301,7 @@ def configure_bluetooth_audio(
             # profile and no bluez_*sink is ever exposed. If a bluez_card for this
             # MAC exists with a non-a2dp active profile, switch it to a2dp_sink
             # and try one more sink discovery pass.
-            if not success and _switch_card_profile_to_a2dp(pa_mac):
+            if not success and not link_dropped and _switch_card_profile_to_a2dp(pa_mac):
                 if not wait_with_cancel(_SINK_RETRY_DELAY):
                     return False
                 sinks = list_sinks()
@@ -296,7 +316,7 @@ def configure_bluetooth_audio(
             # Fallback: direct set_card_profile sometimes leaves the card on
             # a2dp_sink but PA never re-publishes bluez_sink.*. A cycle
             # off → wait → a2dp_sink forces the republish in that scenario.
-            if not success and _cycle_card_profile_for_mac(pa_mac):
+            if not success and not link_dropped and _cycle_card_profile_for_mac(pa_mac):
                 if not wait_with_cancel(_SINK_RETRY_DELAY):
                     return False
                 sinks = list_sinks()
@@ -340,7 +360,7 @@ def configure_bluetooth_audio(
 
             # Cache sink name for faster restart
             save_device_sink(mac_address, configured_sink)
-        elif not success:
+        elif not success and not link_dropped:
             logger.warning("Could not find Bluetooth sink for %s", mac_address)
             logger.warning("Audio may play from default device instead of Bluetooth")
             _warn_pipewire_session(known_names, device)

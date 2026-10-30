@@ -791,6 +791,7 @@ class BluetoothManager:
             host=self.host,
             wait_with_cancel=self._wait_with_cancel,
             device=self.device,
+            link_alive=self.is_device_connected,
             logger=logger,
         )
         return self.audio_sink_ready
