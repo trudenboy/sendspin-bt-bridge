@@ -4,7 +4,6 @@ import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
 import { useSyncStore } from '@/stores/sync'
-import { settleConfirm } from '@/composables/useConfirm'
 import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), sessionSound: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
@@ -22,14 +21,13 @@ async function running() {
 
 const IDLE = { clicker_playing: false, clicker_starts: 0, group_state: 'idle', volumes: { a: 40, b: 30, cast: null }, muted: [] }
 
-/** The manual tab with its preparation skipped (the tests of the preparation mount it as it opens). */
-function setup({ prepared = true, over = {} as Record<string, unknown>, props = {} as Record<string, unknown> } = {}) {
+/** The editor of a session that is ready (the clicks may or may not play). */
+function setup({ over = {} as Record<string, unknown>, props = {} as Record<string, unknown> } = {}) {
   setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks()
   const store = useSyncStore()
   store.group = { id: 'g', name: 'G', session_id: 's1', members } as never
   store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'tuning', members, soloed: null, ...IDLE, ...over } as never
   const w = mount(ManualTuning, { global: { plugins: [i18n] }, props })
-  if (prepared) void w.get('[data-manual-prep] [data-cancel]').trigger('click')
   return w
 }
 
@@ -143,7 +141,6 @@ describe('ManualTuning', () => {
     const store = useSyncStore()
     store.session = { ...store.session!, departed: ['b'] } as never
     const w = mount(ManualTuning, { global: { plugins: [i18n] } })
-    await w.get('[data-manual-prep] [data-cancel]').trigger('click')
     await flushPromises()
     expect(w.findAll('[data-delay-row]')).toHaveLength(1)
     const gone = w.get('[data-departed="b"]')
@@ -264,55 +261,8 @@ describe('ManualTuning', () => {
   })
 })
 
-describe('ManualTuning: getting the group ready', () => {
-  afterEach(() => { vi.useRealTimers() })
-
-  it('stops the music and starts the clicks in one step, then sets the volumes before tuning', async () => {
-    const w = setup({ prepared: false, over: { group_state: 'playing' } })
-    const store = useSyncStore()
-    await flushPromises()
-    expect(w.find('[data-signal]').exists()).toBe(false)  // no tuning controls yet
-    expect(w.get('[data-group-state]').text()).toContain('Playing')
-    expect(w.get('[data-manual-prep] [data-next]').attributes('disabled')).toBeDefined()
-    expect(w.get('[data-manual-prep] [data-cancel]').text()).toBe('Skip')
-    expect(w.find('[data-stop-group]').exists()).toBe(false)
-    expect(w.get('[data-start-clicker]').text()).toBe('Stop the music and start the clicks')
-    vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, group_state: 'idle' } as never)
-    vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, clicker_playing: true, clicker_starts: 1, group_state: 'playing' } as never)
-    await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
-    settleConfirm(true); await flushPromises()  // stopping the user's music is confirmed first
-    expect(vi.mocked(api.sessionSignal).mock.calls.map((c) => c[1])).toEqual(['stop', 'start'])
-    await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
-    expect(w.text()).toContain('Set a level where the clicks are clearly audible where you measure.')
-    w.findComponent({ name: 'VolumeSlider' }).vm.$emit('update:volume', 70)
-    await flushPromises()
-    expect(api.sessionVolume).toHaveBeenCalledWith('s1', 'a', 70)
-    await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
-    expect(w.find('[data-manual-prep]').exists()).toBe(false)
-    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
-  })
-
-  it('opens straight on tuning when the clicker already plays (a reload)', () => {
-    setActivePinia(createPinia()); vi.clearAllMocks()
-    const store = useSyncStore()
-    store.group = { id: 'g', name: 'G', session_id: 's1', members } as never
-    store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'tuning', members, soloed: null, ...IDLE, clicker_playing: true } as never
-    const w = mount(ManualTuning, { global: { plugins: [i18n] } })
-    expect(w.find('[data-manual-prep]').exists()).toBe(false)
-    expect(w.find('[data-signal]').exists()).toBe(true)
-  })
-})
-
 describe('ManualTuning: UX round', () => {
   afterEach(() => { vi.useRealTimers() })
-
-  it('starts the clicks without asking when nothing plays', async () => {
-    const w = setup({ prepared: false })   // IDLE: the group is stopped
-    expect(w.get('[data-start-clicker]').text()).toBe('Start the clicks')
-    expect(w.get('[data-manual-prep] h2').text()).toContain('(1/2)')
-    await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
-    expect(vi.mocked(api.sessionSignal).mock.calls.map((c) => c[1])).toEqual(['start'])
-  })
 
   it('says which way the delay moves next to every delay control', () => {
     const w = setup()
@@ -320,7 +270,7 @@ describe('ManualTuning: UX round', () => {
   })
 
   it('shows the measured value per member with a reset to it, and keeps members that were not measured', async () => {
-    const w = setup({ prepared: false, props: { skipPrep: true, measured: { a: 130 }, before: { a: 100, b: 0 } }, over: { state: 'tuning', mode: 'semi',
+    const w = setup({ props: { measured: { a: 130 }, before: { a: 100, b: 0 } }, over: { state: 'tuning', mode: 'semi',
       members: [{ ...members[0], delay_ms: 130 }, members[1], members[2]], clicker_playing: true } })
     await flushPromises()
     const [rowA, rowB] = w.findAll('[data-delay-row]')
@@ -395,5 +345,82 @@ describe('ManualTuning: the listening sound', () => {
     const measuring = setup({ over: { mode: 'semi', state: 'proposed', sound: null } })
     await flushPromises()
     expect(measuring.find('[data-sound]').exists()).toBe(false)
+  })
+})
+
+describe('ManualTuning: the Manual tab on one screen (simple)', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  function simple(over: Record<string, unknown> | null = {}, props: Record<string, unknown> = {}) {
+    setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks()
+    const store = useSyncStore()
+    store.group = { id: 'g', name: 'G', session_id: null, members: members.map((m) => ({ ...m, volume: m.ma_player_id === 'a' ? 40 : null })) } as never
+    if (over) store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'tuning', members, soloed: null, ...IDLE, ...over } as never
+    return mount(ManualTuning, { global: { plugins: [i18n] }, props: { simple: true, ...props } })
+  }
+
+  it('shows the start button, sound, volumes, delays and Save at once; the controls wait for the start', () => {
+    const w = simple(null)
+    expect(w.get('[data-manual-start]').text()).toBe('Start clicks')
+    expect(w.findAll('[role="radio"]').length).toBe(3)
+    expect(w.findAll('[data-volume-row]')).toHaveLength(3)
+    expect(w.findAll('[data-delay-row]')).toHaveLength(2)
+    expect(w.get('[data-delay-row] input[type="number"]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-manual-save]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-manual-extras]').attributes('open')).toBeUndefined()
+    expect(w.find('[data-reset]').exists()).toBe(false)
+    expect(w.find('[data-manual-prep]').exists()).toBe(false)
+  })
+
+  it('Start clicks asks the view to start, with the sound picked before', async () => {
+    const w = simple(null)
+    await w.findAll('[role="radio"]')[2]!.trigger('click'); vi.advanceTimersByTime(500); await flushPromises()
+    expect(api.sessionSound).not.toHaveBeenCalled()
+    await w.get('[data-manual-start]').trigger('click')
+    expect(w.emitted('start')).toEqual([['noise']])
+    expect(api.sessionSignal).not.toHaveBeenCalled()
+  })
+
+  it('with a running session: delays are live, volumes set, the clicks stop on Stop clicks', async () => {
+    const w = simple({ clicker_playing: true, clicker_starts: 1 })
+    expect(w.find('[data-manual-start]').exists()).toBe(false)
+    await w.findAll('[data-delay-row]')[0]!.find('[aria-label="+10 ms (earlier)"]').trigger('click')
+    vi.advanceTimersByTime(300); await flushPromises()
+    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 110)
+    expect(w.get('[data-manual-unsaved]').text()).toBe('Unsaved changes')
+    w.findComponent({ name: 'VolumeSlider' }).vm.$emit('update:volume', 70); await flushPromises()
+    expect(api.sessionVolume).toHaveBeenCalledWith('s1', 'a', 70)
+    await w.get('[data-manual-stop]').trigger('click')
+    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop_clicker')
+  })
+
+  it('Save emits save; Discard puts the start delays back first and then emits discard', async () => {
+    const w = simple({})
+    await w.findAll('[data-delay-row]')[0]!.find('[aria-label="+10 ms (earlier)"]').trigger('click')
+    vi.advanceTimersByTime(300); await flushPromises()
+    await w.get('[data-manual-save]').trigger('click')
+    expect(w.emitted('save')).toHaveLength(1)
+    vi.mocked(api.sessionDelay).mockClear()
+    await w.get('[data-manual-discard]').trigger('click'); vi.advanceTimersByTime(300); await flushPromises()
+    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 100)
+    expect(w.emitted('discard')).toHaveLength(1)
+  })
+
+  it('says Saved once the session ended, and nothing is unsaved after it', async () => {
+    const w = simple({})
+    await w.findAll('[data-delay-row]')[0]!.find('[aria-label="+10 ms (earlier)"]').trigger('click')
+    vi.advanceTimersByTime(300); await flushPromises()
+    const store = useSyncStore()
+    store.session = { ...store.session!, state: 'done' } as never
+    await w.setProps({ saved: true }); await flushPromises()
+    expect(w.get('[data-manual-saved]').text()).toBe('Saved')
+    expect(w.find('[data-manual-unsaved]').exists()).toBe(false)
+  })
+
+  it('keeps solo and compare-two under a collapsed section, without a second start button', () => {
+    const w = simple({ clicker_playing: true })
+    expect(w.findAll('[data-signal]')).toHaveLength(1)
+    expect(w.get('[data-manual-extras] [data-solo="a"]').exists()).toBe(true)
+    expect(w.get('[data-manual-extras] [data-ab]').exists()).toBe(true)
   })
 })

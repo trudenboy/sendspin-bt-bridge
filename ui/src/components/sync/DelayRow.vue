@@ -13,6 +13,7 @@ const props = defineProps<{
   measured?: number
   /** The delay before this session changed it (the "measured" change is shown against it). */
   before?: number
+  disabled?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [number] }>()
 
@@ -65,6 +66,7 @@ const measuredChange = computed(() =>
           :aria-label="t('sync.manual.valueLabel', { name })"
           :aria-describedby="hintId"
           class="h-8 w-20 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-right text-sm tabular-nums text-text-primary"
+          :disabled="disabled"
           @change="onNumber"
         />
         <span aria-hidden="true">ms</span>
@@ -80,6 +82,7 @@ const measuredChange = computed(() =>
         size="sm"
         variant="ghost"
         :data-reset-measured="member.ma_player_id"
+        :disabled="disabled"
         :aria-label="t('sync.manual.resetMeasuredMember', { name })"
         @click="set(measured)"
       >
@@ -92,6 +95,7 @@ const measuredChange = computed(() =>
       :max="MAX"
       :step="1"
       :show-value="false"
+      :disabled="disabled"
       :aria-label="name"
       :format-value="(v: number) => t('sync.delay', { ms: v })"
       @update:model-value="set"
@@ -105,6 +109,7 @@ const measuredChange = computed(() =>
         variant="secondary"
         class="min-w-12 flex-1 tabular-nums"
         :aria-label="nudgeLabel(d)"
+        :disabled="disabled"
         @click="set(modelValue + d)"
       >
         {{ d < 0 ? '−' : '+' }}{{ Math.abs(d) }}

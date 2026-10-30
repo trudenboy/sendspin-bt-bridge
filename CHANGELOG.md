@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Manual tuning in group sync is now one screen with no steps: Start clicks (stops the group's music after asking, then plays the clicks) with the click type, a volume slider and a latency compensation control per speaker, and Save. Opening the tab starts nothing; changes are heard live, Save keeps them and ends the session, Discard changes puts the old values back, and leaving with unsaved changes asks whether to keep them. Solo and compare-two moved into a collapsed section, and the save-as-profile offer on leaving is gone (profiles are still saved from the Group tab).
+
 ### Fixed
 
 - The web UI reconnects by itself after Home Assistant ingress idles; no more stale "connection lost". It polls meanwhile, retries with backoff, reconnects when the tab or network returns, reloads once if the session expired, and offers a Reload button after 30 seconds.
