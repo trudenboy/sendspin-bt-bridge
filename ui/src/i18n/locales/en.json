@@ -1264,7 +1264,8 @@
         "air": "Air error",
         "confidence": "Confidence",
         "psr": "Peak ratio (PSR)",
-        "lock": "Last confirmed"
+        "lock": "Last confirmed",
+        "learnedTarget": "Air target"
       },
       "needsCalibration": "Needs calibration",
       "agoSeconds": "{s} s ago",
@@ -1307,7 +1308,8 @@
         "forget": "Forget",
         "forgetTitle": "Forget this learned latency?",
         "forgetConfirm": "{name} starts learning its latency for {codec} {rate} kHz on {adapter} again. A calibration for it is forgotten too."
-      }
+      },
+      "learnedValue": "≈{ms} ms (learned)"
     },
     "details": "Technical details"
   },

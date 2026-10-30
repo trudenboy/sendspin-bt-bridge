@@ -7,6 +7,7 @@ import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { forgetAirCalibration, setLatency } from '@/api/devices'
 import { getLatencyHistory, type TimingSample } from '@/api/calibration'
+import { PLAYOUT_FAIR_MS, PLAYOUT_GOOD_MS } from '@/utils/deviceChips'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton } from '@/kit'
 import SettingField from '@/components/settings/SettingField.vue'
@@ -102,6 +103,15 @@ const playoutRows = computed(() => {
     ['warm', p.warm ? t('timing.playout.yes') : p.warm_s != null && p.warmup_s != null ? t('timing.playout.settling', { s: Math.max(0, Math.ceil(p.warmup_s - p.warm_s)) }) : t('timing.playout.no')],
   ] as [string, string][]
 })
+/* The history badge follows the same tones as the sync chip. */
+const syncErrorTone = computed(() => {
+  const err = syncError.value == null ? null : Math.abs(syncError.value)
+  if (err == null) return 'neutral'
+  if (err <= PLAYOUT_GOOD_MS) return 'success'
+  if (err <= PLAYOUT_FAIR_MS) return 'warning'
+  return 'error'
+})
+
 /* Air sensor: null (switch off) shows nothing. */
 const air = computed(() => props.device.timing.air_sensor ?? null)
 const airReason = computed(() => {
@@ -120,7 +130,16 @@ const airRows = computed(() => {
   if (!a || !airHasValues.value) return []
   const jitter = a.jitter_ms == null ? '' : ` (±${a.jitter_ms.toFixed(1)})`
   const rows: [string, string][] = [['host', `${signedMs(a.host_placement_ms!)} ms${jitter}`]]
-  rows.push(['air', a.air_error_ms != null && a.calibrated ? `${signedMs(a.air_error_ms)} ms` : t('timing.air.needsCalibration')])
+  const playout = props.device.timing.playout
+  const learnedTarget = playout?.air_target === 'learned' ? playout.air_target_ms : null
+  if (a.air_error_ms != null && a.calibrated) {
+    rows.push(['air', `${signedMs(a.air_error_ms)} ms`])
+  } else if (learnedTarget != null) {
+    // The loop corrects against a learned target; there is no stored air calibration to report E.
+    rows.push(['learnedTarget', t('timing.air.learnedValue', { ms: Math.round(learnedTarget) })])
+  } else {
+    rows.push(['air', t('timing.air.needsCalibration')])
+  }
   if (a.confidence != null) rows.push(['confidence', `${Math.round(a.confidence * 100)} %`])
   if (a.psr != null) rows.push(['psr', a.psr.toFixed(2)])
   if (a.last_confirmed_at) {
@@ -348,7 +367,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
     <section class="mt-4">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.history.title') }}</h3>
-        <SbBadge v-if="syncError != null" :tone="Math.abs(syncError) < 20 ? 'success' : 'warning'" size="sm">
+        <SbBadge v-if="syncError != null" :tone="syncErrorTone" size="sm">
           {{ t('timing.history.syncError', { ms: syncError.toFixed(1) }) }}
         </SbBadge>
       </div>

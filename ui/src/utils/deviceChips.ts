@@ -15,6 +15,19 @@ export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 
 /* ---------------------------------------------------------------- sync -- */
 
+/**
+ * Playout-error tones. Within GOOD the badge is green, within FAIR yellow, beyond red.
+ *
+ * On Bluetooth a healthy loop settles at ±10-16 ms (a jump or a re-seed moves it for a while) and
+ * ±20 ms is not audible in music, so the previous 1/5 ms (loop) and 5/20 ms (measure) thresholds
+ * painted working speakers red and yellow. Measure mode is noisier than loop mode: ±2-3 ms of EMA
+ * noise on PulseAudio's bluez5, so it gets the wider pair.
+ */
+export const PLAYOUT_GOOD_MS = 20
+export const PLAYOUT_FAIR_MS = 40
+const MEASURE_GOOD_MS = 25
+const MEASURE_FAIR_MS = 50
+
 export interface SyncBadge {
   kind: 'sync' | 'reanchoring' | 'playout'
   tone: Tone
@@ -46,8 +59,7 @@ export function syncBadge(d: Device, held = false): SyncBadge | null {
     const jumps = playout.jumps ?? 0
     const jc = { count: jumps, countTone: (jumps > 10 ? 'warning' : jumps > 0 ? 'success' : 'neutral') as Tone, count5m: null, count30m: null }
     const err = playout.error_ms == null ? null : Math.round(Math.abs(playout.error_ms) * 10) / 10
-    /* measure reports a noisy EMA (±2–3 ms on PA bluez5); loop holds ~1 ms. */
-    const [good, fair] = playout.mode === 'measure' ? [5, 20] : [1, 5]
+    const [good, fair] = playout.mode === 'measure' ? [MEASURE_GOOD_MS, MEASURE_FAIR_MS] : [PLAYOUT_GOOD_MS, PLAYOUT_FAIR_MS]
     const tone: Tone = err == null ? 'neutral' : err <= good ? 'success' : err <= fair ? 'warning' : 'error'
     /* While warming the number shows at once; the settling tone only when the error is out of
        tolerance or a jump happened in this warm-up period (the engine decides). */

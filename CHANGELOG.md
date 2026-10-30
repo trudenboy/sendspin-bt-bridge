@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The sync badge keeps its green and yellow tones for errors that are actually audible: green up to 20 ms (25 ms in measure mode) and yellow up to 40 ms (50 ms) instead of 1/5 ms, which painted working Bluetooth speakers red. The Timing panel's history badge uses the same tones.
+- With no stored air calibration the air sensor block shows the learned target ("Air target ≈219 ms (learned)") instead of "Needs calibration": the loop is correcting, there is simply no calibrated figure to report.
+
 ## [3.1.0-beta.23] - 2026-10-30
 
 ### Fixed

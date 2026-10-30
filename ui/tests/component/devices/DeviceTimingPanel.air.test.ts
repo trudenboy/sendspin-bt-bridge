@@ -167,6 +167,21 @@ describe('DeviceTimingPanel air correction', () => {
     expect(correction(w).text()).toContain('Air correction: calibrated (228.7 ms)')
   })
 
+  it('shows the learned target instead of asking for a calibration', () => {
+    const air = { ...locked, calibrated: false, air_error_ms: null }
+    const w = mountLoop({ air_target: 'learned', air_target_ms: 219.4, air_bias_state: 'active' }, { air })
+    const text = block(w).text()
+    expect(text).toContain('Air target')
+    expect(text).toContain('≈219 ms (learned)')
+    expect(text).not.toContain('Needs calibration')
+  })
+
+  it('still asks for calibration when nothing is learned', () => {
+    const air = { ...locked, calibrated: false, air_error_ms: null }
+    const w = mountLoop({ air_bias_state: 'none', air_bias_reason: 'no_target' }, { air })
+    expect(block(w).text()).toContain('Needs calibration')
+  })
+
   it('names a learned target with its starts', () => {
     const w = mountLoop({ air_bias_state: 'active', air_target: 'learned', air_learned_starts: 6, air_bias_ms: 1 })
     expect(correction(w).text()).toContain('Air correction: learned (6 starts)')
