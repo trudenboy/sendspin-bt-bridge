@@ -5,9 +5,10 @@ import { useNotificationStore } from '@/stores/notifications'
 import { useDeviceStore, type DisabledPlayer } from '@/stores/devices'
 import { useDisabledPlayerActions } from '@/composables/useDisabledPlayerActions'
 import { SbSlider } from '@/kit'
-import { setVolume, setMute, setDevicePlayback } from '@/api/playback'
+import { setVolume, setDevicePlayback } from '@/api/playback'
 import { reconnectDevice } from '@/api/devices'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
+import { useReversibleActions } from '@/composables/useReversibleActions'
 import { bulkEligible, type BulkAction } from '@/utils/bulkActions'
 import { speakerName } from '@/utils/speakerName'
 import { canDo } from '@/utils/supportedActions'
@@ -100,8 +101,27 @@ const reconnectable = computed(() => props.selectedDevices.filter((d) => canDo(d
 const mutable = computed(() => props.selectedDevices.filter(canMute))
 const pausable = computed(() => props.selectedDevices.filter(canPause))
 
+const reversible = useReversibleActions()
+
+/** Reversible actions run at once on every target that takes them; one toast offers Undo for those. */
+async function runUndoable(
+  targets: Device[],
+  label: string,
+  run: (t: { id: string; name: string }[], onFailed: (names: string[]) => void) => Promise<unknown>,
+) {
+  if (!targets.length) return
+  actionLoading.value = true
+  try {
+    await run(targets.map((d) => ({ id: d.id, name: nameOf(d) })), (names) =>
+      notifications.error(t('devices.bulk.failed', { action: label, names: names.join(', ') })),
+    )
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 function onMuteAll() {
-  return runEach(mutable.value, t('devices.muteAll'), (id) => setMute(id, true))
+  return runUndoable(mutable.value, t('devices.muteAll'), reversible.muteAll)
 }
 
 function onPauseAll() {
@@ -138,13 +158,18 @@ async function onBulk(action: BulkAction, ask: boolean) {
   if (!targets.length) return
   if (ask) {
     const names = targets.map(nameOf).join(', ')
-    const ok = await confirmDialog({
+    const consequences =
+      action === 'standby'
+        ? [t('consequence.disconnects', { names }), t('consequence.stopsPlayback', { names }), t('consequence.wakeFromMenu')]
+        : [t('consequence.noReconnect', { names })]
+    const ok = await confirmAction(action === 'standby' ? 'devices.standbyMany' : 'devices.releaseMany', {
       title: t(`devices.bulk.${action}.confirmTitle`, { count: targets.length }),
-      message: t(`devices.bulk.${action}.confirmMessage`, { names }),
+      consequences,
       confirmLabel: t(`devices.bulk.${action}.label`),
     })
     if (!ok) return
   }
+  if (action === 'power_save') return runUndoable(targets, t('devices.bulk.power_save.label'), reversible.powerSaveAll)
   await runEach(targets, t(`devices.bulk.${action}.label`), (id) => runOne(action, id))
 }
 
@@ -178,7 +203,7 @@ watch(
           ref="checkboxRef"
           type="checkbox"
           :checked="allSelected"
-          class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
+          class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary"
           :aria-label="t('devices.selectAll')"
           @change="emit('toggleAll')"
         />
@@ -204,6 +229,7 @@ watch(
           :max="100"
           :step="1"
           :show-value="true"
+          :aria-label="t('devices.groupVolume')"
           class="flex-1"
           @update:model-value="onGroupVolumeChange"
         />

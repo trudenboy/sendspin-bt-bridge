@@ -175,6 +175,11 @@ DEFAULT_CONFIG = {
     # dBm) — the device card normalises both to a single coloured chip.
     # Legacy key ``EXPERIMENTAL_RSSI_BADGE`` is migrated transparently.
     "RSSI_BADGE": True,
+    # Web UI default for the technical chips and rows (Δ dB, re-anchors,
+    # Playout, server ID, advanced fields). A browser's own choice wins.
+    # Off for a new install, on for one that already had speakers: see
+    # ``migrate_config_payload`` and ``update_config``.
+    "SHOW_TECHNICAL_DETAILS": False,
     # v2.65.0 — Home Assistant integration.  Two transports share one
     # config namespace; ``mode`` selects which is active.  See
     # ``services/ha_mqtt_publisher.py`` (B-path) and the
@@ -406,6 +411,9 @@ def update_config(mutator) -> None:
             return
         if had_legacy and raw is not None:
             _backup_v5_config(raw)
+        # Stamped with a real write, not counted as a change of its own, and
+        # decided from the file as it was before this write (see migrate_config_payload).
+        existing.setdefault("SHOW_TECHNICAL_DETAILS", bool(before.get("players")))
         write_config_file(existing)
     changed_key_list = ", ".join(changed_keys)
     if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):

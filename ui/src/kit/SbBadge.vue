@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
+
+const labels = useKitLabels()
 withDefaults(
   defineProps<{
     tone?: 'success' | 'warning' | 'error' | 'info' | 'neutral'
@@ -47,8 +50,8 @@ const dotColor = {
     <button
       v-if="removable"
       type="button"
-      class="-mr-0.5 ml-0.5 inline-flex items-center justify-center rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100 focus:outline-none"
-      aria-label="Remove"
+      class="-mr-0.5 ml-0.5 inline-flex items-center justify-center rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100"
+      :aria-label="labels.removeBadge"
       @click="emit('remove')"
     >
       <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">

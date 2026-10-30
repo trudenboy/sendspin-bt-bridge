@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SyncView from '@/views/SyncView.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { defineComponent, h, nextTick, ref } from 'vue'
 
 vi.mock('@/api/sync', () => ({
@@ -42,9 +42,19 @@ async function mountView() {
   return { w, router }
 }
 
-async function openManual(w: { get: Awaited<ReturnType<typeof mountView>>['w']['get'] }) {
+async function openTab(w: { get: Awaited<ReturnType<typeof mountView>>['w']['get'] }) {
   await w.get('[role="tab"][data-tab-id="manual"]').trigger('click')
   await flushPromises()
+}
+
+/** Opens the tab and, when it offers one, presses the explicit start button (opening alone starts nothing). */
+async function openManual(w: Awaited<ReturnType<typeof mountView>>['w']) {
+  await openTab(w)
+  const start = w.find('[data-manual-start]')
+  if (start.exists()) {
+    await start.trigger('click')
+    await flushPromises()
+  }
 }
 
 describe('SyncView manual tuning', () => {
@@ -64,9 +74,20 @@ describe('SyncView manual tuning', () => {
   })
   afterEach(() => { document.body.innerHTML = '' })
 
-  it('starts a manual session when the manual tab opens', async () => {
+  it('never starts a session by just opening the manual tab; the start button does', async () => {
     const { w } = await mountView()
-    await openManual(w)
+    await openTab(w)
+    expect(api.createSession).not.toHaveBeenCalled()
+    expect(w.find('[data-delay-row]').exists()).toBe(false)
+    await w.get('[data-manual-start]').trigger('click'); await flushPromises()
+    expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'manual', point: 'device' })
+    expect(w.findAll('[data-delay-row]')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('starts the session from the Group tab entry button (an explicit request)', async () => {
+    const { w } = await mountView()
+    await w.get('[data-action="manual"]').trigger('click'); await flushPromises()
     expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'manual', point: 'device' })
     expect(w.findAll('[data-delay-row]')).toHaveLength(1)
     w.unmount()

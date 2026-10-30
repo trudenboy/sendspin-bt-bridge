@@ -6,8 +6,9 @@ import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected } from '@/utils/deviceBackend'
 import { claimAudio } from '@/api/devices'
 import { ApiError } from '@/api/client'
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { speakerName } from '@/utils/speakerName'
+import { useReversibleActions } from '@/composables/useReversibleActions'
 import { canDo } from '@/utils/supportedActions'
 import { SbDropdown, SbDropdownItem } from '@/kit'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
@@ -25,6 +26,7 @@ const { t } = useI18n()
 const store = useDeviceStore()
 const notifications = useNotificationStore()
 const infoOpen = ref(false)
+const reversible = useReversibleActions()
 
 const name = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
@@ -40,11 +42,14 @@ async function run(action: () => Promise<unknown>) {
 }
 
 async function remove() {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('speaker.remove', {
     title: t('speaker.removeTitle', { name: name.value }),
-    message: t('speaker.removeMessage'),
+    consequences: [
+      t('consequence.stopsPlayback', { names: name.value }),
+      t('consequence.leavesMa', { names: name.value }),
+      t('consequence.unpairs'),
+    ],
     confirmLabel: t('speaker.remove'),
-    danger: true,
   })
   if (ok) await run(() => store.remove(props.device.id))
 }
@@ -68,20 +73,20 @@ const heading = 'px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary'
       <p :class="heading">{{ t('speaker.groups.connection') }}</p>
       <SbDropdownItem v-if="canDo(device, 'reconnect')" @click="run(() => store.reconnect(device.id))">{{ t('speaker.reconnect') }}</SbDropdownItem>
       <template v-if="canDo(device, 'standby')">
-        <SbDropdownItem v-if="standby" @click="run(() => store.wake(device.id))">{{ t('speaker.wake') }}</SbDropdownItem>
-        <SbDropdownItem v-else @click="run(() => store.standby(device.id))">{{ t('speaker.standby') }}</SbDropdownItem>
+        <SbDropdownItem v-if="standby" @click="reversible.wake(device.id, name)">{{ t('speaker.wake') }}</SbDropdownItem>
+        <SbDropdownItem v-else @click="reversible.standby(device.id, name)">{{ t('speaker.standby') }}</SbDropdownItem>
       </template>
       <SbDropdownItem v-if="connected && canDo(device, 'claim')" @click="run(() => claimAudio(device.id))">{{ t('speaker.claim') }}</SbDropdownItem>
     </template>
 
     <p :class="heading">{{ t('speaker.groups.bridge') }}</p>
-    <SbDropdownItem v-if="device.enabled && !handedOver" @click="run(() => store.release(device.id, true))">
+    <SbDropdownItem v-if="device.enabled && !handedOver" @click="reversible.handOver(device.id, name)">
       {{ t('speaker.handOver') }}
     </SbDropdownItem>
     <SbDropdownItem v-else-if="device.enabled" @click="run(() => store.release(device.id, false))">
       {{ t('speaker.takeBack') }}
     </SbDropdownItem>
-    <SbDropdownItem @click="run(() => store.setEnabled(device.id, !device.enabled))">
+    <SbDropdownItem @click="device.enabled ? reversible.disable(device.id, name) : reversible.enable(device.id, name)">
       {{ device.enabled ? t('speaker.disable') : t('speaker.enable') }}
     </SbDropdownItem>
     <SbDropdownItem v-if="device.bluetooth?.mac" @click="infoOpen = true">{{ t('speaker.bluetoothInfo') }}</SbDropdownItem>

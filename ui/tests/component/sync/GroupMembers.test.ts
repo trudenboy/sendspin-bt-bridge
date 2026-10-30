@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import GroupMembers from '@/components/sync/GroupMembers.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
@@ -14,7 +14,7 @@ describe('GroupMembers', () => {
     ] } })
     const rows = w.findAll('[data-member]')
     expect(rows[0]!.text()).toContain('Kitchen'); expect(rows[0]!.text()).not.toContain('Bridge'); expect(rows[0]!.text()).toContain('120 ms')
-    expect(w.get('[data-sign-hint]').text()).toBe('Delay (larger = earlier)')
+    expect(w.get('[data-sign-hint]').text()).toBe('Latency compensation (larger = earlier)')
     expect(rows[1]!.text()).toContain('Cannot be adjusted'); expect(rows[1]!.text()).not.toContain('ms')
   })
 
@@ -27,7 +27,7 @@ describe('GroupMembers', () => {
     expect(row.text()).not.toContain('@ 85b1ecde')
     expect(row.text()).toContain('Hall')
     expect(row.text()).toContain('—')
-    expect(row.get('.sr-only').text()).toBe('No delay reported')
+    expect(row.get('.sr-only').text()).toBe('No latency reported')
     expect(row.text()).toContain('5 minutes ago')
   })
 

@@ -12,9 +12,10 @@ if TYPE_CHECKING:
 
 from sendspin_bridge.config import get_config_migration_error
 from sendspin_bridge.config.players import device_entries
-from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_summary
+from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_params, reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 from sendspin_bridge.services.diagnostics.recovery_timeline import build_recovery_timeline
+from sendspin_bridge.services.diagnostics.server_text import action_fields, coded
 from sendspin_bridge.services.infrastructure._helpers import (
     _device_audio_streaming,
     _device_extra,
@@ -70,6 +71,9 @@ class RecoveryAction:
             payload["check_key"] = self.check_key
         if self.value is not None:
             payload["value"] = self.value
+        payload.update(
+            action_fields(self.key, self.label, payload.get("device_names") or [self.device_name or ""], self.value)
+        )
         return payload
 
 
@@ -84,6 +88,10 @@ class RecoveryIssue:
     device_name: str | None = None
     #: Machine-readable causes (``guidance_issue_registry``); in the dict only when set.
     reason_codes: list[str] = field(default_factory=list)
+    #: Stable id of the wording (``server_text``); the key unless one key has several wordings.
+    code: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    summary_variant: str | None = None
 
     @property
     def recommended_action(self) -> RecoveryAction | None:
@@ -97,6 +105,13 @@ class RecoveryIssue:
             "summary": self.summary,
             "secondary_actions": [action.to_dict() for action in self.secondary_actions],
         }
+        payload.update(
+            coded(
+                self.code or self.key,
+                {"device": self.device_name or "", "count": 1, **self.params},
+                variant=self.summary_variant,
+            )
+        )
         if self.device_name:
             payload["device_name"] = self.device_name
         if self.reason_codes:
@@ -398,6 +413,10 @@ def _build_sink_suspend_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 primary_action=primary_action,
                 secondary_actions=secondary_actions,
                 device_name=name,
+                params={
+                    "cause_code": str(facts.get("reason") or "") if cause else "unknown_suspend",
+                    "docs": _SINK_SUSPEND_DOCS,
+                },
             )
         )
     return issues
@@ -539,6 +558,7 @@ def _build_air_correction_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 secondary_actions=secondary_actions,
                 device_name=name,
                 reason_codes=[reason],
+                params={"cause_code": reason},
             )
         )
     return issues
@@ -566,6 +586,7 @@ def _air_unavailable_issue(unavailable: dict[str, set[str]]) -> RecoveryIssue:
         secondary_actions=secondary_actions,
         device_name=names[0] if len(names) == 1 else None,
         reason_codes=codes,
+        params={"count": len(names), "device": names[0], "causes_codes": codes},
     )
 
 
@@ -585,6 +606,7 @@ def _air_codec_issue(name: str, reason: str) -> RecoveryIssue:
             secondary_actions=secondary_actions,
             device_name=name,
             reason_codes=["non_sbc_codec"],
+            params={"codec": codec.upper()},
         )
     primary_action = _recovery_action("open_diagnostics", "Open diagnostics", device_names=[name])
     return RecoveryIssue(
@@ -598,6 +620,8 @@ def _air_codec_issue(name: str, reason: str) -> RecoveryIssue:
         secondary_actions=_merge_secondary_actions(primary_action, []),
         device_name=name,
         reason_codes=[reason],
+        code="air_sensor_codec_unsupported",
+        params={"settings": reason},
     )
 
 
@@ -609,13 +633,42 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
     return issues
 
 
+#: Health summaries a "needs recovery attention" card can carry (``summary_<code>`` in the UI files).
+_NEEDS_ATTENTION_VARIANTS = frozenset(
+    {
+        "error",
+        "stopping",
+        "reconnecting",
+        "resyncing",
+        "foreign_server",
+        "daemon_disconnected",
+        "sink_muted",
+        "playback_without_audio",
+    }
+)
+
+
+def _health_error_detail(health: dict[str, Any]) -> str:
+    """The device's own error text, when that is what its health summary says.
+
+    Any other health summary ("Connected and ready", "Reconnect in progress") is
+    a verdict about a state that may not be the one the card is about, and used
+    to replace the card's own sentence — an "is disconnected" card could read
+    "Connected and ready".  Only a raw error adds information the card lacks.
+    """
+    reasons = health.get("reasons") or []
+    return str(health.get("summary") or "") if "last_error" in reasons else ""
+
+
 def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
     issues: list[RecoveryIssue] = []
     for device in devices:
         name = str(getattr(device, "player_name", None) or "Unknown")
         device_names = [name]
         health = getattr(device, "health_summary", None) or {}
-        summary = str(health.get("summary") or "")
+        summary = _health_error_detail(health)
+        error_variant = "error" if summary else None
+        error_params = {"error": summary} if summary else {}
         state_model = _device_state_model(device)
         management = state_model.get("management") or {}
         bluetooth = state_model.get("bluetooth") or {}
@@ -660,6 +713,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params=error_params,
+                    summary_variant=error_variant,
                 )
             )
             continue
@@ -677,6 +732,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params=error_params,
+                    summary_variant=error_variant,
                 )
             )
             continue
@@ -728,6 +785,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params={"adapter": adapter_mac},
+                    summary_variant=None if adapter_mac else "no_adapter",
                 )
             )
             continue
@@ -742,6 +801,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params=error_params,
+                    summary_variant=error_variant,
                 )
             )
             continue
@@ -759,6 +820,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params=error_params,
+                    summary_variant=error_variant,
                 )
             )
             continue
@@ -803,6 +866,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params={**error_params, **reconnect_attempt_params(device)},
+                    summary_variant=error_variant,
                 )
             )
             continue
@@ -830,6 +895,8 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         primary_action=primary_action,
                         secondary_actions=secondary_actions,
                         device_name=name,
+                        params={"error": last_error},
+                        summary_variant="error_only" if "SENDSPIN_PORT" in last_error else None,
                     )
                 )
                 continue
@@ -846,10 +913,13 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         primary_action=primary_action,
                         secondary_actions=secondary_actions,
                         device_name=name,
+                        params=error_params,
+                        summary_variant=error_variant,
                     )
                 )
                 continue
         health_state = str(health.get("state") or "")
+        health_code = str(health.get("code") or "") if health.get("summary") else ""
         if ma_reconnecting:
             continue
         if health_state in {"degraded", "recovering", "transitioning"}:
@@ -858,9 +928,11 @@ def _build_device_connection_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     key="needs_attention",
                     severity="error" if health_state == "degraded" else "warning",
                     title=f"{name} needs recovery attention",
-                    summary=summary or "Review the recent recovery timeline and diagnostics.",
+                    summary=str(health.get("summary") or "") or "Review the recent recovery timeline and diagnostics.",
                     primary_action=_recovery_action("open_diagnostics", "Open diagnostics", device_names=device_names),
                     device_name=name,
+                    params=dict(health.get("params") or {}),
+                    summary_variant=health_code if health_code in _NEEDS_ATTENTION_VARIANTS else None,
                 )
             )
     return issues
@@ -889,6 +961,12 @@ def _output_missing_issue(name: str, facts: DeviceFacts) -> RecoveryIssue:
         primary_action=primary_action,
         secondary_actions=secondary_actions,
         device_name=name,
+        params={
+            "sink": facts.audio_sink or "",
+            "cause_code": str(facts.sink_match_status)
+            if facts.sink_match_status in _OUTPUT_MISSING_CAUSES
+            else "sink_unplugged",
+        },
     )
 
 
@@ -916,6 +994,7 @@ def _build_duplicate_device_issues() -> list[RecoveryIssue]:
                 primary_action=primary_action,
                 secondary_actions=secondary_actions,
                 device_name=w.device_name,
+                params={"other_bridge": w.other_bridge_name},
             )
         )
     return issues
@@ -957,6 +1036,7 @@ def _build_config_writable_issue(preflight: dict[str, Any] | None = None) -> Rec
         ),
         primary_action=primary_action,
         secondary_actions=secondary_actions,
+        params={"config_dir": str(config_dir), "uid": uid, "remediation": str(remediation)},
     )
 
 
@@ -988,7 +1068,7 @@ def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None
         if sink is None:
             continue
         name = str(getattr(device, "player_name", None) or "Unknown")
-        found: list[tuple[str, str, str]] = []
+        found: list[tuple[str, str, str, dict[str, Any]]] = []
         if sink.muted:
             found.append(
                 (
@@ -996,6 +1076,7 @@ def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None
                     f"{name}: the audio output is muted",
                     f"The output {sink.name} is muted in the system mixer, so nothing is audible. "
                     "Music Assistant's volume cannot unmute it: unmute it in the system sound settings.",
+                    {"sink": sink.name},
                 )
             )
         if sink.volume == 0:
@@ -1005,6 +1086,7 @@ def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None
                     f"{name}: the audio output volume is 0 %",
                     f"The output {sink.name} is set to 0 % in the system mixer. "
                     "Music Assistant's volume cannot raise it: raise it in the system sound settings.",
+                    {"sink": sink.name},
                 )
             )
         if sink.active_port_available == "not available":
@@ -1014,9 +1096,10 @@ def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None
                     f"{name}: nothing is plugged into the audio output",
                     f"The active port {sink.active_port or ''} of {sink.name} reports no connection. "
                     "Check the cable or the speakers.",
+                    {"sink": sink.name, "port": sink.active_port or ""},
                 )
             )
-        for key, title, summary in found:
+        for key, title, summary, issue_params in found:
             primary_action, secondary_actions = build_recovery_issue_actions(key, [name])
             issues.append(
                 RecoveryIssue(
@@ -1027,6 +1110,7 @@ def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
+                    params=issue_params,
                 )
             )
     return issues
@@ -1049,6 +1133,7 @@ def _build_config_migration_issue() -> RecoveryIssue | None:
         ),
         primary_action=primary_action,
         secondary_actions=secondary_actions,
+        params={"error": str(error)},
     )
 
 
@@ -1068,6 +1153,9 @@ def _build_onboarding_issue(onboarding_assistant: dict[str, Any]) -> RecoveryIss
         summary=current_summary or "The setup checklist still has an unresolved step.",
         primary_action=primary_action,
         secondary_actions=secondary_actions,
+        code=str(checklist.get("current_step_code") or "setup_step"),
+        params=dict(checklist.get("current_step_params") or {}),
+        summary_variant=checklist.get("current_step_variant") or None,
     )
 
 
@@ -1209,6 +1297,7 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
         return {
             "tone": "warning",
             "summary": "Repeated re-anchors were observed during active playback.",
+            "code": "repeated_resyncs",
             "current_pulse_latency_msec": pulse_latency,
             "recommended_pulse_latency_msec": pulse_latency,
             "recommended_min_buffer_ms": recommended_min_buffer,
@@ -1231,6 +1320,7 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
         return {
             "tone": "ok",
             "summary": "Single-device setups usually do not need extra latency tuning.",
+            "code": "single",
             "current_pulse_latency_msec": pulse_latency,
             "recommended_pulse_latency_msec": recommended,
             "recommended_summary": "Keep the global latency conservative until you add more rooms.",
@@ -1254,6 +1344,7 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
         return {
             "tone": "warning",
             "summary": "Multi-device setup detected without per-device static delays.",
+            "code": "multi_no_delays",
             "current_pulse_latency_msec": pulse_latency,
             "recommended_pulse_latency_msec": recommended,
             "recommended_summary": "Verify one clean Bluetooth route first, then add per-device delays for room matching.",
@@ -1280,6 +1371,7 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
         return {
             "tone": "warning",
             "summary": "Per-device delay tuning exists, but the global PulseAudio latency is still high.",
+            "code": "high_latency",
             "current_pulse_latency_msec": pulse_latency,
             "recommended_pulse_latency_msec": recommended,
             "recommended_summary": "Lower the shared latency once routing is stable so transport controls feel snappier again.",
@@ -1294,6 +1386,7 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
     return {
         "tone": "ok",
         "summary": "Latency tuning is in a healthy range for a multi-device setup.",
+        "code": "ok",
         "current_pulse_latency_msec": pulse_latency,
         "recommended_pulse_latency_msec": pulse_latency,
         "recommended_summary": "Keep the current global latency and only revisit it after hardware or runtime changes.",

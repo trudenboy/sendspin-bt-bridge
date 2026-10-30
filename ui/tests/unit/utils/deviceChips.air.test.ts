@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import SyncChip from '@/components/devices/chips/SyncChip.vue'
 import { airChipSummary, signedMs } from '@/utils/deviceChips'
 import { resetReanchorMemory } from '@/utils/reanchorHold'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 const device = (air: Record<string, unknown> | null) =>

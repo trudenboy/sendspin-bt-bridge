@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { X, Search } from 'lucide-vue-next'
+
+const labels = useKitLabels()
 
 interface Filter {
   key: string
@@ -43,13 +46,13 @@ function clearSearch() {
         type="text"
         role="searchbox"
         :placeholder="placeholder"
-        class="w-full rounded-(--radius-input) border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        class="w-full rounded-(--radius-input) border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary"
       />
       <button
         v-if="search"
         type="button"
         class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-secondary transition-colors hover:text-text-primary"
-        aria-label="Clear search"
+        :aria-label="labels.clearSearch"
         @click="clearSearch"
       >
         <X class="h-4 w-4" />

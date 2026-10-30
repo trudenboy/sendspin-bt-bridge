@@ -34,7 +34,7 @@ const titleError = ref('')
 const descError = ref('')
 const emailError = ref('')
 
-const canSubmit = computed(() => title.value.length >= 5 && description.value.length >= 10)
+const canSubmit = computed(() => title.value.length >= MIN_TITLE && description.value.length >= MIN_DESC)
 
 const methods = computed(() => {
   const list: { id: 'github' | 'copy' | 'proxy'; label: string; icon: typeof Github }[] = [
@@ -51,6 +51,28 @@ const methods = computed(() => {
   return list
 })
 
+const loadError = ref(false)
+
+async function load() {
+  loading.value = true
+  loadError.value = false
+  try {
+    const [reportData, proxyData] = await Promise.all([
+      getBugreport(),
+      checkProxyAvailable().catch(() => ({ available: false })),
+    ])
+    report.value = reportData
+    proxyAvailable.value = proxyData.available
+    if (reportData.suggested_description && !description.value) {
+      description.value = reportData.suggested_description
+    }
+  } catch {
+    loadError.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
 watch(model, async (open) => {
   if (!open) return
   // Reset form
@@ -63,24 +85,17 @@ watch(model, async (open) => {
   showPreview.value = false
   report.value = null
   method.value = 'github'
-
-  loading.value = true
-  try {
-    const [reportData, proxyData] = await Promise.all([
-      getBugreport(),
-      checkProxyAvailable().catch(() => ({ available: false })),
-    ])
-    report.value = reportData
-    proxyAvailable.value = proxyData.available
-    if (reportData.suggested_description) {
-      description.value = reportData.suggested_description
-    }
-  } catch {
-    notifications.error(t('bugreport.loadFailed'))
-  } finally {
-    loading.value = false
-  }
+  await load()
 })
+
+const MIN_TITLE = 5
+const MIN_DESC = 10
+function checkTitle() {
+  titleError.value = title.value.length < MIN_TITLE ? t('bugreport.errors.titleShort') : ''
+}
+function checkDesc() {
+  descError.value = description.value.length < MIN_DESC ? t('bugreport.errors.descShort') : ''
+}
 
 function validate(): boolean {
   let valid = true
@@ -181,11 +196,13 @@ function onDownload() {
         <input
           v-model="title"
           type="text"
-          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary"
           :placeholder="t('bugreport.fields.titlePlaceholder')"
           maxlength="200"
+          @blur="checkTitle"
         />
-        <p v-if="titleError" class="mt-1 text-xs text-error">{{ titleError }}</p>
+        <p v-if="titleError" class="mt-1 text-xs text-error" role="alert">{{ titleError }}</p>
+        <p v-else class="mt-1 text-xs text-text-secondary">{{ t('bugreport.hints.min', { n: MIN_TITLE }) }}</p>
       </div>
 
       <!-- Description -->
@@ -196,11 +213,13 @@ function onDownload() {
         <textarea
           v-model="description"
           rows="4"
-          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary"
           :placeholder="t('bugreport.fields.descPlaceholder')"
           maxlength="5000"
+          @blur="checkDesc"
         />
-        <p v-if="descError" class="mt-1 text-xs text-error">{{ descError }}</p>
+        <p v-if="descError" class="mt-1 text-xs text-error" role="alert">{{ descError }}</p>
+        <p v-else class="mt-1 text-xs text-text-secondary">{{ t('bugreport.hints.min', { n: MIN_DESC }) }}</p>
       </div>
 
       <!-- Email (for proxy method) -->
@@ -211,7 +230,7 @@ function onDownload() {
         <input
           v-model="email"
           type="email"
-          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary"
           placeholder="your@email.com"
         />
         <p v-if="emailError" class="mt-1 text-xs text-error">{{ emailError }}</p>
@@ -234,6 +253,11 @@ function onDownload() {
         >
           <pre class="whitespace-pre-wrap">{{ report.text_full?.slice(0, 3000) }}</pre>
         </div>
+      </div>
+
+      <div v-if="loadError" data-load-error role="alert" class="flex flex-wrap items-center gap-2 rounded-lg bg-error/10 p-3 text-sm text-error">
+        <span class="flex-1">{{ t('bugreport.loadFailed') }}</span>
+        <SbButton size="sm" variant="outline" @click="load">{{ t('settings.retry') }}</SbButton>
       </div>
 
       <!-- Loading state -->
@@ -281,7 +305,7 @@ function onDownload() {
           <template #icon-left>
             <Bug class="h-3.5 w-3.5" />
           </template>
-          {{ t('bugreport.submit') }}
+          {{ t(`bugreport.submitBy.${method}`) }}
         </SbButton>
       </div>
     </template>

@@ -1,28 +1,15 @@
 {
   "app": {
     "title": "Sendspin Bridge",
-    "dashboard": "Dashboard",
-    "devices": "Devices",
-    "config": "Configuration",
-    "diagnostics": "Diagnostics",
     "ma": "Music Assistant"
   },
   "header": {
-    "viewRelease": "View release on GitHub",
-    "uptime": "Uptime",
-    "hourShort": "h",
-    "minShort": "m",
-    "secShort": "s",
-    "healthGood": "All systems OK",
-    "healthDegraded": "Some devices degraded",
-    "healthError": "Devices offline",
-    "healthUnknown": "No devices",
     "bugReport": "Bug report",
     "docs": "Documentation",
     "github": "GitHub repository",
-    "toggleMenu": "Toggle menu",
     "help": "Help",
     "preferences": "Preferences",
+    "display": "Display",
     "language": "Language",
     "theme": "Theme",
     "themes": {
@@ -38,7 +25,7 @@
     "hostname": "Host name",
     "ipAddress": "IP address",
     "upFor": "up {uptime}",
-    "speakersConnected": "{n}/{total} speakers connected",
+    "speakersConnected": "{n}/{total} Bluetooth connected",
     "runtime": {
       "ha_addon": "Home Assistant add-on",
       "docker": "Docker",
@@ -47,27 +34,75 @@
       "standalone": "Standalone"
     }
   },
+  "status": {
+    "kind": {
+      "audio_link": "Audio link",
+      "ma_account": "Music Assistant account",
+      "bluetooth": "Bluetooth connection"
+    },
+    "hint": {
+      "audio_link": "The audio link is the stream between this player and Music Assistant",
+      "ma_account": "The Music Assistant account is the bridge’s sign-in to the Music Assistant API",
+      "bluetooth": "The Bluetooth connection is the link between the bridge and the speaker"
+    },
+    "audio_link": {
+      "streaming": "Playing",
+      "connected": "Up",
+      "foreign": "Other server",
+      "disconnected": "Down",
+      "unavailable": "Unavailable"
+    },
+    "ma_account": {
+      "signed_in": "Signed in",
+      "signed_out": "Signed out",
+      "not_configured": "Not set up"
+    },
+    "bluetooth": {
+      "connected": "Connected",
+      "connecting": "Connecting",
+      "disconnected": "Disconnected",
+      "standby": "Standby",
+      "released": "Released",
+      "disabled": "Disabled",
+      "not_paired": "Not paired"
+    },
+    "reason": {
+      "reconnecting": "The bridge is reconnecting",
+      "user": "Released by you",
+      "auto": "Released automatically after repeated connection problems",
+      "foreign_server": "The player is on a Music Assistant that is not this bridge’s",
+      "bluetooth_down": "Waiting for the Bluetooth connection",
+      "standby": "The speaker is on standby",
+      "released": "The speaker is released",
+      "disabled": "The player is disabled",
+      "unreachable_or_rejected": "Music Assistant is not reachable or did not accept the sign-in"
+    },
+    "bluetoothSummary": "{n}/{total} Bluetooth connected",
+    "sectionTitle": "Connection states",
+    "accountRow": "Music Assistant account",
+    "speakersTitle": "Speakers"
+  },
   "device": {
     "status": {
       "streaming": "Playing",
-      "ready": "Connected",
+      "ready": "Ready",
       "connecting": "Connecting",
       "error": "Error",
-      "offline": "Not connected",
+      "offline": "Offline",
       "standby": "Standby",
       "idle": "Idle",
       "degraded": "Problem",
       "recovering": "Reconnecting…",
       "transitioning": "Connecting…",
       "disabled": "Disabled",
-      "released": "Handed over",
+      "released": "Released",
       "output_missing": "Output missing",
       "buffering": "Buffering",
       "sink_muted": "Muted by system",
       "stopping": "Stopping",
       "reconnecting": "Reconnecting",
-      "autoReleased": "Auto-released",
-      "autoReleasedTitle": "The bridge let go of this speaker after repeated connection problems. Take it back to retry.",
+      "autoReleased": "Released automatically",
+      "autoReleasedTitle": "The bridge released this speaker after repeated connection problems. Reclaim it to retry.",
       "standbyFor": "{state} · {elapsed}",
       "standbySince": "On standby since {time}"
     },
@@ -80,17 +115,20 @@
       "enable": "Enable",
       "disable": "Disable",
       "details": "Details",
-      "enableFailed": "Failed to toggle device",
+      "enableFailed": "Could not enable or disable the player",
+      "volumeFailed": "Could not change the volume of {name}",
+      "muteFailed": "Could not mute or unmute {name}",
+      "releaseFailed": "Could not release {name}",
+      "claimFailed": "Could not reclaim {name}",
       "forget": "Forget Bluetooth bond",
       "forgetConfirm": "Forget the Bluetooth bond? The speaker must be paired again.",
       "repair": "Pair again",
-      "claim": "Claim audio",
+      "claim": "Use this bridge as the source",
       "reconnectFailed": "Reconnect failed",
       "forgetTitle": "Forget {name}?",
       "more": "More actions for {name}"
     },
     "battery": "Battery {level}%",
-    "reanchored": "Reanchored ×{count}",
     "backend": {
       "bluetooth_a2dp": "Bluetooth A2DP",
       "local_sink": "Local Audio",
@@ -101,23 +139,16 @@
       "le_audio": "LE Audio"
     },
     "adapter": "Adapter {name}",
-    "released": "Released",
     "select": "Select {name}",
-    "signal": "Signal {dbm} dBm",
-    "signalLevel": {
-      "strong": "Strong",
-      "fair": "Fair",
-      "weak": "Weak"
-    },
     "chips": {
       "sync": {
         "label": "Sync",
-        "reanchoring": "Re-anchoring",
+        "reanchoring": "Resyncing",
         "errorMs": "{ms} ms",
         "title": "Playback in sync with the group",
-        "reanchoringTitle": "Re-anchoring stream timing",
+        "reanchoringTitle": "Resyncing stream timing",
         "count": "×{count}",
-        "countTitle": "Re-anchors: {count} this session · {m5} in 5 min · {m30} in 30 min",
+        "countTitle": "Resyncs: {count} this session · {m5} in 5 min · {m30} in 30 min",
         "playout": "Playout",
         "playoutTitle": "Measured playout error at the speaker output",
         "warming": "Warming {s} s",
@@ -149,8 +180,8 @@
           "connected": "Bluetooth connected",
           "disconnected": "Bluetooth disconnected",
           "reconnecting": "Bluetooth reconnecting",
-          "released": "Bluetooth handed over",
-          "autoReleased": "Bluetooth auto-released after connection issues",
+          "released": "Bluetooth released",
+          "autoReleased": "Bluetooth released automatically after connection issues",
           "disabled": "Speaker disabled"
         }
       },
@@ -158,18 +189,18 @@
         "title": "Audio output {name}"
       },
       "transfer": {
-        "ready": "Transfer",
+        "ready": "Room switch",
         "notReady": "Not ready",
-        "readyTitle": "Ready for room handoff",
-        "notReadyTitle": "Room handoff not ready: {reason}",
+        "readyTitle": "Ready to switch rooms",
+        "notReadyTitle": "Not ready to switch rooms: {reason}",
         "reasons": {
           "ready": "ready",
           "disabled": "speaker disabled",
-          "bt_management_disabled": "Bluetooth handed over",
+          "bt_management_disabled": "Bluetooth released",
           "stopping": "stopping",
           "reconnecting": "reconnecting",
           "music_assistant_reconnecting": "Music Assistant reconnecting",
-          "reanchoring": "re-anchoring",
+          "reanchoring": "resyncing",
           "output_missing": "output missing",
           "daemon_unavailable": "player not running",
           "bluetooth_disconnected": "Bluetooth disconnected",
@@ -185,7 +216,7 @@
         "title": {
           "sink_muted": "Muted by the system",
           "reconnect": "Reconnect unavailable",
-          "toggle_bt_management": "Hand-over unavailable",
+          "toggle_bt_management": "Release unavailable",
           "play_pause": "Playback unavailable",
           "volume": "Volume unavailable",
           "queue_control": "Queue controls unavailable"
@@ -207,8 +238,8 @@
         "output": "Audio output"
       },
       "server": {
-        "title": "Connected to Music Assistant {where}",
-        "foreign": "Connected to {where} — not this bridge’s Music Assistant"
+        "title": "Audio link to Music Assistant {where}",
+        "foreign": "Audio link goes to {where} — not this bridge’s Music Assistant"
       }
     },
     "elapsed": {
@@ -218,78 +249,16 @@
     }
   },
   "config": {
-    "general": "General",
-    "audio": "Audio",
-    "bluetooth": "Bluetooth",
     "ma": "Music Assistant",
-    "security": "Security",
-    "advanced": "Advanced",
     "save": "Save",
-    "saving": "Saving…",
-    "saved": "Configuration saved",
-    "unsaved": "Unsaved changes",
-    "reset": "Reset",
-    "validate": "Validate",
-    "validateConfig": "Validate Configuration",
-    "validationOk": "Configuration is valid",
-    "validationResults": "Validation Results",
-    "configValid": "Configuration is valid",
-    "bridgeName": "Bridge Name",
-    "bridgeNameHint": "Auto-populated from hostname if left empty",
-    "timezone": "Timezone",
-    "webPort": "Web Port",
-    "logLevel": "Log Level",
-    "pulseLatency": "Pulse Latency",
-    "pulseLatencyHint": "PulseAudio buffer latency in milliseconds",
-    "pulseLatencyUnit": "ms",
-    "preferSbc": "Prefer SBC Codec",
-    "preferSbcHint": "Use SBC codec instead of higher quality codecs for better compatibility",
-    "staticDelay": "Static Audio Delay",
-    "staticDelayHint": "Negative delay in milliseconds to compensate for Bluetooth latency",
-    "btCheckInterval": "BT Check Interval",
-    "btCheckIntervalHint": "How often to check Bluetooth connection status",
-    "btCheckIntervalUnit": "seconds",
-    "btMaxReconnect": "Max Reconnect Failures",
-    "btMaxReconnectHint": "Stop reconnecting after this many consecutive failures",
-    "managementMode": "Management Mode",
-    "adapterList": "Bluetooth Adapters",
     "adapterPowered": "Powered",
     "adapterOff": "Off",
     "noAdapters": "No adapters detected",
-    "maServer": "MA Server URL",
-    "maServerHint": "Use 'auto' for mDNS discovery",
-    "maPort": "MA Port",
-    "autoDiscovery": "Auto-Discovery",
-    "autoDiscoveryHint": "Automatically discover Music Assistant server via mDNS",
-    "connectionStatus": "Connection Status",
-    "maConnected": "Connected",
-    "maDisconnected": "Disconnected",
-    "enablePassword": "Enable Password Protection",
-    "currentPassword": "Current Password",
-    "newPassword": "New Password",
-    "confirmPassword": "Confirm Password",
-    "changePassword": "Change Password",
     "passwordMismatch": "Passwords do not match",
-    "haAuthInfo": "When running as a Home Assistant addon, authentication is handled by HA",
-    "rawJson": "Raw JSON",
-    "rawJsonWarning": "Editing raw JSON can break your configuration. Proceed with caution.",
-    "invalidJson": "Invalid JSON",
-    "uploadConfig": "Upload Config",
-    "downloadConfig": "Download Config",
-    "saveAndRestart": "Save & Restart",
-    "editAdapterName": "Edit adapter name",
-    "latencyPresets": "Latency Presets",
-    "latencyLow": "Low (200ms)",
-    "latencyStandard": "Standard (500ms)",
-    "latencyHigh": "High (800ms)",
-    "latencyCustom": "Custom"
+    "invalidJson": "Invalid JSON"
   },
   "diagnostics": {
     "tabs": {
-      "health": "Health",
-      "events": "Events",
-      "recovery": "Recovery",
-      "bugreport": "Bug Report",
       "logs": "Logs",
       "system": "System",
       "overview": "Overview"
@@ -326,25 +295,10 @@
     "copied": "Copied!",
     "copyFailed": "Copy failed",
     "downloadCsv": "Download CSV",
-    "audioRouting": "Audio Routing",
     "audioSink": "Audio Sink",
     "codec": "Codec",
     "sampleRate": "Sample Rate",
-    "reanchorCount": "Routing Corrections",
-    "bugreport": {
-      "systemInfo": "System Information",
-      "version": "Version",
-      "buildDate": "Build Date",
-      "adapters": "Adapters",
-      "devices": "Devices",
-      "maConnected": "MA Connected",
-      "download": "Download Bug Report",
-      "copy": "Copy to Clipboard",
-      "howToFile": "How to File a Bug Report",
-      "step1": "Download the bug report using the button above.",
-      "step2": "Describe the issue and steps to reproduce.",
-      "step3": "Open a new issue on"
-    },
+    "reanchorCount": "Resyncs",
     "logs": {
       "title": "Application Logs",
       "logLevel": "Log Level",
@@ -354,18 +308,16 @@
       "apply": "Apply",
       "search": "Search logs…",
       "showingLines": "Showing {shown} of {total} lines",
-      "noLogs": "No log entries"
+      "noLogs": "No log entries",
+      "loadFailed": "Could not load the logs.",
+      "levelApplied": "Now logging at {level}",
+      "levelFailed": "Could not change the log level"
     },
     "timeline": {
       "title": "Recent events"
     }
   },
   "ma": {
-    "connection": {
-      "title": "Connection Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected"
-    },
     "login": {
       "title": "Connect to Music Assistant",
       "step1": "Step 1: Server Address",
@@ -374,24 +326,25 @@
       "serverUrlPlaceholder": "http://192.168.1.100:8095",
       "discover": "Auto-Discover",
       "token": "Token",
-      "tokenPlaceholder": "Enter HA token or MA API key",
       "submit": "Connect",
       "failed": "Connection failed. Check your credentials.",
       "username": "Username",
       "password": "Password",
       "withHa": "Sign in with Home Assistant",
-      "connected": "Connected to {url}",
+      "connected": "Signed in to Music Assistant at {url}",
       "useToken": "Use a token instead",
       "maToken": "Music Assistant token",
       "maTokenHint": "Create a long-lived token in Music Assistant → Settings → Profile, then paste it here.",
       "tokenSubmit": "Connect with token",
-      "tokenFailed": "Music Assistant did not accept the token."
+      "tokenFailed": "Music Assistant did not accept the token.",
+      "noServers": "No Music Assistant server was found on the network. Enter its address above."
     },
     "groups": {
       "members": "members",
       "empty": "No Sync Groups",
       "emptyDesc": "No Music Assistant sync groups found. Discover groups to get started.",
-      "discover": "Discover Groups"
+      "discover": "Discover Groups",
+      "create": "Create a group in Music Assistant"
     },
     "nowPlaying": {
       "artwork": "Album artwork",
@@ -413,7 +366,6 @@
     "passwordPlaceholder": "Enter your password",
     "submit": "Sign In",
     "failed": "Invalid password. Please try again.",
-    "haAuthenticated": "Authenticated via Home Assistant",
     "username": "Username",
     "code": "Authentication code",
     "codePrompt": "Enter the code from {module}",
@@ -425,30 +377,11 @@
       "ha": "Home Assistant account"
     }
   },
-  "dashboard": {
-    "bridge": "Bridge",
-    "adapters": "Adapters",
-    "devices": "Devices",
-    "maStatus": "Music Assistant",
-    "maConnected": "Connected",
-    "maDisconnected": "Disconnected",
-    "empty": {
-      "title": "No devices configured",
-      "description": "Add a Bluetooth speaker or audio device to get started."
-    },
-    "onboarding": {
-      "title": "Getting Started",
-      "addSpeaker": "Add your first Bluetooth speaker",
-      "connectMA": "Connect to Music Assistant",
-      "configure": "Configure settings",
-      "dismiss": "Dismiss"
-    }
-  },
   "devices": {
     "addDevice": "Add speaker",
     "empty": {
-      "title": "No devices yet",
-      "description": "Scan for Bluetooth devices or add a device manually."
+      "title": "No players yet",
+      "description": "Scan for Bluetooth speakers or add a player manually."
     },
     "viewGrid": "Grid view",
     "viewList": "List view",
@@ -461,7 +394,6 @@
     "muteAll": "Mute all",
     "pauseAll": "Pause all",
     "reconnectAll": "Reconnect all",
-    "actionFailed": "Action failed",
     "list": {
       "name": "Name",
       "status": "Status",
@@ -476,7 +408,7 @@
     "bulk": {
       "power_save": {
         "label": "Power save",
-        "title": "Suspend the audio output of {count} of {total} selected (Bluetooth stays connected)"
+        "title": "Turn on power save for {count} of {total} selected (Bluetooth stays connected)"
       },
       "standby": {
         "label": "Standby",
@@ -486,9 +418,9 @@
       },
       "release": {
         "label": "Release",
-        "title": "Hand {count} of {total} selected over to other devices",
-        "confirmTitle": "Hand over {count} speaker(s)?",
-        "confirmMessage": "The bridge lets go of: {names}. They will not reconnect until you take them back."
+        "title": "Release {count} of {total} selected so other devices can use them",
+        "confirmTitle": "Release {count} speaker(s)?",
+        "confirmMessage": "The bridge stops managing: {names}. They will not reconnect until you reclaim them."
       },
       "failed": "{action} failed for: {names}",
       "enable": {
@@ -517,20 +449,17 @@
   },
   "drawer": {
     "tabs": {
-      "status": "Status",
+      "overview": "Overview",
       "config": "Settings",
-      "events": "Events",
-      "signal": "Signal Path",
-      "timing": "Timing"
+      "timing": "Timing",
+      "history": "History"
     },
     "status": {
       "playerState": "State",
-      "backendType": "Backend",
       "audioSink": "Audio Sink",
-      "connected": "Connected",
       "codec": "Codec",
-      "reportedDelay": "Reported delay",
-      "reportedDelayHint": "Delay the speaker reports over Bluetooth (A2DP Delay Reporting). Advisory: reported by the speaker, not measured.",
+      "reportedDelay": "Reported latency",
+      "reportedDelayHint": "Latency the speaker reports over Bluetooth (A2DP Delay Reporting). Advisory: reported by the speaker, not measured.",
       "sampleRate": "Sample Rate"
     },
     "config": {
@@ -538,14 +467,10 @@
       "mac": "MAC Address",
       "adapter": "Adapter",
       "port": "Listen Port",
-      "delay": "Static Delay",
+      "delay": "Speaker latency compensation",
       "enabled": "Enabled",
-      "edit": "Edit",
       "save": "Save",
-      "saved": "Device configuration saved",
       "saveFailed": "Failed to save configuration",
-      "autoAdapter": "Auto (default)",
-      "autoPort": "Auto",
       "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
       "playoutSync": "Playout sync",
       "playoutSyncHelp": "Turn off to run this speaker the way it worked before playout sync: the plain audio output, with no playout measurement.",
@@ -555,7 +480,9 @@
       "empty": "No events recorded"
     },
     "signal": {
-      "subprocess": "Subprocess"
+      "port": "port {port}",
+      "corrections": "{n} correction | {n} corrections",
+      "subprocess": "Player process"
     },
     "actions": {
       "more": "More actions",
@@ -567,10 +494,10 @@
       "pairingDone": "Music Assistant can pair for a while",
       "unmute": "Unmute the audio output",
       "unmuteDone": "Audio output unmuted",
-      "release": "Suspend audio output",
-      "releaseDone": "Audio output suspended",
-      "resume": "Resume audio output",
-      "resumeDone": "Audio output resumed"
+      "release": "Turn on power save",
+      "releaseDone": "Power save is on",
+      "resume": "Turn off power save",
+      "resumeDone": "Power save is off"
     },
     "server": {
       "title": "Music Assistant server",
@@ -578,9 +505,17 @@
       "host": "Address",
       "id": "Server ID",
       "url": "URL",
-      "foreign": "Connected to Music Assistant on {where}, not to this bridge’s Music Assistant. Another server took this player first; reconnect the player so this bridge’s Music Assistant can take it.",
+      "foreign": "The audio link goes to Music Assistant on {where}, not to this bridge’s Music Assistant. Another server took this player first; reconnect the player so this bridge’s Music Assistant can take it.",
       "refusedTitle": "Turned away",
       "refusedCount": "{n} attempts"
+    },
+    "troubleshoot": {
+      "label": "Troubleshoot"
+    },
+    "overview": {
+      "audioPath": "Audio path",
+      "events": "Latest events",
+      "allEvents": "All events →"
     }
   },
   "volume": {
@@ -590,42 +525,26 @@
   },
   "bluetooth": {
     "scan": {
-      "title": "Bluetooth Scan",
-      "description": "Scan for nearby Bluetooth audio devices.",
-      "start": "Start Scan",
       "scanning": "Scanning…",
       "pair": "Pair",
-      "paired": "Paired",
-      "audio": "Audio",
       "unknown": "Unknown Device",
       "noDevices": "No devices found",
       "adapter": "Adapter",
-      "pairAndAdd": "Pair & add",
       "add": "Add",
       "added": "On this bridge",
       "addedToast": "{name} added — the player starts in a moment",
       "pairFailed": "Pairing failed: {reason}",
-      "advanced": "Compatibility options",
       "quiesce": "Temporarily disconnect other speakers on this adapter while pairing",
       "noIo": "Pair without a PIN prompt (Just Works) — for speakers that cancel pairing",
-      "hfp": "Also allow the hands-free profile (calls)",
-      "hint": "Put the speaker in pairing mode first."
+      "hfp": "Also allow the hands-free profile (calls)"
     },
-    "signal": {
-      "strong": "Strong",
-      "medium": "Medium",
-      "weak": "Weak"
-    },
-    "paired": "Paired Devices",
     "audioOnly": "Audio only",
-    "allDevices": "All devices",
     "audioCount": "{audio} audio · {total} total",
     "addToFleet": "Add to fleet",
     "info": "Device Info",
-    "release": "Hand over to other devices",
-    "reclaim": "Take back",
-    "released": "Handed over",
-    "resetReconnect": "Reset & Reconnect",
+    "release": "Release speaker",
+    "reclaim": "Reclaim speaker",
+    "released": "Released",
     "deviceInfo": "Bluetooth Device Info",
     "noDevices": "No paired devices found"
   },
@@ -638,7 +557,6 @@
     "close": "Close",
     "search": "Search",
     "noResults": "No results",
-    "yes": "Yes",
     "no": "No"
   },
   "update": {
@@ -653,6 +571,7 @@
     "recheck": "Re-check",
     "viewRelease": "Release Notes",
     "applyNow": "Update Now",
+    "confirmTitle": "Update to v{version}?",
     "applyStarted": "Update started — the bridge will restart shortly",
     "openHa": "Update in HA",
     "copyCommand": "Copy command",
@@ -666,7 +585,6 @@
     "next": "Next track",
     "previous": "Previous track",
     "failed": "Transport command failed",
-    "progress": "Playback progress",
     "position": "Track position",
     "shuffleOn": "Shuffle on — turn off",
     "shuffleOff": "Shuffle off — turn on",
@@ -679,23 +597,65 @@
     "queue": "Queue controls"
   },
   "adapter": {
-    "management": "Adapter Management",
-    "togglePower": "Power",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "confirmOffTitle": "Turn off adapter {adapter}?",
+    "confirmRebootTitle": "Reboot adapter {adapter}?",
     "reboot": "Reboot",
     "powerToggled": "Adapter power toggled",
     "powerFailed": "Failed to toggle adapter power",
     "rebooted": "Adapter rebooted",
-    "rebootFailed": "Failed to reboot adapter"
+    "rebootFailed": "Failed to reboot adapter",
+    "confirmNone": "No speakers are using it right now."
+  },
+  "kit": {
+    "closeDialog": "Close dialog",
+    "closeDrawer": "Close drawer",
+    "dismissNotification": "Dismiss notification",
+    "removeBadge": "Remove",
+    "signalPath": "Signal path",
+    "selectAllRows": "Select all rows",
+    "clearSearch": "Clear search",
+    "loading": "Loading"
+  },
+  "sidebar": {
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
+  },
+  "undo": {
+    "label": "Undo",
+    "handedOver": "{name} released. It will not reconnect until you reclaim it.",
+    "disabled": "{name} disabled.",
+    "standby": "{name} on standby: Bluetooth disconnected, playback stopped.",
+    "woke": "{name} woken.",
+    "enabled": "{name} enabled.",
+    "muted": "Muted: {name}.",
+    "powerSave": "Power save on: {name}."
   },
   "restart": {
     "stopping": "Stopping bridge…",
     "restarting": "Restarting bridge…",
     "ready": "Bridge restarted successfully",
     "error": "Restart failed",
-    "elapsed": "{seconds}s"
+    "openLogs": "Open logs",
+    "dismiss": "Dismiss",
+    "updating": "Updating… the bridge restarts",
+    "updated": "Updated, the bridge is back",
+    "updateFailed": "Update failed",
+    "errorNext": "Open the logs to see why, then try again.",
+    "updateTimedOut": "The update did not finish — open the logs",
+    "updateTimedOutNext": "The bridge has not come back after 3 minutes. Open the logs to see where the update stopped; if the bridge is still the old version, try the update again."
   },
   "bugreport": {
     "title": "File a Bug Report",
+    "hints": {
+      "min": "At least {n} characters."
+    },
+    "submitBy": {
+      "github": "Open GitHub issue",
+      "proxy": "Send report",
+      "copy": "Copy report"
+    },
     "fileReport": "File Bug Report",
     "fields": {
       "title": "Issue Title",
@@ -727,14 +687,14 @@
   },
   "settings": {
     "title": "Settings",
-    "showAdvanced": "Show advanced settings",
+    "showAdvanced": "Show technical details",
     "unsaved": "Unsaved changes",
     "save": "Save",
     "discard": "Discard",
     "saved": "Settings saved",
-    "appliedLive": "Applied without a restart",
     "restartNeeded": "Restart the bridge to apply some changes",
     "restartNow": "Restart now",
+    "restartConfirmTitle": "Restart the bridge now?",
     "units": {
       "ms": "ms",
       "s": "s",
@@ -742,7 +702,10 @@
       "h": "h"
     },
     "auto": "Automatic",
-    "notSet": "Not set",
+    "embedded": {
+      "security": "Signed in through Home Assistant. Sign-in and access are managed there.",
+      "updates": "Updates come from the Home Assistant add-on store."
+    },
     "sections": {
       "general": {
         "title": "General",
@@ -865,7 +828,7 @@
       },
       "PLAYOUT_SYNC": {
         "label": "Playout sync",
-        "help": "Off keeps the plain audio output. Measure is experimental: it measures the playout error at the speaker output and reports it, without correcting it. Takes effect after the speakers restart.",
+        "help": "Off keeps the plain audio output. Measure is experimental: it measures the playout error at the speaker output and reports it, without correcting it. Measure and correct corrects each start's placement using the air sensor; it needs the experimental air sensor and without it behaves like measure. Takes effect after the speakers restart.",
         "options": {
           "off": "Off",
           "measure": "Measure only",
@@ -877,8 +840,8 @@
         "help": "Also log the speaker sink's own clock rate in the minute-by-minute Clock diag line. Playback is unchanged."
       },
       "PULSE_SINK_RESET_ON_START": {
-        "label": "Wake audio outputs on start",
-        "help": "Suspend and resume each local audio output once before its player first starts. Helps an output that comes up silent."
+        "label": "Reset audio outputs on start",
+        "help": "Pause and resume each local audio output once before its player first starts. Helps an output that comes up silent."
       },
       "BT_CHECK_INTERVAL": {
         "label": "Connection check interval",
@@ -888,13 +851,17 @@
         "label": "Reconnect attempts",
         "help": "Failed reconnects in a row before the bridge stops trying. 0 keeps trying."
       },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "Technical details by default",
+        "help": "Show signal levels, sync counters, server IDs and advanced settings in browsers that have not chosen. Each browser can change this from its preferences menu."
+      },
       "RSSI_BADGE": {
         "label": "Signal strength",
         "help": "Show live signal strength on each connected speaker."
       },
       "BT_CHURN_THRESHOLD": {
         "label": "Reconnect loop limit",
-        "help": "Connect/disconnect cycles within the window that make the bridge pause a speaker. 0 turns this off."
+        "help": "Connect/disconnect cycles within the window that make the bridge release a speaker. 0 turns this off."
       },
       "BT_CHURN_WINDOW": {
         "label": "Reconnect loop window",
@@ -914,7 +881,8 @@
       },
       "EXPERIMENTAL_AIR_SENSOR": {
         "label": "Air sensor (SBC speakers)",
-        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure or loop mode, a Bluetooth SBC speaker and CAP_NET_RAW. Measures in measure mode; corrects placement in loop mode."
+        "help": "Experimental, opt-in; needs a bridge restart. Measures when audio really leaves over the air. Needs playout sync in measure or loop mode, a Bluetooth SBC speaker and CAP_NET_RAW. Measures in measure mode; corrects placement in loop mode.",
+        "disabledReason": "Turn on playout sync (measure or loop mode) first."
       },
       "HA_INTEGRATION": {
         "mode": {
@@ -981,7 +949,8 @@
       },
       "AUTH_ENABLED": {
         "label": "Require sign-in",
-        "help": "Ask for a password or account before showing this interface."
+        "help": "Ask for a password or account before showing this interface.",
+        "disabledReason": "Set a password first."
       },
       "SESSION_TIMEOUT_HOURS": {
         "label": "Session length",
@@ -1127,6 +1096,8 @@
         "importHelp": "Replace the configuration with a file exported earlier. Secrets already on the bridge are kept.",
         "choose": "Choose file",
         "imported": "Configuration imported",
+        "confirmTitle": "Replace the configuration?",
+        "confirmLabel": "Replace",
         "raw": "Edit as JSON",
         "rawHelp": "For keys this screen does not show. Changes are saved with the Save button.",
         "edit": "Edit",
@@ -1178,14 +1149,14 @@
         "help": "What the bridge does while nothing plays.",
         "options": {
           "default": "Stay connected",
-          "power_save": "Release audio (power save)",
+          "power_save": "Power save",
           "auto_disconnect": "Disconnect",
           "keep_alive": "Keep the speaker awake"
         }
       },
       "power_save_delay_minutes": {
-        "label": "Release audio after",
-        "help": "Free the speaker's audio connection after this long without sound."
+        "label": "Power save after",
+        "help": "Turn on power save after this long without sound."
       },
       "idle_disconnect_minutes": {
         "label": "Disconnect after",
@@ -1205,7 +1176,7 @@
         "help": "Time between keep-awake bursts."
       },
       "static_delay_ms": {
-        "label": "Speaker delay",
+        "label": "Speaker latency compensation",
         "help": "How late this speaker plays its sound. The bridge sends audio this much earlier so it stays in time with the group."
       },
       "min_buffer_ms": {
@@ -1227,31 +1198,15 @@
     "nothingFound": "Nothing matches “{q}”.",
     "changed": "Changed",
     "loadFailed": "Settings could not be loaded.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "autosave": {
+      "saved": "Saved",
+      "failed": "Not saved: {reason}"
+    }
   },
   "timing": {
-    "applied": "Applied: {value} ms",
-    "suggestion": "Suggested delay: {value} ms",
+    "suggestion": "Suggested latency compensation: {value} ms",
     "applySuggestion": "Apply",
-    "clicks": {
-      "label": "Click track",
-      "help": "Plays steady clicks in time with the group, so you can hear which speaker is late.",
-      "start": "Start",
-      "stop": "Stop"
-    },
-    "mic": {
-      "label": "Measure with a microphone",
-      "help": "Compares this speaker with another one through your phone or computer microphone. Keep the device still between both speakers.",
-      "needPeer": "Needs a second connected speaker to compare with.",
-      "needHttps": "The browser only allows the microphone over HTTPS or on localhost.",
-      "reference": "Compare with",
-      "start": "Measure",
-      "step": "Measurement {n} of 3: {name}",
-      "not_detected": "The clicks were not heard clearly. Move closer and try again.",
-      "unstable": "The measurements disagreed. Keep the device still and try again.",
-      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s delay to {value} ms?",
-      "resultTitle": "Measurement result"
-    },
     "history": {
       "title": "Recent timing",
       "syncError": "Sync error {ms} ms",
@@ -1322,7 +1277,7 @@
       },
       "calibration": {
         "title": "Calibrations",
-        "line": "Speaker latency: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "line": "Air-to-sound latency: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
         "forget": "Forget",
         "forgetTitle": "Forget this calibration?",
         "forgetConfirm": "{name} is reported uncalibrated for {codec} {rate} kHz on {adapter} until the sync wizard measures it again."
@@ -1335,17 +1290,18 @@
         "inactive": "inactive: not locked",
         "bias": "Air bias {value} ms",
         "corrections": "Air corrections {n}",
-        "trimEarly": "Delay trim {value} ms (target {ms} ms early)",
-        "trimLate": "Delay trim {value} ms (target {ms} ms late)"
+        "trimEarly": "Compensation trim {value} ms (target {ms} ms early)",
+        "trimLate": "Compensation trim {value} ms (target {ms} ms late)"
       },
       "learned": {
         "title": "Learned latencies",
-        "line": "Learned: {latency} ms at {delay} ms delay · {codec} · {adapter} · {starts} starts",
+        "line": "Learned: {latency} ms at {delay} ms compensation · {codec} · {adapter} · {starts} starts",
         "forget": "Forget",
         "forgetTitle": "Forget this learned latency?",
         "forgetConfirm": "{name} starts learning its latency for {codec} {rate} kHz on {adapter} again. A calibration for it is forgotten too."
       }
-    }
+    },
+    "details": "Technical details"
   },
   "system": {
     "bridge": "Bridge",
@@ -1410,9 +1366,7 @@
     "sync": "Group sync"
   },
   "home": {
-    "maConnected": "Music Assistant connected",
-    "maDisconnected": "Music Assistant not connected",
-    "connected": "{n} of {total} connected",
+    "connected": "{n} of {total} Bluetooth connected",
     "playing": "{n} playing"
   },
   "groups": {
@@ -1456,7 +1410,9 @@
       "named": "Choose a name and a room for this output.",
       "looking": "Looking for audio outputs…",
       "taken": "Another player already uses this output."
-    }
+    },
+    "pairing": "Pairing {name}…",
+    "errorNext": "Check that the speaker is in pairing mode and close to the adapter, then try again."
   },
   "connection": {
     "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."
@@ -1476,19 +1432,18 @@
     },
     "reconnect": "Reconnect",
     "standby": "Put on standby",
-    "wake": "Wake from standby",
-    "claim": "Make this bridge the active source",
-    "handOver": "Hand over to other devices",
-    "takeBack": "Take back",
+    "wake": "Wake",
+    "claim": "Use this bridge as the source",
+    "handOver": "Release speaker",
+    "takeBack": "Reclaim speaker",
     "disable": "Disable",
     "enable": "Enable",
     "bluetoothInfo": "Bluetooth details",
     "remove": "Remove speaker",
     "removeTitle": "Remove {name}?",
     "removeMessage": "Its player disappears from Music Assistant and its Bluetooth pairing is removed. To use it again, add it as a new speaker.",
-    "suspendOutput": "Suspend audio output",
-    "resumeOutput": "Resume audio output",
-    "settings": "Settings"
+    "settings": "Settings",
+    "repairTitle": "Pair {name} again?"
   },
   "sync": {
     "open": "Sync",
@@ -1502,7 +1457,7 @@
     },
     "members": "Members",
     "delay": "{ms} ms",
-    "delayHeading": "Delay (larger = earlier)",
+    "delayHeading": "Latency compensation (larger = earlier)",
     "sign": "+ plays earlier · − plays later",
     "noMembers": "This group has no members.",
     "loadError": "Could not read the group members ({code}).",
@@ -1536,7 +1491,7 @@
       "other": "Cannot be adjusted"
     },
     "measuredAgo": "Measured {age}",
-    "noDelay": "No delay reported",
+    "noDelay": "No latency reported",
     "actions": {
       "title": "Tune",
       "manual": "Manual tuning",
@@ -1610,13 +1565,13 @@
       }
     },
     "manual": {
-      "title": "Delays",
-      "help": "A larger delay makes a speaker play earlier. Changes are written at once.",
+      "title": "Latency compensation",
+      "help": "A larger value makes a speaker play earlier. Changes are written at once.",
       "reset": "Put back the delays from the start",
       "resetDone": "Delays are back to where this tuning started.",
       "minus": "−{n} ms (later)",
       "plus": "+{n} ms (earlier)",
-      "valueLabel": "Delay of {name} in ms",
+      "valueLabel": "Latency compensation of {name} in ms",
       "departed": "Left the group",
       "starting": "Starting manual tuning…",
       "startFailed": "Could not start manual tuning ({code}).",
@@ -1637,7 +1592,9 @@
       "resetMeasured": "Reset to measured",
       "resetMeasuredMember": "Reset {name} to the measured delay",
       "endedNotice": "Manual tuning ended: the delays stay; the clicks stopped, every speaker is unmuted and the volumes are back.",
-      "prepOf": "Before you listen ({n}/{total}) · {name}"
+      "prepOf": "Before you listen ({n}/{total}) · {name}",
+      "start": "Start tuning by ear",
+      "startHelp": "Starting stops whatever the group is playing, plays a click track on it and lets you move each speaker's delay. Nothing starts until you press the button."
     },
     "capture": {
       "errors": {
@@ -1664,8 +1621,7 @@
       },
       "steps": {
         "prepare": "Where and how",
-        "stop": "Stop the music",
-        "clicker": "Start the clicks",
+        "clicker": "Stop the music, start the clicks",
         "volume": "Set the volume",
         "members": "Speaker by speaker",
         "tune": "Listen and adjust",
@@ -1673,7 +1629,7 @@
       },
       "notice": {
         "title": "Nothing else plays while you measure.",
-        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop.",
+        "help": "The click track plays on the group once you start the clicks; if the group is playing, that stops it first. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop.",
         "queue": "Calibration replaces the group’s queue with the click track; start your music again afterwards."
       },
       "point": {
@@ -1765,17 +1721,16 @@
       "saveConfirm": "Save and finish"
     },
     "air": {
-      "title": "Speaker latency (air → sound)",
-      "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is measured against a reference: a member whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much.",
+      "title": "Bluetooth latency measured",
+      "help": "How long each bridge speaker takes from receiving the audio over Bluetooth to playing it, from the phone's recording. It is compared with a reference whose sound is on schedule, such as a web player on headphones or a wired output. A reference with its own delay (PC speakers, a Bluetooth headset) makes every value wrong by that much. Saved values are used by the bridge on its own; they are not the speaker's delay setting.",
       "reference": "Reference",
       "referencePick": "Choose a reference…",
       "referenceHint": "Pick a headset, wired output or another reference that plays on schedule. It also becomes the reference for the proposed delays.",
       "referenceFailed": "Could not set the reference ({code}).",
-      "value": "{ms} ms",
+      "value": "Bluetooth latency measured: {ms} ms",
       "hint": "the speaker reports {ms} ms",
-      "save": "Save as this speaker's latency",
-      "saveButton": "Save latencies",
-      "saved": "Saved",
+      "save": "Save this Bluetooth latency",
+      "saveButton": "Save",
       "saveFailed": "Could not save ({code}).",
       "outOfRange": "outside {min}–{max} ms, cannot be saved",
       "reasons": {
@@ -1784,12 +1739,13 @@
         "not_measured": "This speaker or the reference was not heard",
         "not_sbc": "The speaker does not play SBC",
         "air_epoch_changed": "Its Bluetooth stream restarted during its turn",
-        "air_delay_changed": "The speaker's delay changed during the recording.",
+        "air_delay_changed": "The speaker's latency compensation changed during the recording.",
         "no_air_clicks": "Its clicks were not found on the air",
         "no_written_clicks": "Its clicks were not found in what the bridge wrote",
         "fold_failed": "The air measurement for this speaker could not be completed",
         "no_air_frames": "No Bluetooth audio from this speaker was seen on the air during its turn"
-      }
+      },
+      "valueSaved": "Bluetooth latency measured: {ms} ms, saved"
     },
     "cancel": {
       "title": "Stop measuring?",
@@ -1855,13 +1811,6 @@
         "paused": "Paused",
         "unknown": "Unknown"
       },
-      "stop": {
-        "help": "The group must be silent before the clicks start: nothing else may play while the speakers are measured.",
-        "state": "Group:",
-        "button": "Stop the music",
-        "stillPlaying": "The group is still playing. Stop it to go on.",
-        "notPlaying": "The group is not playing — moving on."
-      },
       "clicker": {
         "help": "The click track plays on every speaker of the group through Music Assistant for 3 minutes. If it stops, start it again.",
         "start": "Start the clicks",
@@ -1870,7 +1819,12 @@
         "stopped": "Clicks are not playing.",
         "groupPlaying": "The group plays something else: stop it first.",
         "whyDisabled": "Start the clicks to go on.",
-        "left": "Clicks: {time} left"
+        "left": "Clicks: {time} left",
+        "helpStop": "The group is playing something. Starting the clicks stops it first, then plays the click track on every speaker of the group for 3 minutes.",
+        "groupState": "Group:",
+        "stopAndStart": "Stop the music and start the clicks",
+        "confirmTitle": "Stop the group's music?",
+        "confirmMessage": "What the group is playing stops and its queue is replaced by the click track. Start your music again afterwards."
       },
       "volume": {
         "help": "Set a level where the clicks are clearly audible where you measure.",
@@ -1923,6 +1877,783 @@
       "certificate": "Your phone will warn about the certificate once — accept it to record directly in the browser.",
       "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):",
       "keepsDelay": "Not measured, these keep their current delay: {names}"
+    },
+    "tuneLink": "Tune with your group →",
+    "noGroupHelp": "{name} is not in a sync group. To tune it with others, create a sync group in Groups and add this speaker to it.",
+    "noGroupLink": "Open Groups →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "Apply {value} ms latency"
+      },
+      "edit_ma_server": {
+        "label": "Edit the Music Assistant server"
+      },
+      "enable_device": {
+        "label": "Enable | Enable {count} speakers"
+      },
+      "open_adapter_settings": {
+        "label": "Open adapter settings"
+      },
+      "open_audio_diagnostics": {
+        "label": "Open diagnostics"
+      },
+      "open_bluetooth_settings": {
+        "label": "Open Bluetooth settings"
+      },
+      "open_config": {
+        "label": "Open settings"
+      },
+      "open_devices_settings": {
+        "label": "Open speaker settings"
+      },
+      "open_diagnostics": {
+        "label": "Open diagnostics"
+      },
+      "open_ma_settings": {
+        "label": "Open Music Assistant settings"
+      },
+      "open_output_diagnostics": {
+        "label": "Open diagnostics"
+      },
+      "open_player_settings": {
+        "label": "Open player settings"
+      },
+      "open_runtime_diagnostics": {
+        "label": "Open diagnostics"
+      },
+      "prefer_sbc_codec": {
+        "label": "Prefer the SBC codec"
+      },
+      "recheck_outputs": {
+        "label": "Recheck audio outputs"
+      },
+      "reclaim_bluetooth": {
+        "label": "Reclaim speaker | Reclaim {count} speakers"
+      },
+      "reconnect_device": {
+        "label": "Reconnect speaker | Reconnect {count} speakers"
+      },
+      "release_bluetooth": {
+        "label": "Release speaker"
+      },
+      "repair_speaker": {
+        "label": "Pair speaker again"
+      },
+      "rerun_checks": {
+        "label": "Run the checks again"
+      },
+      "rerun_preflight": {
+        "label": "Run the host check again"
+      },
+      "retry_ma_discovery": {
+        "label": "Find Music Assistant again"
+      },
+      "revalidate_ma_link": {
+        "label": "Check the Music Assistant link again"
+      },
+      "review_buffer_settings": {
+        "label": "Review buffer settings"
+      },
+      "review_diagnostics": {
+        "label": "Review diagnostics"
+      },
+      "review_latency_settings": {
+        "label": "Review latency settings"
+      },
+      "review_pulse_latency": {
+        "label": "Review audio latency"
+      },
+      "scan_devices": {
+        "label": "Scan for speakers"
+      },
+      "start_pairing": {
+        "label": "Start pairing"
+      },
+      "test_ma_connection": {
+        "label": "Test the Music Assistant connection"
+      },
+      "tune_latency_compensation": {
+        "label": "Tune latency compensation"
+      },
+      "unmute_speaker": {
+        "label": "Unmute speaker"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "The audio link to Music Assistant is not connected."
+      },
+      "ma_disconnected": {
+        "message": "The bridge is not connected to the Music Assistant API."
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant has no queue for this speaker yet."
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant is reconnecting."
+      },
+      "no_sink": {
+        "message": "No audio output is configured."
+      },
+      "not_paired": {
+        "message": "The speaker is no longer paired. Put it in pairing mode and pair it again."
+      },
+      "reconnecting": {
+        "message": "A reconnect is already in progress."
+      },
+      "released": {
+        "message": "Bluetooth is released from the bridge. Reclaim the speaker first."
+      },
+      "stopping": {
+        "message": "The player is stopping."
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "The air sensor is not running for this speaker (it needs a Bluetooth speaker)."
+      },
+      "air_not_locked": {
+        "text": "The air sensor has not locked onto this speaker's stream since it started."
+      },
+      "air_unavailable": {
+        "text": "The air sensor cannot run for this speaker (see its air sensor state)."
+      },
+      "cpu_budget": {
+        "text": "Reading the Bluetooth monitor used more CPU than its budget, so the air sensor is off until the bridge restarts."
+      },
+      "internal_error": {
+        "text": "The air sensor hit an internal error and turned itself off (details in the log)."
+      },
+      "module_suspend_on_idle": {
+        "text": "PulseAudio's module-suspend-on-idle is loaded and pauses idle outputs."
+      },
+      "monitor_error": {
+        "text": "The Bluetooth monitor socket failed; the bridge keeps retrying."
+      },
+      "no_cap_net_raw": {
+        "text": "The bridge cannot open the Bluetooth monitor socket: it needs the NET_RAW capability (add NET_RAW to the container's cap_add)."
+      },
+      "observed_suspend": {
+        "text": "The host paused this speaker's audio output while the speaker was connected and idle."
+      },
+      "playout_fallback": {
+        "text": "The playout engine fell back to the legacy player, so there is no schedule to compare with."
+      },
+      "sink_ambiguous": {
+        "text": "Several identical outputs match it and none can be told apart."
+      },
+      "sink_in_use": {
+        "text": "Another player already plays to it."
+      },
+      "sink_unplugged": {
+        "text": "It is unplugged or was renamed."
+      },
+      "unknown_suspend": {
+        "text": "The host paused this speaker's audio output."
+      },
+      "unsupported_input": {
+        "text": "The stream's audio format is not supported (the air sensor needs 44.1 or 48 kHz)."
+      },
+      "unsupported_platform": {
+        "text": "This system has no Bluetooth monitor socket (Linux only)."
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber pauses idle Bluetooth nodes (session.suspend-timeout-seconds)."
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "Playback is active but no audio stream arrives",
+        "title": "Audio stalled"
+      },
+      "audio-streaming": {
+        "summary": "The audio stream became active",
+        "title": "Audio streaming"
+      },
+      "bluetooth-connected": {
+        "summary": "Bluetooth speaker connected",
+        "title": "Speaker connected"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Bluetooth speaker disconnected",
+        "title": "Speaker disconnected"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Bluetooth reconnect failed",
+        "title": "Reconnect failed"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Bluetooth reconnect succeeded",
+        "title": "Speaker reconnected"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "The speaker went to standby after {idle_minutes} minutes without sound",
+        "title": "Standby"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "The speaker is waking from standby",
+        "title": "Waking up"
+      },
+      "bt-management-disabled": {
+        "summary": "The bridge released this speaker's Bluetooth",
+        "title": "Bluetooth released"
+      },
+      "bt-management-reclaimed": {
+        "summary": "The speaker reconnected on its own, so the bridge reclaimed its Bluetooth",
+        "title": "Bluetooth reclaimed"
+      },
+      "daemon-connected": {
+        "summary": "The player connected to Music Assistant",
+        "title": "Audio link up"
+      },
+      "daemon-disconnected": {
+        "summary": "The player disconnected from Music Assistant",
+        "title": "Audio link down"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "The Bluetooth speaker is disconnected",
+        "title": "Disconnected"
+      },
+      "health-daemon_disconnected": {
+        "summary": "The Sendspin player is not connected",
+        "title": "Audio link down"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "Error"
+      },
+      "health-foreign_server": {
+        "summary": "Connected to Music Assistant on {host} {name}, not to this bridge's Music Assistant",
+        "title": "Another Music Assistant"
+      },
+      "health-idle": {
+        "summary": "Idle",
+        "title": "Idle"
+      },
+      "health-ma_reconnecting": {
+        "summary": "The Music Assistant connection is being refreshed",
+        "title": "Refreshing Music Assistant link"
+      },
+      "health-output_missing": {
+        "summary": "The audio output is missing",
+        "title": "Audio output missing"
+      },
+      "health-playback_without_audio": {
+        "summary": "Playback is active but no audio stream arrives",
+        "title": "Audio stalled"
+      },
+      "health-reconnecting": {
+        "summary": "A Bluetooth reconnect is in progress",
+        "title": "Reconnecting"
+      },
+      "health-released": {
+        "summary": "Bluetooth is released from the bridge",
+        "title": "Released"
+      },
+      "health-resyncing": {
+        "summary": "The audio is being resynced",
+        "title": "Resyncing"
+      },
+      "health-sink_muted": {
+        "summary": "The audio output is muted in the system",
+        "title": "Audio output muted"
+      },
+      "health-stopping": {
+        "summary": "The player is stopping",
+        "title": "Stopping"
+      },
+      "ma-monitor-stale": {
+        "summary": "The Music Assistant connection dropped: {error}",
+        "title": "Music Assistant link lost"
+      },
+      "ma-server-refused": {
+        "summary": "Refused Music Assistant at {host}: this bridge belongs to {owner}",
+        "title": "Music Assistant refused"
+      },
+      "playback-started": {
+        "summary": "Playback started",
+        "title": "Playback started"
+      },
+      "playback-stopped": {
+        "summary": "Playback stopped",
+        "title": "Playback stopped"
+      },
+      "reanchoring": {
+        "summary": "The stream timing is being resynced",
+        "title": "Resyncing"
+      },
+      "reconnecting": {
+        "summary": "Bluetooth reconnect in progress",
+        "title": "Reconnecting"
+      },
+      "runtime-error-cleared": {
+        "summary": "The error is gone",
+        "title": "Error cleared"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "Error"
+      },
+      "sink-lost": {
+        "summary": "The audio output was unplugged; the player waits on a placeholder output",
+        "title": "Audio output lost"
+      },
+      "sink-muted": {
+        "summary": "The audio output is muted in the system",
+        "title": "Audio output muted"
+      },
+      "sink-rematched": {
+        "summary": "The audio output was found under a new name: {sink}",
+        "title": "Audio output renamed"
+      },
+      "sink-restored": {
+        "summary": "The audio output is back: {sink}",
+        "title": "Audio output back"
+      },
+      "sink-unmuted": {
+        "summary": "The audio output is unmuted",
+        "title": "Audio output unmuted"
+      },
+      "startup-config": {
+        "summary": "Loading configuration",
+        "title": "Configuration"
+      },
+      "startup-devices": {
+        "summary": "The speaker list is prepared",
+        "title": "Speakers"
+      },
+      "startup-failed": {
+        "summary": "Startup failed: {message}",
+        "title": "Startup failed"
+      },
+      "startup-idle": {
+        "summary": "Startup initiated",
+        "title": "Startup"
+      },
+      "startup-integrations": {
+        "summary": "Music Assistant integration initialized",
+        "title": "Integrations"
+      },
+      "startup-ready": {
+        "summary": "Startup complete",
+        "title": "Ready"
+      },
+      "startup-runtime": {
+        "summary": "Runtime configuration prepared",
+        "title": "Runtime"
+      },
+      "startup-shutdown": {
+        "summary": "The bridge is shutting down",
+        "title": "Shutdown"
+      },
+      "startup-web": {
+        "summary": "The web interface is ready",
+        "title": "Web interface"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "Add first speaker"
+      },
+      "all_disabled": {
+        "label": "All speakers disabled"
+      },
+      "all_released": {
+        "label": "All speakers released"
+      },
+      "devices_ready": {
+        "label": "{ready}/{total} active speakers ready"
+      },
+      "first_run": {
+        "label": "First run"
+      },
+      "issues_attention": {
+        "label": "{count} issues need attention"
+      },
+      "no_playable_speaker": {
+        "label": "No playable speaker available"
+      },
+      "setup_progress": {
+        "label": "Setup {percent}%"
+      },
+      "startup": {
+        "label": "Startup {percent}%"
+      },
+      "startup_finalizing": {
+        "label": "Startup 90%"
+      },
+      "waiting_for_setup": {
+        "label": "Waiting for setup"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "This speaker is in loop mode but the air correction is not running; it plays as in measure mode. {cause}",
+        "title": "{device}: the air correction is not running"
+      },
+      "air_sensor_codec": {
+        "summary": "The speaker streams {codec}, and the air sensor reads only SBC. Turn on PREFER_SBC_CODEC and reconnect the speaker. Playback is not affected.",
+        "title": "{device}: the air sensor needs the SBC codec"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "The speaker uses SBC settings the air sensor does not support ({settings}). Playback is not affected.",
+        "title": "{device}: the air sensor cannot read this speaker's SBC stream"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} Playback is not affected. To hide this, turn off EXPERIMENTAL_AIR_SENSOR (needs a restart).",
+        "title": "{device}: the air sensor is unavailable | The air sensor is unavailable on {count} speakers"
+      },
+      "audio_unavailable": {
+        "summary": "The bridge cannot reach its audio system right now.",
+        "summary_all_disabled": "The bridge cannot reach its audio system right now. Restore audio access before you enable a speaker, or playback stays unavailable.",
+        "summary_no_server": "No PulseAudio or PipeWire server was found.",
+        "summary_no_server_env": "No PulseAudio or PipeWire server was found: PULSE_SERVER is not set.",
+        "summary_socket_missing": "The audio socket {socket} is configured but does not exist on the host; no audio server has ever created it.",
+        "summary_socket_refused": "The audio socket {socket} is mounted, but the audio server refused the connection ({error}).",
+        "summary_socket_unreachable": "The audio socket {socket} is mounted, but the bridge cannot open it ({error}).",
+        "title": "Audio system unavailable"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "This speaker was disabled after repeated pairing failures. Put it in pairing mode and click Enable to try again.",
+        "summary_error": "{error}",
+        "title": "{device} was disabled automatically: never paired"
+      },
+      "auto_released": {
+        "summary": "The bridge released this speaker's Bluetooth after repeated connection problems. | Reclaim {devices} so the bridge manages them again.",
+        "summary_error": "{error}",
+        "title": "{device} was released automatically | {count} speakers were released automatically"
+      },
+      "bluetooth_unavailable": {
+        "summary": "The bridge found no Bluetooth adapter. Open the adapter settings and refresh the list.",
+        "summary_all_disabled": "The bridge cannot reach a Bluetooth adapter right now. Restore adapter access before you enable a speaker, or playback stays unavailable.",
+        "summary_daemon_down": "The Bluetooth service (bluetoothd) is not running on the host, so the bridge sees no adapter until it starts.",
+        "title": "Bluetooth adapter unavailable"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} After such a pause the speaker restarts its stream and may shift by tens of milliseconds. The bridge never changes host audio settings; to stop it, stop the host from suspending idle audio outputs: {docs}",
+        "title": "{device}: the host pauses the audio output between songs"
+      },
+      "config_dir_not_writable": {
+        "summary": "The bridge process (UID {uid}) cannot write to {config_dir}. Saving the Music Assistant token, password changes and speaker settings will all fail. Fix: {remediation}",
+        "title": "{config_dir} is not writable by the bridge"
+      },
+      "config_migration_failed": {
+        "summary": "The bridge started without speakers. config.json was left untouched and is still the old file. Error: {error}. Please send a bug report.",
+        "title": "The configuration could not be updated to this version"
+      },
+      "disconnected": {
+        "summary": "Power on the speaker or reconnect it. | Power on or reconnect {devices}.",
+        "summary_error": "{error}",
+        "title": "{device} is disconnected | {count} speakers are disconnected"
+      },
+      "duplicate_device": {
+        "summary": "This speaker is also registered as '{other_bridge}' in Music Assistant. Running it on two bridges causes reconnect loops. Disable it on one bridge or stop the other one. | These speakers are also registered on another bridge: {devices}. Disable them on one bridge or stop the other one to avoid reconnect loops.",
+        "title": "{device} may conflict with another bridge | {count} speakers may conflict with another bridge"
+      },
+      "latency": {
+        "summary": "Latency tuning could be improved.",
+        "summary_high_latency": "Latency compensation is set, but the global audio latency is still high.",
+        "summary_multi_no_delays": "There are several speakers but none has a latency compensation yet.",
+        "summary_repeated_resyncs": "Repeated resyncs were seen during playback.",
+        "title": "Latency tuning needs attention"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant is not ready yet.",
+        "summary_no_credentials": "Music Assistant sign-in details are missing.",
+        "summary_no_url": "The Music Assistant address is not set.",
+        "summary_not_connected": "Sign-in details for Music Assistant are saved, but the bridge is not connected.",
+        "title": "Music Assistant needs attention"
+      },
+      "missing_sink": {
+        "summary": "The speaker is connected, but its Bluetooth audio output is not ready yet. | Reconnect or check the audio setup for {devices}.",
+        "summary_error": "{error}",
+        "title": "{device} is connected but has no audio output ready | {count} speakers are connected but have no audio output ready"
+      },
+      "needs_attention": {
+        "summary": "Review the recent events and diagnostics.",
+        "summary_daemon_disconnected": "The Sendspin player is not connected.",
+        "summary_error": "{error}",
+        "summary_foreign_server": "Connected to Music Assistant on {host} {name}, not to this bridge's Music Assistant.",
+        "summary_playback_without_audio": "Playback is active but no audio stream arrives.",
+        "summary_reconnecting": "A Bluetooth reconnect is in progress.",
+        "summary_resyncing": "The audio is being resynced.",
+        "summary_sink_muted": "The audio output is muted in the system.",
+        "summary_stopping": "The player is stopping.",
+        "title": "{device} needs attention"
+      },
+      "never_paired": {
+        "summary": "This speaker was added to the bridge but has never appeared in Bluetooth. Put it in pairing mode and click Start pairing. | These speakers were added but have never appeared in Bluetooth: {devices}. Put them in pairing mode and start pairing.",
+        "summary_error": "{error}",
+        "title": "{device} has never been paired | {count} speakers have never been paired"
+      },
+      "output_missing": {
+        "summary": "The output {sink} is not available. {cause} Plug the device back in, or pick another output in the player's settings. Until then the player stays in its Music Assistant groups, silent.",
+        "title": "{device}: the audio output is missing"
+      },
+      "output_muted": {
+        "summary": "The output {sink} is muted in the system mixer, so nothing is audible. Music Assistant's volume cannot unmute it: unmute it in the system sound settings. | The same applies to: {others}.",
+        "title": "{device}: the audio output is muted | {count} audio outputs need attention"
+      },
+      "output_port_unavailable": {
+        "summary": "The active port {port} of {sink} reports no connection. Check the cable or the speakers. | The same applies to: {others}.",
+        "title": "{device}: nothing is plugged into the audio output | {count} audio outputs need attention"
+      },
+      "output_volume_zero": {
+        "summary": "The output {sink} is set to 0 % in the system mixer. Music Assistant's volume cannot raise it: raise it in the system sound settings. | The same applies to: {others}.",
+        "title": "{device}: the audio output volume is 0 % | {count} audio outputs need attention"
+      },
+      "pa_socket_missing": {
+        "summary": "The audio socket {socket} is configured but does not exist on the host yet; no PipeWire or PulseAudio server has created it. This is the usual sign of a headless host without user-session lingering.",
+        "title": "Audio server unreachable: enable user lingering"
+      },
+      "pa_socket_refused": {
+        "summary": "The audio socket {socket} is mounted, but the host's PipeWire or PulseAudio server refused the connection. This is the usual sign of a headless host without user-session lingering.",
+        "title": "Audio server unreachable: enable user lingering"
+      },
+      "repair_required": {
+        "summary": "The speaker is no longer paired, so reconnect attempts keep failing. Put it in pairing mode and pair it again. | These speakers are no longer paired. Pair {devices} again from pairing mode.",
+        "summary_error": "{error}",
+        "title": "{device} needs to be paired again | {count} speakers need to be paired again"
+      },
+      "runtime_access": {
+        "summary": "The bridge cannot reach the host D-Bus services it needs for Bluetooth control. Open Diagnostics and check the container's mounts and privileges.",
+        "summary_all_disabled": "The bridge cannot reach the host services it needs right now. Restore host access before you enable a speaker, or playback stays unavailable.",
+        "title": "The bridge cannot reach the host services it needs"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} sent the connect attempt and the speaker rejected it with 'Limited Resources'. Samsung Q-series soundbars filter incoming pairings by the initiator's Bluetooth Class of Device. Set device_class to 0x00010c on {adapter} in Settings, Bluetooth, then pair again.",
+        "summary_no_adapter": "The Bluetooth adapter sent the connect attempt and the speaker rejected it with 'Limited Resources'. Samsung Q-series soundbars filter incoming pairings by the initiator's Bluetooth Class of Device. Set device_class to 0x00010c on the adapter in Settings, Bluetooth, then pair again.",
+        "title": "{device}: pairing rejected by the speaker's Class of Device filter"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "The player connects but is dropped, or drops itself, on a steady timer ({interval} s). Check the Music Assistant server and port, then run Test connection.",
+        "title": "{device}: the Sendspin player exits every {interval} s | {count} speakers: the Sendspin player exits at a fixed interval"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} Check that SENDSPIN_PORT in the bridge settings matches the Sendspin port in Music Assistant.",
+        "summary_error_only": "{error}",
+        "title": "{device} cannot reach the Sendspin server"
+      },
+      "sendspin_url_malformed": {
+        "summary": "Edit the Music Assistant server in Settings. It must be a bare host name or IP address, with no http://, port or path.",
+        "title": "{device}: the Music Assistant server address is invalid | The Music Assistant server address is invalid"
+      },
+      "setup_audio": {
+        "summary_no_server": "No PulseAudio or PipeWire server was found.",
+        "summary_no_server_env": "No PulseAudio or PipeWire server was found: PULSE_SERVER is not set.",
+        "summary_no_sinks": "The audio server is reachable, but it has no audio outputs yet.",
+        "summary_socket_missing": "The audio socket {socket} is configured but does not exist on the host; no audio server has ever created it.",
+        "summary_socket_refused": "The audio socket {socket} is mounted, but the audio server refused the connection ({error}).",
+        "summary_socket_unreachable": "The audio socket {socket} is mounted, but the bridge cannot open it ({error}).",
+        "title": "Check the audio system"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "The Bluetooth service (bluetoothd) is not running on the host, so the bridge sees no adapter until it starts.",
+        "summary_no_controller": "The bridge found no Bluetooth adapter.",
+        "summary_no_paired": "No paired Bluetooth speaker is available to the bridge.",
+        "summary_no_paired_disabled": "No paired Bluetooth speaker is available, and the saved speaker is disabled.",
+        "title": "Check Bluetooth access"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "No paired Bluetooth speaker is available to the bridge.",
+        "summary_no_paired_disabled": "No paired Bluetooth speaker is available, and the saved speaker is disabled.",
+        "title": "Pair or find a speaker"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "All configured speakers are disabled right now.",
+        "summary_all_released": "All configured speakers are released from the bridge right now.",
+        "summary_all_released_auto": "The bridge released all configured speakers automatically after connection failures.",
+        "title": "Make a speaker available"
+      },
+      "setup_latency": {
+        "summary_high_latency": "Latency compensation is set, but the global audio latency is quite high.",
+        "summary_multi_no_delays": "There are several speakers but none has a latency compensation yet.",
+        "title": "Review latency tuning"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Music Assistant sign-in details are missing.",
+        "summary_no_url": "The Music Assistant address is not set.",
+        "summary_not_connected": "Sign-in details for Music Assistant are saved, but the bridge is not connected.",
+        "title": "Connect Music Assistant"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "The bridge cannot reach the host D-Bus services it needs for Bluetooth control.",
+        "title": "Check access to the host"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "Some connected speakers have no Bluetooth audio output ready.",
+        "summary_none_configured": "No players are configured yet.",
+        "summary_none_connected_bluetooth": "Players are configured, but no speaker is connected over Bluetooth right now.",
+        "summary_none_connected_mixed": "Players are configured, but no speaker is connected over Bluetooth and no audio output is present.",
+        "summary_none_connected_outputs": "Players are configured, but none of their audio outputs is present.",
+        "title": "Connect your first speaker"
+      },
+      "setup_step": {
+        "summary": "The setup checklist still has an unfinished step.",
+        "title": "Finish setup"
+      },
+      "sink_system_muted": {
+        "summary": "The audio output is muted. Nothing plays until it is unmuted. This can happen after a crash or restart.",
+        "summary_error": "{error}",
+        "title": "{device}: the audio output is muted in the system"
+      },
+      "transport_down": {
+        "summary": "The speaker is connected, but its Sendspin player is not running. | Reconnect {devices} to bring the audio link back.",
+        "summary_error": "{error}",
+        "title": "{device} lost its audio link | {count} speakers lost their audio link"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "The speaker is already on standby."
+      },
+      "bad_request": {
+        "detail": "The request was not valid."
+      },
+      "bluetooth_busy": {
+        "detail": "Bluetooth is busy with another operation. Try again in a moment."
+      },
+      "conflict": {
+        "detail": "This conflicts with the current state."
+      },
+      "forbidden": {
+        "detail": "You are not allowed to do this."
+      },
+      "http_error": {
+        "detail": "The request failed."
+      },
+      "internal_error": {
+        "detail": "The bridge hit an internal error."
+      },
+      "invalid_credentials": {
+        "detail": "The sign-in details are not correct."
+      },
+      "invalid_mac": {
+        "detail": "The Bluetooth address is not valid."
+      },
+      "invalid_request": {
+        "detail": "Some values are not valid."
+      },
+      "job_in_progress": {
+        "detail": "The same operation is already running."
+      },
+      "login_failed": {
+        "detail": "Sign-in failed."
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant is not set up yet."
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant is not available."
+      },
+      "ma_unreachable": {
+        "detail": "The bridge cannot reach Music Assistant."
+      },
+      "method_not_allowed": {
+        "detail": "This action is not available here."
+      },
+      "network_error": {
+        "detail": "The bridge cannot be reached. Check your connection."
+      },
+      "no_bluetooth": {
+        "detail": "No Bluetooth adapter is available."
+      },
+      "not_connected": {
+        "detail": "The speaker is not connected."
+      },
+      "not_found": {
+        "detail": "Not found."
+      },
+      "not_in_standby": {
+        "detail": "The speaker is not on standby."
+      },
+      "not_ready": {
+        "detail": "Not ready yet. Try again in a moment."
+      },
+      "pairing_disabled": {
+        "detail": "Pairing is turned off."
+      },
+      "pairing_failed": {
+        "detail": "Pairing failed."
+      },
+      "payload_too_large": {
+        "detail": "The data is too large."
+      },
+      "scan_in_progress": {
+        "detail": "A scan is already running."
+      },
+      "session_expired": {
+        "detail": "Your session has expired. Sign in again."
+      },
+      "timeout": {
+        "detail": "The operation took too long."
+      },
+      "too_many_requests": {
+        "detail": "Too many requests. Wait a moment and try again."
+      },
+      "unauthorized": {
+        "detail": "Sign in to continue."
+      },
+      "unavailable": {
+        "detail": "Not available right now."
+      },
+      "unknown_check": {
+        "detail": "That check does not exist."
+      },
+      "unknown_device": {
+        "detail": "That speaker is not known to the bridge."
+      },
+      "unknown_job": {
+        "detail": "That operation is not known (it may have expired)."
+      },
+      "upstream_error": {
+        "detail": "A service the bridge depends on answered with an error."
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "another server"
+      },
+      "attempt": {
+        "open": "Reconnect attempt {attempt} is in progress.",
+        "with_limit": "Reconnect attempt {attempt}/{max}. {remaining} attempts remain before the bridge releases the speaker."
+      },
+      "list": {
+        "more": "{first}, {second}, and {count} more"
+      },
+      "recovered": {
+        "text": "(recovered)"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "Bridge startup"
+      }
     }
+  },
+  "consequence": {
+    "stopsPlayback": "Playback stops on: {names}.",
+    "disconnects": "Bluetooth disconnects on: {names}.",
+    "leavesMa": "The player disappears from Music Assistant: {names}.",
+    "unpairs": "The Bluetooth pairing is removed. To use it again, add it as a new speaker.",
+    "adapterDisconnects": "Every speaker on it disconnects and playback stops until they reconnect: {names}.",
+    "restartMinute": "Playback stops on every speaker for about a minute while the bridge restarts.",
+    "playingNow": "Playing now: {names}.",
+    "replacesConfig": "All settings and speakers are replaced with the contents of this file.",
+    "noUndo": "This cannot be undone.",
+    "rollback": "To go back, install the previous version.",
+    "needsRepair": "The speaker must be paired again.",
+    "noReconnect": "The bridge stops managing: {names}. They do not reconnect until you reclaim them.",
+    "wakeFromMenu": "Wake them from their menu.",
+    "downloadFirst": "Download current config first",
+    "repairs": "The Bluetooth pairing is removed and created again; the speaker may need to be in pairing mode."
+  },
+  "longOp": {
+    "elapsed": "{seconds}s",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling…",
+    "retry": "Try again"
   }
 }

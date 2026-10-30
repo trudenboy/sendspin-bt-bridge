@@ -228,7 +228,7 @@ const label = (status: SyncMeasurement['status']) =>
     </p>
 
     <div class="flex flex-wrap justify-end gap-3">
-      <SbButton type="button" variant="outline" data-cancel :disabled="!!active" @click="emit('cancel')">
+      <SbButton type="button" variant="outline" data-cancel @click="emit('cancel')">
         {{ t('sync.wizard.cancel') }}
       </SbButton>
       <SbButton type="button" variant="outline" data-back :disabled="!!active" @click="emit('back')">

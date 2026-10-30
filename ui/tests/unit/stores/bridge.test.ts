@@ -70,4 +70,19 @@ describe('useBridgeStore', () => {
     stream.options!.onConnect!()
     expect(store.restartState).toBe('ready')
   })
+
+  it('an update is over as soon as the bridge reports another version', () => {
+    const store = useBridgeStore()
+    const status = (version: string) => {
+      const s = makeStatus() as never as { bridge: { version: string } }
+      s.bridge.version = version
+      return s
+    }
+    stream.options!.onEvent!({ type: 'status', data: status('3.1.0') })
+    store.initiateRestart('update')
+    stream.options!.onEvent!({ type: 'status', data: status('3.1.0') })
+    expect(store.restartState).toBe('stopping')
+    stream.options!.onEvent!({ type: 'status', data: status('3.2.0') })
+    expect(store.restartState).toBe('ready')
+  })
 })

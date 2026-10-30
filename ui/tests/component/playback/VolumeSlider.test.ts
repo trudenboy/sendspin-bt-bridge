@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 function buildI18n() {
   return createI18n({
@@ -33,7 +33,7 @@ describe('VolumeSlider', () => {
 
   it('shows muted icon when muted', () => {
     const w = mountSlider({ muted: true })
-    expect(w.find('.text-warning').exists()).toBe(true)
+    expect(w.find('.text-warning-text').exists()).toBe(true)
   })
 
   it('emits update:muted on mute toggle', async () => {

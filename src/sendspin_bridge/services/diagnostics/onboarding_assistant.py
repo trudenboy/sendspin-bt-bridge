@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from sendspin_bridge.services.diagnostics.server_text import action_fields
 from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel, build_bridge_state_model
 
 UTC = timezone.utc
@@ -43,6 +44,7 @@ class OnboardingChecklistAction:
             payload["check_key"] = self.check_key
         if self.value is not None:
             payload["value"] = self.value
+        payload.update(action_fields(self.key, self.label, self.device_names, self.value))
         return payload
 
 
@@ -116,6 +118,10 @@ class OnboardingChecklistSnapshot:
     total_steps: int
     current_step_key: str | None
     current_step_title: str | None
+    #: The issue code of the current step's title, and the wording of its summary.
+    current_step_code: str | None = None
+    current_step_variant: str | None = None
+    current_step_params: dict[str, Any] = field(default_factory=dict)
     journey_key: str | None = None
     journey_title: str | None = None
     journey_summary: str | None = None
@@ -134,6 +140,9 @@ class OnboardingChecklistSnapshot:
             "total_steps": self.total_steps,
             "current_step_key": self.current_step_key,
             "current_step_title": self.current_step_title,
+            "current_step_code": self.current_step_code,
+            "current_step_variant": self.current_step_variant,
+            "current_step_params": dict(self.current_step_params),
             "journey_key": self.journey_key,
             "journey_title": self.journey_title,
             "journey_summary": self.journey_summary,
@@ -153,6 +162,9 @@ class OnboardingCheck:
     summary: str
     details: dict[str, Any] = field(default_factory=dict)
     actions: list[str] = field(default_factory=list)
+    #: Which wording the summary is (``no_dbus``, ``daemon_down`` …); the summary variant in the UI.
+    code: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -161,6 +173,8 @@ class OnboardingCheck:
             "summary": self.summary,
             "details": dict(self.details),
             "actions": list(self.actions),
+            "code": self.code,
+            "params": dict(self.params),
         }
 
 
@@ -199,6 +213,13 @@ def _title_for_check(check: OnboardingCheck) -> str:
     ):
         return "Pair or rediscover a speaker"
     return _CHECKLIST_TITLES.get(check.key, check.key)
+
+
+def _setup_issue_code(check: OnboardingCheck) -> str:
+    """The issue code of a setup step's title (``setup_<key>``; one more for the pairing variant)."""
+    if _title_for_check(check) == "Pair or rediscover a speaker":
+        return "setup_bluetooth_pair"
+    return f"setup_{check.key}" if check.key in _CHECKLIST_TITLES else "setup_step"
 
 
 def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklistAction | None:
@@ -343,12 +364,18 @@ def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str,
         summary = current_check.summary
         current_step_key = current_check.key
         current_step_title = _title_for_check(current_check)
+        current_step_code = _setup_issue_code(current_check)
+        current_step_variant = current_check.code or None
+        current_step_params = dict(current_check.params)
         primary_action = _recommended_action_for_check(current_check)
     else:
         headline = "Bridge setup looks ready"
         summary = "Core setup checks are green and the bridge is ready for first playback."
         current_step_key = None
         current_step_title = None
+        current_step_code = None
+        current_step_variant = None
+        current_step_params = {}
         primary_action = OnboardingChecklistAction(key="open_diagnostics", label="Review diagnostics")
 
     steps: list[OnboardingChecklistStep] = []
@@ -398,6 +425,9 @@ def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str,
         total_steps=total_steps,
         current_step_key=current_step_key,
         current_step_title=current_step_title,
+        current_step_code=current_step_code,
+        current_step_variant=current_step_variant,
+        current_step_params=current_step_params,
         journey_key=journey_key,
         journey_title=journey_title,
         journey_summary=journey_summary,
@@ -502,6 +532,7 @@ def build_onboarding_assistant_snapshot(
                 key="runtime_access",
                 status="error",
                 summary="The bridge runtime cannot reach the host D-Bus services required for Bluetooth control.",
+                code="no_dbus",
                 details={"dbus": False},
                 actions=[
                     "Open diagnostics and confirm D-Bus is reachable from this runtime.",
@@ -515,6 +546,7 @@ def build_onboarding_assistant_snapshot(
                 key="runtime_access",
                 status="ok",
                 summary="The bridge runtime can reach the host services it needs for Bluetooth and audio control.",
+                code="ok",
                 details={"dbus": True},
             )
         )
@@ -537,6 +569,7 @@ def build_onboarding_assistant_snapshot(
                 "If you're on Home Assistant OS, the Supervisor manages BlueZ for you — "
                 "check that the host's Bluetooth integration isn't disabled.",
             ]
+            bluetooth_code = "daemon_down"
             bluetooth_summary = (
                 "Bluetooth daemon (bluetoothd) is not running on the host — "
                 "the bridge can't see any controller until it's started."
@@ -546,6 +579,7 @@ def build_onboarding_assistant_snapshot(
                 "Open Bluetooth settings and press Refresh adapters.",
                 "If no adapter appears, verify Bluetooth passthrough or host access, then add the adapter manually.",
             ]
+            bluetooth_code = "no_controller"
             bluetooth_summary = "No Bluetooth controller detected by preflight checks."
         audio_socket_mounted_but_unreachable = (
             bool(audio.get("socket_exists")) and audio.get("socket_reachable") is False
@@ -562,17 +596,20 @@ def build_onboarding_assistant_snapshot(
                 key="bluetooth",
                 status="error",
                 summary=bluetooth_summary,
+                code=bluetooth_code,
                 details={"paired_devices": paired_devices, "daemon": bluetooth_daemon or None},
                 actions=bluetooth_actions,
             )
         )
     elif bluetooth_configured_count > 0 and paired_devices == 0:
+        bluetooth_code = "no_paired"
         bluetooth_summary = "No paired Bluetooth speakers are currently available to the bridge."
         bluetooth_actions = [
             "Put a speaker in pairing mode, then open Bluetooth scan to pair or rediscover it.",
         ]
         bluetooth_details = {"paired_devices": paired_devices, "configured_devices": bluetooth_configured_count}
         if disabled_configured_count >= configured_count:
+            bluetooth_code = "no_paired_disabled"
             bluetooth_summary = (
                 "No paired Bluetooth speakers are currently available, and the saved speaker is disabled."
             )
@@ -585,6 +622,7 @@ def build_onboarding_assistant_snapshot(
                 key="bluetooth",
                 status="warning",
                 summary=bluetooth_summary,
+                code=bluetooth_code,
                 details=bluetooth_details,
                 actions=bluetooth_actions,
             )
@@ -595,6 +633,7 @@ def build_onboarding_assistant_snapshot(
                 key="bluetooth",
                 status="ok",
                 summary="Bluetooth controller is visible to the bridge.",
+                code="ok",
                 details={"paired_devices": paired_devices},
             )
         )
@@ -603,6 +642,7 @@ def build_onboarding_assistant_snapshot(
         socket_path = str(audio.get("socket") or "(unknown)")
         last_error = str(audio.get("last_error") or "")
         is_refused = "refused" in last_error.lower()
+        audio_params = {"socket": socket_path, "error": last_error}
         details: dict[str, Any] = {
             "system": "unreachable",
             "socket": socket_path,
@@ -612,6 +652,7 @@ def build_onboarding_assistant_snapshot(
         }
         if is_refused:
             details["reason_code"] = "pa_socket_refused"
+            audio_code = "socket_refused"
             summary = (
                 f"Audio socket {socket_path} is mounted but the server refused the connection "
                 f"({last_error or 'connection refused'})."
@@ -622,6 +663,7 @@ def build_onboarding_assistant_snapshot(
                 "See docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
             ]
         else:
+            audio_code = "socket_unreachable"
             summary = (
                 f"Audio socket {socket_path} is mounted but the bridge cannot open it "
                 f"({last_error or 'unknown error'})."
@@ -635,6 +677,8 @@ def build_onboarding_assistant_snapshot(
                 key="audio",
                 status="error",
                 summary=summary,
+                code=audio_code,
+                params=audio_params,
                 details=details,
                 actions=actions,
             )
@@ -642,9 +686,11 @@ def build_onboarding_assistant_snapshot(
     elif audio_system == "unknown":
         socket_path = str(audio.get("socket") or "")
         socket_exists = bool(audio.get("socket_exists"))
+        audio_params = {"socket": socket_path}
         details = {"sinks": audio_sinks, "socket": socket_path or None, "socket_exists": socket_exists}
         if socket_path and not socket_exists:
             details["reason_code"] = "pa_socket_missing"
+            audio_code = "socket_missing"
             summary = (
                 f"Audio socket {socket_path} is configured but does not exist on this host — "
                 "no PulseAudio/PipeWire server has ever bound it."
@@ -656,12 +702,14 @@ def build_onboarding_assistant_snapshot(
                 "See docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
             ]
         elif not socket_path:
+            audio_code = "no_server_env"
             summary = "No PulseAudio or PipeWire server was detected — `PULSE_SERVER` is not set."
             actions = [
                 "Set `PULSE_SERVER` to the host's PulseAudio/PipeWire socket path and mount that socket into the container.",
                 "See docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#requirements for the required volume mounts and environment variables.",
             ]
         else:
+            audio_code = "no_server"
             summary = "No PulseAudio or PipeWire server was detected."
             actions = [
                 "Open diagnostics to confirm the runtime can reach PulseAudio or PipeWire.",
@@ -672,6 +720,8 @@ def build_onboarding_assistant_snapshot(
                 key="audio",
                 status="error",
                 summary=summary,
+                code=audio_code,
+                params=audio_params,
                 details=details,
                 actions=actions,
             )
@@ -682,6 +732,7 @@ def build_onboarding_assistant_snapshot(
                 key="audio",
                 status="warning",
                 summary="The audio server is reachable, but it currently exposes no sinks.",
+                code="no_sinks",
                 details={"system": audio_system, "sinks": audio_sinks},
                 actions=[
                     "Power on a Bluetooth speaker and wait for its `bluez_*` sink to appear.",
@@ -695,6 +746,7 @@ def build_onboarding_assistant_snapshot(
                 key="audio",
                 status="ok",
                 summary="The audio server is reachable and exposes sinks.",
+                code="ok",
                 details={"system": audio_system, "sinks": audio_sinks},
             )
         )
@@ -705,6 +757,7 @@ def build_onboarding_assistant_snapshot(
                 key="bridge_control",
                 status="ok",
                 summary="No Bluetooth speakers are configured yet, so the bridge is ready for your first device.",
+                code="none_configured",
                 details={"configured_devices": 0, "active_devices": 0},
             )
         )
@@ -714,6 +767,7 @@ def build_onboarding_assistant_snapshot(
                 key="bridge_control",
                 status="warning",
                 summary="All configured Bluetooth speakers are globally disabled right now.",
+                code="all_disabled",
                 details={
                     "configured_devices": configured_count,
                     "disabled_devices": disabled_configured_count,
@@ -735,6 +789,11 @@ def build_onboarding_assistant_snapshot(
                     if auto_released_devices and len(auto_released_devices) >= configured_count
                     else "All configured speakers are currently released from bridge management."
                 ),
+                code=(
+                    "all_released_auto"
+                    if auto_released_devices and len(auto_released_devices) >= configured_count
+                    else "all_released"
+                ),
                 details={
                     "configured_devices": configured_count,
                     "released_devices": len(released_devices),
@@ -753,6 +812,7 @@ def build_onboarding_assistant_snapshot(
                 key="bridge_control",
                 status="ok",
                 summary="At least one configured speaker is available to the bridge.",
+                code="ok",
                 details={"configured_devices": configured_count, "active_devices": len(active_devices)},
             )
         )
@@ -763,6 +823,7 @@ def build_onboarding_assistant_snapshot(
                 key="sink_verification",
                 status="warning",
                 summary="No bridge devices are configured yet.",
+                code="none_configured",
                 details={"configured_devices": configured_count},
                 actions=[
                     "Put your speaker in pairing mode, then open device scan to discover it.",
@@ -776,6 +837,7 @@ def build_onboarding_assistant_snapshot(
                 key="sink_verification",
                 status="error",
                 summary="Some connected devices are missing a resolved Bluetooth sink.",
+                code="missing_sink",
                 details={
                     "connected_devices": connected_devices,
                     "sink_ready_devices": sink_ready_devices,
@@ -790,10 +852,13 @@ def build_onboarding_assistant_snapshot(
     elif connected_or_standby == 0:
         has_bluetooth = bool(bluetooth_active) or bluetooth_configured_count > 0
         if has_bluetooth and local_active:
+            sink_code = "none_connected_mixed"
             summary = "Devices are configured, but none are connected over Bluetooth or have their output present."
         elif has_bluetooth:
+            sink_code = "none_connected_bluetooth"
             summary = "Devices are configured, but none are currently connected over Bluetooth."
         else:
+            sink_code = "none_connected_outputs"
             summary = "Devices are configured, but none of their audio outputs are present."
         sink_actions: list[str] = []
         if has_bluetooth:
@@ -810,6 +875,7 @@ def build_onboarding_assistant_snapshot(
                 key="sink_verification",
                 status="warning",
                 summary=summary,
+                code=sink_code,
                 details={"configured_devices": configured_count},
                 actions=sink_actions,
             )
@@ -821,6 +887,7 @@ def build_onboarding_assistant_snapshot(
                 key="sink_verification",
                 status="ok",
                 summary=f"Connected devices have resolved Bluetooth sinks.{standby_note}",
+                code="ok",
                 details={
                     "connected_devices": connected_devices,
                     "sink_ready_devices": sink_ready_devices,
@@ -837,6 +904,7 @@ def build_onboarding_assistant_snapshot(
                 key="ma_auth",
                 status="ok",
                 summary="Music Assistant integration is configured and connected.",
+                code="ok",
                 details={"configured_url": ma_url},
             )
         )
@@ -846,6 +914,7 @@ def build_onboarding_assistant_snapshot(
                 key="ma_auth",
                 status="warning",
                 summary="Music Assistant API URL is not configured.",
+                code="no_url",
                 details={"configured_url": "", "auto_discovery_available": True},
                 actions=[
                     "Run discovery first so the bridge can try to find Music Assistant automatically.",
@@ -859,6 +928,7 @@ def build_onboarding_assistant_snapshot(
                 key="ma_auth",
                 status="warning",
                 summary="Music Assistant credentials are missing.",
+                code="no_credentials",
                 details={"configured_url": ma_url},
                 actions=["Open Music Assistant settings and sign in or paste a long-lived token."],
             )
@@ -869,6 +939,7 @@ def build_onboarding_assistant_snapshot(
                 key="ma_auth",
                 status="error",
                 summary="Music Assistant credentials are configured, but the bridge is not connected.",
+                code="not_connected",
                 details={"configured_url": ma_url, "has_token": bool(ma_token), "has_username": bool(ma_username)},
                 actions=[
                     "Open Music Assistant settings and verify the URL and credentials.",
@@ -883,6 +954,7 @@ def build_onboarding_assistant_snapshot(
                 key="latency",
                 status="ok",
                 summary="Single-device setups usually do not require extra latency calibration.",
+                code="ok_single",
                 details={
                     "pulse_latency_msec": pulse_latency,
                     "custom_device_delays": custom_delays,
@@ -897,6 +969,7 @@ def build_onboarding_assistant_snapshot(
                 key="latency",
                 status="warning",
                 summary="Multi-device setup detected without per-device static delay tuning.",
+                code="multi_no_delays",
                 details={
                     "pulse_latency_msec": pulse_latency,
                     "configured_devices": configured_count,
@@ -912,6 +985,7 @@ def build_onboarding_assistant_snapshot(
                 key="latency",
                 status="warning",
                 summary="Latency tuning is present, but the global PulseAudio latency is quite high.",
+                code="high_latency",
                 details={
                     "pulse_latency_msec": pulse_latency,
                     "custom_device_delays": custom_delays,
@@ -928,6 +1002,7 @@ def build_onboarding_assistant_snapshot(
                 key="latency",
                 status="ok",
                 summary="Latency tuning is configured for a multi-device setup.",
+                code="ok",
                 details={
                     "pulse_latency_msec": pulse_latency,
                     "custom_device_delays": custom_delays,

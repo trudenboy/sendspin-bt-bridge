@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+
+const labels = useKitLabels()
 
 const props = withDefaults(
   defineProps<{
@@ -8,12 +11,14 @@ const props = withDefaults(
     type?: 'success' | 'error' | 'warning' | 'info'
     duration?: number
     closable?: boolean
+    actionLabel?: string
   }>(),
   { type: 'info', duration: 5000, closable: true },
 )
 
 const emit = defineEmits<{
   close: [id: number]
+  action: [id: number]
 }>()
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -37,31 +42,43 @@ const iconMap = {
   info: 'ℹ',
 } as const
 
+function onAction() {
+  emit('action', props.id)
+  dismiss()
+}
+
 function dismiss() {
   visible.value = false
   emit('close', props.id)
 }
 
-onMounted(() => {
-  if (props.duration > 0) {
-    timer = setTimeout(dismiss, props.duration)
-  }
-})
-
-onBeforeUnmount(() => {
+function start() {
+  stop()
+  if (props.duration > 0) timer = setTimeout(dismiss, props.duration)
+}
+function stop() {
   if (timer) clearTimeout(timer)
-})
+  timer = null
+}
+
+onMounted(start)
+
+onBeforeUnmount(stop)
 </script>
 
 <template>
   <div
     v-if="visible"
-    role="alert"
+    :role="type === 'error' ? 'alert' : 'status'"
     :class="[
       'flex min-w-[300px] max-w-[420px] items-center gap-3 rounded-(--radius-card) px-4 py-3 shadow-lg',
       typeStyles,
     ]"
     :data-toast-id="id"
+    @mouseenter="stop"
+    @mouseleave="start"
+    @focusin="stop"
+    @focusout="start"
   >
     <!-- Icon -->
     <span class="shrink-0 text-lg" aria-hidden="true">
@@ -71,12 +88,22 @@ onBeforeUnmount(() => {
     <!-- Message -->
     <p class="flex-1 text-sm text-text-primary">{{ message }}</p>
 
+    <button
+      v-if="actionLabel"
+      type="button"
+      class="shrink-0 cursor-pointer rounded-(--radius-button) px-2 py-1 text-sm font-medium text-primary-text underline-offset-2 hover:underline"
+      data-testid="toast-action-btn"
+      @click="onAction"
+    >
+      {{ actionLabel }}
+    </button>
+
     <!-- Close button -->
     <button
       v-if="closable"
       type="button"
-      class="shrink-0 cursor-pointer text-text-secondary transition-colors hover:text-text-primary"
-      aria-label="Dismiss notification"
+      class="-my-3 -mr-3 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:text-text-primary"
+      :aria-label="labels.dismissNotification"
       data-testid="toast-close-btn"
       @click="dismiss"
     >

@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { SbButton, SbBadge, SbSpinner } from '@/kit'
+import { speakerName } from '@/utils/speakerName'
 import BtDeviceInfoModal from './BtDeviceInfoModal.vue'
 import { Bluetooth, Info, Trash2, RefreshCw } from 'lucide-vue-next'
 
@@ -16,7 +18,6 @@ const notifications = useNotificationStore()
 const audioOnly = ref(true)
 const infoModalOpen = ref(false)
 const infoMac = ref('')
-const confirmRemoveMac = ref<string | null>(null)
 
 onMounted(() => {
   btStore.fetchPairedDevices()
@@ -52,14 +53,21 @@ function openInfo(mac: string) {
   infoModalOpen.value = true
 }
 
-function confirmRemove(mac: string) {
-  confirmRemoveMac.value = mac
-}
-
-async function doRemove() {
-  if (!confirmRemoveMac.value) return
-  const mac = confirmRemoveMac.value
-  confirmRemoveMac.value = null
+/** Forgetting a bond is irreversible: say what happens to this speaker first. */
+async function forget(mac: string, name: string) {
+  const bridgeNames = bridge.devices
+    .filter((d) => d.bluetooth?.mac?.toUpperCase() === mac.toUpperCase())
+    .map((d) => speakerName(d.name))
+    .join(', ')
+  const ok = await confirmAction('bluetooth.forgetBond', {
+    title: t('device.actions.forgetTitle', { name: name || mac }),
+    consequences: [
+      ...(bridgeNames ? [t('consequence.stopsPlayback', { names: bridgeNames })] : []),
+      t('consequence.needsRepair'),
+    ],
+    confirmLabel: t('device.actions.forget'),
+  })
+  if (!ok) return
   try {
     await btStore.removePairedDevice(mac)
     notifications.success(t('device.actions.remove'))
@@ -157,8 +165,8 @@ function refresh() {
           <button
             type="button"
             class="cursor-pointer rounded p-1 text-text-secondary transition-colors hover:text-error"
-            :aria-label="t('device.actions.remove')"
-            @click="confirmRemove(device.mac)"
+            :aria-label="t('device.actions.forget')"
+            @click="forget(device.mac, device.name)"
           >
             <Trash2 class="h-4 w-4" />
           </button>
@@ -172,24 +180,6 @@ function refresh() {
       class="py-6 text-center text-sm text-text-secondary"
     >
       {{ t('bluetooth.noDevices') }}
-    </div>
-
-    <!-- Confirm remove inline dialog -->
-    <div
-      v-if="confirmRemoveMac"
-      class="rounded-lg border border-error/20 bg-error/5 p-3"
-    >
-      <p class="mb-2 text-sm text-text-primary">
-        {{ t('device.actions.remove') }}: <span class="font-mono">{{ confirmRemoveMac }}</span>?
-      </p>
-      <div class="flex items-center gap-2">
-        <SbButton size="sm" variant="outline" @click="doRemove">
-          {{ t('common.confirm') }}
-        </SbButton>
-        <SbButton size="sm" variant="ghost" @click="confirmRemoveMac = null">
-          {{ t('common.cancel') }}
-        </SbButton>
-      </div>
     </div>
 
     <!-- BT Device Info Modal -->

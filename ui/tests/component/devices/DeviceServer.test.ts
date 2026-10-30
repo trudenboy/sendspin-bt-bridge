@@ -4,8 +4,8 @@ import { createI18n } from 'vue-i18n'
 import { nextTick } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { makeDevice } from '../../fixtures/device'
 
 const foreign = makeDevice({

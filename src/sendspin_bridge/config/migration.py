@@ -637,6 +637,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "EXPERIMENTAL_PA_MODULE_RELOAD",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
         "RSSI_BADGE",
+        "SHOW_TECHNICAL_DETAILS",
         "COMPENSATE_OUTPUT_LATENCY",
         "PLAYOUT_DIAG",
         "EXPERIMENTAL_AIR_SENSOR",
@@ -912,5 +913,13 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
                     message=server_issue.message,
                 )
             )
+
+    # SHOW_TECHNICAL_DETAILS arrived with the web UI's progressive disclosure:
+    # off for a new install, on for one that already has speakers (those
+    # operators are used to the technical chips). A file that already carries
+    # the key keeps its value; ``update_config`` stamps the decision on the
+    # first write, so adding a first speaker later does not flip a new install.
+    if "SHOW_TECHNICAL_DETAILS" not in normalized and normalized.get("players"):
+        normalized["SHOW_TECHNICAL_DETAILS"] = True
 
     return ConfigMigrationResult(normalized_config=normalized, warnings=warnings, needs_persist=needs_persist)

@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import RuntimeRow from '@/components/layout/RuntimeRow.vue'
 import { useBridgeStore } from '@/stores/bridge'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 import { makeStatus } from '../../fixtures/status'
@@ -47,21 +47,27 @@ describe('RuntimeRow', () => {
   })
 
   it('counts connected speakers, coloured by how many are up', () => {
-    expect(pill(mountRow([connected('a'), connected('b')]), 'speakers').text()).toBe('2/2 speakers connected')
+    expect(pill(mountRow([connected('a'), connected('b')]), 'speakers').text()).toBe('2/2 Bluetooth connected')
     expect(pill(mountRow([connected('a'), connected('b')]), 'speakers').classes()).toContain('tone-success')
     expect(pill(mountRow([connected('a'), offline('b')]), 'speakers').classes()).toContain('tone-warning')
     expect(pill(mountRow([offline('a')]), 'speakers').classes()).toContain('tone-error')
     expect(pill(mountRow([]), 'speakers').exists()).toBe(false)
   })
 
-  it('shows Music Assistant and how many speakers play', () => {
-    const on = mountRow([playing('a'), connected('b')], { ma_connected: true })
-    expect(pill(on, 'ma').text()).toBe('Music Assistant connected')
-    expect(pill(on, 'ma').classes()).toContain('tone-success')
+  it('shows the Music Assistant account (not an audio link) and how many speakers play', () => {
+    const on = mountRow([playing('a'), connected('b')], {
+      ma_connected: true,
+      music_assistant_account: { state: 'signed_in', tone: 'success', reason: null },
+    })
+    expect(pill(on, 'ma').text()).toBe('Music Assistant account: Signed in')
+    expect(pill(on, 'ma').find('.tone-success').exists()).toBe(true)
     expect(pill(on, 'playing').text()).toBe('1 playing')
-    const off = mountRow([connected('a')], { ma_connected: false })
-    expect(pill(off, 'ma').text()).toBe('Music Assistant not connected')
-    expect(pill(off, 'ma').classes()).toContain('tone-neutral')
+    const off = mountRow([connected('a')], {
+      ma_connected: false,
+      music_assistant_account: { state: 'signed_out', tone: 'warning', reason: 'unreachable_or_rejected' },
+    })
+    expect(pill(off, 'ma').text()).toBe('Music Assistant account: Signed out')
+    expect(pill(off, 'ma').find('.tone-warning').exists()).toBe(true)
     expect(pill(off, 'playing').exists()).toBe(false)
   })
 
@@ -74,10 +80,10 @@ describe('RuntimeRow', () => {
       makeDevice({ id: 'd', enabled: false, bluetooth: { connected: false } }),
       makeDevice({ id: 'r', bluetooth: { connected: false, management_enabled: false, released_by: 'user' } }),
     ])
-    expect(pill(w, 'speakers').text()).toBe('1/1 speakers connected')
+    expect(pill(w, 'speakers').text()).toBe('1/1 Bluetooth connected')
     expect(pill(w, 'speakers').classes()).toContain('tone-success')
     const auto = mountRow([connected('a'), makeDevice({ id: 'x', bluetooth: { connected: false, management_enabled: false, released_by: 'auto' } })])
-    expect(pill(auto, 'speakers').text()).toBe('1/2 speakers connected')
+    expect(pill(auto, 'speakers').text()).toBe('1/2 Bluetooth connected')
     expect(pill(auto, 'speakers').classes()).toContain('tone-warning')
   })
 })

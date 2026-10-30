@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import ConfigDict, Field
 
 from sendspin_bridge.application.models.base import ResponseModel
-from sendspin_bridge.application.models.devices import Device, DisabledDevice
+from sendspin_bridge.application.models.devices import Device, DisabledDevice, LinkStatus
 
 
 class GroupMember(ResponseModel):
@@ -71,6 +71,13 @@ class UpdateInfo(ResponseModel):
     body: str | None = None
 
 
+class BridgeVerdict(ResponseModel):
+    """The bridge's one-word health, from the same issue list as the guidance banner."""
+
+    level: str = Field(description="ok, warning or error: the worst severity in the issue list.")
+    count: int = Field(description="Issues at warning or error.")
+
+
 class Bridge(ResponseModel):
     name: str = Field(default="", description="The bridge's name (BRIDGE_NAME, or the host name).")
     version: str
@@ -84,6 +91,10 @@ class Bridge(ResponseModel):
     ipc_protocol_version: int | None = None
     auth_enabled: bool = False
     ma_connected: bool = False
+    music_assistant_account: LinkStatus = Field(
+        description="The bridge's sign-in to the Music Assistant API: signed_in, signed_out or not_configured."
+    )
+    verdict: BridgeVerdict
     ma_web_url: str | None = None
     device_count: int = 0
     disabled_devices: list[DisabledDevice] = Field(default_factory=list)

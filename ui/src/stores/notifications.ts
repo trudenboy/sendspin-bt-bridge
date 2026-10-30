@@ -8,6 +8,8 @@ export interface Toast {
   type: ToastType
   message: string
   duration: number
+  /** A button on the toast (Undo); running it also dismisses the toast. */
+  action?: { label: string; run: () => void | Promise<unknown> }
 }
 
 let nextId = 0
@@ -15,13 +17,11 @@ let nextId = 0
 export const useNotificationStore = defineStore('notifications', () => {
   const toasts = ref<Toast[]>([])
 
-  function add(type: ToastType, message: string, duration = 4000) {
+  // The toast component owns the countdown, so hovering or focusing it can
+  // pause it. ``duration`` 0 keeps a toast until it is dismissed (errors).
+  function add(type: ToastType, message: string, duration = 4000, action?: Toast['action']) {
     const id = nextId++
-    toasts.value.push({ id, type, message, duration })
-
-    if (duration > 0) {
-      setTimeout(() => remove(id), duration)
-    }
+    toasts.value.push({ id, type, message, duration, action })
   }
 
   function remove(id: number) {
@@ -34,9 +34,11 @@ export const useNotificationStore = defineStore('notifications', () => {
     toasts,
     hasToasts,
     success: (msg: string) => add('success', msg),
-    error: (msg: string) => add('error', msg, 6000),
+    error: (msg: string) => add('error', msg, 0),
     warning: (msg: string) => add('warning', msg),
     info: (msg: string) => add('info', msg),
+    /** A done, reversible action: a success toast with an Undo button that stays long enough to use. */
+    undo: (msg: string, label: string, run: NonNullable<Toast['action']>['run']) => add('success', msg, 8000, { label, run }),
     remove,
   }
 })

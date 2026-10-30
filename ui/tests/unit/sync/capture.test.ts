@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { SyncRecorder, SyncCaptureError, SYNC_CAPTURE_ERROR_CODES, resolveWorkletUrl } from '@/sync/capture'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 
 class FakePort {
   onmessage: ((e: MessageEvent) => void) | null = null

@@ -6,7 +6,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import { useBridgeStore } from '@/stores/bridge'
 import { useAudioStore } from '@/stores/audio'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device, Group } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 import { makeStatus } from '../../fixtures/status'
@@ -99,10 +99,10 @@ describe('DeviceCard chips', () => {
       expect(wrapper.find('[data-chip="sync"] .tone-success').exists()).toBe(true)
     })
 
-    it('says Re-anchoring, pulsing, while the stream re-anchors', async () => {
+    it('says Resyncing, pulsing, while the stream re-anchors', async () => {
       const { wrapper } = await mountCard(streaming({ reanchoring: true }))
       const chip = wrapper.find('[data-chip="sync"]')
-      expect(chip.text()).toContain('Re-anchoring')
+      expect(chip.text()).toContain('Resyncing')
       expect(chip.find('.tone-warning').exists()).toBe(true)
       expect(chip.find('.animate-pulse').exists()).toBe(true)
     })

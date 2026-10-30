@@ -32,7 +32,7 @@ function openAdapter() {
       v-if="chip.kind === 'adapter'"
       type="button"
       data-chip="adapter"
-      class="inline-flex max-w-full rounded-(--radius-badge) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      class="inline-flex max-w-full rounded-(--radius-badge)"
       :title="t('device.chips.adapter.title', { name: chip.label, hci: chip.hci, state: t(`device.chips.adapter.state.${chip.state}`) })"
       :aria-label="t('device.chips.adapter.open', { name: chip.label })"
       @click.stop="openAdapter"

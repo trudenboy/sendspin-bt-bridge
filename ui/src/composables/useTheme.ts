@@ -1,4 +1,4 @@
-import { ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { hostDocument, readHomeAssistantTheme, type HomeAssistantTheme } from './haTheme'
 
 type ThemeMode = 'light' | 'dark' | 'auto'
@@ -19,6 +19,9 @@ const resolved = ref<'light' | 'dark'>('light')
 /** Home Assistant's theme when the page runs in its ingress panel. */
 const homeAssistant = ref<HomeAssistantTheme | null>(null)
 
+/** Running inside Home Assistant's panel (ingress). */
+const embedded = computed(() => homeAssistant.value !== null)
+
 function applyTheme() {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   // "Auto" follows Home Assistant inside its panel, the browser elsewhere.
@@ -28,6 +31,8 @@ function applyTheme() {
 
   const root = document.documentElement
   root.classList.toggle('dark', isDark)
+  // Only the decorative accent follows Home Assistant. Text, focus ring and warning-text
+  // tokens keep the bridge's own WCAG-checked values (light/dark switch with the .dark class).
   const accent = homeAssistant.value?.primary
   if (accent) root.style.setProperty('--sb-primary', accent)
   else root.style.removeProperty('--sb-primary')
@@ -73,5 +78,5 @@ export function useTheme() {
     watchEffect(applyTheme)
   }
 
-  return { mode, resolved, homeAssistant, toggleTheme }
+  return { mode, resolved, homeAssistant, embedded, toggleTheme }
 }

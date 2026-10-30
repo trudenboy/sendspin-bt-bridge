@@ -13,6 +13,7 @@ import {
 } from '@/api/bluetooth'
 import { ApiError } from '@/api/client'
 import { getConfig, saveConfig } from '@/api/config'
+import { cancelJob } from '@/api/jobs'
 import { useJobsStore } from './jobs'
 import type { Adapter, BtDeviceInfo, Job, KnownDevice, ScanDevice, ScanResult } from '@/api/types'
 
@@ -27,6 +28,11 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
   const pairing = ref(false)
   const pairTarget = ref<string | null>(null)
   const pairError = ref<string | null>(null)
+  const scanStartedAt = ref<number | null>(null)
+  const pairStartedAt = ref<number | null>(null)
+  const pairJob = ref<Job | null>(null)
+  /** Cancel was asked and the bridge has not finished winding the job down yet. */
+  const cancelling = ref(false)
 
   const pairedDevices = ref<KnownDevice[]>([])
   const loadingPaired = ref(false)
@@ -41,6 +47,8 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
   /** Scan one adapter (about 15 s); the bridge refuses a second scan or one too soon. */
   async function startScan(adapter: string, audioOnly = true) {
     scanning.value = true
+    scanStartedAt.value = Date.now()
+    cancelling.value = false
     scanResults.value = []
     scanError.value = null
     try {
@@ -49,11 +57,13 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
       const finished = await useJobsStore().waitFor(job)
       scanJob.value = finished
       if (finished.status === 'succeeded') scanResults.value = (finished.result as ScanResult).devices
-      else scanError.value = finished.error?.detail ?? 'Scan failed'
+      else if (finished.status !== 'cancelled') scanError.value = finished.error?.detail ?? 'Scan failed'
     } catch (e) {
       scanError.value = e instanceof ApiError ? e.message : String(e)
     } finally {
       scanning.value = false
+      scanStartedAt.value = null
+      cancelling.value = false
     }
   }
 
@@ -61,10 +71,14 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
   async function pairDevice(mac: string, opts: PairOptions = {}) {
     pairing.value = true
     pairTarget.value = mac
+    pairStartedAt.value = Date.now()
+    cancelling.value = false
     pairError.value = null
     try {
-      const finished = await useJobsStore().waitFor(await startPairing(mac, opts))
-      if (finished.status !== 'succeeded') pairError.value = finished.error?.detail ?? 'Pairing failed'
+      const job = await startPairing(mac, opts)
+      pairJob.value = job
+      const finished = await useJobsStore().waitFor(job)
+      if (finished.status !== 'succeeded' && finished.status !== 'cancelled') pairError.value = finished.error?.detail ?? 'Pairing failed'
       return finished.status === 'succeeded'
     } catch (e) {
       pairError.value = e instanceof ApiError ? e.message : String(e)
@@ -72,6 +86,30 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     } finally {
       pairing.value = false
       pairTarget.value = null
+      pairStartedAt.value = null
+      pairJob.value = null
+      cancelling.value = false
+    }
+  }
+
+  /** Ask the bridge to stop the running scan; the job ends as cancelled. */
+  async function cancelScan() {
+    if (!scanJob.value || cancelling.value) return
+    cancelling.value = true
+    try {
+      await cancelJob(scanJob.value.id)
+    } catch {
+      cancelling.value = false
+    }
+  }
+
+  async function cancelPairing() {
+    if (!pairJob.value || cancelling.value) return
+    cancelling.value = true
+    try {
+      await cancelJob(pairJob.value.id)
+    } catch {
+      cancelling.value = false
     }
   }
 
@@ -151,6 +189,11 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     startScan,
     pairDevice,
     resetReconnect,
+    scanStartedAt,
+    pairStartedAt,
+    cancelling,
+    cancelScan,
+    cancelPairing,
     setPower,
     fetchPairedDevices,
     fetchBtDeviceInfo,

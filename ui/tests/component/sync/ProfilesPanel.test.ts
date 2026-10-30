@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import ProfilesPanel from '@/components/sync/ProfilesPanel.vue'
 import { useSyncStore } from '@/stores/sync'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({ listProfiles: vi.fn(), applyProfile: vi.fn(), captureProfile: vi.fn(), patchProfile: vi.fn(), deleteProfile: vi.fn(), getSyncGroup: vi.fn() }))
 import * as api from '@/api/sync'

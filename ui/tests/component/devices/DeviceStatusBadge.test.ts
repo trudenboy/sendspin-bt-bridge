@@ -3,7 +3,7 @@ import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import DeviceStatusBadge from '@/components/devices/DeviceStatusBadge.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 
@@ -25,11 +25,11 @@ describe('DeviceStatusBadge', () => {
 
   it.each([
     ['streaming', 'Playing', 'success'],
-    ['ready', 'Connected', 'neutral'],
+    ['ready', 'Ready', 'neutral'],
     ['transitioning', 'Connecting…', 'warning'],
     ['recovering', 'Reconnecting…', 'warning'],
     ['degraded', 'Problem', 'error'],
-    ['offline', 'Not connected', 'neutral'],
+    ['offline', 'Offline', 'neutral'],
     ['standby', 'Standby', 'neutral'],
     ['disabled', 'Disabled', 'neutral'],
   ])('renders %s as %s with %s tone', (state, label, tone) => {
@@ -104,13 +104,13 @@ describe('DeviceStatusBadge: standby time and release kind', () => {
     expect(w.text().trim()).toBe('Standby')
   })
 
-  it('says Auto-released (warning) when the bridge let go by itself, Handed over (neutral) otherwise', () => {
+  it('says Released automatically (warning) when the bridge released it by itself, Released (neutral) otherwise', () => {
     const auto = mountWith('released', makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } }))
-    expect(auto.text()).toContain('Auto-released')
+    expect(auto.text()).toContain('Released automatically')
     expect(auto.find('.tone-warning').exists()).toBe(true)
     const user = mountWith('released', makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } }))
-    expect(user.text()).toContain('Handed over')
-    expect(user.text()).not.toContain('Auto-released')
+    expect(user.text()).toContain('Released')
+    expect(user.text()).not.toContain('Released automatically')
     expect(user.find('.tone-neutral').exists()).toBe(true)
   })
 })

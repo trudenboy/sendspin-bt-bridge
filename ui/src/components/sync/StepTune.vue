@@ -87,7 +87,7 @@ function confirmSave() {
       class="rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
     >
       <p class="mb-1 flex items-center gap-2 font-medium">
-        <AlertTriangle class="size-4 text-warning" aria-hidden="true" />{{ t('sync.proposal.warnings') }}
+        <AlertTriangle class="size-4 text-warning-text" aria-hidden="true" />{{ t('sync.proposal.warnings') }}
       </p>
       <ul class="list-disc pl-5">
         <li v-for="w in warnings" :key="w">{{ w }}</li>
@@ -125,7 +125,7 @@ function confirmSave() {
             :aria-invalid="nameMissing || undefined"
             :aria-describedby="nameMissing ? 'sync-tune-profile-name-error' : undefined"
             :class="[
-              'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40',
+              'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary',
               nameMissing && 'border-error',
             ]"
             @input="nameMissing = false"

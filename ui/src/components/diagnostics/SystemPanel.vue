@@ -162,13 +162,13 @@ const downloads = computed(() => [
           required
           placeholder="https://example.local/hook"
           :aria-label="t('system.hooks.url')"
-          class="h-9 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+          class="h-9 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary focus:border-primary"
         />
         <input
           v-model="categories"
           :placeholder="t('system.hooks.categories')"
           :aria-label="t('system.hooks.categories')"
-          class="h-9 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+          class="h-9 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary focus:border-primary"
         />
         <SbButton type="submit" variant="outline" :loading="adding">{{ t('system.hooks.add') }}</SbButton>
       </form>

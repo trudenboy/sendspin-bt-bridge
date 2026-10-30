@@ -1,34 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
-import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import LongOperation from '@/components/LongOperation.vue'
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
+const router = useRouter()
 
-const elapsed = ref(0)
-let elapsedTimer: ReturnType<typeof setInterval> | null = null
 let autoHideTimer: ReturnType<typeof setTimeout> | null = null
 
 const visible = computed(() => bridge.restartState !== 'idle')
-
-function startElapsedTimer() {
-  stopElapsedTimer()
-  elapsed.value = 0
-  elapsedTimer = setInterval(() => {
-    if (bridge.restartStartedAt) {
-      elapsed.value = Math.floor((Date.now() - bridge.restartStartedAt) / 1000)
-    }
-  }, 1000)
-}
-
-function stopElapsedTimer() {
-  if (elapsedTimer) {
-    clearInterval(elapsedTimer)
-    elapsedTimer = null
-  }
-}
 
 function clearAutoHide() {
   if (autoHideTimer) {
@@ -37,75 +20,67 @@ function clearAutoHide() {
   }
 }
 
+/** An update that neither drops the event stream nor changes the version in this time did not finish. */
+const UPDATE_TIMEOUT_MS = 3 * 60 * 1000
+const timedOut = ref(false)
+let updateTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearUpdateTimer() {
+  if (updateTimer) clearTimeout(updateTimer)
+  updateTimer = null
+}
+
+watch(
+  () => [bridge.restartState, bridge.restartReason, bridge.restartStartedAt] as const,
+  ([state, reason, startedAt]) => {
+    clearUpdateTimer()
+    timedOut.value = false
+    if (reason !== 'update' || (state !== 'stopping' && state !== 'restarting')) return
+    const left = Math.max(0, UPDATE_TIMEOUT_MS - (Date.now() - (startedAt ?? Date.now())))
+    updateTimer = setTimeout(() => (timedOut.value = true), left)
+  },
+  { immediate: true },
+)
+
 watch(() => bridge.restartState, (state) => {
-  if (state === 'stopping') {
-    startElapsedTimer()
-    clearAutoHide()
-  } else if (state === 'ready') {
-    stopElapsedTimer()
-    clearAutoHide()
-    autoHideTimer = setTimeout(() => {
-      bridge.dismissRestart()
-    }, 5000)
-  } else if (state === 'idle') {
-    stopElapsedTimer()
-    clearAutoHide()
-  } else if (state === 'error') {
-    stopElapsedTimer()
-    clearAutoHide()
+  clearAutoHide()
+  if (state === 'ready') {
+    autoHideTimer = setTimeout(() => bridge.dismissRestart(), 5000)
   }
 })
 
 onUnmounted(() => {
-  stopElapsedTimer()
   clearAutoHide()
+  clearUpdateTimer()
 })
 
-const bannerClass = computed(() => {
-  switch (bridge.restartState) {
-    case 'stopping':
-    case 'restarting':
-      return 'bg-info/10 border-info/20 text-info'
-    case 'ready':
-      return 'bg-success/10 border-success/20 text-success'
-    case 'error':
-      return 'bg-warning/10 border-warning/20 text-warning'
-    default:
-      return ''
+const isUpdate = computed(() => bridge.restartReason === 'update')
+
+const label = computed(() => {
+  const state = bridge.restartState
+  if (isUpdate.value) {
+    if (timedOut.value) return t('restart.updateTimedOut')
+    if (state === 'ready') return t('restart.updated')
+    if (state === 'error') return t('restart.updateFailed')
+    return t('restart.updating')
   }
-})
-
-const messageKey = computed(() => {
   const map: Record<string, string> = {
     stopping: 'restart.stopping',
     restarting: 'restart.restarting',
     ready: 'restart.ready',
     error: 'restart.error',
   }
-  return map[bridge.restartState] ?? ''
+  return map[state] ? t(map[state]!) : ''
 })
 
-const iconComponent = computed(() => {
-  switch (bridge.restartState) {
-    case 'stopping':
-    case 'restarting':
-      return Loader2
-    case 'ready':
-      return CheckCircle2
-    case 'error':
-      return AlertTriangle
-    default:
-      return null
-  }
-})
-
-const showSpinner = computed(() =>
-  bridge.restartState === 'stopping' || bridge.restartState === 'restarting',
+const status = computed<'running' | 'done' | 'error'>(() =>
+  bridge.restartState === 'ready' ? 'done' : bridge.restartState === 'error' || timedOut.value ? 'error' : 'running',
 )
+const nextStep = computed(() => (timedOut.value ? t('restart.updateTimedOutNext') : t('restart.errorNext')))
 
-const showElapsed = computed(() =>
-  bridge.restartState === 'stopping' || bridge.restartState === 'restarting',
-)
+function openLogs() {
+  void router.push({ path: '/diagnostics', query: { tab: 'logs' } })
+}
 </script>
 
 <template>
@@ -117,26 +92,33 @@ const showElapsed = computed(() =>
     leave-from-class="opacity-100 max-h-12"
     leave-to-class="opacity-0 max-h-0"
   >
-    <div
-      v-if="visible"
-      class="overflow-hidden border-b"
-      :class="bannerClass"
-    >
-      <div class="flex items-center justify-center gap-3 px-4 py-2.5">
-        <component
-          :is="iconComponent"
-          v-if="iconComponent"
-          class="h-4 w-4 shrink-0"
-          :class="{ 'animate-spin': showSpinner }"
-        />
-        <span class="text-sm font-medium">{{ t(messageKey) }}</span>
-        <span
-          v-if="showElapsed"
-          class="text-sm opacity-70"
-        >
-          {{ t('restart.elapsed', { seconds: elapsed }) }}
-        </span>
-      </div>
+    <div v-if="visible" class="overflow-hidden">
+      <LongOperation
+        variant="banner"
+        :label="label"
+        :status="status"
+        :started-at="bridge.restartStartedAt"
+        :next-step="nextStep"
+      >
+        <template #actions>
+          <button
+            type="button"
+            data-restart-logs
+            class="cursor-pointer rounded-(--radius-button) px-2 py-1 text-sm font-medium underline underline-offset-2"
+            @click="openLogs"
+          >
+            {{ t('restart.openLogs') }}
+          </button>
+          <button
+            type="button"
+            data-restart-dismiss
+            class="cursor-pointer rounded-(--radius-button) px-2 py-1 text-sm font-medium"
+            @click="bridge.dismissRestart()"
+          >
+            {{ t('restart.dismiss') }}
+          </button>
+        </template>
+      </LongOperation>
     </div>
   </Transition>
 </template>

@@ -5,8 +5,9 @@ import { useBridgeStore } from '@/stores/bridge'
 import { SbButton } from '@/kit'
 import { AlertTriangle, Info, XCircle } from 'lucide-vue-next'
 import { useGuidanceActions, type GuidanceAction } from '@/composables/useGuidanceActions'
+import { tAction, tServer, type ServerText } from '@/i18n/server'
 
-interface IssueGroup {
+interface IssueGroup extends ServerText {
   key: string
   severity: 'error' | 'warning' | 'info' | string
   title: string
@@ -54,14 +55,14 @@ async function act(issue: IssueGroup) {
       <component
         :is="icon[issue.severity] ?? Info"
         class="mt-0.5 size-5 shrink-0"
-        :class="issue.severity === 'error' ? 'text-error' : issue.severity === 'warning' ? 'text-warning' : 'text-info'"
+        :class="issue.severity === 'error' ? 'text-error' : issue.severity === 'warning' ? 'text-warning-text' : 'text-info'"
         aria-hidden="true"
       />
       <!-- Phones: the action goes under the text so the text keeps its width. -->
       <div data-guidance-body class="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-start sm:gap-3">
         <div data-guidance-text class="min-w-0 sm:flex-1">
-          <p class="text-sm font-medium text-text-primary">{{ issue.title }}</p>
-          <p class="mt-0.5 text-[13px] text-text-secondary">{{ issue.summary }}</p>
+          <p class="text-sm font-medium text-text-primary">{{ tServer('issue', issue, 'title', issue.title) }}</p>
+          <p class="mt-0.5 text-[13px] text-text-secondary">{{ tServer('issue', issue, 'summary', issue.summary) }}</p>
         </div>
         <SbButton
           v-if="issue.primary_action"
@@ -71,7 +72,7 @@ async function act(issue: IssueGroup) {
           :loading="busy === issue.key"
           @click="act(issue)"
         >
-          {{ issue.primary_action.label }}
+          {{ tAction(issue.primary_action) }}
         </SbButton>
       </div>
     </div>

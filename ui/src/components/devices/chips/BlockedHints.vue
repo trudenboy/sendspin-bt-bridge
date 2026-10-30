@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { CircleAlert } from 'lucide-vue-next'
 import { blockedHints } from '@/utils/deviceChips'
+import { tServer } from '@/i18n/server'
 import type { Device } from '@/api/types'
 
 /** Up to two controls the speaker cannot use now, each with a "Why?" that tells the bridge's reason. */
@@ -21,8 +22,9 @@ function toggle(key: string) {
   open.value = { ...open.value, [key]: !open.value[key] }
 }
 
-function reason(hint: { key: string; message: string }) {
-  return hint.key === 'sink_muted' ? t('device.chips.blocked.sinkMutedReason') : hint.message
+function reason(hint: { key: string; message: string; code: string | null }) {
+  if (hint.key === 'sink_muted') return t('device.chips.blocked.sinkMutedReason')
+  return tServer('blocked', { code: hint.code }, 'message', hint.message)
 }
 
 function needs(dependsOn: string[]) {
@@ -46,12 +48,12 @@ function openDiagnostics() {
       class="rounded-(--radius-button) border border-warning/30 bg-warning/8 px-2.5 py-1.5 text-xs text-text-primary"
     >
       <div class="flex items-center gap-1.5">
-        <CircleAlert class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+        <CircleAlert class="size-3.5 shrink-0 text-warning-text" aria-hidden="true" />
         <span class="min-w-0 flex-1 truncate font-medium">{{ t(`device.chips.blocked.title.${hint.key}`) }}</span>
         <button
           type="button"
           data-hint-why
-          class="shrink-0 rounded text-primary-text underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none"
+          class="shrink-0 rounded text-primary-text underline-offset-2 hover:underline"
           :class="{ underline: open[hint.key] }"
           :aria-expanded="open[hint.key] ? 'true' : 'false'"
           :aria-controls="panelId(hint.key)"

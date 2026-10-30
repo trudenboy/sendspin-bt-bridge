@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import HealthSummary from '@/components/diagnostics/HealthSummary.vue'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/diagnostics', () => ({
   getDiagnostics: vi.fn().mockResolvedValue({}),

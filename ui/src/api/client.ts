@@ -1,6 +1,7 @@
 import createClient, { type Middleware } from 'openapi-fetch'
 import type { components, paths } from './schema'
 import { useIngress } from '@/composables/useIngress'
+import { tProblem } from '@/i18n/server'
 
 export type Schemas = components['schemas']
 
@@ -21,7 +22,7 @@ export class ApiError extends Error {
   problem: Problem
 
   constructor(problem: Problem) {
-    super(problem.detail || problem.title || problem.code)
+    super(tProblem(problem))
     this.name = 'ApiError'
     this.status = problem.status
     this.code = problem.code

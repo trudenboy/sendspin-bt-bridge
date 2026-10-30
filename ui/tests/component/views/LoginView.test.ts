@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import router from '@/router'
 import LoginView from '@/views/LoginView.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const api = vi.hoisted(() => ({
   session: { authenticated: false, auth_enabled: true, methods: ['password'], ha_addon: false, csrf_token: 't' },

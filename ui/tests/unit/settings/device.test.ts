@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import spec from '../../../openapi.json'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { DEVICE_FIELDS, DEVICE_GROUPS, DEVICE_MANAGED_KEYS, deviceFieldFor, deviceFieldVisible } from '@/settings/device'
 
 type Schema = Record<string, any>

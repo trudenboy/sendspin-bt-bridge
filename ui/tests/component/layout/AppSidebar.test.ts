@@ -4,7 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 const SIDEBAR_KEY = 'sendspin-ui:sidebar-collapsed'
 
@@ -122,5 +122,15 @@ describe('AppSidebar', () => {
     const wrapper = await mountSidebar()
     const aside = wrapper.find('[data-testid="app-sidebar"]')
     expect(aside.classes()).toContain('w-16')
+  })
+
+  it('names and states its collapse toggle in the UI language', async () => {
+    const wrapper = await mountSidebar()
+    const toggle = wrapper.get('[data-testid="sidebar-toggle"]')
+    expect(toggle.attributes('aria-label')).toBe(en.sidebar.collapse)
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-label')).toBe(en.sidebar.expand)
+    expect(toggle.attributes('aria-expanded')).toBe('false')
   })
 })

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { computed } from 'vue'
+
+const labels = useKitLabels()
 
 interface Segment {
   id: string
@@ -27,7 +30,7 @@ const isVertical = computed(() => props.direction === 'vertical')
 
 <template>
   <div
-    aria-label="Signal path"
+    :aria-label="labels.signalPath"
     :class="[
       'flex flex-wrap items-center gap-1',
       isVertical ? 'flex-col' : 'flex-row max-sm:flex-col',

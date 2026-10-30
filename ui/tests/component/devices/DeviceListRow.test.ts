@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 vi.mock('@/stores/devices', async (importOriginal) => ({
@@ -162,6 +162,6 @@ describe('DeviceListRow', () => {
   it('shows standby time and an automatic release in the status cell', () => {
     const since = new Date(Date.now() - 3 * 60_000 - 5_000).toISOString()
     expect(mountRow(makeDevice({ bluetooth: { standby: true, standby_since: since } })).text()).toContain('Standby · 3 min')
-    expect(mountRow(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()).toContain('Auto-released')
+    expect(mountRow(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()).toContain('Released automatically')
   })
 })

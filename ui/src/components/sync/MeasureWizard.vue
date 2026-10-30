@@ -19,13 +19,14 @@ import { ApiError } from '@/api/client'
 import type { SessionPoint, SyncMeasurement, SyncProposal, SyncSession } from '@/api/types'
 import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SOLO_SETTLE_MS, SyncCaptureError, SyncRecorder, type Capture } from '@/sync/capture'
-import { SbButton, SbSpinner } from '@/kit'
-import { confirmDialog } from '@/composables/useConfirm'
+import { SbButton } from '@/kit'
+import LongOperation from '@/components/LongOperation.vue'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { formatMs } from '@/sync/format'
 import { speakerName } from '@/sync/names'
+import { stopMusicAndStartClicks } from '@/sync/startClicks'
 import { useCountdown } from '@/sync/countdown'
 import StepPrepare from './StepPrepare.vue'
-import StepStopGroup from './StepStopGroup.vue'
 import StepClicker from './StepClicker.vue'
 import StepVolume from './StepVolume.vue'
 import StepMembers, { type MemberPhase } from './StepMembers.vue'
@@ -35,7 +36,7 @@ import StepDone from './StepDone.vue'
 
 /**
  * The measurement wizard, in four stages. Prepare: where to measure and the microphone, stop the
- * group's music, start the clicks, set the volumes (with the microphone's level). Measure: speaker by
+ * group's music and start the clicks (one step), set the volumes (with the microphone's level). Measure: speaker by
  * speaker. Tune: the measured delays are applied and the session becomes the manual editor (listen,
  * adjust, finish). Done: the group restored.
  *
@@ -65,11 +66,10 @@ const emit = defineEmits<{
   skip: [member: string, skip: boolean]
 }>()
 
-type Step = 'prepare' | 'stop' | 'clicker' | 'volume' | 'members' | 'tune' | 'done'
+type Step = 'prepare' | 'clicker' | 'volume' | 'members' | 'tune' | 'done'
 export type Stage = 'prepare' | 'measure' | 'tune' | 'done'
 const STAGE_OF: Record<Step, Stage> = {
   prepare: 'prepare',
-  stop: 'prepare',
   clicker: 'prepare',
   volume: 'prepare',
   members: 'measure',
@@ -393,13 +393,7 @@ async function begin() {
         /* still offered on the members step */
       }
     }
-    await goTo('stop')
-    if (session.value && session.value.group_state !== 'playing') {
-      // Nothing to stop: one tap fewer.
-      await goTo('clicker')
-      message.value = t('sync.prep.stop.notPlaying')
-      autoNote.value = message.value
-    }
+    await goTo('clicker')
     // iOS may leave a fresh context suspended until a tap: offer it right away.
     if (rec?.needsResume) interrupt()
   } finally {
@@ -410,8 +404,6 @@ async function begin() {
 /* -- getting the group ready: stop it, start the clicker, set the volumes ---------------------- */
 
 const prepBusy = ref(false)
-/** Said on the clicks step when the stop step was skipped because nothing played. */
-const autoNote = ref('')
 const prepError = ref('')
 
 function prepText(e: unknown) {
@@ -432,8 +424,10 @@ async function prepCall(call: () => Promise<unknown>) {
   }
 }
 
-const stopGroup = () => prepCall(() => sync.signal('stop'))
-const startClicker = () => prepCall(() => sync.signal('start'))
+const startClicker = () =>
+  prepCall(() =>
+    stopMusicAndStartClicks(sync, { state: session.value?.group_state ?? null, clickerPlaying: clickerPlaying.value }),
+  )
 
 async function setVolume(member: string, level: number) {
   prepError.value = ''
@@ -446,7 +440,6 @@ async function setVolume(member: string, level: number) {
 
 async function toStep(next: Step) {
   prepError.value = ''
-  autoNote.value = ''
   await goTo(next)
 }
 
@@ -946,12 +939,11 @@ async function cancel() {
     Object.values(results).some((r) => r.status !== 'skipped') ||
     Object.values(session.value?.measurements ?? {}).some((r) => r.status !== 'skipped')
   if (applied.value || recorded) {
-    const ok = await confirmDialog({
+    const ok = await confirmAction('sync.cancelMeasurement', {
       title: t(applied.value ? 'sync.cancel.tuneTitle' : 'sync.cancel.title'),
       message: t(applied.value ? 'sync.cancel.tuneMessage' : 'sync.cancel.message'),
       confirmLabel: t('sync.cancel.confirm'),
       cancelLabel: t('sync.cancel.keep'),
-      danger: true,
     })
     if (!ok || id !== sessionId.value) return
   }
@@ -1098,27 +1090,16 @@ const volumes = computed(() => session.value?.volumes ?? {})
       @next="begin"
       @manual="emit('manual')"
     />
-    <StepStopGroup
-      v-else-if="step === 'stop'"
-      :group-state="session?.group_state ?? null"
-      :clicker-playing="clickerPlaying"
-      :busy="prepBusy"
-      :error="prepError"
-      @stop="stopGroup"
-      @next="toStep('clicker')"
-      @cancel="cancel"
-    />
     <StepClicker
       v-else-if="step === 'clicker'"
+      :group-state="session?.group_state ?? null"
       :clicker-playing="clickerPlaying"
       :started="clickerStarted"
       :left-s="leftS"
-      :note="autoNote"
       :busy="prepBusy"
       :error="prepError"
       @start="startClicker"
       @next="toStep('volume')"
-      @back="toStep('stop')"
       @cancel="cancel"
     />
     <StepVolume
@@ -1167,9 +1148,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
       @cancel="cancel"
     />
     <template v-else-if="step === 'tune'">
-      <p v-if="proposing || applying" role="status" class="flex items-center gap-2 text-sm text-text-secondary">
-        <SbSpinner size="sm" />{{ proposing ? t('sync.wizard.computing') : t('sync.wizard.applying') }}
-      </p>
+      <LongOperation v-if="proposing || applying" :label="proposing ? t('sync.wizard.computing') : t('sync.wizard.applying')" />
       <div
         v-else-if="proposalError || applyError || forbidden"
         data-proposal-error

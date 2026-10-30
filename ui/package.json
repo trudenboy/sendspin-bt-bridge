@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "postbuild": "node scripts/check-locale-chunks.mjs",
     "preview": "vite preview",
     "test": "vitest run",
+    "check:locales": "node scripts/check-locales.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src/",
@@ -36,6 +38,7 @@
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.9.0",
+    "axe-core": "^4.14.0",
     "eslint": "^10.1.0",
     "eslint-plugin-vue": "^10.8.0",
     "happy-dom": "^20.8.9",

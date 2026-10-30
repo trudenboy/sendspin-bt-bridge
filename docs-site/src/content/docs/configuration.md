@@ -83,9 +83,9 @@ When BlueZ exposes no delay report, the bridge uses a codec starting point once 
 
 The advanced device row also contains **Startup lead** (`required_lead_time_ms`) and **Minimum buffer** (`min_buffer_ms`). Both hot-apply to compatible `aiosendspin` versions. Increase them when repeated re-anchors indicate that the Bluetooth/QEMU path is exhausting the default 250 ms headroom; they do not replace `static_delay_ms`.
 
-With the experimental air sensor on (**Settings → Audio → Air sensor (SBC speakers)**, `EXPERIMENTAL_AIR_SENSOR`, bridge restart required), the device's **Timing** panel also shows when the speaker's audio left over the air relative to its schedule, and, in `loop`, the sensor corrects the speaker once per stream start; the group sync wizard can calibrate the speaker's air-to-sound latency. Requirements, the panel's fields and calibration are described in [Bluetooth speakers › Air sensor](/bluetooth-speakers/#air-sensor-experimental).
+With the experimental air sensor on (**Settings → Audio → Air sensor (SBC speakers)**, `EXPERIMENTAL_AIR_SENSOR`, bridge restart required), the device's **Timing** panel also shows when the speaker's audio left over the air relative to its schedule, and, in `loop`, the sensor corrects the speaker once per stream start; the group sync wizard can measure and save the speaker's Bluetooth latency. Requirements, the panel's fields and calibration are described in [Bluetooth speakers › Air sensor](/bluetooth-speakers/#air-sensor-experimental).
 
-The metronome button plays a continuous synchronized click track directly through the selected Bluetooth sink. The microphone button starts a relative calibration between two speakers: open the UI through HTTPS or localhost, keep the phone fixed, and let the three reference/target trials finish. Recordings remain in memory for at most ten minutes. The result compensates the faster speaker; it is relative rather than a certified end-to-end absolute latency measurement.
+The Timing tab has one calibration path: **Tune with your group →** opens the group's sync tuning, where you tune by ear or measure with a microphone or phone. The per-speaker click track and microphone comparison that used to sit in this tab were removed; their API endpoints remain for other clients and are marked deprecated for the web UI in the OpenAPI document.
 
 ### Bluetooth tab
 

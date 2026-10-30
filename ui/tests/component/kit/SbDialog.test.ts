@@ -145,3 +145,16 @@ describe('SbDialog', () => {
     })
   })
 })
+
+describe('SbDialog close button', () => {
+  it('has a 40 px hit area', async () => {
+    const w = mount(SbDialog, {
+      props: { modelValue: true, title: 'T' },
+      global: { stubs: { Teleport: true } },
+      slots: { default: 'body' },
+    })
+    await nextTick()
+    const cls = w.find('[data-testid="dialog-close-btn"]').classes()
+    expect(cls).toContain('size-10')
+  })
+})

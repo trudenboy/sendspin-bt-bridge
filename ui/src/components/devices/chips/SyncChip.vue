@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge } from '@/kit'
 import { airChipSummary, signedMs, syncBadge } from '@/utils/deviceChips'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { observeReanchor, retainReanchor } from '@/utils/reanchorHold'
 import type { Device } from '@/api/types'
 
@@ -60,8 +61,8 @@ const titleKey = computed(() => {
 const labelText = computed(() => {
   const kind = badge.value?.kind
   if (kind === 'reanchoring') return t('device.chips.sync.reanchoring')
-  if (kind === 'playout') return t('device.chips.sync.playout')
-  if (kind === 'warming') return t('device.chips.sync.warming', { s: badge.value?.warmInS ?? 0 })
+  if (kind === 'playout' && technicalDetails.value) return t('device.chips.sync.playout')
+  if (kind === 'warming' && technicalDetails.value) return t('device.chips.sync.warming', { s: badge.value?.warmInS ?? 0 })
   return t('device.chips.sync.label')
 })
 const dash = (n: number | null) => (n == null ? '—' : String(n))
@@ -93,10 +94,10 @@ const countTitle = computed(() =>
           aria-hidden="true"
         />
         {{ labelText }}
-        <span v-if="badge.errorMs != null" class="tabular-nums opacity-80">{{ t('device.chips.sync.errorMs', { ms: badge.errorMs }) }}</span>
+        <span v-if="technicalDetails && badge.errorMs != null" class="tabular-nums opacity-80">{{ t('device.chips.sync.errorMs', { ms: badge.errorMs }) }}</span>
       </SbBadge>
     </span>
-    <span v-if="badge.count > 0" :data-chip="isPlayout ? 'jumps' : 'reanchors'" class="inline-flex" :title="countTitle">
+    <span v-if="technicalDetails && badge.count > 0" :data-chip="isPlayout ? 'jumps' : 'reanchors'" class="inline-flex" :title="countTitle">
       <SbBadge :tone="badge.countTone" size="sm"><span class="tabular-nums">{{ t('device.chips.sync.count', { count: badge.count }) }}</span></SbBadge>
     </span>
   </template>

@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import os
 import socket
+from dataclasses import asdict
 
 from sendspin_bridge.application import diagnostics as _diag
 from sendspin_bridge.application.models import (
     Bridge,
     BridgeStatus,
+    BridgeVerdict,
     Device,
     DisabledDevice,
     Group,
     StartupProgress,
     UpdateInfo,
 )
+from sendspin_bridge.application.models.devices import LinkStatus
 from sendspin_bridge.config import load_config
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.diagnostics.status_model import ma_account_state, verdict_from_issues
 from sendspin_bridge.services.ipc.bridge_state_model import build_bridge_state_model
 from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
 
@@ -141,6 +145,7 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
     running = [d for d in snapshot.devices if d.enabled]
     off = [d for d in snapshot.devices if not d.enabled]
     info = state.get_bridge_system_info()
+    verdict = verdict_from_issues(guidance.get("issue_groups") or [])
     bridge = Bridge(
         name=bridge_name(config),
         version=info.get("version", ""),
@@ -154,6 +159,15 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
         ipc_protocol_version=info.get("ipc_protocol_version"),
         auth_enabled=auth_enabled,
         ma_connected=snapshot.ma_connected,
+        music_assistant_account=LinkStatus(
+            **asdict(
+                ma_account_state(
+                    configured=bool(config.get("MA_API_URL") and config.get("MA_API_TOKEN")),
+                    connected=bool(snapshot.ma_connected),
+                )
+            )
+        ),
+        verdict=BridgeVerdict(level=verdict.level, count=verdict.count),
         ma_web_url=snapshot.ma_web_url,
         device_count=len(running),
         disabled_devices=[_disabled(d, config) for d in snapshot.disabled_devices]

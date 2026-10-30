@@ -19,6 +19,8 @@ const notifications = useNotificationStore()
         :message="toast.message"
         :type="toast.type"
         :duration="toast.duration"
+        :action-label="toast.action?.label"
+        @action="toast.action?.run()"
         @close="notifications.remove($event)"
       />
     </TransitionGroup>

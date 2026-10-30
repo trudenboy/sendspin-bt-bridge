@@ -34,7 +34,7 @@ function onClick() {
       v-if="chip.url"
       type="button"
       data-chip="group"
-      class="inline-flex max-w-full rounded-(--radius-badge) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      class="inline-flex max-w-full rounded-(--radius-badge)"
       :title="title"
       :aria-label="t('device.chips.group.open', { name: chip.label })"
       @click.stop="onClick"

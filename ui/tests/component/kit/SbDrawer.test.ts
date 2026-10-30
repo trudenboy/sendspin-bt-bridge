@@ -154,3 +154,16 @@ describe('SbDrawer', () => {
     })
   })
 })
+
+describe('SbDrawer close button', () => {
+  it('has a 40 px hit area', async () => {
+    const w = mount(SbDrawer, {
+      props: { modelValue: true, title: 'T' },
+      global: { stubs: { Teleport: true } },
+      slots: { default: 'body' },
+    })
+    await nextTick()
+    const cls = w.find('[data-testid="drawer-close-btn"]').classes()
+    expect(cls).toContain('size-10')
+  })
+})

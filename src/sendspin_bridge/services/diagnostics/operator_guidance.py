@@ -7,9 +7,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sendspin_bridge.config.network import is_ha_addon_runtime
-from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_summary
+from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_params, reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.guidance_issue_registry import build_issue_context, issue_sort_priority
 from sendspin_bridge.services.diagnostics.recovery_assistant import RecoveryAction, build_recovery_issue_actions
+from sendspin_bridge.services.diagnostics.server_text import action_fields, coded, device_params
 from sendspin_bridge.services.infrastructure._helpers import (
     _device_audio_streaming,
     _device_extra,
@@ -42,6 +43,7 @@ class GuidanceAction:
             payload["check_key"] = self.check_key
         if self.value is not None:
             payload["value"] = self.value
+        payload.update(action_fields(self.key, self.label, self.device_names, self.value))
         return payload
 
 
@@ -56,6 +58,10 @@ class GuidanceIssueGroup:
     primary_action: GuidanceAction | None = None
     secondary_actions: list[GuidanceAction] = field(default_factory=list)
     context: dict[str, Any] = field(default_factory=dict)
+    #: Stable id and values of the wording (``server_text``); the UI translates them.
+    code: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    summary_variant: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
@@ -67,6 +73,7 @@ class GuidanceIssueGroup:
             "device_names": list(self.device_names),
             "secondary_actions": [action.to_dict() for action in self.secondary_actions],
             "context": dict(self.context),
+            **coded(self.code or self.key, self.params, variant=self.summary_variant),
         }
         if self.primary_action:
             payload["primary_action"] = self.primary_action.to_dict()
@@ -78,9 +85,17 @@ class GuidanceHeaderStatus:
     tone: str
     label: str
     summary: str
+    #: Stable id of the label (``server_text``); ``area`` says where to look it up
+    #: ("header", or "issue" when the label is the lead issue's title).
+    code: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    area: str = "header"
 
-    def to_dict(self) -> dict[str, str]:
-        return {"tone": self.tone, "label": self.label, "summary": self.summary}
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"tone": self.tone, "label": self.label, "summary": self.summary}
+        payload.update(coded(self.code, self.params))
+        payload["area"] = self.area
+        return payload
 
 
 @dataclass
@@ -343,10 +358,15 @@ def _append_group(
     secondary_actions: list[GuidanceAction] | None = None,
     reason_codes: list[str] | None = None,
     all_devices_affected: bool | None = None,
+    params: dict[str, Any] | None = None,
+    summary_variant: str | None = None,
 ) -> None:
     names = [name for name in (device_names or []) if name]
     groups.append(
         GuidanceIssueGroup(
+            code=key,
+            params=device_params(names, **(params or {})),
+            summary_variant=summary_variant,
             key=key,
             severity=severity,
             title=title,
@@ -403,6 +423,7 @@ def _runtime_access_issue(
 
     return {
         "title": "Host service access unavailable",
+        "variant": "all_disabled" if all_devices_globally_disabled else None,
         "summary": summary,
         "details": dict(runtime_check.get("details") or {}),
         "actions": actions,
@@ -441,6 +462,11 @@ def _bluetooth_access_issue(
 
     return {
         "title": "Bluetooth adapter unavailable",
+        "variant": (
+            "all_disabled"
+            if all_devices_globally_disabled
+            else (None if str(bluetooth_check.get("code") or "") in ("", "no_controller") else bluetooth_check["code"])
+        ),
         "summary": summary,
         "details": {"paired_devices": paired_devices, "disabled_devices": disabled_count},
         "actions": actions,
@@ -486,6 +512,7 @@ def _audio_backend_issue(
         return {
             "key": reason_code,
             "title": "Audio server unreachable — enable user lingering",
+            "params": {"socket": socket_path},
             "summary": summary,
             "details": details,
             "actions": actions,
@@ -510,6 +537,11 @@ def _audio_backend_issue(
 
     return {
         "title": "Audio backend unavailable",
+        "variant": "all_disabled" if all_devices_globally_disabled else (audio_check.get("code") or None),
+        "params": {
+            "socket": str(details.get("socket") or ""),
+            "error": str(details.get("last_error") or ""),
+        },
         "summary": summary,
         "details": details,
         "actions": actions,
@@ -586,6 +618,7 @@ def _build_issue_groups(
             summary=runtime_access_issue["summary"],
             primary_action=runtime_access_issue["primary_action"],
             secondary_actions=runtime_access_issue["secondary_actions"],
+            summary_variant=runtime_access_issue.get("variant"),
         )
     elif bluetooth_access_issue and current_step_key == "bluetooth":
         _append_group(
@@ -596,6 +629,7 @@ def _build_issue_groups(
             summary=bluetooth_access_issue["summary"],
             primary_action=bluetooth_access_issue["primary_action"],
             secondary_actions=bluetooth_access_issue["secondary_actions"],
+            summary_variant=bluetooth_access_issue.get("variant"),
         )
     elif audio_backend_issue and current_step_key == "audio":
         _append_group(
@@ -606,6 +640,8 @@ def _build_issue_groups(
             summary=audio_backend_issue["summary"],
             primary_action=audio_backend_issue["primary_action"],
             secondary_actions=audio_backend_issue["secondary_actions"],
+            summary_variant=audio_backend_issue.get("variant"),
+            params=audio_backend_issue.get("params"),
         )
     # v2.70.0-rc.2 (#260) — never_paired devices form their own group with
     # Start pairing remediation; exclude them from repair_needed/disconnected
@@ -776,6 +812,7 @@ def _build_issue_groups(
             severity="error",
             title=title,
             summary=summary,
+            params={"interval": interval_str},
             device_names=loop_timeout_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
@@ -804,6 +841,7 @@ def _build_issue_groups(
             severity="error",
             title=title,
             summary=summary,
+            params=reconnect_attempt_params(never_paired_devices[0]) if len(never_paired_devices) == 1 else {},
             device_names=never_paired_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
@@ -830,6 +868,7 @@ def _build_issue_groups(
             severity="error",
             title=title,
             summary=summary,
+            params=reconnect_attempt_params(repair_needed[0]) if len(repair_needed) == 1 else {},
             device_names=repair_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
@@ -878,6 +917,7 @@ def _build_issue_groups(
             severity="warning",
             title=title,
             summary=summary,
+            params=reconnect_attempt_params(disconnected_device) if disconnected_device is not None else {},
             device_names=disconnected,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
@@ -928,6 +968,7 @@ def _build_issue_groups(
             severity="warning",
             title=title,
             summary=summary,
+            params={**dict(output_issues[0].get("params") or {}), "others": output_names[1:]},
             device_names=output_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
@@ -958,6 +999,7 @@ def _build_issue_groups(
             severity="warning",
             title=title,
             summary=summary,
+            params={"other_bridge": dup_warnings[0].other_bridge_name} if len(dup_warnings) == 1 else {},
             device_names=dup_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
@@ -981,6 +1023,7 @@ def _build_issue_groups(
             key="ma_auth",
             severity="error" if overall_status == "error" else "warning",
             title="Music Assistant needs attention",
+            summary_variant=checklist.get("current_step_variant") or None,
             summary=str(checklist.get("summary") or "Music Assistant integration is not ready yet."),
             primary_action=primary_action,
             secondary_actions=secondary,
@@ -1008,6 +1051,12 @@ def _build_issue_groups(
             key="latency",
             severity="warning",
             title="Latency tuning needs attention",
+            summary_variant=(
+                latency_assistant.get("code")
+                if latency_assistant.get("code") in {"multi_no_delays", "high_latency", "repeated_resyncs"}
+                else None
+            )
+            or (checklist.get("current_step_variant") or None),
             summary=str(
                 latency_assistant.get("summary")
                 or checklist.get("summary")
@@ -1276,12 +1325,15 @@ def _build_header_status(
         return GuidanceHeaderStatus(
             tone="info",
             label=f"Startup {percent}%",
+            code="startup",
+            params={"percent": percent},
             summary=str(startup_progress.get("message") or "Bridge startup checks are still running."),
         )
     if _startup_banner_cooldown_active(startup_progress, config):
         return GuidanceHeaderStatus(
             tone="info",
             label="Startup 90%",
+            code="startup_finalizing",
             summary="Finalizing Startup",
         )
     if lead_issue and lead_issue.key in {"runtime_access", "bluetooth_unavailable", "audio_unavailable"}:
@@ -1289,23 +1341,29 @@ def _build_header_status(
             tone=lead_issue.severity,
             label=lead_issue.title,
             summary=lead_issue.summary,
+            code=lead_issue.code,
+            params=lead_issue.params,
+            area="issue",
         )
     if mixed_bluetooth_guidance:
         return GuidanceHeaderStatus(
             tone="warning",
             label=mixed_bluetooth_guidance["title"],
             summary=mixed_bluetooth_guidance["summary"],
+            code="no_playable_speaker",
         )
     if all_devices_globally_disabled:
         return GuidanceHeaderStatus(
             tone="neutral",
             label="All devices disabled",
+            code="all_disabled",
             summary="All configured Bluetooth devices are globally disabled. Re-enable a device in Configuration → Devices.",
         )
     if mode == "empty_state":
         return GuidanceHeaderStatus(
             tone="info",
             label="First run" if configured_adapters == 0 else "Add first speaker",
+            code="first_run" if configured_adapters == 0 else "add_first_speaker",
             summary=(
                 "Add your first Bluetooth adapter and speaker to start guided setup."
                 if configured_adapters == 0
@@ -1315,17 +1373,35 @@ def _build_header_status(
     if issue_groups:
         lead = issue_groups[0]
         label = lead.title if len(issue_groups) == 1 else f"{len(issue_groups)} issues need attention"
-        return GuidanceHeaderStatus(tone=lead.severity, label=label, summary=lead.summary)
+        if len(issue_groups) == 1:
+            return GuidanceHeaderStatus(
+                tone=lead.severity,
+                label=label,
+                summary=lead.summary,
+                code=lead.code,
+                params=lead.params,
+                area="issue",
+            )
+        return GuidanceHeaderStatus(
+            tone=lead.severity,
+            label=label,
+            summary=lead.summary,
+            code="issues_attention",
+            params={"count": len(issue_groups)},
+        )
     if not active_devices and released_devices:
         return GuidanceHeaderStatus(
             tone="neutral",
             label="Bluetooth released",
+            code="all_released",
             summary="All configured devices are intentionally released from bridge management.",
         )
     if active_devices and configured_devices > 0 and str(checklist.get("overall_status") or "") != "ok":
         return GuidanceHeaderStatus(
             tone="warning",
             label=f"Setup {int(checklist.get('progress_percent') or 0)}%",
+            code="setup_progress",
+            params={"percent": int(checklist.get("progress_percent") or 0)},
             summary=str(checklist.get("summary") or "Bridge setup still has pending steps."),
         )
 
@@ -1336,6 +1412,8 @@ def _build_header_status(
         return GuidanceHeaderStatus(
             tone="success",
             label=f"{ready_devices}/{len(active_devices)} active devices ready",
+            code="devices_ready",
+            params={"ready": ready_devices, "total": len(active_devices)},
             summary=(
                 "All active devices have sinks and are ready for playback."
                 if ready_devices == len(active_devices) and active_devices
@@ -1345,6 +1423,7 @@ def _build_header_status(
     return GuidanceHeaderStatus(
         tone="neutral",
         label="Waiting for setup",
+        code="waiting_for_setup",
         summary=str(recovery_summary.get("summary") or "Configure your first speaker to start playback."),
     )
 

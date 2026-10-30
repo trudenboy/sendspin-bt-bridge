@@ -941,6 +941,7 @@ def save_config(config: dict) -> dict:
         "DISABLE_PA_RESCUE_STREAMS",
         "COMPENSATE_OUTPUT_LATENCY",
         "PLAYOUT_DIAG",
+        "SHOW_TECHNICAL_DETAILS",
         "EXPERIMENTAL_AIR_SENSOR",
         "PULSE_SINK_RESET_ON_START",
         "AUTH_ENABLED",

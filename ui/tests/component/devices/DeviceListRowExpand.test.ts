@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 
@@ -21,9 +21,8 @@ vi.mock('@/stores/devices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/devices')>()),
   useDeviceStore: () => store,
 }))
-vi.mock('@/stores/notifications', () => ({
-  useNotificationStore: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
-}))
+const notes = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
+vi.mock('@/stores/notifications', () => ({ useNotificationStore: () => notes }))
 vi.mock('@/api/playback', () => ({ transport: vi.fn().mockResolvedValue(undefined) }))
 
 import { transport } from '@/api/playback'
@@ -124,6 +123,7 @@ describe('DeviceListRow expansion', () => {
     expect(store.reconnect).toHaveBeenCalledWith('dev-1')
     expect(store.standby).toHaveBeenCalledWith('dev-1')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
+    expect(notes.undo).toHaveBeenCalledTimes(2) // standby and release both offer Undo
   })
 
   it('offers wake and take back where they apply', async () => {

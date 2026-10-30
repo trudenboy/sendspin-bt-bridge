@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import type { DisabledPlayer } from '@/stores/devices'
 import { makeDevice } from '../../fixtures/device'
@@ -11,7 +11,7 @@ import { setVolume } from '@/api/playback'
 
 const store = vi.hoisted(() => ({ setEnabled: vi.fn(), remove: vi.fn(), standby: vi.fn(), release: vi.fn(), setPowerSave: vi.fn() }))
 const bridge = vi.hoisted(() => ({ refresh: vi.fn(), adapters: [] }))
-const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }))
+const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
 const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
 
 vi.mock('@/stores/devices', async (importOriginal) => ({
@@ -83,7 +83,7 @@ describe('GroupActionBar with disabled players selected', () => {
     await button(w, 'remove').trigger('click')
     await flushPromises()
     expect(confirm.confirmDialog).toHaveBeenCalledTimes(1)
-    expect(confirm.confirmDialog.mock.calls[0]![0].message).toContain('Xray, Yankee')
+    expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('Xray, Yankee')
     expect(store.remove.mock.calls).toEqual([['x'], ['y']])
     expect(notify.error).toHaveBeenCalledWith('Remove speaker failed for: Yankee')
   })

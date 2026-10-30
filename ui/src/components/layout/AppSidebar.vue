@@ -4,13 +4,17 @@ import { useI18n } from 'vue-i18n'
 import { ChevronsLeft, ChevronsRight } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useTheme } from '@/composables/useTheme'
 
 const { t } = useI18n()
 const route = useRoute()
 
 const STORAGE_KEY = 'sendspin-ui:sidebar-collapsed'
 
-const collapsed = ref(localStorage.getItem(STORAGE_KEY) === 'true')
+const { embedded } = useTheme()
+// Inside Home Assistant's panel the sidebar starts as icons only; a choice made here is kept.
+const stored = localStorage.getItem(STORAGE_KEY)
+const collapsed = ref(stored === null ? embedded.value : stored === 'true')
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
@@ -23,7 +27,7 @@ const navLinks = NAV
 <template>
   <aside
     :class="[
-      'flex h-[calc(100vh-4rem)] flex-col border-r border-border bg-surface-card transition-[width] duration-200',
+      'flex h-[calc(100vh-var(--sb-header-h))] flex-col border-r border-border bg-surface-card transition-[width] duration-200',
       collapsed ? 'w-16' : 'w-60',
     ]"
     data-testid="app-sidebar"
@@ -55,7 +59,9 @@ const navLinks = NAV
       <!-- Collapse toggle -->
       <button
         class="flex w-full items-center justify-center rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary"
-        :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :title="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+        :aria-label="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+        :aria-expanded="!collapsed"
         data-testid="sidebar-toggle"
         @click="toggleCollapsed"
       >

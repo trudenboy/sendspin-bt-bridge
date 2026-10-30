@@ -1,13 +1,15 @@
 ---
 title: Web UI
-description: Current guide to the Sendspin Bluetooth Bridge dashboard, guidance banners, Bluetooth scan modal, Music Assistant reconfigure flow, diagnostics, and bug reports
+description: Guide to the Sendspin Bluetooth Bridge web interface in v3 - Speakers, Groups, Settings and Diagnostics, the three connection states, the speaker panel, technical details and the Home Assistant layout
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The web interface is available through a direct browser port controlled by **`WEB_PORT`** (default **8080** for standalone installs) and through **HA Ingress** for the Home Assistant addon. In addon mode the ingress port is **dynamically assigned by Home Assistant Supervisor** (the addon manifest declares `ingress_port: 0`), so `WEB_PORT` set inside the addon is ignored — open the UI from the addon's Home Assistant sidebar entry. The page updates in real time over Server-Sent Events, so most status changes appear without a refresh.
+The web interface is available through a direct browser port controlled by **`WEB_PORT`** (default **8080** for standalone installs) and through **HA Ingress** for the Home Assistant add-on. In add-on mode the ingress port is **dynamically assigned by Home Assistant Supervisor** (the add-on manifest declares `ingress_port: 0`), so `WEB_PORT` set inside the add-on is ignored: open the UI from the add-on's Home Assistant sidebar entry. The page updates live, so most changes appear without a refresh. If the connection to the bridge drops, a banner says what you see may be out of date until it reconnects.
 
-## Sign-in flow
+The words used in the interface and in this guide follow one [glossary](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/docs/ux-glossary.md): a **Speaker** is a Bluetooth speaker or headset, an **Audio output** is a wired or local sound output, and a **Player** is what Music Assistant sees for either.
+
+## Signing in
 
 ![Login page with Home Assistant, Music Assistant, and Password auth tabs](/sendspin-bt-bridge/screenshots/screenshot-login.png)
 
@@ -19,330 +21,113 @@ When authentication is enabled, the bridge shows a dedicated sign-in screen befo
 | **Music Assistant** | Standalone installs already connected to MA with a built-in MA token flow | Validates MA credentials against the connected MA server |
 | **Password** | Standalone auth is enabled and a local password hash exists | PBKDF2-SHA256 local password flow |
 
-If Home Assistant requires MFA, the page switches to a **6-digit verification step**. In standalone mode, the **Security** tab controls the session timeout and brute-force policy for these logins. Login forms are CSRF-protected, and standalone sessions use `SameSite=Lax` plus `HttpOnly` cookies.
+If Home Assistant requires MFA, the page switches to a **6-digit verification step**. In standalone mode, the **Security** section of Settings controls the session timeout and brute-force policy for these logins. Login forms are CSRF-protected, and standalone sessions use `SameSite=Lax` plus `HttpOnly` cookies.
 
 <Aside type="tip">
-After **5 failed attempts** the default lockout is **5 minutes**, but all lockout values are configurable in **Configuration → Security**.
+After **5 failed attempts** the default lockout is **5 minutes**, but all lockout values are configurable in **Settings → Security**.
 </Aside>
 
-## Dashboard overview
+## Pages
 
-![Dashboard with filters, guidance banners, device rows, and the redesigned configuration section](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
+The sidebar (a bottom bar on a phone) has four pages.
 
-The top of the page combines the live device dashboard with quick filters, guidance, and batch actions:
-
-- **Onboarding checklist** for first-run setup and empty-state recovery.
-- **Recovery guidance** when the bridge detects grouped issues that need attention.
-- **Device cards or list rows** for every configured speaker.
-- **Realtime status** for Bluetooth, sink routing, playback, Music Assistant connectivity, and sync state.
-- **Configuration**, **Diagnostics**, and **Logs** as collapsible sections below the live fleet view.
-
-## Header
-
-![Header with version badge, update badge, quick links, runtime chip, and health pills](/sendspin-bt-bridge/screenshots/screenshot-header.png)
-
-The header is split into a main action row and a runtime/status row.
-
-### Main row
-
-- **Bridge title and logo** — always shown on the left.
-- **Version badge** — links directly to the matching GitHub release.
-- **Update badge** — shows `check`, `up to date`, or the available target version.
-- **Report / Docs / GitHub** — quick links for support and documentation.
-- **Theme toggle** — cycles through Auto → Light → Dark colour schemes; your choice is saved in the browser.
-- **User area** — shows the current user and **Sign out** when authentication is active.
-
-### Runtime row
-
-- **Runtime chip** such as `LXC`, `systemd`, or `demo`.
-- **Hostname, IP, and uptime**.
-- **Health pills** summarizing Bluetooth devices, Music Assistant state, and active playback.
-- **Restart progress banner** during **Save & Restart**.
-
-## Onboarding and recovery guidance
-
-![Onboarding checklist with explicit show-hide control, progress summary, and guided actions](/sendspin-bt-bridge/screenshots/screenshot-onboarding-checklist.png)
-
-The current UI has two distinct guidance surfaces above the device list:
-
-### Setup checklist
-
-- The **Setup checklist** appears during first-run and empty-state onboarding.
-- **Show checklist** / **Hide checklist** explicitly expands or collapses it.
-- When collapsed, it stays useful instead of disappearing completely: you get a compact summary such as **`2/5 complete - Next: Add a speaker`**.
-- **Don’t show again** hides it until you re-enable **Show empty-state onboarding guidance** in **Configuration → General**.
-
-### Recovery guidance
-
-- The **Recovery guidance** banner appears when the bridge detects issues that need operator action.
-- Actions can jump straight to the right place, such as **Music Assistant settings**, **Diagnostics**, or the affected device action.
-- Use **Configuration → General → Show recovery banners** if you want to hide or restore those notices.
-
-Together, these cards give you both first-run help and day-two operational guidance without sending you hunting through logs first.
-
-![Recovery guidance banner with actionable operator recommendations](/sendspin-bt-bridge/screenshots/screenshot-recovery-guidance.png)
-
-## Filters, batch actions, and view modes
-
-![Toolbar with group filter, adapter filter, status filter, selection count, batch volume, and view toggle](/sendspin-bt-bridge/screenshots/screenshot-group-controls.png)
-
-The toolbar above the fleet view includes:
-
-- **Group filter** — show one Music Assistant sync group or all groups.
-- **Adapter filter** — narrow the view to a specific Bluetooth adapter.
-- **Status filter** — filter by playing, idle, standby, reconnecting, released, or error states.
-- **Selection controls** — select all visible devices, then apply group volume, mute, or pause.
-- **Bulk actions** dropdown — runs against every device in the fleet, regardless of selection: **Reconnect all**, **Power save all** (suspend the PulseAudio sink), **Standby all** (disconnect Bluetooth), and **Release all** (hand the speakers back to the host without removing them from the saved fleet).
-- **Grid/List toggle** — switch between card view and table view.
-
-### View modes
-
-The current UI defaults to **list view**. You can still switch to **grid view** when you want larger per-device cards, and your manual choice is remembered in browser storage.
-
-In **list view**, one row can be expanded at a time for transport controls, routing details, and device actions. The list auto-expands the most relevant row on load, usually the first active device.
-
-Devices are automatically sorted by activity: playing speakers appear first, then connected-idle, then disconnected or standby. Within each tier, sync-group members stay together.
-
-## Device cards and rows
-
-![Device card while playing, with badges, track info, progress, and transport controls](/sendspin-bt-bridge/screenshots/screenshot-device-card-playing.png)
-
-Each device exposes the same core information in both grid and list layouts:
-
-- **Player name** and playback animation.
-- **Status badge** — current device state: `Playing`, `Connecting`, `Stale stream`, `No sink`, `Standby`, `Disconnected`, `Stopping`, `Waking`, `Sink muted`, `Applying`, or `Buffering`.
-- **Track, artist, progress, and album art** when available. The progress bar is driven by the native sendspin daemon timeline (the older Music Assistant fallback path was removed in v2.64). Click the artwork to enlarge it.
-- **Volume and mute controls**.
-- **Sync badge** — shows `Sync` (green) or `Re-anchoring` (amber, pulsing) with the running drift in milliseconds and a re-anchor counter.
-- **Adapter chip** — Bluetooth icon plus the adapter's friendly name. The chip is colour-coded by health (success / warning / error / neutral) and clicking it jumps to the adapter row in **Configuration → Bluetooth**.
-- **Music Assistant chip** — MA icon, with an `API` tag when the bridge is talking to the MA REST/WebSocket API.
-- **Battery chip** — icon plus percentage, where available. Tiers are green (>25 %), amber (16–25 %), and red (≤15 %); the value is read from `org.bluez.Battery1`.
-- **RSSI chip** — four-bar signal indicator and live `Δ dB` readout, refreshed every 5 s. The value is the offset from the BR/EDR Golden Receive Power Range, so `0` is ideal and increasingly negative values are a degraded link. The chip greys out when no fresh sample arrived in the last 30 s. RSSI is on by default and can be turned off in **Configuration → Bluetooth → Show live signal-strength badges**.
-
-  ![Device row with API tag and a live RSSI chip showing -4 Δ dB](/sendspin-bt-bridge/screenshots/screenshot-rssi-badge.png)
-- **Group chip** — Music Assistant sync-group name. Unnamed groups fall back to a short `#suffix` (last few characters of the group UUID) so multiple unnamed groups still read distinctly. A `+N` decoration appears when the group has external (non-bridge) members. Click the chip to open the group's settings page in the MA web UI.
-- **Room chip** — appears when the device has a `room_name` / `room_id` set; styled in blue when the value was auto-resolved from a Home Assistant area.
-- **Transfer-readiness chip** — appears during a room handoff to indicate whether the next speaker is primed.
-- **Released / Auto-released badge** — overlay above the speaker icon when the device is currently outside the bridge's control.
-- **Standby badge** — `💤 Standby (Xm)` with elapsed minutes, when the device is parked.
-
-![Hovered device card with extra routing details and quick actions](/sendspin-bt-bridge/screenshots/screenshot-device-card-hover.png)
-
-Hovering a card or expanding a row reveals more context and quick actions, including:
-
-- **Reconnect** and **Re-pair**.
-- **Release / Reclaim** for temporarily handing the speaker back to a phone or PC without deleting it from the bridge.
-- **Claim** — appears for AVRCP-multipoint speakers that are currently controlled by another source (a phone, for example). Pressing it tells the bridge to take over the AVRCP role.
-- **Standby** / **Wake** for power-saving disconnect; the speaker stays in the fleet but Bluetooth is parked until you wake it. **Wake** is shown only while the device is in standby.
-- **Disable** — danger-styled action that takes the device out of the active fleet without removing the saved configuration.
-- **BT Info** modal — copyable diagnostics. The modal renders the full `bluetoothctl info <MAC>` output including advertised service UUIDs.
-- **Settings gear** that jumps straight into the matching row in **Configuration → Devices**.
-
-When a control is disabled, the card shows up to two **blocked-action hints** (with `Why disabled?` remediation links), so you immediately see why a button cannot be pressed in the current state.
-
-A few action pairs look similar but mean different things:
-
-- **Release / Reclaim** is immediate and only toggles Bluetooth management for the live bridge.
-- **Disable / Enable** lives in **Configuration → Devices** and controls whether the device should be part of the saved fleet.
-- **Re-pair** or paired-device reset tools are for broken host pairing/trust state, not day-to-day handoff.
-
-Group badges are interactive too: clicking a Music Assistant group badge opens the matching group settings page in the MA web UI.
-
-## Group sync tuning
-
-The **Sync** screen (`/sync/<group id>`) lines up the speakers of a Music Assistant sync group by ear or with the phone microphone, and keeps the results as profiles. Open it from the **Sync** button on a group in the Music Assistant tab, or from **Tune the whole group** in a device's timing section. Measuring needs HTTPS or `localhost` for the microphone. See [Group sync tuning](/sendspin-bt-bridge/group-sync-tuning/).
-
-## Speaker hardware controls (MPRIS)
-
-The bridge registers a per-device MPRIS player on the system D-Bus and hands it to BlueZ via `Media1.RegisterPlayer`. That gives you a two-way connection between the speaker's physical buttons and Music Assistant:
-
-- **Speaker → bridge → MA** — pressing **Play / Pause / Next / Previous** or rotating the volume knob on the speaker is forwarded as an AVRCP keypress, mapped to the corresponding Music Assistant queue command for that device's sync group.
-- **MA → bridge → speaker** — when MA reports a track change, pause, or volume update, the bridge pushes the new playback state, title/artist metadata, and volume back through MPRIS so the speaker's display and indicator LEDs reflect what is actually playing.
-
-When a single Bluetooth adapter has more than one speaker connected, the bridge uses an HCI source monitor to figure out **which** speaker generated an AVRCP keypress, so a Next press on speaker A doesn't skip the track playing on speaker B. Multi-speaker correlation needs the `CAP_NET_RAW` capability inside the container; without it the bridge falls back to routing every keypress to the most recently active speaker on that adapter.
-
-There is no UI toggle for MPRIS itself — it is always on for connected speakers that advertise AVRCP target support.
-
-## Configuration panel
-
-![General tab of the redesigned Configuration section, with cards and footer actions](/sendspin-bt-bridge/screenshots/screenshot-config.png)
-
-The redesigned **Configuration** section is organized into six tabs:
-
-| Tab | Purpose |
+| Page | What it is for |
 |---|---|
-| **General** | Bridge identity, timezone, direct web port, base listener port, restart behavior, update policy, guidance visibility, and advanced compatibility-tools toggle |
-| **Audio** | PulseAudio latency, codec preference, and PA rescue-streams control |
-| **Devices** | Speaker fleet table and per-device saved settings |
-| **Bluetooth** | Adapter inventory, paired-device management, scan modal, and reconnect policy |
-| **Music Assistant** | Connection status, token flows, reconfigure flow, and sync/routing toggles |
-| **Security** | Local auth, session timeout, brute-force settings (standalone only) |
+| **Speakers** | Every speaker and audio output with its live state, the speaker panel, bulk actions and adding a speaker. |
+| **Groups** | The Music Assistant sync groups, with **Group sync** for tuning a group together. |
+| **Settings** | One page of sections: General, Music Assistant, Audio, Bluetooth, Home Assistant, Security, Updates, Guidance and Backup. |
+| **Diagnostics** (**Health** on a phone) | Overview, Logs and System tabs, with the recovery guidance and the event timeline. |
 
-The footer actions behave differently on purpose:
+The header shows the bridge name, a status pill (the lead problem, or startup progress), the runtime row (runtime, host name, IP address, uptime, how many speakers have Bluetooth connected), and a preferences menu for language, theme and **Show technical details**. Earlier addresses such as `/devices`, `/ma` and `/settings` still open the right page.
 
-- **Save** writes the config without forcing a restart.
-- **Save & Restart** applies restart-sensitive changes immediately and shows progress in the header.
-- **Cancel** restores the last saved values in the form.
-- **Download** exports a share-safe `config.json` with sensitive values removed.
-- **Upload** imports a config file while preserving the current password hash, secret key, and stored MA token on the server.
+## Connection states
 
-Unsaved edits enable **Cancel**, mark the configuration area as dirty, and trigger a browser warning if you try to leave the page mid-edit.
+Three names describe a connection, and they mean the same thing in the runtime row, the speaker cards, the speaker panel and Diagnostics:
 
-### General tab
+| State | What it is | Scope |
+|---|---|---|
+| **Audio link** | The Sendspin stream between a player and Music Assistant. Shows Playing, Up, Other server, Down or Unavailable. | Per speaker |
+| **Music Assistant account** | The bridge's sign-in to the Music Assistant API. Shows Signed in, Signed out or Not set up. | Whole bridge |
+| **Bluetooth connection** | The Bluetooth link between the bridge and the speaker. Shows Connected, Connecting, Disconnected, Standby, Released, Disabled or Not paired. | Per speaker |
 
-Beyond the core identity and policy fields listed in the table, the General tab includes an **Advanced compatibility tools** toggle. This browser-local preference reveals narrowly targeted recovery and pairing workarounds; it is not written to the config file. Stable controls such as adapter-area naming, room labels, RSSI, pairing peer-quiesce, and microphone calibration remain visible without it.
+A state is shown with a reason when it is not OK, for example "Released automatically after repeated connection problems" or "The player is on a Music Assistant that is not this bridge's". The Diagnostics verdict and the header pill come from the same list of issues, so they never disagree.
 
-Compatibility rows show their restart requirement and runtime support. An unavailable PulseAudio or adapter-recovery control is disabled with the detected reason instead of accepting a setting that cannot work on the current host.
+## Speakers
 
-### Audio tab
+Speakers can be shown as a list (the default on a wide screen) or as cards (always on a phone). Filters narrow the view by sync group and adapter. Select several speakers to set the group volume, mute or pause them, or use the bulk actions menu.
 
-The **Audio** tab groups latency and codec settings that affect all speakers:
+Each card shows the player name, what is playing with progress and artwork, volume and mute, and the states above (only when something is not OK, unless technical details are on). Click a card or row to open the speaker panel.
 
-- **PulseAudio latency** (default 600 ms, range 50–2000 ms) — tunes the buffer between the bridge and the PulseAudio/PipeWire backend.
-- **Prefer SBC codec** — selects the lower-CPU Bluetooth audio codec; useful on Raspberry Pi and similar boards.
-- **Disable PA rescue-streams** — prevents PulseAudio's `module-rescue-streams` from moving audio to the wrong sink after a Bluetooth reconnect.
+### Actions run at once, or ask first
 
-### Devices tab
+Reversible actions run immediately and show an **Undo** button in the toast: **Standby**, **Wake**, **Enable**, **Disable**, mute, **Power save** and **Release**. Actions with real consequences open a confirmation that names what happens (which speakers disconnect, whether playback stops, whether it can be undone): removing a speaker, **Pair again**, resetting an adapter or a Bluetooth pairing, importing a configuration, restarting the bridge and updating it. A long operation such as a scan, a pairing, an update or a measurement shows progress with **Cancel** in one shared place.
 
-![Devices tab with the main device fleet table](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
+Names of the actions:
 
-The **Devices** tab is now the saved fleet table only:
-
-- **Enabled**, **player name**, **MAC**, **adapter**, **port**, a compact live delay panel, **live badge**, and **remove** all live here.
-- Per-speaker details include **preferred audio format**, **`listen_host`**, **`keepalive_interval`**, and optional **room name / room ID** context. Room values may come from a Home Assistant area or be entered as local labels; they do not imply Music Assistant room handoff.
-- Dashboard device gears scroll here, highlight the matching row, and focus the relevant controls.
-
-If `listen_port` is left blank, the runtime uses **`BASE_LISTEN_PORT + device index`**. Positive `keepalive_interval` values enable silence keepalive, values below 30 seconds are raised to 30, and the old `keepalive_silence` compatibility flag is no longer exposed as a separate web-UI toggle.
-
-### Bluetooth tab
-
-![Bluetooth tab with adapter inventory, reconnect policy, and codec preference](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)
-
-The **Bluetooth** tab now owns the bridge-side Bluetooth tools:
-
-- **Adapters** card for rename, refresh, reboot, and manual adapter rows. The **↻ Reboot** button power-cycles a single adapter (off → 3 s pause → on) without restarting the bridge.
-- **Paired devices** card for inventory, import, and repair/reset actions. Each row has a **ℹ️ Info** button that opens the BT device info modal with copyable diagnostics.
-- **Scan nearby** opens a dedicated Bluetooth scan modal from this tab.
-- **Show live signal-strength badges** (`RSSI_BADGE`) — controls whether the device cards display the live RSSI chip described above. Default on.
-- **Connection recovery** settings cover BT check interval, auto-disable threshold, and the rapid-reconnect churn-isolation thresholds (`BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`) used to auto-disable a device that is stuck in a reconnect loop.
-- **Advanced recovery workarounds** card (visible only with **Advanced compatibility tools** turned on) — see the table further down.
-
-The scan modal improves first-run discovery and troubleshooting:
-
-- choose the specific adapter that should perform this scan (the first detected adapter is preselected);
-- keep **Audio devices only** on for normal use, or turn it off when debugging non-audio candidates;
-- watch a live **countdown/progress bar** while the scan runs;
-- use **Pair and Add** (primary action) for the normal case, or the **Add to fleet** dropdown alternative when the speaker is already paired with the host;
-- use **Rescan** after the cooldown without leaving the modal.
-
-The **Already paired devices** list is the faster option when the host already knows the speaker and you just want to import or repair it.
-
-Each scan result row carries its own context chips: an `Audio device` / `Other` tag, the adapter that saw the device, an RSSI chip, and a `⚠ Another bridge` warning when the device looks like it is already managed by another bridge instance.
-
-![Scan results with the Pair and Add split-button on a discovered audio device](/sendspin-bt-bridge/screenshots/screenshot-scan-pair-and-add.png)
-
-#### Advanced Bluetooth compatibility tools
-
-Visible only with **Advanced compatibility tools** turned on:
-
-| Toggle | What it does |
+| Action | What it does |
 |---|---|
-| `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE` | Adds a profile-disconnect / reconnect dance after BlueZ misses the A2DP sink during connect. Workaround for the dual-role regression in BlueZ 5.86 ([bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922)). |
-| `EXPERIMENTAL_PA_MODULE_RELOAD` | Reloads PulseAudio's `module-bluez5-discover` if a Bluetooth card never appears. It is unavailable on PipeWire and disrupts all classic-PulseAudio Bluetooth devices. |
-| `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` | At the reconnect-failure threshold, validates rfkill state, power-cycles the controller through MGMT/HCI, and optionally resets a USB adapter if the power-cycle fails. Requires Linux `NET_ADMIN` + `NET_RAW`; USB reset additionally needs writable USB-device access. The UI reports the detected level. |
+| **Release** / **Reclaim** | The bridge stops managing the speaker's Bluetooth so a phone or PC can use it; it does not reconnect until you reclaim it. If the bridge released a speaker after repeated connection problems, it says **Released automatically**. |
+| **Standby** / **Wake** | Bluetooth is disconnected to save the speaker's battery; the speaker stays in the list until you wake it. |
+| **Power save** | The audio output is paused while the Bluetooth connection stays up. |
+| **Disable** / **Enable** | A disabled speaker keeps its settings but gets no player. |
+| **Use this bridge as the source** | For speakers that another source (a phone) currently controls over Bluetooth. |
+| **Remove speaker** | Removes the player from Music Assistant and the Bluetooth pairing. |
 
-![The three experimental recovery toggles in the Bluetooth tab, each labelled with an EXPERIMENTAL chip](/sendspin-bt-bridge/screenshots/screenshot-experimental-bluetooth-toggles.png)
+When a control is unavailable, it says why and offers the fix.
 
-The scan modal also has pairing-attempt controls:
+### The speaker panel
 
-| Toggle | What it does |
+The panel has four tabs that fit a phone:
+
+- **Overview** - the states, the one main action, the **Audio path** from Music Assistant to the speaker and the latest events with a link to **History**. Recovery tools sit in the **Troubleshoot** menu (**Reconnect**, **Pair again**, **Let Music Assistant pair**, **Unmute the audio output**, **Bluetooth details**).
+- **Settings** - name, adapter, listen port, **Speaker latency compensation**, idle behaviour and room. Each field saves as you change it and shows **Saved** with **Undo**. Adapter power and reboot are in **Settings → Bluetooth**.
+- **Timing** - the one **Speaker latency compensation** value and **Tune with your group →**. The speaker's **Reported latency** (what it says about itself over Bluetooth) is advisory, and a **Bluetooth latency measured** result appears only after a calibration. Playout, air sensor and sync-error details are folded under **Technical details**.
+- **History** - the speaker's recent events.
+
+## Groups and sync tuning
+
+The **Groups** page lists the Music Assistant sync groups with their members and now playing. The **Group sync** page (`/sync/<group id>`) is the one place to line a group up: **Tune by ear** (adjust while listening) or **Measure** (record with the phone microphone, which needs HTTPS or `localhost`), with profiles to keep the results. A speaker that is in no sync group is told how to make one. See [Group sync tuning](/sendspin-bt-bridge/group-sync-tuning/).
+
+## Show technical details
+
+The preference **Show technical details** in the header's preferences menu hides or shows signal levels (RSSI), sync counters, resync counts, Playout and air-sensor rows, server IDs, the signal path, and advanced settings. A browser's own choice is remembered in that browser. Until it makes one, the bridge's default applies: **Technical details by default** in **Settings → General** (`SHOW_TECHNICAL_DETAILS`), which is off for new installs and on for installs that already had speakers. In the interface these rows are grouped under **Technical details**.
+
+## Settings
+
+Settings is one page of sections, each saving as you go. A banner offers a restart when a change needs one.
+
+| Section | Purpose |
 |---|---|
-| **Temporarily disconnect other speakers** (peer-quiesce) | Stable pairing aid: disconnects peers on the selected adapter, then lets their normal reconnect paths restore them after the attempt. |
-| **NoInputNoOutput pair agent** | One-shot Just-Works mode for speakers that never send SSP confirmation. It removes authenticated numeric comparison, is hidden behind the compatibility toggle, resets after the request, and the BlueZ agent rejects requests for every MAC except the selected target. |
-| **Authorize HFP/HSP for this pair** | One-shot service authorization for multi-profile devices that otherwise refuse pairing. Playback remains A2DP-only; this does not install an HFP audio backend. It resets after the request. |
+| **General** | Bridge name, time zone, logging, and the technical-details default. |
+| **Music Assistant** | The connection and the bridge's sign-in (finding the server and getting a token), and how players are controlled. |
+| **Audio** | PulseAudio latency, codec preference and rescue-streams control. |
+| **Bluetooth** | Adapters (rename, power, reboot), paired devices, scan, reconnect policy, signal strength badges and the advanced recovery workarounds. |
+| **Home Assistant** | Entities published to Home Assistant, the integration, and room names from areas. |
+| **Security** | Sign-in, sessions, brute-force protection and API tokens (standalone only). |
+| **Updates** | How the bridge finds and installs new versions. |
+| **Guidance** | When the dashboard shows setup and recovery hints. |
+| **Backup** | Download a share-safe `config.json`, import one, or edit the file. Importing replaces all settings and speakers, so it asks first and offers to download the current configuration. |
 
-![Scan nearby modal with the experimental peer-quiesce and NoInputNoOutput pair-agent toggles visible](/sendspin-bt-bridge/screenshots/screenshot-scan-modal-experimental.png)
+Advanced settings appear with **Show technical details**; they include the `EXPERIMENTAL_*` compatibility toggles described in [Configuration](/sendspin-bt-bridge/configuration/). Rows that cannot work on the current host are disabled with the detected reason.
 
-### Music Assistant tab
+## Adding a speaker
 
-![Music Assistant tab with connection status, token flows, and bridge integration toggles](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
-
-The **Music Assistant** tab combines connection state with authentication helpers:
-
-- **Connection status** card shows whether the bridge is connected and who authenticated it.
-- **Reconfigure** appears on that status card once you are connected, so you can reopen the token tools without clearing the existing config first.
-- The **Sign in & token** card stays hidden when the connection is healthy, then reappears when you click **Reconfigure** or when the bridge is not connected yet.
-- **Discover** finds or confirms the MA URL.
-- **Get token** signs in with MA credentials, saves a long-lived `MA_API_TOKEN`, and does not store the password.
-- For HA-backed Music Assistant targets, the UI can offer **Get token automatically**.
-- In addon mode, **Auto-get token on UI open** can try silent token creation automatically.
-
-Important token-flow constraints:
-
-- **Auto-get token on UI open** is useful only in the **Home Assistant addon** web UI.
-- Silent token creation depends on running under **HA Ingress** with a valid current **Home Assistant browser session/token**.
-- If silent auth cannot complete, the UI falls back to the visible HA-assisted or manual token flow instead of leaving you stuck.
-
-The tab also includes the manual token field plus **WebSocket monitor**, **Route volume through MA**, and **Route mute through MA** toggles.
-
-## Empty states and deep links
-
-![Empty state with Scan for devices action and the redesigned collapsed sections underneath](/sendspin-bt-bridge/screenshots/screenshot-empty-no-devices.png)
-
-The empty-state actions now jump to the exact working surface:
-
-- **No Bluetooth devices configured** → **Scan for devices** opens the **Bluetooth** tab and launches the **Scan nearby** modal.
-- **No Bluetooth adapter detected** → **Add adapter** opens **Configuration → Bluetooth**, inserts an empty manual adapter row, and focuses the first field.
-- **Device gear** → highlights the matching row in **Configuration → Devices**.
-- **Adapter gear / adapter shortcut** → highlights the matching row in **Configuration → Bluetooth**.
-
-## Authentication and security UX
-
-Standalone installs expose a dedicated **Security** tab for local access control:
-
-- **Enable web UI authentication** toggle.
-- **Session timeout** in hours.
-- **Brute-force protection** toggle plus max-attempt, window, and lockout fields.
-- **Set password** flow with password confirmation.
-
-When auth is disabled, the page shows a yellow warning banner with a shortcut that jumps straight to **Configuration → Security** and highlights the auth toggle.
-
-In **HA addon mode**, Home Assistant owns access control and auth is always enforced, so the local Security tab is replaced by the addon auth model and direct HA login / TOTP flow. Use **Save & Restart** after changing auth, session, or port settings because those behaviors are applied at startup.
+**Add speaker** (also reachable from the keyboard) opens a dialog. Put the speaker in pairing mode and press **Search**; nearby speakers appear with a signal strength (Strong, Fair, Weak) and say whether another bridge already uses them. Choose one, press **Add**, give it a name and a room, then **Add to bridge**. **Play test sound** plays a short click so you can hear it. A speaker the host has already paired can be picked from **Choose a speaker that is already paired**, and **Speaker not found or pairing fails?** opens the troubleshooting hints. Pairing aids such as **Temporarily disconnect other speakers** are under technical details.
 
 ## Diagnostics
 
-![Diagnostics section with health summary cards, routing details, bridge devices, and advanced runtime data](/sendspin-bt-bridge/screenshots/screenshot-diagnostics.png)
+**Diagnostics** has three tabs: **Overview** (health summary, recovery guidance with **Run Checks**, and the event timeline with CSV download), **Logs** (filters, auto-refresh, runtime log level INFO or DEBUG, download) and **System** (runtime, adapters, audio backend, and the bridge's own processes). **Submit bug report** pre-fills a description from the diagnostics and previews the attached report. Everything the bridge says in guidance, recovery cards, the header pill, action buttons, timeline events and blocked-control reasons follows the chosen language.
 
-**Diagnostics** is a live troubleshooting surface, not just a static info dump. It includes:
+## Home Assistant add-on layout
 
-- Bridge device counts and sink routing summary.
-- Music Assistant state and sync-group summary.
-- Adapter inventory and attached sinks.
-- Per-device runtime cards with connection and last-known issues.
-- Subprocess and advanced runtime information.
-- **Download diagnostics**, **Submit bug report**, and **Refresh** actions.
-
-## Logs
-
-![Logs section with filters, runtime log-level controls, and downloadable output](/sendspin-bt-bridge/screenshots/screenshot-logs.png)
-
-The **Logs** section exposes both log viewing and runtime control:
-
-- Filter by **All / Errors / Warnings / Info+ / Debug**.
-- Toggle **Auto-refresh**.
-- Change the backend log level between **INFO** and **DEBUG** without a restart.
-- Download the current log output.
+Inside Home Assistant (Ingress) the page drops the bridge's own header and logo, because Home Assistant already frames it. A compact status pill and the preferences menu stay at the top. **Security** reads "Signed in through Home Assistant" because access is managed there, and **Updates** reads "Updates come from the Home Assistant add-on store". The **Home Assistant** section and room names from areas are available as in standalone mode.
 
 ## Updates and bug reports
 
 ![Update modal showing current version, target version, release notes, and available actions](/sendspin-bt-bridge/screenshots/screenshot-update-modal.png)
 
-Clicking the update badge opens a modal that summarizes:
+The update badge opens a dialog with the current and target version, the release notes and the actions for your runtime (**Update Now**, **Release Notes**, or a manual hint). **Update Now** asks first: playback stops, and going back means installing the previous version. An update that never finishes says so after three minutes and points to the logs.
 
-- **Current vs target version**.
-- Short **release notes** excerpt.
-- Runtime-specific actions such as **Update Now**, **Release Notes**, or a manual update hint.
+## Keyboard
 
-The header **Report** link and the Diagnostics action both open the bug-report flow. The dialog now pre-fills the description with a **diagnostics-generated suggested summary**, lets you edit it before submission, and keeps the full auto-attached diagnostics report available in an expandable preview.
-
-![Bug report dialog with diagnostics-driven suggested description and auto-attached report preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)
+Press `?` for the list of keyboard shortcuts.

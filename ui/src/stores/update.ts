@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { applyUpdate, getUpdateInfo, startUpdateCheck, type UpdateChannel, type UpdateInfo } from '@/api/updates'
 import { useJobsStore } from './jobs'
 import { useNotificationStore } from './notifications'
+import { useBridgeStore } from './bridge'
 
 export const useUpdateStore = defineStore('update', () => {
   const info = ref<UpdateInfo | null>(null)
@@ -65,6 +66,8 @@ export const useUpdateStore = defineStore('update', () => {
       const result = await applyUpdate(info.value?.tag, info.value?.channel as UpdateChannel | undefined)
       notifications.success(i18n.global.t('update.applyStarted'))
       showDialog.value = false
+      // The update restarts the bridge: follow it in the same banner as a restart.
+      if (result?.started) useBridgeStore().initiateRestart('update')
       return result
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Update failed'

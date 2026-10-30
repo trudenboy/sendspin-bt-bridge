@@ -198,6 +198,9 @@ function isBuffering(d: Device): boolean {
 export const useDeviceStore = defineStore('devices', () => {
   const selectedDeviceId = ref<string | null>(null)
   const filter = ref<DeviceFilter>({ search: '', status: [], adapter: '', group: '', backend: '' })
+  function clearFilters() {
+    filter.value = { search: '', status: [], adapter: '', group: '', backend: '' }
+  }
   const sortBy = ref<DeviceSortField>(readSort())
   const sortDir = ref<SortDirection>('asc')
 
@@ -321,6 +324,7 @@ export const useDeviceStore = defineStore('devices', () => {
   return {
     selectedDeviceId,
     filter,
+    clearFilters,
     sortBy,
     sortDir,
     setSort,

@@ -2,6 +2,7 @@
 import { onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
+import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { apiUrl, ApiError } from '@/api/client'
 import { SbInput, SbButton, SbCard } from '@/kit'
@@ -10,8 +11,25 @@ import { Search, LogIn, Home, KeyRound } from 'lucide-vue-next'
 const { t } = useI18n()
 const ma = useMaStore()
 const notifications = useNotificationStore()
+const bridge = useBridgeStore()
 
-const serverUrl = ref('')
+/** The address Music Assistant is known by: its web address, else the host the speakers' Sendspin connection points at. */
+function knownServerUrl(): string {
+  if (bridge.bridge?.ma_web_url) return bridge.bridge.ma_web_url
+  for (const d of bridge.devices) {
+    const raw = d.playback?.server_url
+    if (!raw) continue
+    try {
+      return `http://${new URL(raw).hostname}:8095`
+    } catch {
+      /* not a URL: try the next speaker */
+    }
+  }
+  return ''
+}
+
+const serverUrl = ref(knownServerUrl())
+const nothingFound = ref(false)
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -23,9 +41,11 @@ const connectingToken = ref(false)
 
 async function discover() {
   error.value = ''
+  nothingFound.value = false
   try {
     const servers = await ma.discover()
     if (servers[0]?.url) serverUrl.value = servers[0].url
+    else nothingFound.value = true
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : String(e)
   }
@@ -106,6 +126,8 @@ onUnmounted(() => window.removeEventListener('message', onPopupMessage))
           </SbButton>
         </div>
       </div>
+
+      <p v-if="nothingFound" class="text-sm text-text-secondary" role="status">{{ t('ma.login.noServers') }}</p>
 
       <form class="space-y-2" @submit.prevent="doLogin">
         <p class="text-sm font-medium text-text-primary">{{ t('ma.login.step2') }}</p>

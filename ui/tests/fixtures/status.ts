@@ -16,6 +16,8 @@ export function makeStatus(devices: Device[] = [makeDevice()]): BridgeStatus {
       ipc_protocol_version: 2,
       auth_enabled: false,
       ma_connected: false,
+      music_assistant_account: { state: 'not_configured', tone: 'neutral', reason: null },
+      verdict: { level: 'ok', count: 0 },
       ma_web_url: null,
       device_count: devices.length,
       disabled_devices: [],

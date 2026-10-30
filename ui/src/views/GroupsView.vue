@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
 import { useBridgeStore } from '@/stores/bridge'
-import { SbStatusDot } from '@/kit'
+import StatusState from '@/components/StatusState.vue'
 import MaLoginFlow from '@/components/ma/MaLoginFlow.vue'
 import MaGroupList from '@/components/ma/MaGroupList.vue'
 import { Loader2 } from 'lucide-vue-next'
@@ -17,7 +17,7 @@ const bridge = useBridgeStore()
     <div class="mb-6 flex flex-wrap items-baseline justify-between gap-2">
       <h1 class="text-2xl font-semibold tracking-tight text-text-primary">{{ t('nav.groups') }}</h1>
       <p v-if="bridge.maConnected" class="inline-flex items-center gap-1.5 text-sm text-text-secondary">
-        <SbStatusDot status="online" size="sm" :label="t('ma.connection.connected')" />
+        <StatusState kind="ma_account" :status="bridge.maAccount" variant="full" />
         {{ t('groups.via', { url: bridge.bridge?.ma_web_url ?? 'Music Assistant' }) }}
       </p>
     </div>

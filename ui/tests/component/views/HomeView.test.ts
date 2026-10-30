@@ -6,7 +6,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import HomeView from '@/views/HomeView.vue'
 import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 import { makeStatus } from '../../fixtures/status'
@@ -234,7 +234,7 @@ describe('HomeView disabled players', () => {
 
   it('keeps the header counts to running players', () => {
     const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')])
-    expect(w.get('[data-home-summary]').text()).toContain('1 of 1 connected')
+    expect(w.get('[data-home-summary]').text()).toContain('1 of 1 Bluetooth connected')
   })
 })
 
@@ -268,5 +268,34 @@ describe('HomeView adapter filter', () => {
       [offDevice('o', 'Out', { backend_type: 'pulse_sink', adapter: 'hci9' })],
     )
     expect(await options(w)).toEqual(['hci0', 'hci1'])
+  })
+})
+
+describe('HomeView empty filter results', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('offers Clear filters when nothing matches, and clears them', async () => {
+    const w = mountHome([idle('a', 'Alpha'), idle('b', 'Bravo')])
+    useDeviceStore().filter.search = 'zzz'
+    await nextTick()
+    expect(w.text()).toContain('No results')
+    await w.get('[data-clear-filters]').trigger('click')
+    expect(useDeviceStore().filter.search).toBe('')
+    expect(cardNames(w)).toEqual(['Alpha', 'Bravo'])
+  })
+
+  it('clears the filters when the bar disappears (fewer than six players)', async () => {
+    const many = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => idle(id, id.toUpperCase()))
+    mountHome(many)
+    useDeviceStore().filter.search = 'zzz'
+    useDeviceStore().filter.status = ['idle']
+    useBridgeStore().snapshot = makeStatus(many.slice(0, 2))
+    await nextTick()
+    await nextTick()
+    expect(useDeviceStore().filter.search).toBe('')
+    expect(useDeviceStore().filter.status).toEqual([])
   })
 })

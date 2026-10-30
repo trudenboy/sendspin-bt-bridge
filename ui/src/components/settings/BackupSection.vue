@@ -5,6 +5,7 @@ import { useConfigStore } from '@/stores/config'
 import { useNotificationStore } from '@/stores/notifications'
 import { ApiError } from '@/api/client'
 import { SbButton } from '@/kit'
+import { confirmAction } from '@/composables/useActionPolicy'
 import SettingsRow from './SettingsRow.vue'
 
 const { t } = useI18n()
@@ -25,6 +26,13 @@ async function onFile(event: Event) {
   const file = target.files?.[0]
   target.value = ''
   if (!file) return
+  const ok = await confirmAction('config.import', {
+    title: t('settings.parts.backup.confirmTitle'),
+    consequences: [t('consequence.replacesConfig'), t('consequence.noUndo')],
+    link: { label: t('consequence.downloadFirst'), run: () => configStore.downloadConfig() },
+    confirmLabel: t('settings.parts.backup.confirmLabel'),
+  })
+  if (!ok) return
   try {
     await configStore.uploadConfig(file)
     notifications.success(t('settings.parts.backup.imported'))
@@ -53,7 +61,7 @@ function applyRaw() {
       <SbButton variant="outline" size="sm" @click="configStore.downloadConfig()">{{ t('settings.parts.backup.download') }}</SbButton>
     </SettingsRow>
     <SettingsRow :label="t('settings.parts.backup.import')" :help="t('settings.parts.backup.importHelp')">
-      <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" data-testid="file-input" @change="onFile" />
+      <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" tabindex="-1" aria-hidden="true" data-testid="file-input" @change="onFile" />
       <SbButton variant="outline" size="sm" @click="fileInput?.click()">{{ t('settings.parts.backup.choose') }}</SbButton>
     </SettingsRow>
     <SettingsRow :label="t('settings.parts.backup.raw')" :help="t('settings.parts.backup.rawHelp')">
@@ -66,7 +74,7 @@ function applyRaw() {
         v-model="raw"
         spellcheck="false"
         data-testid="json-editor"
-        class="h-96 w-full rounded-(--radius-input) border border-border-strong bg-surface-card p-3 font-mono text-xs text-text-primary outline-none focus:border-primary"
+        class="h-96 w-full rounded-(--radius-input) border border-border-strong bg-surface-card p-3 font-mono text-xs text-text-primary focus:border-primary"
       />
       <p v-if="jsonError" class="text-sm text-error" role="alert">{{ jsonError }}</p>
       <SbButton variant="outline" size="sm" @click="applyRaw">{{ t('settings.parts.backup.apply') }}</SbButton>

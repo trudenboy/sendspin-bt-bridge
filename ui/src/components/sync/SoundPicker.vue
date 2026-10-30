@@ -73,7 +73,7 @@ async function onKey(e: KeyboardEvent, index: number) {
           :tabindex="selected === sound ? 0 : -1"
           :disabled="disabled"
           :class="[
-            'h-7 cursor-pointer whitespace-nowrap rounded-(--radius-button) px-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50',
+            'h-7 cursor-pointer whitespace-nowrap rounded-(--radius-button) px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
             selected === sound ? 'bg-primary-fill text-on-primary' : 'text-text-primary hover:bg-surface-secondary',
           ]"
           @click="pick(sound)"

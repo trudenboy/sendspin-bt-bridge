@@ -14,6 +14,11 @@ from pydantic import AfterValidator, ConfigDict, Field, StrictBool, StrictInt, S
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, supported_actions_for
+from sendspin_bridge.services.diagnostics.server_text import event_fields
+from sendspin_bridge.services.diagnostics.status_model import (
+    audio_link_state,
+    bluetooth_connection_state,
+)
 
 IdleMode = Literal["default", "power_save", "auto_disconnect", "keep_alive"]
 
@@ -438,6 +443,56 @@ class DeviceHealth(ResponseModel):
     summary: str = ""
     reasons: list[str] = Field(default_factory=list)
     last_event_at: str | None = None
+    code: str = Field(default="", description="Stable id of the summary's wording; the UI translates it.")
+    params: dict[str, Any] = Field(default_factory=dict, description="Values the summary's sentence interpolates.")
+
+
+class LinkStatus(ResponseModel):
+    """One of the three named states (Audio link, Music Assistant account, Bluetooth connection)."""
+
+    state: str = Field(description="Stable state code; the vocabulary differs per state kind.")
+    tone: str = Field(description="success, warning, error or neutral.")
+    reason: str | None = Field(default=None, description="Stable code of why, when the state has a reason.")
+
+
+class DeviceLinks(ResponseModel):
+    """A speaker's own states; the account is bridge-wide (``Bridge.music_assistant_account``)."""
+
+    audio_link: LinkStatus = Field(
+        description="Sendspin stream with Music Assistant: streaming, connected, foreign, disconnected, unavailable."
+    )
+    bluetooth: LinkStatus | None = Field(
+        default=None,
+        description="connected, connecting, disconnected, standby, released, disabled, not_paired; null for a local output.",
+    )
+
+
+def _links_from_status(d: dict[str, Any], backend_type: str) -> DeviceLinks:
+    g = d.get
+    enabled = bool(g("enabled", True))
+    bt = None
+    if backend_type != PULSE_SINK:
+        bt = bluetooth_connection_state(
+            enabled=enabled,
+            managed=bool(g("bt_management_enabled", True)),
+            released_by=g("bt_released_by"),
+            standby=bool(g("bt_standby")),
+            reconnecting=bool(g("reconnecting")),
+            connected=bool(g("bluetooth_connected")),
+            never_paired=bool(g("never_paired")),
+        )
+    audio = audio_link_state(
+        enabled=enabled,
+        bluetooth_state=bt.state if bt else None,
+        bluetooth_reason=bt.reason if bt else None,
+        server_connected=bool(g("server_connected")),
+        streaming=bool(g("playing")) and bool(g("audio_streaming")),
+        foreign=g("connected_server_own") is False,
+    )
+    return DeviceLinks(
+        audio_link=LinkStatus(state=audio.state, tone=audio.tone, reason=audio.reason),
+        bluetooth=LinkStatus(state=bt.state, tone=bt.tone, reason=bt.reason) if bt else None,
+    )
 
 
 class Device(ResponseModel):
@@ -462,6 +517,7 @@ class Device(ResponseModel):
         default_factory=list, description="Commands this player's backend can do; others answer 409."
     )
     bluetooth: DeviceBluetooth | None = Field(default=None, description="Present for Bluetooth players only.")
+    links: DeviceLinks = Field(description="The speaker's Audio link and Bluetooth connection, named once.")
     audio: DeviceAudio
     timing: DeviceTiming
     playback: DevicePlayback
@@ -493,6 +549,7 @@ class Device(ResponseModel):
         else:
             backend = DeviceBackend(type=BLUETOOTH, mac=g("bluetooth_mac"), adapter=g("bluetooth_adapter_hci") or None)
         return cls(
+            links=_links_from_status(d, backend_type),
             id=str(g("player_id") or ""),
             config_id=config_id,
             playout_sync_enabled=playout_sync_enabled,
@@ -664,7 +721,7 @@ class Device(ResponseModel):
             ),
             capabilities=g("capabilities") or {},
             transfer_readiness=g("transfer_readiness"),
-            recent_events=list(g("recent_events") or []),
+            recent_events=[{**e, **event_fields(e)} if isinstance(e, dict) else e for e in g("recent_events") or []],
         )
 
 

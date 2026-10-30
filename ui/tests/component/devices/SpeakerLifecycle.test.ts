@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import SpeakerActionsMenu from '@/components/devices/SpeakerActionsMenu.vue'
 import { makeDevice } from '../../fixtures/device'
 
@@ -29,7 +29,7 @@ describe('speaker actions', () => {
 
   it('hides the actions the backend does not support', async () => {
     const items = await menuItems(makeDevice({ supported_actions: ['volume', 'transport', 'power_save'] }))
-    for (const gone of ['Reconnect', 'Put on standby', 'Make this bridge the active source']) expect(items).not.toContain(gone)
+    for (const gone of ['Reconnect', 'Put on standby', 'Use this bridge as the source']) expect(items).not.toContain(gone)
     expect(items).toContain('Disable')
     expect(items).toContain('Remove speaker…')
   })
@@ -46,16 +46,16 @@ describe('speaker actions', () => {
     expect(items).toEqual([
       'Reconnect',
       'Put on standby',
-      'Make this bridge the active source',
-      'Hand over to other devices',
+      'Use this bridge as the source',
+      'Release speaker',
       'Disable',
       'Bluetooth details',
       'Remove speaker…',
     ])
   })
 
-  it('offers no connection actions for a speaker handed over to other devices', async () => {
+  it('offers no connection actions for a speaker released', async () => {
     const items = await menuItems(makeDevice({ bluetooth: { management_enabled: false } }))
-    expect(items).toEqual(['Take back', 'Disable', 'Bluetooth details', 'Remove speaker…'])
+    expect(items).toEqual(['Reclaim speaker', 'Disable', 'Bluetooth details', 'Remove speaker…'])
   })
 })

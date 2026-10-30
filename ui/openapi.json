@@ -1358,6 +1358,10 @@
             ],
             "title": "Mock Runtime"
           },
+          "music_assistant_account": {
+            "$ref": "#/components/schemas/LinkStatus",
+            "description": "The bridge's sign-in to the Music Assistant API: signed_in, signed_out or not_configured."
+          },
           "name": {
             "default": "",
             "description": "The bridge's name (BRIDGE_NAME, or the host name).",
@@ -1450,6 +1454,9 @@
             "title": "Uptime",
             "type": "string"
           },
+          "verdict": {
+            "$ref": "#/components/schemas/BridgeVerdict"
+          },
           "version": {
             "title": "Version",
             "type": "string"
@@ -1468,6 +1475,8 @@
           "ipc_protocol_version",
           "auth_enabled",
           "ma_connected",
+          "music_assistant_account",
+          "verdict",
           "ma_web_url",
           "device_count",
           "disabled_devices",
@@ -2219,6 +2228,19 @@
             "description": "Authenticated session lifetime in hours.",
             "title": "Session Timeout Hours"
           },
+          "SHOW_TECHNICAL_DETAILS": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Web UI default for showing technical chips and rows (signal Δ dB, re-anchor counts, Playout, server ID, sync diagnostics, advanced settings). Each browser can override it from the preferences menu. Off for a new install, on for an install that already had speakers when this setting first appeared.",
+            "title": "Show Technical Details"
+          },
           "SMOOTH_RESTART": {
             "anyOf": [
               {
@@ -2353,6 +2375,27 @@
           "groups"
         ],
         "title": "BridgeStatus",
+        "type": "object"
+      },
+      "BridgeVerdict": {
+        "description": "The bridge's one-word health, from the same issue list as the guidance banner.",
+        "properties": {
+          "count": {
+            "description": "Issues at warning or error.",
+            "title": "Count",
+            "type": "integer"
+          },
+          "level": {
+            "description": "ok, warning or error: the worst severity in the issue list.",
+            "title": "Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "count"
+        ],
+        "title": "BridgeVerdict",
         "type": "object"
       },
       "BugReportIn": {
@@ -2745,6 +2788,10 @@
             ],
             "title": "Last Error At"
           },
+          "links": {
+            "$ref": "#/components/schemas/DeviceLinks",
+            "description": "The speaker's Audio link and Bluetooth connection, named once."
+          },
           "music_assistant": {
             "$ref": "#/components/schemas/DeviceMusicAssistant"
           },
@@ -2843,6 +2890,7 @@
           "backend",
           "supported_actions",
           "bluetooth",
+          "links",
           "audio",
           "timing",
           "playback",
@@ -3383,6 +3431,12 @@
       },
       "DeviceHealth": {
         "properties": {
+          "code": {
+            "default": "",
+            "description": "Stable id of the summary's wording; the UI translates it.",
+            "title": "Code",
+            "type": "string"
+          },
           "last_event_at": {
             "anyOf": [
               {
@@ -3393,6 +3447,12 @@
               }
             ],
             "title": "Last Event At"
+          },
+          "params": {
+            "additionalProperties": true,
+            "description": "Values the summary's sentence interpolates.",
+            "title": "Params",
+            "type": "object"
           },
           "reasons": {
             "items": {
@@ -3422,9 +3482,37 @@
           "severity",
           "summary",
           "reasons",
-          "last_event_at"
+          "last_event_at",
+          "code",
+          "params"
         ],
         "title": "DeviceHealth",
+        "type": "object"
+      },
+      "DeviceLinks": {
+        "description": "A speaker's own states; the account is bridge-wide (``Bridge.music_assistant_account``).",
+        "properties": {
+          "audio_link": {
+            "$ref": "#/components/schemas/LinkStatus",
+            "description": "Sendspin stream with Music Assistant: streaming, connected, foreign, disconnected, unavailable."
+          },
+          "bluetooth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "connected, connecting, disconnected, standby, released, disabled, not_paired; null for a local output."
+          }
+        },
+        "required": [
+          "audio_link",
+          "bluetooth"
+        ],
+        "title": "DeviceLinks",
         "type": "object"
       },
       "DeviceMusicAssistant": {
@@ -4966,6 +5054,40 @@
           "double_count_risk"
         ],
         "title": "LatencySuggestion",
+        "type": "object"
+      },
+      "LinkStatus": {
+        "description": "One of the three named states (Audio link, Music Assistant account, Bluetooth connection).",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable code of why, when the state has a reason.",
+            "title": "Reason"
+          },
+          "state": {
+            "description": "Stable state code; the vocabulary differs per state kind.",
+            "title": "State",
+            "type": "string"
+          },
+          "tone": {
+            "description": "success, warning, error or neutral.",
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "tone",
+          "reason"
+        ],
+        "title": "LinkStatus",
         "type": "object"
       },
       "LogLevel": {
@@ -9710,6 +9832,7 @@
     },
     "/api/v1/calibration/metronome": {
       "post": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "metronome_api_v1_calibration_metronome_post",
         "requestBody": {
           "content": {
@@ -9809,6 +9932,7 @@
     },
     "/api/v1/calibration/sessions": {
       "post": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "create_session_api_v1_calibration_sessions_post",
         "responses": {
           "201": {
@@ -9852,6 +9976,7 @@
     },
     "/api/v1/calibration/sessions/{session_id}": {
       "delete": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "delete_session_api_v1_calibration_sessions__session_id__delete",
         "parameters": [
           {
@@ -9899,6 +10024,7 @@
     },
     "/api/v1/calibration/sessions/{session_id}/audio": {
       "post": {
+        "description": "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.",
         "operationId": "upload_api_v1_calibration_sessions__session_id__audio_post",
         "parameters": [
           {

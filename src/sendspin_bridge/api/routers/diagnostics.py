@@ -194,6 +194,12 @@ class RecordingIn(BaseModel):
     sample_rate: int
 
 
+_UI_DEPRECATED = (
+    "Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of "
+    "group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component."
+)
+
+
 @router.get("/calibration/tone.wav", response_class=Response, tags=["calibration"], summary="Click track")
 def tone() -> Response:
     return Response(cal.tone_wav(), media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
@@ -206,7 +212,11 @@ def play(body: DeviceRef) -> Response:
 
 
 @router.post(
-    "/calibration/metronome", response_model=MetronomeOut, tags=["calibration"], summary="Start or stop the metronome"
+    "/calibration/metronome",
+    response_model=MetronomeOut,
+    tags=["calibration"],
+    summary="Start or stop the metronome",
+    description=_UI_DEPRECATED,
 )
 def metronome(body: MetronomeIn) -> MetronomeOut:
     return MetronomeOut(active=cal.set_metronome(body.device_id, body.action))
@@ -218,6 +228,7 @@ def metronome(body: MetronomeIn) -> MetronomeOut:
     status_code=201,
     tags=["calibration"],
     summary="Start a microphone session",
+    description=_UI_DEPRECATED,
 )
 def create_session() -> SessionOut:
     return SessionOut(**cal.create_session())
@@ -228,12 +239,19 @@ def create_session() -> SessionOut:
     response_model=dict[str, Any],
     tags=["calibration"],
     summary="Upload a recording",
+    description=_UI_DEPRECATED,
 )
 def upload(session_id: str, body: RecordingIn) -> dict[str, Any]:
     return cal.upload_recording(session_id, body.role, body.samples, body.sample_rate)
 
 
-@router.delete("/calibration/sessions/{session_id}", status_code=204, tags=["calibration"], summary="End a session")
+@router.delete(
+    "/calibration/sessions/{session_id}",
+    status_code=204,
+    tags=["calibration"],
+    summary="End a session",
+    description=_UI_DEPRECATED,
+)
 def delete_session(session_id: str) -> Response:
     cal.delete_session(session_id)
     return Response(status_code=204)

@@ -108,7 +108,7 @@ function toggleMute() {
       v-if="mutable"
       type="button"
       class="-ml-2 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
-      :class="{ 'text-warning': muted }"
+      :class="{ 'text-warning-text': muted }"
       :aria-label="muted ? t('volume.unmute') : t('volume.mute')"
       :disabled="disabled"
       @click="toggleMute"

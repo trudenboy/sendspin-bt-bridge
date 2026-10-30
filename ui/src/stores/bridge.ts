@@ -8,6 +8,8 @@ import { useSyncStore } from './sync'
 import type { Adapter, BridgeStatus, Device, Group, Job, SyncSession } from '@/api/types'
 
 export type RestartState = 'idle' | 'stopping' | 'restarting' | 'ready' | 'error'
+/** Why the bridge restarts: asked for, or because an update was installed. */
+export type RestartReason = 'restart' | 'update'
 
 export const useBridgeStore = defineStore('bridge', () => {
   const snapshot = ref<BridgeStatus | null>(null)
@@ -17,15 +19,26 @@ export const useBridgeStore = defineStore('bridge', () => {
 
   const restartState = ref<RestartState>('idle')
   const restartStartedAt = ref<number | null>(null)
+  const restartReason = ref<RestartReason>('restart')
 
   const devices = computed<Device[]>(() => snapshot.value?.devices ?? [])
   const groups = computed<Group[]>(() => snapshot.value?.groups ?? [])
   const bridge = computed(() => snapshot.value?.bridge ?? null)
   const version = computed(() => snapshot.value?.bridge.version ?? '')
   const maConnected = computed(() => snapshot.value?.bridge.ma_connected ?? false)
+  /** The bridge's sign-in to Music Assistant, as the bridge names it (not a player's audio link). */
+  const maAccount = computed(() => snapshot.value?.bridge.music_assistant_account ?? null)
+
+  /** The version the bridge ran when an update began; another version means it is done. */
+  let versionBeforeUpdate = ''
 
   function apply(status: BridgeStatus) {
     snapshot.value = status
+    const inProgress = restartState.value === 'stopping' || restartState.value === 'restarting'
+    if (inProgress && restartReason.value === 'update' && versionBeforeUpdate && status.bridge.version !== versionBeforeUpdate) {
+      restartState.value = 'ready'
+      void refreshAdapters()
+    }
     loading.value = false
   }
 
@@ -58,7 +71,9 @@ export const useBridgeStore = defineStore('bridge', () => {
     void refreshAdapters()
   }
 
-  function initiateRestart() {
+  function initiateRestart(reason: RestartReason = 'restart') {
+    restartReason.value = reason
+    versionBeforeUpdate = reason === 'update' ? version.value : ''
     restartState.value = 'stopping'
     restartStartedAt.value = Date.now()
   }
@@ -107,6 +122,7 @@ export const useBridgeStore = defineStore('bridge', () => {
     adapters,
     version,
     maConnected,
+    maAccount,
     connectSSE,
     disconnectSSE: stream.disconnect,
     refresh,
@@ -114,6 +130,7 @@ export const useBridgeStore = defineStore('bridge', () => {
     deviceById,
     restartState,
     restartStartedAt,
+    restartReason,
     initiateRestart,
     dismissRestart,
     restart,

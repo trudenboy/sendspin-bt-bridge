@@ -41,6 +41,12 @@ export interface FieldDef {
   /** Hidden until "Show advanced settings" is on. */
   advanced?: boolean
   visible?: (config: ConfigDoc) => boolean
+  /**
+   * Toggle stays shown but cannot be switched on until this holds; the reason
+   * is ``<key>.disabledReason`` in i18n. A value that is already on can still
+   * be turned off.
+   */
+  enabledWhen?: (config: ConfigDoc) => boolean
   /** Extra writes that keep related keys consistent with this one. */
   onChange?: (value: unknown, set: (key: string, value: unknown) => void) => void
 }
@@ -101,6 +107,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'TZ', kind: 'text', placeholder: 'Europe/Berlin' },
       { key: 'WEB_PORT', kind: 'number', min: 1, max: 65535, nullable: true, placeholder: '8080', advanced: true },
       { key: 'LOG_LEVEL', kind: 'select', options: ['DEBUG', 'INFO', 'WARNING', 'ERROR'] },
+      { key: 'SHOW_TECHNICAL_DETAILS', kind: 'toggle' },
     ],
   },
   {
@@ -133,8 +140,13 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'PULSE_SINK_RESET_ON_START', kind: 'toggle', advanced: true },
       { key: 'COMPENSATE_OUTPUT_LATENCY', kind: 'toggle', advanced: true },
       { key: 'PLAYOUT_DIAG', kind: 'toggle', advanced: true },
-      { key: 'EXPERIMENTAL_AIR_SENSOR', kind: 'toggle', advanced: true },
-      { key: 'PLAYOUT_SYNC', kind: 'select', options: ['off', 'measure', 'loop'], offered: ['off', 'measure'], advanced: true },
+      {
+        key: 'EXPERIMENTAL_AIR_SENSOR',
+        kind: 'toggle',
+        advanced: true,
+        enabledWhen: (c) => ['measure', 'loop'].includes(String(getPath(c, 'PLAYOUT_SYNC') ?? 'off')),
+      },
+      { key: 'PLAYOUT_SYNC', kind: 'select', options: ['off', 'measure', 'loop'], advanced: true },
     ],
     after: ['latencyAssistant'],
   },
@@ -204,7 +216,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: 'security',
     icon: 'shield',
     fields: [
-      { key: 'AUTH_ENABLED', kind: 'toggle' },
+      { key: 'AUTH_ENABLED', kind: 'toggle', enabledWhen: (c) => c._password_set === true },
       { key: 'SESSION_TIMEOUT_HOURS', kind: 'number', min: 1, unit: 'h' },
       { key: 'BRUTE_FORCE_PROTECTION', kind: 'toggle' },
       { key: 'BRUTE_FORCE_MAX_ATTEMPTS', kind: 'number', min: 1, visible: bruteForceOn },

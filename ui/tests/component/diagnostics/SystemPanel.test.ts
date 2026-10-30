@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import SystemPanel from '@/components/diagnostics/SystemPanel.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { addHook, removeHook } from '@/api/system'
 
 vi.mock('@/api/system', () => ({

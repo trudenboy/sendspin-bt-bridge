@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceTimingPanel from '@/components/devices/DeviceTimingPanel.vue'
-import en from '@/i18n/en.json'
-import ru from '@/i18n/ru.json'
+import en from '@/i18n/locales/en.json'
+import ru from '@/i18n/locales/ru.json'
 import { makeDevice } from '../../fixtures/device'
 
 vi.mock('@/api/devices', () => ({ setLatency: vi.fn() }))
@@ -52,6 +52,18 @@ describe('DeviceTimingPanel air sensor block', () => {
     expect(text).toContain('87 %')
     expect(text).toContain('1.31')
     expect(text).toContain('3 s ago')
+  })
+
+  describe('seconds since the last lock', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('keeps counting while the panel stays open', async () => {
+      const w = mountPanel({ ...locked, last_confirmed_at: new Date(Date.now() - 3000).toISOString() })
+      expect(block(w).text()).toContain('3 s ago')
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(block(w).text()).toContain('33 s ago')
+    })
   })
 
   it('asks for calibration when the air error is not calibrated', () => {
@@ -196,12 +208,12 @@ describe('DeviceTimingPanel air correction', () => {
 
   it('shows the delay trim as an earlier placement', () => {
     const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_trim_ms: 30 })
-    expect(correction(w).text()).toContain('Delay trim −30.0 ms (target 30.0 ms early)')
+    expect(correction(w).text()).toContain('Compensation trim −30.0 ms (target 30.0 ms early)')
   })
 
   it('has no trim row at zero', () => {
     const w = mountLoop({ air_bias_state: 'active', air_target: 'calibrated', air_target_ms: 1, air_bias_ms: 1, air_trim_ms: 0 })
-    expect(correction(w).text()).not.toContain('Delay trim')
+    expect(correction(w).text()).not.toContain('Compensation trim')
   })
 
   it('shows nothing in measure mode', () => {

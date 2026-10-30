@@ -9,6 +9,11 @@ export interface TimelineEntry {
   source: string
   label: string
   summary: string
+  /** Stable id and values of label and summary (the UI translates them). */
+  code?: string
+  params?: Record<string, unknown>
+  /** Stable id of `source` when it is a bridge part, not a speaker's name. */
+  source_code?: string
   [key: string]: unknown
 }
 

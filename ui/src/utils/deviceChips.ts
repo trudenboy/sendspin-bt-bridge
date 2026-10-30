@@ -255,6 +255,8 @@ export interface BlockedHint {
   key: string
   /** The bridge's reason (English, from the capability payload); empty for sink_muted. */
   message: string
+  /** The stable code of the reason (translated by the UI); null when the bridge sent none. */
+  code: string | null
   dependsOn: string[]
   recommendedAction: string | null
 }
@@ -265,7 +267,7 @@ interface Capability {
   blocked_reason?: string | null
   depends_on?: string[]
   recommended_action?: string | null
-  blocked_reason_detail?: { depends_on?: string[] } | null
+  blocked_reason_detail?: { depends_on?: string[]; code?: string } | null
 }
 
 /** The actions stable explains on a card, in its order. */
@@ -286,7 +288,7 @@ export function blockedHints(d: Device, limit = 2): BlockedHint[] {
   const streaming = d.playback.playing && d.audio.streaming
   const hints: BlockedHint[] = []
   if (d.audio.sink_muted && !d.audio.muted && d.audio.has_sink) {
-    hints.push({ key: 'sink_muted', message: '', dependsOn: [], recommendedAction: null })
+    hints.push({ key: 'sink_muted', message: '', code: null, dependsOn: [], recommendedAction: null })
   }
   const actions = ((d.capabilities as { actions?: Record<string, Capability> }).actions ?? {}) as Record<string, Capability>
   for (const key of HINT_ACTIONS) {
@@ -298,6 +300,7 @@ export function blockedHints(d: Device, limit = 2): BlockedHint[] {
     hints.push({
       key,
       message: cap.blocked_reason,
+      code: cap.blocked_reason_detail?.code ?? null,
       dependsOn: cap.depends_on?.length ? cap.depends_on : (cap.blocked_reason_detail?.depends_on ?? []),
       recommendedAction: cap.recommended_action || null,
     })

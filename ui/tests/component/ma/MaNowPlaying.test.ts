@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import MaNowPlaying from '@/components/ma/MaNowPlaying.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/ma', () => ({
   discoverMA: vi.fn().mockResolvedValue({ job_id: '1', status: 'running' }),

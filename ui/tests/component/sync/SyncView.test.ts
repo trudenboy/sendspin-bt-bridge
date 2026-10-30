@@ -5,7 +5,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SyncView from '@/views/SyncView.vue'
 import MeasureWizard from '@/components/sync/MeasureWizard.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({
   getSyncGroup: vi.fn(), getSession: vi.fn(), listRestores: vi.fn(), retryRestore: vi.fn(), listProfiles: vi.fn(),

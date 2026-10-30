@@ -5,9 +5,11 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUpdateStore } from '@/stores/update'
 import { useBridgeStore } from '@/stores/bridge'
+import { confirmAction } from '@/composables/useActionPolicy'
 import SbDialog from '@/kit/SbDialog.vue'
 import SbButton from '@/kit/SbButton.vue'
 import SbBadge from '@/kit/SbBadge.vue'
+import LongOperation from '@/components/LongOperation.vue'
 import { ArrowUpCircle, ExternalLink, RefreshCw, Terminal, Copy } from 'lucide-vue-next'
 
 const CHANNELS = ['stable', 'rc', 'beta'] as const
@@ -45,6 +47,15 @@ function checkWithChannel() {
   update.checkForUpdates(selectedChannel.value as UpdateChannel)
 }
 
+async function applyNow() {
+  const ok = await confirmAction('update.apply', {
+    title: t('update.confirmTitle', { version: update.latestVersion }),
+    consequences: [t('consequence.restartMinute'), t('consequence.rollback')],
+    confirmLabel: t('update.applyNow'),
+  })
+  if (ok) await update.doApplyUpdate()
+}
+
 function copyCommand() {
   if (update.info?.command) {
     navigator.clipboard.writeText(update.info.command)
@@ -67,6 +78,7 @@ function openHaAddon() {
 <template>
   <SbDialog v-model="update.showDialog" :title="t('update.title')" size="lg">
     <div class="space-y-5">
+      <LongOperation v-if="update.applying" :label="t('restart.updating')" />
       <!-- Channel selector -->
       <div class="flex items-center gap-3">
         <span class="text-sm text-text-secondary">{{ t('update.channel') }}</span>
@@ -114,7 +126,7 @@ function openHaAddon() {
             </SbBadge>
             <span
               v-if="update.info?.channel_warning"
-              class="text-xs text-warning"
+              class="text-xs text-warning-text"
             >
               {{ update.info.channel_warning }}
             </span>
@@ -191,7 +203,7 @@ function openHaAddon() {
         variant="primary"
         size="sm"
         :loading="update.applying"
-        @click="update.doApplyUpdate()"
+        @click="applyNow"
       >
         <template #icon-left><Terminal class="h-4 w-4" /></template>
         {{ t('update.applyNow') }}

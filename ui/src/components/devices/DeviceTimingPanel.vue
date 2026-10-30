@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useNow } from '@/composables/useNow'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
-import { isDeviceConnected } from '@/utils/deviceBackend'
 import { forgetAirCalibration, setLatency } from '@/api/devices'
-import { createSession, endSession, getLatencyHistory, setMetronome, uploadRecording, type TimingSample } from '@/api/calibration'
+import { getLatencyHistory, type TimingSample } from '@/api/calibration'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton } from '@/kit'
 import SettingField from '@/components/settings/SettingField.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS } from '@/settings/device'
-import { microphoneAvailable, openMicrophone, recordClick } from '@/calibration/capture'
-import { planCorrection } from '@/calibration/plan'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { signedMs } from '@/utils/deviceChips'
 import type { Device } from '@/api/types'
 
@@ -24,7 +23,7 @@ const bridge = useBridgeStore()
 const notifications = useNotificationStore()
 
 const fields = DEVICE_GROUPS.find((g) => g.id === 'sync')!.fields
-const showAdvanced = ref(false)
+const showAdvanced = technicalDetails
 
 /* Live values: timing edits are applied at once, no save step. */
 function read(key: string) {
@@ -34,9 +33,9 @@ function read(key: string) {
   return undefined
 }
 
-async function apply(field: 'static_delay_ms' | 'min_buffer_ms' | 'required_lead_time_ms', value: number, source = 'manual', revision?: string, deviceId = props.device.id) {
+async function apply(field: 'static_delay_ms' | 'min_buffer_ms' | 'required_lead_time_ms', value: number, source = 'manual', revision?: string) {
   try {
-    await setLatency(deviceId, value, { field, source, revision })
+    await setLatency(props.device.id, value, { field, source, revision })
   } catch (e) {
     notifications.error(e instanceof ApiError ? e.message : t('common.error'))
   }
@@ -51,67 +50,6 @@ const suggestion = computed(() => props.device.timing.latency_suggestion)
 const canSuggest = computed(
   () => suggestion.value?.suggested_static_delay_ms != null && suggestion.value.suggested_static_delay_ms !== Math.round(props.device.audio.static_delay_ms),
 )
-
-/* Click track: a continuous, phase-aligned click to compare speakers by ear. */
-const metronomeBusy = ref(false)
-async function toggleMetronome() {
-  metronomeBusy.value = true
-  try {
-    await setMetronome(props.device.id, props.device.timing.calibration_metronome_active ? 'stop' : 'start')
-  } catch (e) {
-    notifications.error(e instanceof ApiError ? e.message : t('common.error'))
-  } finally {
-    metronomeBusy.value = false
-  }
-}
-
-/* Microphone comparison against another connected speaker. */
-const peers = computed(() =>
-  bridge.devices.filter((d) => d.id !== props.device.id && d.enabled && isDeviceConnected(d)),
-)
-const referenceId = ref('')
-const micStep = ref('')
-const canMeasure = computed(() => microphoneAvailable() && peers.value.length > 0)
-
-async function measure() {
-  const reference = peers.value.find((p) => p.id === referenceId.value) ?? peers.value[0]
-  if (!reference) return
-  let stream: MediaStream | null = null
-  const estimates: number[] = []
-  try {
-    stream = await openMicrophone()
-    for (let trial = 1; trial <= 3; trial++) {
-      const session = await createSession()
-      micStep.value = t('timing.mic.step', { n: trial, name: reference.name })
-      await uploadRecording(session.session_id, 'reference', await recordClick(stream, reference.id))
-      micStep.value = t('timing.mic.step', { n: trial, name: props.device.name })
-      const result = await uploadRecording(session.session_id, 'target', await recordClick(stream, props.device.id))
-      void endSession(session.session_id).catch(() => undefined)
-      if (result.estimate?.valid && result.estimate.delay_ms != null) estimates.push(result.estimate.delay_ms)
-    }
-    const plan = planCorrection(
-      estimates,
-      { id: props.device.id, delay: props.device.audio.static_delay_ms },
-      { id: reference.id, delay: reference.audio.static_delay_ms },
-    )
-    if (!plan.ok) {
-      notifications.error(t(`timing.mic.${plan.reason}`))
-      return
-    }
-    const late = plan.deviceId === props.device.id ? props.device : reference
-    const ok = await confirmDialog({
-      title: t('timing.mic.resultTitle'),
-      message: t('timing.mic.confirm', { offset: plan.median.toFixed(0), spread: plan.spread.toFixed(0), value: plan.value, name: late.name }),
-      confirmLabel: t('timing.applySuggestion'),
-    })
-    if (ok) await apply('static_delay_ms', plan.value, 'microphone_calibration', undefined, plan.deviceId)
-  } catch (e) {
-    notifications.error(e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e))
-  } finally {
-    stream?.getTracks().forEach((track) => track.stop())
-    micStep.value = ''
-  }
-}
 
 /* Recent timing samples, drawn as two small lines. */
 const samples = ref<TimingSample[]>([])
@@ -176,6 +114,7 @@ const airReason = computed(() => {
   return te(key) ? t(key) : t('timing.air.reasons.unknown', { reason })
 })
 const airHasValues = computed(() => air.value != null && air.value.host_placement_ms != null)
+const now = useNow()
 const airRows = computed(() => {
   const a = air.value
   if (!a || !airHasValues.value) return []
@@ -185,7 +124,7 @@ const airRows = computed(() => {
   if (a.confidence != null) rows.push(['confidence', `${Math.round(a.confidence * 100)} %`])
   if (a.psr != null) rows.push(['psr', a.psr.toFixed(2)])
   if (a.last_confirmed_at) {
-    const ageS = Math.max(0, Math.round((Date.now() - Date.parse(a.last_confirmed_at)) / 1000))
+    const ageS = Math.max(0, Math.round((now.value - Date.parse(a.last_confirmed_at)) / 1000))
     if (Number.isFinite(ageS)) rows.push(['lock', t('timing.air.agoSeconds', { s: ageS })])
   }
   return rows
@@ -218,11 +157,10 @@ const calibrationLine = (c: AirCalibration) =>
   t('timing.air.calibration.line', { ...calibrationParams(c), latency: c.latency_ms.toFixed(1), age: calibrationAge(c.measured_at) })
 const forgetting = ref('')
 async function forgetCalibration(c: AirCalibration) {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('timing.forgetCalibration', {
     title: t('timing.air.calibration.forgetTitle'),
     message: t('timing.air.calibration.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
     confirmLabel: t('timing.air.calibration.forget'),
-    danger: true,
   })
   if (!ok) return
   forgetting.value = calibrationKey(c)
@@ -247,11 +185,10 @@ const learnedLine = (c: AirLearned) =>
     starts: c.starts,
   })
 async function forgetLearned(c: AirLearned) {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('timing.forgetLearned', {
     title: t('timing.air.learned.forgetTitle'),
     message: t('timing.air.learned.forgetConfirm', { ...calibrationParams(c), name: props.device.name }),
     confirmLabel: t('timing.air.learned.forget'),
-    danger: true,
   })
   if (!ok) return
   forgetting.value = `learned:${calibrationKey(c)}`
@@ -297,9 +234,9 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
 
 <template>
   <div class="py-2">
-    <div class="divide-y divide-border">
+    <div data-timing-main class="divide-y divide-border">
       <template v-for="f in fields" :key="f.key">
-        <SettingField v-if="showAdvanced || !f.advanced" :field="f" i18n-base="settings.device" :read="read" :write="write" />
+        <SettingField v-if="!f.advanced" :field="f" i18n-base="settings.device" :read="read" :write="write" />
       </template>
       <SettingsRow
         v-if="canSuggest"
@@ -312,38 +249,32 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
           @click="apply('static_delay_ms', suggestion!.suggested_static_delay_ms!, suggestion!.source, suggestion!.revision ?? undefined)"
         >{{ t('timing.applySuggestion') }}</SbButton>
       </SettingsRow>
-      <SettingsRow :label="t('timing.clicks.label')" :help="t('timing.clicks.help')">
-        <SbButton variant="outline" size="sm" :loading="metronomeBusy" :disabled="!device.audio.has_sink" @click="toggleMetronome">
-          {{ device.timing.calibration_metronome_active ? t('timing.clicks.stop') : t('timing.clicks.start') }}
-        </SbButton>
-      </SettingsRow>
-      <SettingsRow
-        :label="t('timing.mic.label')"
-        :help="micStep || (canMeasure ? t('timing.mic.help') : microphoneAvailable() ? t('timing.mic.needPeer') : t('timing.mic.needHttps'))"
-      >
-        <div class="flex items-center gap-2">
-          <select
-            v-if="peers.length > 1"
-            v-model="referenceId"
-            :aria-label="t('timing.mic.reference')"
-            class="h-8 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 text-sm text-text-primary"
-          >
-            <option v-for="p in peers" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-          <SbButton variant="outline" size="sm" :disabled="!canMeasure" :loading="!!micStep" @click="measure">
-            {{ t('timing.mic.start') }}
-          </SbButton>
-        </div>
-      </SettingsRow>
       <SettingsRow v-if="device.music_assistant.syncgroup_id" :label="t('sync.tuneGroup')" :help="t('sync.tuneGroupHelp')">
         <RouterLink
           :to="{ name: 'sync', params: { groupId: device.music_assistant.syncgroup_id } }"
-          class="inline-flex h-8 items-center rounded-(--radius-button) border border-border-strong px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          class="inline-flex h-8 items-center rounded-(--radius-button) border border-border-strong px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-secondary"
         >
-          {{ t('sync.open') }}
+          {{ t('sync.tuneLink') }}
+        </RouterLink>
+      </SettingsRow>
+      <SettingsRow v-else :label="t('sync.tuneGroup')" :help="t('sync.noGroupHelp', { name: device.name })" data-no-group>
+        <RouterLink
+          :to="{ name: 'groups' }"
+          class="inline-flex h-8 items-center rounded-(--radius-button) border border-border-strong px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-secondary"
+        >
+          {{ t('sync.noGroupLink') }}
         </RouterLink>
       </SettingsRow>
     </div>
+
+    <details v-if="technicalDetails" data-timing-details class="mt-4 rounded-(--radius-card) border border-border">
+      <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-text-primary">{{ t('timing.details') }}</summary>
+      <div class="px-3 pb-3">
+        <div class="divide-y divide-border">
+          <template v-for="f in fields" :key="f.key">
+            <SettingField v-if="f.advanced && showAdvanced" :field="f" i18n-base="settings.device" :read="read" :write="write" />
+          </template>
+        </div>
 
     <dl v-if="latencyRows.length" class="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm" data-testid="timing-latency">
       <template v-for="[key, value] in latencyRows" :key="key">
@@ -354,7 +285,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
 
     <section v-if="playout" class="mt-4" data-testid="playout-block">
       <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">{{ t('timing.playout.title') }}</h3>
-      <p v-if="playout.state === 'fallback'" class="mt-1 text-sm text-warning" data-testid="playout-fallback">
+      <p v-if="playout.state === 'fallback'" class="mt-1 text-sm text-warning-text" data-testid="playout-fallback">
         {{ t('timing.playout.fallback', { reason: playout.fallback_reason ?? t('timing.playout.unknownReason') }) }}
       </p>
       <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
@@ -432,9 +363,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
       </p>
     </section>
 
-    <label class="mt-4 flex items-center gap-2 text-sm text-text-secondary">
-      <input v-model="showAdvanced" type="checkbox" class="accent-primary" />
-      {{ t('settings.showAdvanced') }}
-    </label>
+      </div>
+    </details>
   </div>
 </template>

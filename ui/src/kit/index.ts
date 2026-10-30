@@ -19,6 +19,7 @@ export { default as SbTable } from './SbTable.vue'
 export { default as SbEmptyState } from './SbEmptyState.vue'
 export { default as SbFilterBar } from './SbFilterBar.vue'
 
+export { default as ConfirmConsequences } from './ConfirmConsequences.vue'
 export { default as SbDialog } from './SbDialog.vue'
 export { default as SbDrawer } from './SbDrawer.vue'
 export { default as SbToast } from './SbToast.vue'

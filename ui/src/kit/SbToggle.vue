@@ -45,7 +45,7 @@ function onKeydown(e: KeyboardEvent) {
       :aria-checked="model"
       :aria-label="label"
       :disabled="disabled"
-      class="relative inline-flex shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      class="relative inline-flex shrink-0 rounded-full border-2 border-transparent transition-colors"
       :class="[
         model
           ? 'bg-primary-fill'

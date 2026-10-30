@@ -53,7 +53,7 @@ const batteryColor = computed(() => {
   const level = battery.value
   if (level == null) return ''
   if (level < 20) return 'text-error'
-  if (level <= 50) return 'text-warning'
+  if (level <= 50) return 'text-warning-text'
   return 'text-success'
 })
 
@@ -84,7 +84,7 @@ function onDetails() {
       <div class="min-w-0 flex-1">
         <button
           type="button"
-          class="block max-w-full text-left text-base font-medium leading-snug text-text-primary after:absolute after:inset-0 after:rounded-(--radius-card) after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary/60"
+          class="block max-w-full text-left text-base font-medium leading-snug text-text-primary after:absolute after:inset-0 after:rounded-(--radius-card) after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-(--sb-focus-ring)"
           :title="device.name ?? undefined"
           @click="onDetails"
         >
@@ -95,7 +95,7 @@ function onDetails() {
           <span v-if="battery != null && BatteryIcon" class="inline-flex items-center gap-0.5" :class="batteryColor" :title="t('device.battery', { level: battery })">
             <component :is="BatteryIcon" class="size-3.5" aria-hidden="true" />{{ battery }}%
           </span>
-          <span v-if="releasedNote" class="text-warning">{{ releasedNote }}</span>
+          <span v-if="releasedNote" class="text-warning-text">{{ releasedNote }}</span>
         </p>
       </div>
       <DeviceStatusBadge :state="state" :device="device" class="relative z-10 shrink-0" />

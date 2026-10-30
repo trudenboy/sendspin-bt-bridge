@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
+import { useReversibleActions } from '@/composables/useReversibleActions'
+import { actionFailure, type ActionKind } from '@/utils/actionFailure'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
@@ -25,6 +27,7 @@ import SyncChip from './chips/SyncChip.vue'
 import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
 import ServerChip from './chips/ServerChip.vue'
+import StatusState from '@/components/StatusState.vue'
 import LinkChip from './chips/LinkChip.vue'
 import DevicePlayerPanel from './DevicePlayerPanel.vue'
 import { canDo } from '@/utils/supportedActions'
@@ -87,26 +90,30 @@ const batteryColor = computed(() => {
   const level = battery.value
   if (level == null) return ''
   if (level < 20) return 'text-error'
-  if (level <= 50) return 'text-warning'
+  if (level <= 50) return 'text-warning-text'
   return 'text-success'
 })
 
-async function run(action: () => Promise<unknown>, failure: string) {
+async function run(action: () => Promise<unknown>, failure: ActionKind | string) {
   try {
     await action()
-  } catch {
-    notifications.error(t(failure))
+  } catch (e) {
+    const kinds: string[] = ['volume', 'mute', 'release', 'claim']
+    notifications.error(
+      kinds.includes(failure) ? actionFailure(t, failure as ActionKind, speakerName(props.device.name), e) : t(failure),
+    )
   }
 }
 
 function onVolumeUpdate(level: number) {
-  void run(() => deviceStore.setVolume(props.device.id, level), 'device.actions.enableFailed')
+  void run(() => deviceStore.setVolume(props.device.id, level), 'volume')
 }
 
 function onMuteUpdate(muted: boolean) {
-  void run(() => deviceStore.setMute(props.device.id, muted), 'device.actions.enableFailed')
+  void run(() => deviceStore.setMute(props.device.id, muted), 'mute')
 }
 
+const reversible = useReversibleActions()
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const detailId = computed(() => `device-row-detail-${props.device.id}`)
 /* The expanded row spans every column: checkbox, name, status, volume, transport, adapter, actions. */
@@ -148,7 +155,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       <input
         type="checkbox"
         :checked="selected"
-        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
+        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary"
         :aria-label="t('device.select', { name: speakerName(device.name) })"
         @click.stop
         @change.stop="emit('toggleSelect', device.id)"
@@ -208,8 +215,10 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <td class="whitespace-nowrap px-2 py-2">
       <div class="flex flex-wrap items-center gap-1.5">
         <DeviceStatusBadge :state="state" :device="device" />
+        <StatusState kind="bluetooth" :status="device.links.bluetooth" only-if-not-ok />
+        <StatusState kind="audio_link" :status="device.links.audio_link" only-if-not-ok />
         <SyncChip :device="device" />
-        <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning" :title="blockedTitle">
+        <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning-text" :title="blockedTitle">
           <CircleAlert class="h-4 w-4" aria-hidden="true" />
           <span class="sr-only">{{ t('device.chips.blocked.summary') }}: {{ blockedTitle }}</span>
         </span>
@@ -302,14 +311,14 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
               {{ t('speaker.reconnect') }}
             </SbButton>
             <template v-if="canDo(device, 'standby')">
-              <SbButton v-if="standby" size="sm" variant="secondary" data-quick="wake" @click="quick(() => deviceStore.wake(device.id))">
+              <SbButton v-if="standby" size="sm" variant="secondary" data-quick="wake" @click="reversible.wake(device.id, displayName)">
                 {{ t('speaker.wake') }}
               </SbButton>
-              <SbButton v-else size="sm" variant="secondary" data-quick="standby" @click="quick(() => deviceStore.standby(device.id))">
+              <SbButton v-else size="sm" variant="secondary" data-quick="standby" @click="reversible.standby(device.id, displayName)">
                 {{ t('speaker.standby') }}
               </SbButton>
             </template>
-            <SbButton size="sm" variant="secondary" data-quick="release" @click="quick(() => deviceStore.release(device.id, true))">
+            <SbButton size="sm" variant="secondary" data-quick="release" @click="reversible.handOver(device.id, displayName)">
               {{ t('speaker.handOver') }}
             </SbButton>
           </template>

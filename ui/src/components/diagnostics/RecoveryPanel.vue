@@ -6,17 +6,23 @@ import { SbCard, SbBadge, SbButton, SbSpinner } from '@/kit'
 import { ShieldCheck, RefreshCw, ClipboardCopy, DownloadCloud } from 'lucide-vue-next'
 import { copyToClipboard } from '@/utils/clipboard'
 import { downloadTimelineCsv } from '@/api/diagnostics'
+import { useGuidanceActions, type GuidanceAction } from '@/composables/useGuidanceActions'
+import { tAction, tServer, type ServerText } from '@/i18n/server'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
-const copyLabel = ref(t('diagnostics.copy'))
+const { run } = useGuidanceActions()
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+const copyLabel = computed(() =>
+  t(copyState.value === 'copied' ? 'diagnostics.copied' : copyState.value === 'failed' ? 'diagnostics.copyFailed' : 'diagnostics.copy'),
+)
 
-interface RecoveryIssue {
+interface RecoveryIssue extends ServerText {
   key: string
   severity: string
   title: string
   summary?: string
-  primary_action?: { key: string; label: string }
+  primary_action?: GuidanceAction
 }
 
 const issues = computed(() => (diagnostics.recovery?.issues ?? []) as RecoveryIssue[])
@@ -33,11 +39,11 @@ function severityTone(severity: string) {
 
 async function copyIssues() {
   const lines = issues.value.map(
-    (i) => `[${i.severity}] ${i.title}: ${i.summary ?? ''}`,
+    (i) => `[${i.severity}] ${tServer('issue', i, 'title', i.title)}: ${tServer('issue', i, 'summary', i.summary ?? '')}`,
   )
   const ok = await copyToClipboard(lines.join('\n'))
-  copyLabel.value = ok ? t('diagnostics.copied') : t('diagnostics.copyFailed')
-  setTimeout(() => { copyLabel.value = t('diagnostics.copy') }, 2000)
+  copyState.value = ok ? 'copied' : 'failed'
+  setTimeout(() => { copyState.value = 'idle' }, 2000)
 }
 
 async function runChecks() {
@@ -48,11 +54,11 @@ async function runChecks() {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-2">
       <h3 class="text-lg font-semibold text-text-primary">
         {{ t('diagnostics.recovery.title') }}
       </h3>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <SbButton variant="outline" size="sm" :loading="diagnostics.loading" @click="runChecks">
           <template #icon-left>
             <RefreshCw class="h-4 w-4" aria-hidden="true" />
@@ -85,10 +91,18 @@ async function runChecks() {
             <SbBadge :tone="severityTone(issue.severity)" size="sm" dot>
               {{ issue.severity }}
             </SbBadge>
-            <span class="text-sm font-medium text-text-primary">{{ issue.title }}</span>
+            <span class="text-sm font-medium text-text-primary">{{ tServer('issue', issue, 'title', issue.title) }}</span>
           </div>
-          <p v-if="issue.summary" class="text-sm text-text-secondary">{{ issue.summary }}</p>
-          <p v-if="issue.primary_action" class="text-xs text-text-secondary">→ {{ issue.primary_action.label }}</p>
+          <p v-if="issue.summary" class="text-sm text-text-secondary">{{ tServer('issue', issue, 'summary', issue.summary) }}</p>
+          <SbButton
+            v-if="issue.primary_action"
+            variant="outline"
+            size="sm"
+            data-recovery-action
+            @click="run(issue.primary_action)"
+          >
+            {{ tAction(issue.primary_action) }}
+          </SbButton>
         </div>
       </SbCard>
     </template>

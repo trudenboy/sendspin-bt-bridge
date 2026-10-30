@@ -196,6 +196,19 @@ def _sampled_preflight_status() -> dict:
     return _preflight_probe.current()
 
 
+def _status_from_guidance(guidance: Any, failed_collections: list[str]) -> str:
+    """ok, degraded or error: the same issue list the header pill is drawn from.
+
+    A diagnostics bundle whose collections all succeeded used to say "ok" above
+    a list of warnings; the verdict is now the worst issue severity.
+    """
+    from sendspin_bridge.services.diagnostics.status_model import verdict_from_issues
+
+    issues = guidance.get("issue_groups") if isinstance(guidance, dict) else None
+    level = verdict_from_issues(issues or [], failed_collections=failed_collections).level
+    return {"ok": "ok", "warning": "degraded", "error": "error"}[level]
+
+
 def _collection_error_payload(exc: Exception) -> dict[str, str]:
     """Return a structured diagnostics error payload."""
     return _shared_collection_error_payload(exc)
@@ -997,7 +1010,7 @@ def diagnostics(*, auth_enabled: bool = False) -> dict:
         # ``None`` on failure — no extra guard needed here.
         diag["last_run"] = _collect_last_run_summary()
 
-        diag["status"] = "degraded" if failed_collections else "ok"
+        diag["status"] = _status_from_guidance(diag.get("operator_guidance"), failed_collections)
         diag["failed_collections"] = failed_collections
         diag["collections_status"] = collections_status
         return diag

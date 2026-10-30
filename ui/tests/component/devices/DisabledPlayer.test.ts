@@ -4,7 +4,7 @@ import { reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
 import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
@@ -12,7 +12,7 @@ import type { DisabledPlayer } from '@/stores/devices'
 
 const store = vi.hoisted(() => ({ setEnabled: vi.fn(), remove: vi.fn() }))
 const bridge = vi.hoisted(() => ({ value: null as unknown as { adapters: unknown[]; refresh: () => unknown } }))
-const notify = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }))
+const notify = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn(), undo: vi.fn() }))
 
 vi.mock('@/stores/devices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/devices')>()),

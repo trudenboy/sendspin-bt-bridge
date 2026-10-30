@@ -24,6 +24,8 @@
 
   --color-success: var(--sb-success);
   --color-warning: var(--sb-warning);
+  /* --color-warning is decorative (icons, fills); use warning-text for text. */
+  --color-warning-text: var(--sb-warning-text);
   --color-error: var(--sb-error);
   --color-info: var(--sb-info);
 
@@ -60,10 +62,12 @@
   --sb-primary-fill-hover: #01579b;
   --sb-primary-text: #0277bd;
   --sb-on-primary: #ffffff;
+  --sb-focus-ring: #0277bd;
 
   /* Status colours as text on light surfaces: darker shades of HA's palette. */
   --sb-success: #2e7d32;
   --sb-warning: #ffa600;
+  --sb-warning-text: #8a5a00;
   --sb-error: #c62828;
   --sb-error-fill: #c62828;
   --sb-info: #0277bd;
@@ -74,8 +78,8 @@
   --sb-raised: #ffffff;
 
   --sb-text: #212121;
-  --sb-text-secondary: #727272;
-  --sb-text-tertiary: #8a8a8a;
+  --sb-text-secondary: #545454;
+  --sb-text-tertiary: #666666;
   --sb-text-disabled: #bdbdbd;
 
   --sb-divider: rgb(0 0 0 / 0.12);
@@ -89,7 +93,9 @@
 .dark {
   color-scheme: dark;
   --sb-primary-text: #4fc3f7;
+  --sb-focus-ring: #4fc3f7;
   --sb-success: #43a047;
+  --sb-warning-text: #ffb74d;
   --sb-error: #ef5350;
   --sb-info: #29b6f6;
 
@@ -99,8 +105,8 @@
   --sb-raised: #232323;
 
   --sb-text: #e1e1e1;
-  --sb-text-secondary: #9b9b9b;
-  --sb-text-tertiary: #7d7d7d;
+  --sb-text-secondary: #aaaaaa;
+  --sb-text-tertiary: #939393;
   --sb-text-disabled: #5e5e5e;
 
   --sb-divider: rgb(225 225 225 / 0.12);
@@ -119,7 +125,7 @@
 
 @utility tone-warning {
   background-color: color-mix(in srgb, var(--sb-warning) 16%, transparent);
-  color: color-mix(in srgb, var(--sb-warning) 75%, var(--sb-text));
+  color: var(--sb-warning-text);
 }
 
 @utility tone-error {
@@ -147,6 +153,15 @@
   }
 }
 
+/* One keyboard-focus indicator for every control (WCAG 1.4.11, >=3:1 on both
+   themes). In the base layer so a component can still override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--sb-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
 html {
   /* Inside the HA ingress iframe a drag that nothing scrolls would chain out to
      HA's pull-to-refresh and reload the panel. */
@@ -169,4 +184,11 @@ body {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
+}
+
+:root {
+  --sb-header-h: 4rem;
+}
+:root[data-embedded] {
+  --sb-header-h: 2.75rem;
 }

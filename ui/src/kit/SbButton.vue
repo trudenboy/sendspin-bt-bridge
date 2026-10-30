@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { computed } from 'vue'
 import SbSpinner from './SbSpinner.vue'
+
+const labels = useKitLabels()
 
 const props = withDefaults(
   defineProps<{
@@ -43,14 +46,14 @@ const isDisabled = computed(() => props.disabled || props.loading)
 <template>
   <button
     :class="[
-      'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-(--radius-button) font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface [&_svg]:size-4 [&_svg]:shrink-0',
+      'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-(--radius-button) font-medium transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
       variantClasses[variant],
       sizeClasses,
       isDisabled && 'pointer-events-none opacity-50 cursor-not-allowed',
     ]"
     :disabled="isDisabled"
   >
-    <SbSpinner v-if="loading" size="sm" label="Loading" />
+    <SbSpinner v-if="loading" size="sm" :label="labels.loading" />
     <slot v-if="!loading" name="icon-left" />
     <slot />
     <slot v-if="!loading" name="icon-right" />

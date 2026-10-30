@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import ConfigView from '@/views/ConfigView.vue'
 import { getConfig, saveConfig } from '@/api/config'
+import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { useConfigStore } from '@/stores/config'
 
 const BASE = {
@@ -32,6 +33,7 @@ vi.mock('@/api/config', () => ({
   uploadConfig: vi.fn(),
   testSendspin: vi.fn(),
 }))
+vi.mock('@/components/settings/LatencyAssistantSection.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/api/auth', () => ({
   listTokens: vi.fn().mockResolvedValue({ tokens: [] }),
   issueToken: vi.fn(),
@@ -52,6 +54,9 @@ vi.mock('@/api/updates', () => ({
   applyUpdate: vi.fn(),
 }))
 vi.mock('@/api/status', () => ({ getStatus: vi.fn(), restartBridge: vi.fn().mockResolvedValue({}) }))
+const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
+vi.mock('@/composables/useConfirm', () => confirm)
+import { restartBridge } from '@/api/status'
 vi.mock('@/composables/useIngress', () => ({ useIngress: () => ({ basePath: '', apiBase: '' }) }))
 vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), useRoute: () => ({ hash: '' }) }))
 
@@ -94,6 +99,7 @@ describe('ConfigView (settings)', () => {
   })
 
   it('hides advanced settings until asked', async () => {
+    setTechnicalDetails(false)
     const w = await mountView()
     expect(labels(w)).toContain('Bridge name')
     expect(labels(w)).not.toContain('Web port')
@@ -140,6 +146,32 @@ describe('ConfigView (settings)', () => {
     await flushPromises()
 
     expect(w.text()).toContain('Restart the bridge to apply some changes')
+  })
+
+  describe('Restart now', () => {
+    async function pendingRestart() {
+      vi.mocked(saveConfig).mockResolvedValue({ reconfig: { restart_required: [{ key: 'WEB_PORT' }] }, warnings: [] } as never)
+      const w = await mountView()
+      const name = w.findAll('input').find((i) => (i.element as HTMLInputElement).value === 'Kitchen bridge')!
+      await name.setValue('x')
+      await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
+      await flushPromises()
+      await w.findAll('button').find((b) => b.text() === 'Restart now')!.trigger('click')
+      await flushPromises()
+    }
+
+    it('asks first, naming that playback stops, and does nothing when declined', async () => {
+      confirm.confirmDialog.mockResolvedValue(false)
+      await pendingRestart()
+      expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toMatch(/Playback stops/)
+      expect(restartBridge).not.toHaveBeenCalled()
+    })
+
+    it('restarts once confirmed', async () => {
+      confirm.confirmDialog.mockResolvedValue(true)
+      await pendingRestart()
+      expect(restartBridge).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('stores null for an emptied automatic number and a list from lines', async () => {

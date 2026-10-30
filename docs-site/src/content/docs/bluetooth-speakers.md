@@ -110,8 +110,8 @@ The air sensor measures when each speaker's audio actually leaves the host over 
 | Row | Meaning |
 |---|---|
 | **State** | One of the states below; when the sensor is off for this speaker or unavailable, the reason is shown |
-| **Host placement** | `H`: how far before (negative) or after its schedule the audio left over the air, the median of the last five confirmed windows. It stops at the air: the speaker's own air-to-sound latency is not in it. On the test stand `H` was −31 to −45 ms per stream start, with σ ≈ 0.2 ms within a stream (range ≤ 0.9 ms per start) |
-| **Air error** | With a calibration: the speaker's lateness at the sound, `H` plus its calibrated air-to-sound latency minus the delay set for it. Without one the row says **Needs calibration** |
+| **Host placement** | `H`: how far before (negative) or after its schedule the audio left over the air, the median of the last five confirmed windows. It stops at the air: the speaker's own Bluetooth latency is not in it. On the test stand `H` was −31 to −45 ms per stream start, with σ ≈ 0.2 ms within a stream (range ≤ 0.9 ms per start) |
+| **Air error** | With a calibration: the speaker's lateness at the sound, `H` plus its measured Bluetooth latency minus the delay set for it. Without one the row says **Needs calibration** |
 | **Confidence** | 0 to 1, from the peak ratio and the share of confirmed windows; it falls while the sensor is holding |
 | **Peak ratio (PSR)** | How clearly the last confirmed window matched; a window needs at least 1.17, music usually gives 2 to 4 |
 | **Last confirmed** | Seconds since the last confirmed window |
@@ -137,7 +137,7 @@ With Playout sync in `loop` and the air sensor on, the bridge also uses the air 
 
 Where the audio is placed depends on what the bridge knows about the speaker:
 
-- **Calibrated.** The group sync wizard measured the speaker's air-to-sound latency (see Calibration above). Each start is placed on the schedule, using that latency.
+- **Calibrated.** The group sync wizard measured and saved the speaker's Bluetooth latency (see Calibration above). Each start is placed on the schedule, using that latency.
 - **Learned.** There is no calibration, so the bridge learns where the speaker played on average in its previous starts. It learns from the first 2 starts, uses the value from then on, and converges in about 6 to 8 starts; the first starts are uncorrected or only roughly placed. A calibration always wins over a learned value.
 
 **Forget** in the Timing panel clears both a calibration and a learned latency for that codec, rate and adapter.

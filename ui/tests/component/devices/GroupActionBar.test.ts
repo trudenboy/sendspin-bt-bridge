@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 import { setMute, setDevicePlayback } from '@/api/playback'
@@ -14,7 +14,7 @@ const store = vi.hoisted(() => ({
   release: vi.fn(),
   setPowerSave: vi.fn(),
 }))
-const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }))
+const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
 const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
 
 vi.mock('@/stores/devices', async (importOriginal) => ({
@@ -112,7 +112,7 @@ describe('GroupActionBar bulk power actions', () => {
     await button(w, 'standby').trigger('click')
     await flushPromises()
     expect(confirm.confirmDialog).toHaveBeenCalledTimes(1)
-    expect(confirm.confirmDialog.mock.calls[0]![0].message).toContain('Alpha')
+    expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('Alpha')
     expect(store.standby).not.toHaveBeenCalled()
   })
 
@@ -224,5 +224,13 @@ describe('GroupActionBar mute, pause and reconnect all', () => {
     ])
     expect(w.find('[data-bulk="mute"]').exists()).toBe(false)
     expect(w.find('[data-bulk="pause"]').exists()).toBe(false)
+  })
+})
+
+describe('GroupActionBar accessibility', () => {
+  it('gives the selection volume slider an accessible name', () => {
+    const w = mountBar([speaker('a', 'Alpha')])
+    const slider = w.find('input[type="range"]')
+    expect(slider.attributes('aria-label')).toBe(en.devices.groupVolume)
   })
 })

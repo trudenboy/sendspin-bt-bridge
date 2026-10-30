@@ -5,9 +5,10 @@ import { useBluetoothStore } from '@/stores/bluetooth'
 import { useBridgeStore } from '@/stores/bridge'
 import { playClick } from '@/api/calibration'
 import { ApiError } from '@/api/client'
-import { SbBadge, SbButton, SbDialog, SbInput, SbSpinner, SbTabs } from '@/kit'
+import { SbBadge, SbButton, SbDialog, SbInput, SbTabs } from '@/kit'
 import AudioOutputPicker from './AudioOutputPicker.vue'
 import PairedDevicesList from './PairedDevicesList.vue'
+import LongOperation from '@/components/LongOperation.vue'
 import { CheckCircle2, RotateCw, Speaker } from 'lucide-vue-next'
 import type { ScanDevice } from '@/api/types'
 
@@ -89,6 +90,8 @@ async function pick(result: ScanDevice) {
   chosen.value = result
   const ok = await bt.pairDevice(result.mac, { adapter: hciOf(result), ...options.value })
   if (!ok) {
+    chosen.value = null
+    if (!bt.pairError) return // cancelled by the operator
     error.value = t('bluetooth.scan.pairFailed', { reason: bt.pairError ?? '' })
     chosen.value = null
     return
@@ -161,10 +164,23 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
         </SbButton>
       </div>
 
-      <div v-if="bt.scanning && !bt.scanResults.length" class="flex flex-col items-center gap-2 py-8 text-sm text-text-secondary">
-        <SbSpinner size="md" />
-        {{ t('addSpeaker.looking') }}
-      </div>
+      <LongOperation
+        v-if="bt.pairing"
+        :label="t('addSpeaker.pairing', { name: chosen?.name && chosen.name !== chosen.mac ? chosen.name : chosen?.mac })"
+        :started-at="bt.pairStartedAt"
+        cancellable
+        :cancelling="bt.cancelling"
+        @cancel="bt.cancelPairing()"
+      />
+
+      <LongOperation
+        v-if="bt.scanning && !bt.scanResults.length"
+        :label="t('addSpeaker.looking')"
+        :started-at="bt.scanStartedAt"
+        cancellable
+        :cancelling="bt.cancelling"
+        @cancel="bt.cancelScan()"
+      />
 
       <ul v-else-if="bt.scanResults.length" class="divide-y divide-border rounded-(--radius-card) border border-border">
         <li v-for="r in bt.scanResults" :key="r.mac" class="flex items-center gap-3 px-3 py-2.5">
@@ -242,7 +258,16 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
       <PairedDevicesList />
     </div>
 
-    <p v-if="error" class="mt-3 text-sm text-error" role="alert">{{ error }}</p>
+    <LongOperation
+      v-if="error"
+      class="mt-3"
+      status="error"
+      :label="error"
+      :error="error"
+      :next-step="step === 'find' ? t('addSpeaker.errorNext') : null"
+      :retryable="step === 'find' && scanned && adapter !== ''"
+      @retry="scan"
+    />
 
     <template #footer>
       <template v-if="mode === 'audio'">

@@ -11,7 +11,7 @@ import type { SyncSound } from '@/api/types'
 import { speakerName } from '@/sync/names'
 import { useCountdown } from '@/sync/countdown'
 import { formatClock } from '@/sync/format'
-import StepStopGroup from './StepStopGroup.vue'
+import { stopMusicAndStartClicks } from '@/sync/startClicks'
 import StepClicker from './StepClicker.vue'
 import StepVolume from './StepVolume.vue'
 
@@ -109,15 +109,10 @@ function reset() {
 
 /* -- getting the group ready: stop it, start the clicker, set the volumes ----------------- */
 
-type Prep = 'stop' | 'clicker' | 'volume' | 'ready'
-/** Where the preparation stands; a page opened on a session whose clicker plays goes straight to tuning. */
-const PREP_STEPS = ['stop', 'clicker', 'volume'] as const
+type Prep = 'clicker' | 'volume' | 'ready'
+const PREP_STEPS = ['clicker', 'volume'] as const
 /** Where the preparation stands; a session whose clicks play already goes straight to tuning. */
-const prep = ref<Prep>(
-  props.skipPrep || session.value?.clicker_playing ? 'ready' : session.value && session.value.group_state !== 'playing' ? 'clicker' : 'stop',
-)
-/** The stop step was skipped because nothing played: say so on the clicks step. */
-const autoNote = ref(prep.value === 'clicker' ? t('sync.prep.stop.notPlaying') : '')
+const prep = ref<Prep>(props.skipPrep || session.value?.clicker_playing ? 'ready' : 'clicker')
 const prepBusy = ref(false)
 const prepError = ref('')
 
@@ -144,7 +139,6 @@ async function prepCall(call: () => Promise<unknown>) {
 
 function toPrep(next: Prep) {
   prepError.value = ''
-  autoNote.value = ''
   prep.value = next
 }
 
@@ -276,28 +270,16 @@ const listenStatus = computed(() => {
       <h2 class="mb-3 text-sm font-medium text-text-secondary">
         {{ t('sync.manual.prepOf', { n: (PREP_STEPS as readonly string[]).indexOf(prep) + 1, total: PREP_STEPS.length, name: t(`sync.wizard.steps.${prep}`) }) }}
       </h2>
-      <StepStopGroup
-        v-if="prep === 'stop'"
-        :group-state="session?.group_state ?? null"
-        :clicker-playing="!!session?.clicker_playing"
-        :busy="prepBusy"
-        :error="prepError"
-        @stop="prepCall(() => sync.signal('stop'))"
-        @next="toPrep('clicker')"
-        cancel-label="skip"
-        @cancel="toPrep('ready')"
-      />
       <StepClicker
-        v-else-if="prep === 'clicker'"
+        v-if="prep === 'clicker'"
+        :group-state="session?.group_state ?? null"
         :clicker-playing="!!session?.clicker_playing"
         :started="(session?.clicker_starts ?? 0) > 0"
         :left-s="leftS"
-        :note="autoNote"
         :busy="prepBusy"
         :error="prepError"
-        @start="prepCall(() => sync.signal('start'))"
+        @start="prepCall(() => stopMusicAndStartClicks(sync, { state: session?.group_state ?? null, clickerPlaying: !!session?.clicker_playing }))"
         @next="toPrep('volume')"
-        @back="toPrep('stop')"
         cancel-label="skip"
         @cancel="toPrep('ready')"
       />

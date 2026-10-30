@@ -6,6 +6,7 @@ import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected } from '@/utils/deviceBackend'
 import { speakerName } from '@/utils/speakerName'
+import { actionFailure, type ActionKind } from '@/utils/actionFailure'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
 import ArtworkThumb from '@/components/playback/ArtworkThumb.vue'
@@ -14,8 +15,10 @@ import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
 import LinkChip from './chips/LinkChip.vue'
 import ServerChip from './chips/ServerChip.vue'
+import StatusState from '@/components/StatusState.vue'
 import BlockedHints from './chips/BlockedHints.vue'
 import { SbBadge } from '@/kit'
+import { technicalDetails } from '@/composables/useTechnicalDetails'
 import { transferChip } from '@/utils/deviceChips'
 import { apiUrl } from '@/api/client'
 import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1 } from 'lucide-vue-next'
@@ -71,20 +74,20 @@ const supports = (command: string) => {
   return list.length === 0 || list.includes(command)
 }
 
-async function run(action: () => Promise<unknown>, failure: string) {
+async function run(action: () => Promise<unknown>, kind: ActionKind) {
   try {
     await action()
-  } catch {
-    notifications.error(t(failure))
+  } catch (e) {
+    notifications.error(actionFailure(t, kind, speakerName(props.device.name), e))
   }
 }
 
 function onVolumeUpdate(level: number) {
-  void run(() => deviceStore.setVolume(props.device.id, level), 'device.actions.enableFailed')
+  void run(() => deviceStore.setVolume(props.device.id, level), 'volume')
 }
 
 function onMuteUpdate(muted: boolean) {
-  void run(() => deviceStore.setMute(props.device.id, muted), 'device.actions.enableFailed')
+  void run(() => deviceStore.setMute(props.device.id, muted), 'mute')
 }
 
 /* Shuffle, repeat and seek: one command at a time, none while Music Assistant confirms one. */
@@ -141,11 +144,13 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   <!-- Where it plays through, its group, sync and signal -->
   <div class="relative z-10 flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
     <LinkChip :device="device" />
+    <StatusState kind="bluetooth" :status="device.links.bluetooth" only-if-not-ok />
+    <StatusState kind="audio_link" :status="device.links.audio_link" only-if-not-ok />
     <GroupChip :device="device" />
     <ServerChip :device="device" />
     <SyncChip :device="device" />
     <SignalChip :device="device" />
-    <span v-if="transfer" data-chip="transfer" class="inline-flex" :title="transferTitle">
+    <span v-if="technicalDetails && transfer" data-chip="transfer" class="inline-flex" :title="transferTitle">
       <SbBadge :tone="transfer.tone" size="sm">
         {{ transfer.ready ? t('device.chips.transfer.ready') : t('device.chips.transfer.notReady') }}
       </SbBadge>

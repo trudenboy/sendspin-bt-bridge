@@ -6,7 +6,7 @@ import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import { useSyncStore } from '@/stores/sync'
 import { ApiError } from '@/api/client'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({
   createSession: vi.fn(), getSession: vi.fn(), sessionSignal: vi.fn(), sessionSolo: vi.fn(), uploadRecording: vi.fn(),
@@ -69,7 +69,7 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => rec as never }, attachTo: document.body })
 
   async function toTune(w: ReturnType<typeof mount>) {
-    for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+    for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     await recordMember(w, 'a'); await recordMember(w, 'b')
     await w.get('[data-skip="c"]').trigger('click'); await flushPromises()
     await w.get('[data-to-tune]').trigger('click'); await flushPromises()
@@ -154,7 +154,7 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
 
   it('cancel with recordings asks first; "Keep going" keeps everything', async () => {
     const w = mountWizard()
-    for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+    for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     await recordMember(w, 'a')
     await w.get('[data-cancel]').trigger('click'); await flushPromises()
     expect(confirmState.options?.title).toBe('Stop measuring?')
@@ -224,7 +224,7 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', preSkip: ['c'], recorderFactory: () => rec as never } })
     await w.get('[data-next]').trigger('click'); await flushPromises()
     expect(api.sessionSkip).toHaveBeenCalledWith('s1', 'c')
-    for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+    for (let i = 0; i < 2; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     expect(w.get('[data-result="c"]').text()).toContain('Skipped')
   })
 })

@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import PhoneCapture from '@/components/sync/PhoneCapture.vue'
 import { useSyncStore } from '@/stores/sync'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({
   createSession: vi.fn(), getSession: vi.fn(), sessionSignal: vi.fn(), sessionSolo: vi.fn(), sessionSkip: vi.fn(),
@@ -94,10 +94,25 @@ describe('measuring with a phone', () => {
     const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', recorderFactory: () => ({ open }) as never } })
     await w.get('[data-capture="phone"]').setValue(true)
     expect(w.get('[data-next]').text()).toBe('Start')
-    for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+    for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     expect(open).not.toHaveBeenCalled()
     expect(api.createSession).toHaveBeenCalledWith({ group_id: 'g', mode: 'semi', point: 'device' })
     expect(w.find('[data-phone]').exists()).toBe(true)
     expect(w.find('[data-member-step]').exists()).toBe(false)
+  })
+})
+
+describe('phone sequence: Cancel', () => {
+  it('stays active while the sequence runs, Back does not', async () => {
+    useSyncStore().group = { id: 'g', name: 'G', session_id: null, members } as never
+    vi.mocked(api.captureLink).mockResolvedValue(LINK)
+    const running = session({ sequence: { members: ['a'], phase: 'solo', index: 0, member: 'a', error: null, error_member: null, solo_s: 7, gap_s: 5, lead_s: 3, uploaded: false } })
+    useSyncStore().session = running
+    const w = mount(PhoneCapture, { global: { plugins: [i18n] }, props: { session: running, members: members as never } })
+    await flushPromises()
+    expect(w.get('[data-cancel]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-back]').attributes('disabled')).toBeDefined()
+    await w.get('[data-cancel]').trigger('click')
+    expect(w.emitted('cancel')).toHaveLength(1)
   })
 })

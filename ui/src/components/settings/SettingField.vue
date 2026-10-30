@@ -17,9 +17,13 @@ const props = withDefaults(
     write?: (key: string, value: unknown) => void
     /** Choices for ``optionsFrom`` selects. */
     dynamicOptions?: readonly { value: string; label: string }[]
+    /** Auto-saved fields (the speaker panel): the last save of this field. */
+    saveState?: { kind: 'saved' | 'error'; message?: string; undoable?: boolean }
   }>(),
-  { i18nBase: 'settings.fields', read: undefined, write: undefined, dynamicOptions: undefined },
+  { i18nBase: 'settings.fields', read: undefined, write: undefined, dynamicOptions: undefined, saveState: undefined },
 )
+
+const emit = defineEmits<{ undo: [] }>()
 
 const { t, te } = useI18n()
 const configStore = useConfigStore()
@@ -31,8 +35,16 @@ const base = computed(() => `${props.i18nBase}.${props.field.key}`)
 const label = computed(() => t(`${base.value}.label`))
 // ``<key>.addonHelp`` is added under the Home Assistant add-on, whose own
 // options overwrite some bridge settings on every restart (LOG_LEVEL, #476).
+/** A toggle whose precondition is unmet (and that is not already on, so it can still be turned off). */
+const blocked = computed(
+  () =>
+    props.field.kind === 'toggle' &&
+    !!props.field.enabledWhen &&
+    value.value !== true &&
+    !props.field.enabledWhen((configStore.config ?? {}) as Record<string, unknown>),
+)
 const help = computed(() => {
-  const text = t(`${base.value}.help`)
+  const text = blocked.value ? `${t(`${base.value}.help`)} ${t(`${base.value}.disabledReason`)}` : t(`${base.value}.help`)
   const addonKey = `${base.value}.addonHelp`
   return authStore.haAddon && te(addonKey) ? `${text} ${t(addonKey)}` : text
 })
@@ -101,7 +113,7 @@ function onList(raw: string) {
 }
 
 const inputClass =
-  'h-9 w-full rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary focus:ring-2 focus:ring-primary/25'
+  'h-9 w-full rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary'
 </script>
 
 <template>
@@ -110,6 +122,7 @@ const inputClass =
       v-if="field.kind === 'toggle'"
       :id="id"
       :model-value="value === true"
+      :disabled="blocked"
       :aria-describedby="helpId"
       @update:model-value="set"
     />
@@ -168,5 +181,14 @@ const inputClass =
     />
 
     <p v-if="error" class="mt-1 text-xs text-error" role="alert">{{ error }}</p>
+    <p v-if="saveState?.kind === 'saved'" data-save-state="saved" role="status" class="mt-1 flex items-center justify-end gap-2 text-xs text-success">
+      {{ t('settings.autosave.saved') }}
+      <button v-if="saveState.undoable" type="button" data-save-undo class="cursor-pointer font-medium underline underline-offset-2" @click="emit('undo')">
+        {{ t('undo.label') }}
+      </button>
+    </p>
+    <p v-else-if="saveState?.kind === 'error'" data-save-state="error" role="alert" class="mt-1 text-xs text-error">
+      {{ t('settings.autosave.failed', { reason: saveState.message ?? '' }) }}
+    </p>
   </SettingsRow>
 </template>

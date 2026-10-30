@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import { useBridgeStore } from '@/stores/bridge'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import { makeStatus } from '../../fixtures/status'
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ query: {}, hash: '' }) }))

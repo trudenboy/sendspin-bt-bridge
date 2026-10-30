@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
-import en from '@/i18n/en.json'
+import en from '@/i18n/locales/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
 
@@ -23,9 +23,8 @@ vi.mock('@/stores/devices', async (importOriginal) => ({
   useDeviceStore: () => store,
 }))
 
-vi.mock('@/stores/notifications', () => ({
-  useNotificationStore: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
-}))
+const notes = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), undo: vi.fn() }))
+vi.mock('@/stores/notifications', () => ({ useNotificationStore: () => notes }))
 
 vi.mock('@/api/playback', () => ({ transport: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/api/devices', () => ({ claimAudio: vi.fn().mockResolvedValue(undefined) }))
@@ -109,7 +108,7 @@ describe('DeviceCard', () => {
 
     it('shows no Bluetooth details and no handed-over label', () => {
       const w = mountCard(output())
-      expect(w.text()).not.toContain('Handed over')
+      expect(w.text()).not.toContain('Released')
       expect(w.text()).not.toMatch(/dBm|Strong|Fair|Weak/)
     })
   })
@@ -153,15 +152,18 @@ describe('DeviceCard', () => {
     const items = await openMenu(mountCard(makeDevice({ enabled })))
     await items.find((b) => b.text().includes(item))!.trigger('click')
     expect(store.setEnabled).toHaveBeenCalledWith('dev-1', next)
+    // Disabling and enabling are both reversible: they run at once and offer Undo.
+    expect(notes.undo).toHaveBeenCalledTimes(1)
   })
 
   it('releases and reclaims through the device store', async () => {
     let items = await openMenu(mountCard())
-    await items.find((b) => b.text() === 'Hand over to other devices')!.trigger('click')
+    await items.find((b) => b.text() === 'Release speaker')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
+    expect(notes.undo).toHaveBeenCalledTimes(1)
 
     items = await openMenu(mountCard(makeDevice({ bluetooth: { management_enabled: false } })))
-    await items.find((b) => b.text() === 'Take back')!.trigger('click')
+    await items.find((b) => b.text() === 'Reclaim speaker')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', false)
   })
 
@@ -201,10 +203,9 @@ describe('DeviceCard', () => {
 
   it('tells an automatic release from a hand-over', () => {
     const auto = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()
-    expect(auto).toContain('Auto-released')
-    expect(auto).not.toContain('Handed over')
+    expect(auto).toContain('Released automatically')
     const user = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } })).text()
-    expect(user).toContain('Handed over')
-    expect(user).not.toContain('Auto-released')
+    expect(user).toContain('Released')
+    expect(user).not.toContain('Released automatically')
   })
 })

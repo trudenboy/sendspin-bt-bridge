@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { confirmDialog } from '@/composables/useConfirm'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationStore } from '@/stores/notifications'
@@ -41,11 +41,10 @@ async function create() {
 }
 
 async function revoke(id: string) {
-  const ok = await confirmDialog({
+  const ok = await confirmAction('token.revoke', {
     title: t('settings.parts.tokens.revoke'),
     message: t('settings.parts.tokens.revokeConfirm'),
     confirmLabel: t('settings.parts.tokens.revoke'),
-    danger: true,
   })
   if (!ok) return
   try {
@@ -105,7 +104,7 @@ function when(value?: string | null) {
         maxlength="64"
         :placeholder="t('settings.parts.tokens.newLabel')"
         :aria-label="t('settings.parts.tokens.newLabel')"
-        class="h-9 min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+        class="h-9 min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary focus:border-primary"
       />
       <SbButton type="submit" variant="outline" :loading="busy">{{ t('settings.parts.tokens.create') }}</SbButton>
     </form>

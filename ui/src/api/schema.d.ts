@@ -403,7 +403,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start or stop the metronome */
+        /**
+         * Start or stop the metronome
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         post: operations["metronome_api_v1_calibration_metronome_post"];
         delete?: never;
         options?: never;
@@ -437,7 +440,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a microphone session */
+        /**
+         * Start a microphone session
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         post: operations["create_session_api_v1_calibration_sessions_post"];
         delete?: never;
         options?: never;
@@ -455,7 +461,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** End a session */
+        /**
+         * End a session
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         delete: operations["delete_session_api_v1_calibration_sessions__session_id__delete"];
         options?: never;
         head?: never;
@@ -471,7 +480,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload a recording */
+        /**
+         * Upload a recording
+         * @description Deprecated for the web UI: the per-speaker click track and microphone compare were removed in favour of group sync tuning (`/sync`). Kept for other clients such as the Home Assistant component.
+         */
         post: operations["upload_api_v1_calibration_sessions__session_id__audio_post"];
         delete?: never;
         options?: never;
@@ -2919,6 +2931,8 @@ export interface components {
             mock_runtime: {
                 [key: string]: unknown;
             } | null;
+            /** @description The bridge's sign-in to the Music Assistant API: signed_in, signed_out or not_configured. */
+            music_assistant_account: components["schemas"]["LinkStatus"];
             /**
              * Name
              * @description The bridge's name (BRIDGE_NAME, or the host name).
@@ -2963,6 +2977,7 @@ export interface components {
              * @default
              */
             uptime: string;
+            verdict: components["schemas"]["BridgeVerdict"];
             /** Version */
             version: string;
         };
@@ -3304,6 +3319,12 @@ export interface components {
              */
             SESSION_TIMEOUT_HOURS?: number | null;
             /**
+             * Show Technical Details
+             * @description Web UI default for showing technical chips and rows (signal Δ dB, re-anchor counts, Playout, server ID, sync diagnostics, advanced settings). Each browser can override it from the preferences menu. Off for a new install, on for an install that already had speakers when this setting first appeared.
+             * @default false
+             */
+            SHOW_TECHNICAL_DETAILS?: boolean | null;
+            /**
              * Smooth Restart
              * @description Enable smooth daemon restart (reconnect IPC instead of full restart).
              * @default true
@@ -3362,6 +3383,22 @@ export interface components {
             devices: components["schemas"]["Device"][];
             /** Groups */
             groups: components["schemas"]["Group"][];
+        };
+        /**
+         * BridgeVerdict
+         * @description The bridge's one-word health, from the same issue list as the guidance banner.
+         */
+        BridgeVerdict: {
+            /**
+             * Count
+             * @description Issues at warning or error.
+             */
+            count: number;
+            /**
+             * Level
+             * @description ok, warning or error: the worst severity in the issue list.
+             */
+            level: string;
         };
         /** BugReportIn */
         BugReportIn: {
@@ -3537,6 +3574,8 @@ export interface components {
             last_error: string | null;
             /** Last Error At */
             last_error_at: string | null;
+            /** @description The speaker's Audio link and Bluetooth connection, named once. */
+            links: components["schemas"]["DeviceLinks"];
             music_assistant: components["schemas"]["DeviceMusicAssistant"];
             /** Name */
             name: string | null;
@@ -3768,8 +3807,21 @@ export interface components {
         };
         /** DeviceHealth */
         DeviceHealth: {
+            /**
+             * Code
+             * @description Stable id of the summary's wording; the UI translates it.
+             * @default
+             */
+            code: string;
             /** Last Event At */
             last_event_at: string | null;
+            /**
+             * Params
+             * @description Values the summary's sentence interpolates.
+             */
+            params: {
+                [key: string]: unknown;
+            };
             /** Reasons */
             reasons: string[];
             /**
@@ -3787,6 +3839,16 @@ export interface components {
              * @default
              */
             summary: string;
+        };
+        /**
+         * DeviceLinks
+         * @description A speaker's own states; the account is bridge-wide (``Bridge.music_assistant_account``).
+         */
+        DeviceLinks: {
+            /** @description Sendspin stream with Music Assistant: streaming, connected, foreign, disconnected, unavailable. */
+            audio_link: components["schemas"]["LinkStatus"];
+            /** @description connected, connecting, disconnected, standby, released, disabled, not_paired; null for a local output. */
+            bluetooth: components["schemas"]["LinkStatus"] | null;
         };
         /** DeviceMusicAssistant */
         DeviceMusicAssistant: {
@@ -4357,6 +4419,27 @@ export interface components {
             source: string;
             /** Suggested Static Delay Ms */
             suggested_static_delay_ms: number | null;
+        };
+        /**
+         * LinkStatus
+         * @description One of the three named states (Audio link, Music Assistant account, Bluetooth connection).
+         */
+        LinkStatus: {
+            /**
+             * Reason
+             * @description Stable code of why, when the state has a reason.
+             */
+            reason: string | null;
+            /**
+             * State
+             * @description Stable state code; the vocabulary differs per state kind.
+             */
+            state: string;
+            /**
+             * Tone
+             * @description success, warning, error or neutral.
+             */
+            tone: string;
         };
         /** LogLevel */
         LogLevel: {

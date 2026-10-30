@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useKitLabels } from './labels'
 import { computed, watch, onBeforeUnmount, nextTick, ref, useId } from 'vue'
+
+const labels = useKitLabels()
 
 const props = withDefaults(
   defineProps<{
@@ -150,8 +153,8 @@ onBeforeUnmount(() => {
             <button
               v-if="closable"
               type="button"
-              class="ml-4 cursor-pointer text-text-secondary transition-colors hover:text-text-primary"
-              aria-label="Close drawer"
+              class="-my-2 -mr-2 ml-4 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:text-text-primary"
+              :aria-label="labels.closeDrawer"
               data-testid="drawer-close-btn"
               @click="close"
             >
