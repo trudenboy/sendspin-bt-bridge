@@ -360,6 +360,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bridge/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start or stop the Bluetooth source now
+         * @description Start or stop the Sendspin source without restarting the bridge (#563).
+         */
+        post: operations["set_source_enabled_api_v1_bridge_source_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/pairing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a Bluetooth pairing window for a phone
+         * @description Make the adapters discoverable and pairable for a couple of minutes, with a no-PIN agent.
+         */
+        post: operations["open_source_pairing_api_v1_bridge_source_pairing_post"];
+        /** Close the phone pairing window */
+        delete: operations["close_source_pairing_api_v1_bridge_source_pairing_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Play the Bluetooth source on a speaker, or stop
+         * @description Point a speaker's player at the source, or send it back to Music Assistant (#563).
+         */
+        post: operations["set_source_player_api_v1_bridge_source_players_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bridge/startup": {
         parameters: {
             query?: never;
@@ -5268,6 +5329,11 @@ export interface components {
          */
         SendspinSourceStatus: {
             /**
+             * Attached Devices
+             * @description Speakers playing the source instead of Music Assistant.
+             */
+            attached_devices: string[];
+            /**
              * Enabled
              * @description The source server is running.
              * @default false
@@ -5278,6 +5344,17 @@ export interface components {
              * @description Why the source is off: port_in_use.
              */
             error: string | null;
+            /**
+             * Pairing Adapters
+             * @description Adapters the pairing window opened.
+             */
+            pairing_adapters: string[];
+            /**
+             * Pairing Seconds Left
+             * @description Seconds the phone-pairing window stays open (0: closed).
+             * @default 0
+             */
+            pairing_seconds_left: number;
             /**
              * Phone
              * @description The capture node of the phone that is playing, if any.
@@ -5491,6 +5568,26 @@ export interface components {
              * @enum {string}
              */
             sound: "clicks" | "accent" | "noise";
+        };
+        /** SourceEnabledIn */
+        SourceEnabledIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** SourcePairingIn */
+        SourcePairingIn: {
+            /**
+             * Seconds
+             * @default 120
+             */
+            seconds?: number;
+        };
+        /** SourcePlayerIn */
+        SourcePlayerIn: {
+            /** Device Id */
+            device_id: string;
+            /** Enabled */
+            enabled: boolean;
         };
         /** StartupProgress */
         StartupProgress: {
@@ -6758,6 +6855,182 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_source_enabled_api_v1_bridge_source_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceEnabledIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    open_source_pairing_api_v1_bridge_source_pairing_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SourcePairingIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    close_source_pairing_api_v1_bridge_source_pairing_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_source_player_api_v1_bridge_source_players_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourcePlayerIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

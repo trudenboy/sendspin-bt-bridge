@@ -721,6 +721,8 @@ class SendspinClient:
         static_delay_codec: str | None = None,
     ):
         self.player_name = player_name
+        # Set while this speaker plays the bridge's own Sendspin source (#563) instead of MA.
+        self.source_stream_url: str | None = None
         # The BlueZ transport last described in the log (one line per connect).
         self._described_transport_path: str | None = None
         # The speaker's reported A2DP Delay as last written to the log, so a
@@ -2125,6 +2127,15 @@ class SendspinClient:
                 self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 
+    async def use_source_stream(self, url: str | None) -> None:
+        """Play the bridge's Bluetooth source (a URL) or go back to Music Assistant (#563)."""
+        if url == self.source_stream_url:
+            return
+        self.source_stream_url = url
+        logger.info("[%s] %s", self.player_name, "playing the Bluetooth source" if url else "back to Music Assistant")
+        await self.stop_sendspin()
+        await self.start_sendspin()
+
     def _config_entry(self, config: dict) -> dict:
         """This player's entry in *config*'s ``players`` (empty when it has none)."""
         entry = find_player_by_id(config, self.config_id) if self.config_id else None
@@ -2267,7 +2278,7 @@ class SendspinClient:
                         probed,
                     )
                     effective_port = probed
-                server_url = f"ws://{self.server_host}:{effective_port}/sendspin"
+                server_url = self.source_stream_url or f"ws://{self.server_host}:{effective_port}/sendspin"
                 logger.info(
                     "Starting Sendspin player '%s' connecting to %s (port %s)",
                     self.player_name,

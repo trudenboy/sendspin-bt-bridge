@@ -18,6 +18,19 @@ public = APIRouter(tags=["bridge"])
 router = APIRouter(tags=["bridge"], dependencies=[Depends(require_principal)], responses=PROBLEM_RESPONSES)
 
 
+class SourcePairingIn(BaseModel):
+    seconds: int = 120
+
+
+class SourceEnabledIn(BaseModel):
+    enabled: bool
+
+
+class SourcePlayerIn(BaseModel):
+    device_id: str
+    enabled: bool
+
+
 class Health(BaseModel):
     ok: bool = True
 
@@ -81,6 +94,48 @@ def restart_bridge() -> Response:
 
     restart()
     return Response(status_code=202)
+
+
+@router.post("/bridge/source", summary="Start or stop the Bluetooth source now")
+async def set_source_enabled(body: SourceEnabledIn) -> dict[str, Any]:
+    """Start or stop the Sendspin source without restarting the bridge (#563)."""
+    from sendspin_bridge.bridge.orchestrator import _resolve_config_dir
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.services.source import manager as source_manager
+
+    if not body.enabled:
+        return await source_manager.stop()
+    return await source_manager.start(load_config(), _resolve_config_dir())
+
+
+@router.post("/bridge/source/players", summary="Play the Bluetooth source on a speaker, or stop")
+async def set_source_player(body: SourcePlayerIn) -> dict[str, Any]:
+    """Point a speaker's player at the source, or send it back to Music Assistant (#563)."""
+    from sendspin_bridge.application.status import find_client
+    from sendspin_bridge.config import load_config
+
+    config = load_config()
+    port = config.get("SENDSPIN_SOURCE_PORT") or 8940
+    client = find_client(body.device_id)
+    url = f"ws://127.0.0.1:{int(port)}/sendspin" if body.enabled else None
+    await client.use_source_stream(url)
+    return {"device_id": body.device_id, "playing_source": bool(url)}
+
+
+@router.post("/bridge/source/pairing", summary="Open a Bluetooth pairing window for a phone")
+async def open_source_pairing(body: SourcePairingIn | None = None) -> dict[str, Any]:
+    """Make the adapters discoverable and pairable for a couple of minutes, with a no-PIN agent."""
+    from sendspin_bridge.services.source.pairing import open_window
+
+    return await open_window(body.seconds if body is not None else 120)
+
+
+@router.delete("/bridge/source/pairing", status_code=204, summary="Close the phone pairing window")
+async def close_source_pairing() -> Response:
+    from sendspin_bridge.services.source.pairing import close_window
+
+    await close_window()
+    return Response(status_code=204)
 
 
 @router.get("/devices", response_model=list[Device], summary="Bridge speakers")

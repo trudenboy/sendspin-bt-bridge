@@ -1120,7 +1120,14 @@
         "off": "Off",
         "waiting": "Waiting for a phone on port {port}: pair one and play",
         "streaming": "Phone {phone} is playing to port {port}",
-        "error": "The port is in use — choose another one"
+        "error": "The port is in use — choose another one",
+        "pair": "Pair a phone",
+        "cancelPairing": "Stop pairing",
+        "pairing": "Open for pairing: {time} left — pair the phone now",
+        "startNow": "Start now",
+        "stop": "Stop",
+        "attach": "Play the phone here",
+        "detach": "Back to Music Assistant"
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",

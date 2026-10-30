@@ -127,9 +127,6 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
         # Decides at start which monitor path owns the HCI socket (R-17).
         "EXPERIMENTAL_AIR_SENSOR",
-        # The source server starts with the bridge (#563): no live start/stop yet.
-        "SENDSPIN_SOURCE",
-        "SENDSPIN_SOURCE_PORT",
     }
 )
 

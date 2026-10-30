@@ -7199,6 +7199,14 @@
       "SendspinSourceStatus": {
         "description": "A phone streaming into the bridge, offered to Sendspin players as a live source.",
         "properties": {
+          "attached_devices": {
+            "description": "Speakers playing the source instead of Music Assistant.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Attached Devices",
+            "type": "array"
+          },
           "enabled": {
             "default": false,
             "description": "The source server is running.",
@@ -7216,6 +7224,20 @@
             ],
             "description": "Why the source is off: port_in_use.",
             "title": "Error"
+          },
+          "pairing_adapters": {
+            "description": "Adapters the pairing window opened.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Pairing Adapters",
+            "type": "array"
+          },
+          "pairing_seconds_left": {
+            "default": 0,
+            "description": "Seconds the phone-pairing window stays open (0: closed).",
+            "title": "Pairing Seconds Left",
+            "type": "integer"
           },
           "phone": {
             "anyOf": [
@@ -7260,7 +7282,10 @@
           "phone",
           "players",
           "streaming",
-          "error"
+          "error",
+          "pairing_seconds_left",
+          "pairing_adapters",
+          "attached_devices"
         ],
         "title": "SendspinSourceStatus",
         "type": "object"
@@ -7770,6 +7795,48 @@
           "sound"
         ],
         "title": "SoundIn",
+        "type": "object"
+      },
+      "SourceEnabledIn": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SourceEnabledIn",
+        "type": "object"
+      },
+      "SourcePairingIn": {
+        "properties": {
+          "seconds": {
+            "default": 120,
+            "title": "Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "SourcePairingIn",
+        "type": "object"
+      },
+      "SourcePlayerIn": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "device_id",
+          "enabled"
+        ],
+        "title": "SourcePlayerIn",
         "type": "object"
       },
       "StartupProgress": {
@@ -9886,6 +9953,215 @@
           }
         },
         "summary": "Runtime mode and mocked layers",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source": {
+      "post": {
+        "description": "Start or stop the Sendspin source without restarting the bridge (#563).",
+        "operationId": "set_source_enabled_api_v1_bridge_source_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceEnabledIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Source Enabled Api V1 Bridge Source Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Start or stop the Bluetooth source now",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/pairing": {
+      "delete": {
+        "operationId": "close_source_pairing_api_v1_bridge_source_pairing_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Close the phone pairing window",
+        "tags": [
+          "bridge"
+        ]
+      },
+      "post": {
+        "description": "Make the adapters discoverable and pairable for a couple of minutes, with a no-PIN agent.",
+        "operationId": "open_source_pairing_api_v1_bridge_source_pairing_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SourcePairingIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Open Source Pairing Api V1 Bridge Source Pairing Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Open a Bluetooth pairing window for a phone",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/players": {
+      "post": {
+        "description": "Point a speaker's player at the source, or send it back to Music Assistant (#563).",
+        "operationId": "set_source_player_api_v1_bridge_source_players_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcePlayerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Source Player Api V1 Bridge Source Players Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Play the Bluetooth source on a speaker, or stop",
         "tags": [
           "bridge"
         ]

@@ -199,6 +199,11 @@ def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
     state = source_status()
     if state.get("port") is None:
         state["port"] = config.get("SENDSPIN_SOURCE_PORT")
+    state["attached_devices"] = [
+        str(getattr(client, "player_id", ""))
+        for client in get_device_registry_snapshot().active_clients
+        if getattr(client, "source_stream_url", None)
+    ]
     return SendspinSourceStatus(**state)
 
 

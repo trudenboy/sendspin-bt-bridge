@@ -572,35 +572,20 @@ class BridgeOrchestrator:
         enabled = env in ("1", "true", "yes") if env else bool(config.get("SENDSPIN_SOURCE", False))
         if not enabled:
             return
-        from dataclasses import replace
+        from sendspin_bridge.services.source import manager as source_manager
 
-        from sendspin_bridge.services.source.bt_source import BtSendspinSource, SourceConfig
-
-        config_dir = _resolve_config_dir()
-        source_config = SourceConfig.from_env()
-        configured_port = os.environ.get("SENDSPIN_SOURCE_PORT") or config.get("SENDSPIN_SOURCE_PORT")
-        if configured_port:
-            source_config = replace(source_config, port=int(configured_port))
-        self._bt_source = BtSendspinSource(
-            source_config,
-            identity_path=config_dir / "source_identity.key",
-            pairing_path=config_dir / "source_pairing.json",
-        )
         try:
-            await self._bt_source.start()
+            await source_manager.start(config, _resolve_config_dir())
         except Exception:
             logger.exception("The Sendspin source could not start")
-            self._bt_source = None
 
     async def _stop_bt_source(self) -> None:
-        source = getattr(self, "_bt_source", None)
-        if source is None:
-            return
+        from sendspin_bridge.services.source import manager as source_manager
+
         try:
-            await source.stop()
+            await source_manager.stop()
         except Exception:
             logger.warning("Stopping the Sendspin source failed", exc_info=True)
-        self._bt_source = None
 
     async def graceful_shutdown(
         self,

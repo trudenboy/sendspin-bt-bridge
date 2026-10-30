@@ -46,7 +46,11 @@ _STATE: dict[str, Any] = {
 
 def source_status() -> dict[str, Any]:
     """The source's state for the bridge status: enabled, port, phone node, players, streaming."""
-    return dict(_STATE)
+    from sendspin_bridge.services.source.pairing import pairing_status
+
+    state = dict(_STATE)
+    state.update(pairing_status())
+    return state
 
 
 def _set_state(**changes: Any) -> None:

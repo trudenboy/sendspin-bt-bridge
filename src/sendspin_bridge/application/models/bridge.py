@@ -87,6 +87,11 @@ class SendspinSourceStatus(ResponseModel):
     players: int = Field(default=0, description="Sendspin players connected to the source.")
     streaming: bool = Field(default=False, description="A player is connected and the phone's audio is being pushed.")
     error: str | None = Field(default=None, description="Why the source is off: port_in_use.")
+    pairing_seconds_left: int = Field(default=0, description="Seconds the phone-pairing window stays open (0: closed).")
+    pairing_adapters: list[str] = Field(default_factory=list, description="Adapters the pairing window opened.")
+    attached_devices: list[str] = Field(
+        default_factory=list, description="Speakers playing the source instead of Music Assistant."
+    )
 
 
 class Bridge(ResponseModel):
