@@ -89,7 +89,11 @@ describe('AddSpeakerDialog', () => {
     await roomInput!.setValue('Kitchen')
     await button(w, 'Add to bridge').trigger('click')
     await flushPromises()
-    expect(bt.addToBridge).toHaveBeenCalledWith('AA:BB', 'Kitchen Boom', 'hci0', { room: 'Kitchen' })
+    // The pairing-time HFP choice is saved with the speaker (#476 follow-up).
+    expect(bt.addToBridge).toHaveBeenCalledWith('AA:BB', 'Kitchen Boom', 'hci0', {
+      room: 'Kitchen',
+      allowHfpProfile: false,
+    })
     expect(w.text()).toContain('Kitchen Boom is on the bridge.')
   })
 

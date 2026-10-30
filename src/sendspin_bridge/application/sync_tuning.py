@@ -330,7 +330,9 @@ def _keep_awake_sinks(group_id: str) -> list[str]:
             )
             continue
         if client is None:
-            logger.debug("keep-awake: member %s (bridge %s) has the flag but no running client", ma_player_id, client_id)
+            logger.debug(
+                "keep-awake: member %s (bridge %s) has the flag but no running client", ma_player_id, client_id
+            )
             continue
         manager = getattr(client, "bt_manager", None)
         status = getattr(client, "status", {}) or {}
