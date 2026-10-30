@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import socket
 import time
@@ -712,6 +713,7 @@ class BridgeDaemon:
         known = {f for f in PlayoutSettings.__dataclass_fields__ if f != "mode"}
         extra = {k: v for k, v in (self._args.playout or {}).items() if k in known}
         mode: Literal["measure", "loop"] = "loop" if self._args.playout_mode == "loop" else "measure"
+        extra.setdefault("rate", os.environ.get("PLAYOUT_RATE", "").strip().lower() in ("1", "true", "yes"))
         return PlayoutSettings(mode=mode, **extra)
 
     def _new_playout_player(self, sink_name: str | None) -> PlayoutPlayer:
@@ -1766,7 +1768,7 @@ class BridgeDaemon:
             logger.info("playout output pre-opened in %.0f ms (no stream yet)", opened_ms)
         else:
             self._start_cost = {"output_open_ms": opened_ms}
-        if self._opening_from_start:
+        if self._opening_from_start and self._start_cost is not None:
             self._start_cost["loop_block_ms"] = self._loop_block_ms
         self._schedule_start_timing_line()
         try:

@@ -34,6 +34,12 @@ MAX_STEADY_JUMP_US = 50_000.0
 JUMP_MIN_INTERVAL_S = 10.0
 HOLDOFF_S = 1.0
 _MAD_SCALE = 1.4826
+# Stage B2 (#546): inside the jump threshold the error is removed by playing a hair fast or slow
+# instead of by a jump that clicks. 1 ms is corrected in ~30 s (333 ppm at 10 ms), which is 0.6
+# cents of pitch at most; an error under the dead band is left alone (the sink clock jitters more).
+RATE_GAIN_PER_US = 1.0 / 30e6
+RATE_MAX = 4e-4
+RATE_DEADBAND_US = 500.0
 
 Mode = Literal["measure", "loop"]
 
@@ -59,7 +65,10 @@ class LoopController:
         self._run: deque[tuple[float, float]] = deque()  # (t_s, raw e_w) of the last JUMP_PERSIST_S
         self._last_event_s: float | None = None
         self._holdoff_until_s = 0.0
-        self._quiet_wait = False  # waiting for the interval after the last event is expected
+        self._quiet_wait = False
+        # The error a placement left behind: the rate correction works around it, so a delay change
+        # or an underrun baseline is kept (the contract tests pin that) and only drift is removed.
+        self._rate_ref_us = 0.0  # waiting for the interval after the last event is expected
 
     @property
     def rate_estimate(self) -> float:
@@ -81,6 +90,7 @@ class LoopController:
         self._outliers = 0
         self._run.clear()
         self._last_event_s = t_s
+        self._rate_ref_us = residual_us
         self._holdoff_until_s = t_s + HOLDOFF_S
         self._quiet_wait = quiet_wait
 
@@ -134,4 +144,17 @@ class LoopController:
         accepted = self._gate(e_w_us)
         if accepted:
             self._ema = e_w_us if self._ema is None else self._ema + self._alpha * (e_w_us - self._ema)
-        return Decision(0.0, None, self._ema, not accepted, False, degraded)
+        return Decision(self._rate_for(self._ema), None, self._ema, not accepted, False, degraded)
+
+    def _rate_for(self, e_us: float | None) -> float:
+        """The rate correction for the error *around the error a placement left*.
+
+        Zero in measure mode, inside the dead band, and while a jump is the answer (the caller
+        returns before asking then).
+        """
+        if self._mode != "loop" or e_us is None:
+            return 0.0
+        drift = e_us - self._rate_ref_us
+        if abs(drift) < RATE_DEADBAND_US:
+            return 0.0
+        return max(-RATE_MAX, min(RATE_MAX, RATE_GAIN_PER_US * drift))

@@ -68,3 +68,28 @@ def test_steady_jump_over_the_bound_is_clamped():
     assert jumps[0].clamped_from_us == pytest.approx(-80_000.0) and not jumps[0].degraded
     ok = run(LoopController(mode="measure"), [0.0] * 20 + [45_000.0] * 60)
     assert [(x.jump_us, x.clamped_from_us) for x in ok if x.jump_us is not None] == [(pytest.approx(45_000.0), None)]
+
+
+def test_loop_mode_asks_for_a_slow_rate_correction_instead_of_a_jump():
+    """Stage B2 (#546): inside the jump threshold the error is removed by speed, not a jump."""
+    ctrl = LoopController(mode="loop")
+    d = run(ctrl, [0.0] * 20 + [4_000.0] * 30)  # 4 ms late, never beyond the 10 ms jump threshold
+    assert all(x.jump_us is None for x in d)
+    assert d[-1].rate > 0  # positive drops frames: catch up
+    assert ctrl.rate_estimate == 0.0  # the estimate is Stage 3; the decision carries the rate
+
+
+def test_the_rate_correction_works_around_the_error_a_placement_left():
+    ctrl = LoopController(mode="loop")
+    run(ctrl, [7_000.0] * 10)
+    ctrl.placed(1.0, residual_us=7_000.0)  # a delay jump kept a 7 ms residual
+    d = ctrl.update(1.1, 7_000.0)
+    assert d.rate == 0.0  # the residual is the reference, not drift
+    d = ctrl.update(1.2, 15_000.0)  # drift on top of it, past the 0.5 ms dead band
+    assert d.rate > 0
+
+
+def test_measure_mode_never_asks_for_a_rate():
+    ctrl = LoopController(mode="measure")
+    d = run(ctrl, [0.0] * 20 + [4_000.0] * 30)
+    assert all(x.rate == 0.0 for x in d)

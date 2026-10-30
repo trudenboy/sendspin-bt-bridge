@@ -142,6 +142,9 @@ class PlayoutSettings:
     warmup_s: float = 60.0
     trim_us: int = 0
     keep_alive_method: str = "silence"
+    # Stage B2 (#546): remove small errors by playing a hair fast or slow instead of jumping.
+    # Off by default: the scheduler and the loop's contracts are validated separately first.
+    rate: bool = False
 
 
 class PlayoutEngine:
@@ -215,6 +218,9 @@ class PlayoutEngine:
         self._history: EHistory | None = None
         self._b_dom: float | None = None
         self._air_off_reason: str | None = None
+        # Stage B2: the controller's current rate correction (s/s, + drops frames), applied by the
+        # scheduler at the write head on every block.
+        self._rate = 0.0
         if settings.mode == "loop" and air_feed is not None:
             self._bias = AirBias(air_feed)
             self._history = EHistory()
@@ -337,11 +343,13 @@ class PlayoutEngine:
 
         total = (jump or 0.0) + (air.jump_us if air is not None else 0.0)
         block = self._sched.render(
-            audible_us=target, now_us=now_us, rate=0.0, jump_us=total if (jump is not None or air is not None) else None
+            audible_us=target,
+            now_us=now_us,
+            rate=self._rate,
+            jump_us=total if (jump is not None or air is not None) else None,
         )
-        # R10: frames that belong to a jump are not loop corrections. Every insert and drop the
-        # scheduler reports today is a jump's (rate corrections arrive in Stage 3).
-        jump_dropped, jump_inserted = block.dropped, block.inserted
+        # R10: frames that belong to a jump are not loop corrections; the rate correction's are
+        # (block.dropped/inserted count both, so the stats below use the rate subsets).
         if jump is not None:
             if jump_reason == "delay":
                 # The schedule stays continuous across a delay jump: the residual is kept.
@@ -365,7 +373,7 @@ class PlayoutEngine:
                 self._late_start_us = block.late_drop_us
             if self._reading is not None:  # before the first reading a placement is provisional
                 self._record_placement(reason, size_us, t_s, o)
-        self._stats.correction(t_s, block.inserted - jump_inserted, block.dropped - jump_dropped)
+        self._stats.correction(t_s, block.rate_inserted, block.rate_dropped)
         return block
 
     def arrival_wanted(self, now_us: float) -> bool:
@@ -534,6 +542,8 @@ class PlayoutEngine:
         if bias is not None and self._air(lambda: bias.frozen, False):
             return  # the readings broke; the controller waits for the bias to be seeded again
         d = self._controller.update(t_s, e_rel)
+        # Stage B2: a slow rate correction replaces the small steady jumps inside the threshold.
+        self._rate = d.rate if self._settings.rate else 0.0
         if d.rejected:
             self._stats.rejected()
         if d.degraded:
@@ -832,7 +842,8 @@ class PlayoutEngine:
             "state": self._state(),
             "error_ms": error_ms,
             **stats,
-            "correction_ppm": round(self._controller.rate_estimate * 1e6, 1),
+            # The rate actually applied (Stage B2), not the controller's estimate of it.
+            "correction_ppm": round(self._rate * 1e6, 1),
             "host_latency_ms": host_latency_ms,
             "pa_latency_ms": None,
             "clock_slew_ppm": None,

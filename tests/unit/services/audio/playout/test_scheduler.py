@@ -208,10 +208,28 @@ def test_fill_supplies_the_silence_signal():
     assert set(array.array("h", b.pcm)) == {1} and not b.program
 
 
-def test_rate_corrections_are_not_implemented_yet():
-    s, _ = sched()
-    with pytest.raises(NotImplementedError):
-        s.render(audible_us=0.0, now_us=0.0, rate=1e-4)
+def test_a_positive_rate_drops_frames_at_the_write_head():
+    """Stage B2 (#546): 400 ppm at 48 kHz drops one frame every ~52 ms, reported as a rate frame.
+
+    A frame is 20 us of audio: the discontinuity is inaudible, unlike a 20 ms jump.
+    """
+    s, m = sched()
+    s.submit(1_000_000, tone(4800))
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    # 10 ms blocks at 48 kHz: 400 ppm owes one frame every ~5 blocks.
+    blocks = [s.render(audible_us=1_000_000.0, now_us=0.0, rate=400e-6) for _ in range(8)]
+    rate_frames = sum(b.rate_dropped for b in blocks)
+    assert rate_frames >= 1
+    assert all(b.rate_inserted == 0 for b in blocks)
+
+
+def test_a_negative_rate_inserts_frames_and_reports_them_as_rate_frames():
+    s, _m = sched()
+    s.submit(1_000_000, tone(4800))
+    s.render(audible_us=1_000_000.0, now_us=0.0)
+    blocks = [s.render(audible_us=1_000_000.0, now_us=0.0, rate=-400e-6) for _ in range(8)]
+    assert sum(b.rate_inserted for b in blocks) >= 1
+    assert all(b.rate_dropped == 0 for b in blocks)
 
 
 def test_shift_later_places_the_frame_exactly():

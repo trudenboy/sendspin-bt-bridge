@@ -52,9 +52,12 @@ class Block:
     # Corrections and jumps only; placement silence and late drops are not counted here.
     dropped: int  # frames removed by corrections or a jump
     inserted: int  # frames added by corrections or a jump
+    # Of those, the frames the slow rate correction moved (Stage B2): the rest belong to a jump.
+    rate_dropped: int = 0
+    rate_inserted: int = 0
     # Audio dropped by a placement because it was already due: the head of the placed
     # chunk, plus any chunk dropped whole because all of it was due.
-    late_drop_us: float
+    late_drop_us: float = 0.0
 
 
 class _Chunk:
@@ -92,7 +95,11 @@ class PlayoutScheduler:
         # Mirror of the map's last segment, for linear continuation.
         self._seg: tuple[int, float, SegmentKind] | None = None
         self._placement: str | None = "start"  # pending placement reason
-        self._pending_silence: int | None = None  # silence frames a decided placement still owes
+        self._pending_silence: int | None = None
+        # Stage B2: the fractional frame debt of the rate correction, and how many of the owed
+        # inserted frames came from it (a jump's inserts are not corrections).
+        self._rate_acc = 0.0
+        self._rate_insert_owed = 0  # silence frames a decided placement still owes
         self._owed_insert = 0  # silence frames a negative jump still has to write
         self._expect_us: float | None = None  # play time of the frame after the last chunk
         self._decided = False  # the pending placement was already counted
@@ -188,8 +195,6 @@ class PlayoutScheduler:
         much ``fill``; the frames are reported in ``Block.dropped``/``inserted``. ``rate``
         corrections arrive in Stage 3."""
         del now_us  # used by the corrections of Stage 3
-        if rate != 0.0:
-            raise NotImplementedError("rate corrections arrive in Stage 3")
         fmt = self._require_format()
         fs = fmt.sample_rate
         fb = fmt.frame_bytes()
@@ -206,6 +211,21 @@ class PlayoutScheduler:
                 dropped = self._jump_drop(jump, fs)
             elif jump < 0:
                 self._owed_insert += -jump
+        # Stage B2: the slow rate correction moves whole frames at the write head (a frame is 20 us
+        # at 48 kHz: the discontinuity is inaudible, unlike a 20 ms jump).
+        rate_dropped = rate_inserted = 0
+        if rate:
+            self._rate_acc += rate * n_block
+            if self._rate_acc >= 1.0:
+                frames = int(self._rate_acc)
+                self._rate_acc -= frames
+                rate_dropped = self._jump_drop(frames, fs)
+                dropped += rate_dropped
+            elif self._rate_acc <= -1.0:
+                frames = int(-self._rate_acc)
+                self._rate_acc += frames
+                self._owed_insert += frames
+                self._rate_insert_owed += frames
         i = 0  # frames written in this block
 
         while i < n_block:
@@ -216,6 +236,10 @@ class PlayoutScheduler:
                 i += n
                 inserted += n
                 self._owed_insert -= n
+                if self._rate_insert_owed:
+                    moved = min(n, self._rate_insert_owed)
+                    self._rate_insert_owed -= moved
+                    rate_inserted += moved
                 if not self._owed_insert:
                     self._resume_program(i)
                 continue
@@ -268,6 +292,8 @@ class PlayoutScheduler:
             program=program,
             dropped=dropped,
             inserted=inserted,
+            rate_dropped=rate_dropped,
+            rate_inserted=rate_inserted,
             late_drop_us=late_drop_frames * _US_PER_S / fs,
         )
 

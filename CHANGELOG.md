@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Playout sync can remove small timing drift by playing a hair faster or slower (400 ppm at most, under a cent of pitch) instead of by a corrective jump every half a minute. It is off by default for now: set `PLAYOUT_RATE=1` in the bridge's environment to try it, and the Diagnostics timing panel shows the applied rate as ppm.
+
 ### Changed
 
 - A speaker's playout output is now opened as soon as its bridge player starts, before any stream, so the first stream does not pay the one second a Bluetooth output takes to open: nothing of the first second is dropped and the sound starts with the group. The output is closed again when no stream arrives within three minutes, and the pre-open is skipped for speakers set to power save or auto-disconnect.
