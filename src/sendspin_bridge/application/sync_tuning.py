@@ -43,6 +43,7 @@ from sendspin_bridge.application.models.sync import (
 )
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_groups, get_ma_player_ids
 from sendspin_bridge.sync_tuning import capture_tokens, session_store
+from sendspin_bridge.sync_tuning.bed_stream import BedStreams
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_bridge.sync_tuning.profiles import ConfigProfileRepository
 from sendspin_bridge.sync_tuning.session_store import get_store, run_in_background
@@ -282,11 +283,55 @@ def _act(sid: str, action: Callable[[SyncSession], object]) -> SyncSessionOut:
     return _session_out(session)
 
 
+#: Keep-awake streams for speakers whose amplifier sleeps through the silence between clicks.
+_BEDS = BedStreams()
+
+
+def _keep_awake_sinks(group_id: str) -> list[str]:
+    """The sinks of this group's members that asked to stay awake during tuning.
+
+    Read from the configuration at session start: the flag is a property of the speaker, not of the
+    session, and it is only ever consulted while a tuning session runs.
+    """
+    from sendspin_bridge.bridge import state as bridge_state
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.config.players import find_player_by_id
+
+    try:
+        members = _control().members(group_id)
+    except (ControlError, MaApiError):
+        return []
+    clients = {str(getattr(c, "player_id", "") or ""): c for c in bridge_state.get_clients_snapshot()}
+    config = load_config()
+    sinks: list[str] = []
+    for member in members:
+        client_id = getattr(member, "client_id", None)
+        if not client_id:
+            continue
+        entry = find_player_by_id(config, str(client_id))
+        if not entry or not entry.get("calibration_bed"):
+            continue
+        client = clients.get(str(client_id))
+        if client is None:
+            continue
+        manager = getattr(client, "bt_manager", None)
+        sink = getattr(manager, "bluetooth_sink_name", None) if manager is not None else None
+        if not sink:
+            sink = (getattr(client, "status", {}) or {}).get("sink")
+        if isinstance(sink, str) and sink:
+            sinks.append(sink)
+    return sinks
+
+
 def create_session(body: SessionCreate) -> SyncSessionOut:
     try:
         session = get_store().create(body.group_id, body.mode, body.point)
     except (ControlError, MaApiError) as exc:
         _raise(exc)
+    try:
+        _BEDS.sync(_keep_awake_sinks(body.group_id))
+    except Exception:  # a keep-awake stream must never cost the session
+        logger.warning("Could not start the tuning keep-awake streams", exc_info=True)
     return _session_out(session)
 
 
@@ -297,9 +342,12 @@ def get_session(sid: str) -> SyncSessionOut:
 def end_session(sid: str) -> None:
     """Cancel (a session already restoring or finished keeps its outcome); the store restores the group."""
     try:
-        get_store().end(sid)
-    except ControlError as exc:
-        _raise(exc)
+        _BEDS.stop_all()
+    finally:
+        try:
+            get_store().end(sid)
+        except ControlError as exc:
+            _raise(exc)
 
 
 def signal(sid: str, action: str) -> SyncSessionOut:

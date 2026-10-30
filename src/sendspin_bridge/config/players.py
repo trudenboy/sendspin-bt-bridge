@@ -197,6 +197,9 @@ class Player(BaseModel):
     # default: playback is A2DP-only and the bridge switches the card back when
     # PipeWire restores a saved headset profile (#476 follow-up).
     allow_hfp_profile: StrictBool | None = None
+    # Keep this speaker's amplifier awake with a quiet noise stream while group tuning runs:
+    # some speakers never un-mute for the calibration clicks after silence (#tuning).
+    calibration_bed: StrictBool | None = None
     # Air sensor calibrations, one per (codec, SBC rate, adapter); applied live.
     air_to_sound_latency: list[AirLatencyEntry] | None = Field(None, max_length=AIR_LATENCY_MAX_ENTRIES)
     # Learned air latency per (codec, SBC rate, adapter); written by the bridge, applied live.

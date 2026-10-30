@@ -755,6 +755,18 @@
           "default": true,
           "description": "false runs this speaker the way it worked before playout sync (legacy player, not held warm, no automatic offset); true or null follows PLAYOUT_SYNC."
         },
+        "calibration_bed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "true plays a soft continuous noise into this speaker's output for the duration of a group tuning session, so an amplifier that sleeps through the silence between clicks is awake when the clicks arrive."
+        },
         "allow_hfp_profile": {
           "anyOf": [
             {

@@ -15,23 +15,17 @@ def test_click_schedule_follows_period_and_cycle():
     assert ct.gap_ms(4) == 120 and ct.CYCLE_S == 10.0
 
 
-def test_the_bed_keeps_a_slow_speaker_awake_and_the_chirps_stand_above_it():
-    """A continuous -30 dBFS bed under the chirps (Lenco LS-500 never un-mutes for a chirp alone).
-
-    The chirps stay ~24 dB above the bed, which is what the phone's estimator needs.
-    """
+def test_track_is_silent_for_one_second_then_pairs_of_chirps_at_minus_6_dbfs():
     pcm = ct.render_pcm(duration_s=4, sample_rate=48000)
     mono = _mono(pcm)
-    lead_in = mono[:48000]
-    assert max(abs(v) for v in lead_in) > 0  # the bed, not silence
-    assert max(abs(v) for v in lead_in) < 2000  # ... and well below a chirp
+    assert max(abs(v) for v in mono[:48000]) == 0
     first = mono[48000 : 48000 + 384]  # 8 ms chirp
     assert 15000 <= max(abs(v) for v in first) <= 17500  # 0.5 x 32767 ~ 16384
     second_start = 48000 + round(0.040 * 48000)  # k=0 -> 40 ms gap
     second = mono[second_start : second_start + 384]
     assert max(abs(v) for v in second) >= 15000
     gap = mono[48000 + 384 : second_start]
-    assert max(abs(v) for v in gap) < 4000  # only the bed between the pair
+    assert max(abs(v) for v in gap) == 0
     # k=1 click at 3 s has a 60 ms gap
     third_pair = 3 * 48000 + round(0.060 * 48000)
     assert max(abs(v) for v in mono[third_pair : third_pair + 384]) >= 15000

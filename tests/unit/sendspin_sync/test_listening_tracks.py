@@ -196,4 +196,4 @@ def test_the_measurement_track_is_unchanged():
     assert digest == MEASURE_SHA256
 
 
-MEASURE_SHA256 = "5f9989cfe7659092e4b84ef8235ec4c3aed99e7f06e82d36dd6acb5a506b22be"
+MEASURE_SHA256 = "8c1ea70997343f22ab6cd8f9c571a217d172874cce83f7c0ede4c29ad130c19c"

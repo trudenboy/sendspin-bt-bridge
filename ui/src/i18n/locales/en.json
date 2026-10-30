@@ -1190,6 +1190,10 @@
       "allow_hfp_profile": {
         "label": "Allow the headset profile (calls)",
         "help": "Off keeps the speaker on A2DP for music and switches the card back if the host restores a headset profile. On lets another app use the speaker's microphone for calls; sound drops to 8 kHz mono while that profile is active."
+      },
+      "calibration_bed": {
+        "label": "Keep this speaker awake during tuning",
+        "help": "Some amplifiers never un-mute for the short calibration clicks after silence and make the tuning sound inaudible. On plays a soft noise into this speaker only while a group tuning session runs; other speakers keep the clean clicks."
       }
     },
     "deviceGroups": {

@@ -5659,6 +5659,17 @@
             ],
             "title": "Backend"
           },
+          "calibration_bed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Bed"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",

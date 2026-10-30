@@ -4691,6 +4691,8 @@ export interface components {
             allow_hfp_profile?: boolean | null;
             /** Backend */
             backend: components["schemas"]["BluetoothBackend"] | components["schemas"]["PulseSinkBackend"];
+            /** Calibration Bed */
+            calibration_bed?: boolean | null;
             /**
              * Enabled
              * @default true
