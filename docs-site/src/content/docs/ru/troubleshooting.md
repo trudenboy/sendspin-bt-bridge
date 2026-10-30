@@ -164,7 +164,7 @@ DisablePlugins=hfp,hsp
 
 **Почему.** Echo умеет быть и колонкой (A2DP sink), и источником («Alexa, connect to my speaker») и выбирает роль на каждом подключении. Если хост тоже готов быть колонкой — PulseAudio и PipeWire по умолчанию регистрируют обе A2DP-роли, — Echo может открыть поток *в сторону хоста* и так и не подключить свой sink-профиль. Смена Class of Device адаптера на этот выбор не влияет.
 
-**Что может сделать bridge.** Включите **Восстанавливать пропавший аудиовыход** (расширенные настройки восстановления Bluetooth, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`). Для колонки, у которой есть и Audio Source, и Audio Sink, bridge тогда:
+**Что может сделать bridge.** **Восстанавливать пропавший аудиовыход** включено по умолчанию с 3.1.0-beta.25 (расширенные настройки восстановления Bluetooth, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`; на стороне BlueZ это [bluez/bluez#1898](https://github.com/bluez/bluez/issues/1898), починено в BlueZ 5.86+). Для колонки, у которой есть и Audio Source, и Audio Sink, bridge тогда:
 
 1. сразу после установления связи — в том числе когда Echo подключается сама — запрашивает профиль Audio Sink, не трогая source-профиль (лог: `Early Audio Sink ConnectProfile (source kept): …`);
 2. если подключение установил сам bridge и sink не появился, запрашивает ещё раз с сохранённым source-профилем, и только при отказе отключает source-профиль и запрашивает снова (лог: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);

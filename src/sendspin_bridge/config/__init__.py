@@ -163,7 +163,8 @@ DEFAULT_CONFIG = {
     "PULSE_SINK_RESET_ON_START": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],
-    "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": False,
+    # #476: an Echo-style speaker lands on a2dp_source without this (bluez/bluez#1898).
+    "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": True,
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
     # Periodic live-RSSI refresh for connected speakers (mgmt opcode 0x0031).

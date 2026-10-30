@@ -212,6 +212,11 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
             # went away there is nothing to report — the reconnect path does.
             if mgr.connected:
                 _report_missing_sink(mgr)
+                if mgr.sink_recovery_enabled:
+                    # Ask again with a fresh connect: the role flip and the profile switch run
+                    # on that path, and a speaker stuck on a2dp_source often lands right the
+                    # second time (bluez/bluez#1898). Bounded in the manager.
+                    await loop.run_in_executor(bt_executor(), mgr.request_sink_reconnect)
             return True
         _clear_missing_sink_error(mgr)
         mgr.host.update_status(

@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
@@ -60,6 +61,25 @@ def _pick_a2dp_sink_profile(profiles: list[str]) -> str | None:
     return None
 
 
+#: Delays between attempts to set the A2DP sink profile (#476). Right after a connect the card
+#: answers "Input/output error" until BlueZ has connected the sink profile; with bluez/bluez#1898
+#: (the source profile is tried first) that can take a moment. The first attempt runs at once.
+PROFILE_SWITCH_RETRY_S = (0.0, 0.5, 1.0, 2.0)
+
+
+def _set_profile_with_retry(name: str, target: str) -> bool:
+    """Switch the card's profile, retrying the transient refusal a fresh connect gives."""
+    for delay in PROFILE_SWITCH_RETRY_S:
+        if delay:
+            time.sleep(delay)
+        try:
+            if set_card_profile(name, target):
+                return True
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.debug("Profile switch for %s errored: %s", name, exc)
+    return False
+
+
 def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
     """If a bluez_card for *pa_mac* exists with a non-A2DP-sink active
     profile and an A2DP-sink profile available, switch it. Accepts both
@@ -99,13 +119,10 @@ def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
             ", ".join(profiles) or "—",
             target,
         )
-        try:
-            if set_card_profile(name, target):
-                logger.info("✓ Switched %s to %s profile", name, target)
-                return True
-            logger.warning("Failed to switch %s to %s profile", name, target)
-        except Exception as exc:  # pragma: no cover — defensive
-            logger.warning("Profile switch for %s errored: %s", name, exc)
+        if _set_profile_with_retry(name, target):
+            logger.info("✓ Switched %s to %s profile", name, target)
+            return True
+        logger.warning("Failed to switch %s to %s profile after %d attempts", name, target, len(PROFILE_SWITCH_RETRY_S))
         return False
     return False
 

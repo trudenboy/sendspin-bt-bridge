@@ -2275,3 +2275,40 @@ def test_a_link_transition_tells_the_host_probe(bt_manager, monkeypatch):
     bt_manager.apply_connected_state(False)
 
     assert calls == [1, 1]
+
+
+# ---------------------------------------------------------------------------
+# request_sink_reconnect — a link without an audio sink asks again (#476)
+# ---------------------------------------------------------------------------
+
+
+def test_a_sinkless_link_is_reconnected_and_then_backs_off(bt_manager):
+    """Two tries per window: a speaker that never offers a sink must not loop."""
+    with patch.object(bt_manager, "disconnect_device", return_value=True) as disconnect:
+        assert bt_manager.request_sink_reconnect() is True
+        assert bt_manager.request_sink_reconnect() is True
+        assert bt_manager.request_sink_reconnect() is False  # bounded
+    assert disconnect.call_count == 2
+
+
+def test_the_sink_reconnect_budget_returns_after_the_window(bt_manager, monkeypatch):
+    from sendspin_bridge.bluetooth import manager as manager_module
+
+    clock = [1000.0]
+    monkeypatch.setattr(manager_module.time, "monotonic", lambda: clock[0])
+    with patch.object(bt_manager, "disconnect_device", return_value=True):
+        assert bt_manager.request_sink_reconnect() is True
+        assert bt_manager.request_sink_reconnect() is True
+        assert bt_manager.request_sink_reconnect() is False
+        clock[0] += manager_module.SINK_RECONNECT_WINDOW_S + 1.0
+        assert bt_manager.request_sink_reconnect() is True  # a fresh window
+
+
+def test_sink_recovery_follows_the_setting(installed_bluez):
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    installed_bluez.on("show", stdout="")
+    off = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="S", enable_a2dp_dance=False)
+    on = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="S", enable_a2dp_dance=True)
+    assert off.sink_recovery_enabled is False
+    assert on.sink_recovery_enabled is True

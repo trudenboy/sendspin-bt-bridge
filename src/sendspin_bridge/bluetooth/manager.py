@@ -84,6 +84,10 @@ _AUTO_RECLAIM_QUIET_S = 60.0
 # (6x safety margin so transient mgmt contention doesn't grey out
 # every chip).
 _RSSI_REFRESH_INTERVAL_S = 5.0
+# A link with no audio sink is reconnected at most this often (#476): a speaker that
+# never offers a sink must not loop.
+SINK_RECONNECT_TRIES = 2
+SINK_RECONNECT_WINDOW_S = 600.0
 # After this many consecutive failed connect attempts where BlueZ has no current
 # device object, force-remove the stale BlueZ entry so the next reconnect cycle
 # can escalate to pair_device (KALLSUP-class loop, #162).
@@ -213,6 +217,10 @@ class BluetoothManager:
         # attempt is keyed to the connection transition it was made on.
         self._early_flip_lock = threading.Lock()
         self._early_flip_seq: int | None = None
+        # A link that came up without an audio sink is disconnected once and reconnected so the
+        # role flip and the profile switch run again (#476), bounded per window.
+        self._sink_reconnect_tries = 0
+        self._sink_reconnect_since = 0.0
         # When a transient refusal or unknown services leave the flip pending,
         # this is when to ask again (monotonic) and how far down the back-off
         # ladder we are. Both reset on every connection transition.
@@ -1180,6 +1188,30 @@ class BluetoothManager:
             "accepted" if connected else f"refused ({self.device.last_error or 'no reason given'})",
         )
         return connected
+
+    @property
+    def sink_recovery_enabled(self) -> bool:
+        """Whether a sinkless link may be reconnected once (#476)."""
+        return self._enable_a2dp_dance
+
+    def request_sink_reconnect(self) -> bool:
+        """Drop a link that has no audio sink so the next attempt can get one.
+
+        Returns whether the disconnect was made. At most ``SINK_RECONNECT_TRIES`` per
+        ``SINK_RECONNECT_WINDOW_S``: a speaker that simply has no sink profile must not loop.
+        """
+        now = time.monotonic()
+        if now - self._sink_reconnect_since > SINK_RECONNECT_WINDOW_S:
+            self._sink_reconnect_since = now
+            self._sink_reconnect_tries = 0
+        if self._sink_reconnect_tries >= SINK_RECONNECT_TRIES:
+            logger.warning("[%s] Still no audio sink; not reconnecting again for a while", self.device_name)
+            return False
+        self._sink_reconnect_tries += 1
+        logger.info(
+            "[%s] Link is up without an audio sink — reconnecting to ask for the sink profile", self.device_name
+        )
+        return self.disconnect_device()
 
     @property
     def early_role_flip_pending(self) -> bool:

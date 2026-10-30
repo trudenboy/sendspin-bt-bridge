@@ -869,7 +869,7 @@
       },
       "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
         "label": "Recover a missing audio sink",
-        "help": "Experimental. Asks a speaker that is also an audio source (such as an Amazon Echo) to accept audio as soon as it connects, and again if its audio output never appears. Speakers without an audio output are then disconnected and reconnected once, except a speaker that is also an audio source and refused and dropped the link."
+        "help": "On by default. Asks a speaker that is also an audio source (such as an Amazon Echo) to accept audio as soon as it connects, switches a sound card left on the source profile back to the sink one (retrying briefly, because a fresh connect answers \"Input/output error\" until BlueZ has the sink), and if the audio output still does not appear, reconnects the speaker up to twice in ten minutes."
       },
       "EXPERIMENTAL_PA_MODULE_RELOAD": {
         "label": "Reload the PulseAudio Bluetooth module",

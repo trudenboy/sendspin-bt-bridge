@@ -324,7 +324,7 @@ Then restart the BlueZ daemon (`systemctl restart bluetooth` on a regular host).
 
 **Why.** An Echo can be a speaker (A2DP sink) or a source ("Alexa, connect to my speaker"), and it picks its role per connection. When the host also offers to be a speaker — PulseAudio and PipeWire register both A2DP endpoints by default — the Echo may open its stream *towards* the host and never connect its own sink profile on that connection. Changing the adapter's Class of Device does not change that choice.
 
-**What the bridge can do.** Turn on **Recover a missing audio sink** (advanced Bluetooth recovery settings, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`). For a speaker that lists both Audio Source and Audio Sink it then:
+**What the bridge can do.** **Recover a missing audio sink** is on by default since 3.1.0-beta.25 (advanced Bluetooth recovery settings, `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`; the BlueZ side is [bluez/bluez#1898](https://github.com/bluez/bluez/issues/1898), fixed in BlueZ 5.86+). For a speaker that lists both Audio Source and Audio Sink it then:
 
 1. asks for the Audio Sink profile right after the link comes up — also when the Echo reconnects on its own — leaving the source profile alone (log: `Early Audio Sink ConnectProfile (source kept): …`);
 2. when the bridge itself made the connection and no sink appears, asks again with the source profile kept, and only if that is refused drops the source profile and asks once more (log: `Audio Sink ConnectProfile (source kept): …`, `Audio Source DisconnectProfile: …`, `Audio Sink ConnectProfile (after dropping the source): …`);

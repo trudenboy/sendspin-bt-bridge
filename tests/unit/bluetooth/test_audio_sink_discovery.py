@@ -140,3 +140,39 @@ def test_a_speaker_allowed_the_headset_profile_keeps_it(monkeypatch, no_sinks):
 
     assert switched == []
     assert ok is True
+
+
+def test_a_transient_profile_switch_refusal_is_retried(monkeypatch, caplog):
+    """#476: a fresh connect answers "Input/output error" until BlueZ has the sink (bluez#1898)."""
+    attempts: list[tuple[str, str]] = []
+
+    def _flaky(name: str, profile: str) -> bool:
+        attempts.append((name, profile))
+        return len(attempts) >= 3  # refused twice, then accepted
+
+    monkeypatch.setattr(audio, "time", type("T", (), {"sleep": staticmethod(lambda _s: None)}))
+    monkeypatch.setattr(audio, "list_cards", lambda: [
+        {"name": "bluez_card.6C_5C_3D_35_17_99", "active_profile": "a2dp_source",
+         "profiles": ["a2dp_source", "a2dp_sink", "off"]},
+    ])
+    monkeypatch.setattr(audio, "set_card_profile", _flaky)
+
+    with caplog.at_level(logging.INFO, logger=audio.logger.name):
+        switched = audio._switch_card_profile_to_a2dp(_MAC.replace(":", "_"))
+
+    assert switched is True
+    assert len(attempts) == 3
+    assert all(profile == "a2dp_sink" for _name, profile in attempts)
+    assert "Switched bluez_card.6C_5C_3D_35_17_99 to a2dp_sink" in caplog.text
+
+
+def test_a_card_without_an_a2dp_sink_profile_is_not_retried(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(audio, "list_cards", lambda: [
+        {"name": "bluez_card.6C_5C_3D_35_17_99", "active_profile": "a2dp_source",
+         "profiles": ["a2dp_source", "off"]},
+    ])
+    monkeypatch.setattr(audio, "set_card_profile", lambda name, profile: calls.append(profile) or True)
+
+    assert audio._switch_card_profile_to_a2dp(_MAC.replace(":", "_")) is False
+    assert calls == []  # nothing to switch to: no pointless retries

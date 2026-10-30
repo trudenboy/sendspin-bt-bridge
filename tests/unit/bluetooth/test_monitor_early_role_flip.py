@@ -302,3 +302,47 @@ async def test_an_unrelated_error_is_not_cleared_by_a_good_link(installed_bluez)
         await _start_player_on_established_link(mgr, asyncio.get_running_loop())
 
     assert all(call[0][0] != {"last_error": None} for call in mgr.host.update_status.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_a_link_without_a_sink_is_reconnected_when_recovery_is_on(installed_bluez):
+    """#476: rather than leaving the player stopped, ask again with a fresh connect."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sendspin_bridge.bluetooth.monitor import _start_player_on_established_link
+
+    mgr = _manager(installed_bluez, enable_a2dp_dance=True)
+    attach(mgr, bluez_knowing(mgr, connected=True, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID)))
+    mgr.host = MagicMock()
+    mgr.host.start_subprocess = AsyncMock()
+    mgr._apply_connected_state(True)
+
+    with (
+        patch.object(mgr, "configure_bluetooth_audio", return_value=False),
+        patch.object(mgr, "request_sink_reconnect", return_value=True) as reconnect,
+    ):
+        assert await _start_player_on_established_link(mgr, asyncio.get_running_loop()) is True
+
+    reconnect.assert_called_once()
+    mgr.host.start_subprocess.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_link_without_a_sink_is_left_alone_when_recovery_is_off(installed_bluez):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sendspin_bridge.bluetooth.monitor import _start_player_on_established_link
+
+    mgr = _manager(installed_bluez, enable_a2dp_dance=False)
+    attach(mgr, bluez_knowing(mgr, connected=True, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID)))
+    mgr.host = MagicMock()
+    mgr.host.start_subprocess = AsyncMock()
+    mgr._apply_connected_state(True)
+
+    with (
+        patch.object(mgr, "configure_bluetooth_audio", return_value=False),
+        patch.object(mgr, "request_sink_reconnect") as reconnect,
+    ):
+        assert await _start_player_on_established_link(mgr, asyncio.get_running_loop()) is True
+
+    reconnect.assert_not_called()
