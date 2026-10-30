@@ -2966,6 +2966,8 @@ export interface components {
              * @default production
              */
             runtime_mode: string;
+            /** @description A phone streaming into the bridge as a Sendspin source (#563). */
+            sendspin_source: components["schemas"]["SendspinSourceStatus"] | null;
             startup: components["schemas"]["StartupProgress"] | null;
             /** State Model */
             state_model: {
@@ -3312,6 +3314,18 @@ export interface components {
              * @default auto
              */
             SENDSPIN_SERVER?: string | null;
+            /**
+             * Sendspin Source
+             * @description Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source other players can play (#563). Needs PipeWire for the capture. Off by default.
+             * @default false
+             */
+            SENDSPIN_SOURCE?: boolean | null;
+            /**
+             * Sendspin Source Port
+             * @description The port the source's Sendspin server listens on. It must differ from the players' own listen ports (they start at 8928).
+             * @default 8940
+             */
+            SENDSPIN_SOURCE_PORT?: number | null;
             /**
              * Session Timeout Hours
              * @description Authenticated session lifetime in hours.
@@ -5247,6 +5261,45 @@ export interface components {
              * @default true
              */
             audio_only?: boolean;
+        };
+        /**
+         * SendspinSourceStatus
+         * @description A phone streaming into the bridge, offered to Sendspin players as a live source.
+         */
+        SendspinSourceStatus: {
+            /**
+             * Enabled
+             * @description The source server is running.
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Error
+             * @description Why the source is off: port_in_use.
+             */
+            error: string | null;
+            /**
+             * Phone
+             * @description The capture node of the phone that is playing, if any.
+             */
+            phone: string | null;
+            /**
+             * Players
+             * @description Sendspin players connected to the source.
+             * @default 0
+             */
+            players: number;
+            /**
+             * Port
+             * @description The port players connect to (ws://<bridge>:port/sendspin).
+             */
+            port: number | null;
+            /**
+             * Streaming
+             * @description A player is connected and the phone's audio is being pushed.
+             * @default false
+             */
+            streaming: boolean;
         };
         /** SendspinTestIn */
         SendspinTestIn: {

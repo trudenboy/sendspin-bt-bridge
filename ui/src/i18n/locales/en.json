@@ -1000,6 +1000,14 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Recovery grace period",
         "help": "Wait this long before suggesting fixes for a speaker that dropped."
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "Accept a phone as a source",
+        "help": "A phone paired to the bridge over Bluetooth streams into it, and the bridge offers that audio as a Sendspin source other players can play. Needs PipeWire (PulseAudio never exposes the phone's input)."
+      },
+      "SENDSPIN_SOURCE_PORT": {
+        "label": "Source port",
+        "help": "The port players connect to (ws://<bridge>:port/sendspin). It must differ from the players' own listen ports, which start at 8928."
       }
     },
     "sectionsNav": "Sections",
@@ -1106,6 +1114,13 @@
       "latency": {
         "label": "Buffer presets",
         "recommended": "recommended"
+      },
+      "sourceStatus": {
+        "label": "Bluetooth source",
+        "off": "Off",
+        "waiting": "Waiting on port {port}: pair a phone and play",
+        "streaming": "Phone {phone} is playing to port {port}",
+        "error": "The port is in use — choose another one"
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",

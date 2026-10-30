@@ -78,6 +78,17 @@ class BridgeVerdict(ResponseModel):
     count: int = Field(description="Issues at warning or error.")
 
 
+class SendspinSourceStatus(ResponseModel):
+    """A phone streaming into the bridge, offered to Sendspin players as a live source."""
+
+    enabled: bool = Field(default=False, description="The source server is running.")
+    port: int | None = Field(default=None, description="The port players connect to (ws://<bridge>:port/sendspin).")
+    phone: str | None = Field(default=None, description="The capture node of the phone that is playing, if any.")
+    players: int = Field(default=0, description="Sendspin players connected to the source.")
+    streaming: bool = Field(default=False, description="A player is connected and the phone's audio is being pushed.")
+    error: str | None = Field(default=None, description="Why the source is off: port_in_use.")
+
+
 class Bridge(ResponseModel):
     name: str = Field(default="", description="The bridge's name (BRIDGE_NAME, or the host name).")
     version: str
@@ -101,6 +112,9 @@ class Bridge(ResponseModel):
     startup: StartupProgress | None = None
     update_available: UpdateInfo | None = None
     mock_runtime: dict[str, Any] | None = None
+    sendspin_source: SendspinSourceStatus | None = Field(
+        default=None, description="A phone streaming into the bridge as a Sendspin source (#563)."
+    )
     preflight: dict[str, Any] | None = Field(
         default=None, description="Sampled host checks (BT, audio, D-Bus, memory)."
     )

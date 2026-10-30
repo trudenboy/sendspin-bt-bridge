@@ -33,6 +33,26 @@ CHUNK_MS = 10
 NODE_POLL_S = 2.0
 
 
+#: What the bridge status reports about the source (read by the API from another thread).
+_STATE: dict[str, Any] = {
+    "enabled": False,
+    "port": None,
+    "phone": None,
+    "players": 0,
+    "streaming": False,
+    "error": None,
+}
+
+
+def source_status() -> dict[str, Any]:
+    """The source's state for the bridge status: enabled, port, phone node, players, streaming."""
+    return dict(_STATE)
+
+
+def _set_state(**changes: Any) -> None:
+    _STATE.update(changes)
+
+
 @dataclass(frozen=True)
 class SourceConfig:
     """Where the source listens and what it accepts (environment-driven)."""
@@ -165,10 +185,12 @@ class BtSendspinSource:
             # A player's listen port or another service may hold it: say so instead of a traceback.
             await self._server.close()
             self._server = None
+            _set_state(enabled=False, error="port_in_use")
             raise RuntimeError(
                 f"the Sendspin source port {self._config.port} is already in use ({exc.strerror or exc}); "
                 "set SENDSPIN_SOURCE_PORT to a free port"
             ) from exc
+        _set_state(enabled=True, port=self._config.port, phone=None, players=0, streaming=False, error=None)
         logger.info(
             "Sendspin source listening on %s:%d (players connect to ws://<bridge>:%d/sendspin)",
             self._config.host,
@@ -197,6 +219,7 @@ class BtSendspinSource:
         self._group = players[0].group
         self._stream = self._group.start_stream()
         self._stream.set_live_source(True)
+        _set_state(players=len(players), streaming=True)
         logger.info("Bluetooth source: a player connected, streaming to it")
         return True
 
@@ -231,6 +254,7 @@ class BtSendspinSource:
         assert self._stream is not None
         self._capture = PwCapture(node, self._config)
         await self._capture.start()
+        _set_state(phone=node)
         sent = 0
         try:
             async for chunk in self._capture.chunks():
@@ -249,6 +273,7 @@ class BtSendspinSource:
             logger.info("Bluetooth source: capture ended")
 
     async def stop(self) -> None:
+        _set_state(enabled=False, phone=None, players=0, streaming=False)
         if self._task is not None:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

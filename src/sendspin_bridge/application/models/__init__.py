@@ -6,6 +6,7 @@ from sendspin_bridge.application.models.bridge import (
     BridgeVerdict,
     Group,
     GroupMember,
+    SendspinSourceStatus,
     StartupProgress,
     UpdateInfo,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "DisabledDevice",
     "Group",
     "GroupMember",
+    "SendspinSourceStatus",
     "StartupProgress",
     "UpdateInfo",
 ]

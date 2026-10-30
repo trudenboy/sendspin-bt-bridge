@@ -568,12 +568,19 @@ class BridgeOrchestrator:
         Off by default: it opens a second Sendspin server on the bridge, which an operator opts
         into once a phone is paired to the adapter as an audio source.
         """
-        if os.environ.get("SENDSPIN_SOURCE", "").strip().lower() not in ("1", "true", "yes"):
+        env = os.environ.get("SENDSPIN_SOURCE", "").strip().lower()
+        enabled = env in ("1", "true", "yes") if env else bool(config.get("SENDSPIN_SOURCE", False))
+        if not enabled:
             return
+        from dataclasses import replace
+
         from sendspin_bridge.services.source.bt_source import BtSendspinSource, SourceConfig
 
         config_dir = _resolve_config_dir()
         source_config = SourceConfig.from_env()
+        configured_port = os.environ.get("SENDSPIN_SOURCE_PORT") or config.get("SENDSPIN_SOURCE_PORT")
+        if configured_port:
+            source_config = replace(source_config, port=int(configured_port))
         self._bt_source = BtSendspinSource(
             source_config,
             identity_path=config_dir / "source_identity.key",

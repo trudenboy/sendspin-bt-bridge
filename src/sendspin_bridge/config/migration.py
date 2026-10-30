@@ -590,6 +590,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
 
     for key, min_value, max_value in (
         ("SENDSPIN_PORT", 1, 65535),
+        ("SENDSPIN_SOURCE_PORT", 1, 65535),
         ("PULSE_LATENCY_MSEC", 1, 5000),
         ("BT_CHECK_INTERVAL", 1, 3600),
         ("BT_MAX_RECONNECT_FAILS", 0, 1000),
@@ -639,6 +640,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "RSSI_BADGE",
         "SHOW_TECHNICAL_DETAILS",
         "COMPENSATE_OUTPUT_LATENCY",
+        "SENDSPIN_SOURCE",
         "PLAYOUT_DIAG",
         "EXPERIMENTAL_AIR_SENSOR",
     ):

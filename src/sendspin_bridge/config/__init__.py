@@ -160,6 +160,9 @@ DEFAULT_CONFIG = {
     "COMPENSATE_OUTPUT_LATENCY": True,
     # Let the sink provide its audio clock so its rate is logged.
     "PLAYOUT_DIAG": False,
+    # A phone paired to the bridge becomes a Sendspin source players can play (#563).
+    "SENDSPIN_SOURCE": False,
+    "SENDSPIN_SOURCE_PORT": 8940,
     "PULSE_SINK_RESET_ON_START": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],

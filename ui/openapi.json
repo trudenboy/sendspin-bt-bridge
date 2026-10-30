@@ -1417,6 +1417,17 @@
             "title": "Runtime Mode",
             "type": "string"
           },
+          "sendspin_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SendspinSourceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A phone streaming into the bridge as a Sendspin source (#563)."
+          },
           "startup": {
             "anyOf": [
               {
@@ -1483,6 +1494,7 @@
           "startup",
           "update_available",
           "mock_runtime",
+          "sendspin_source",
           "preflight",
           "state_model",
           "guidance",
@@ -2213,6 +2225,32 @@
             "default": "auto",
             "description": "Music Assistant server hostname/IP. 'auto' uses mDNS discovery.",
             "title": "Sendspin Server"
+          },
+          "SENDSPIN_SOURCE": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source other players can play (#563). Needs PipeWire for the capture. Off by default.",
+            "title": "Sendspin Source"
+          },
+          "SENDSPIN_SOURCE_PORT": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 8940,
+            "description": "The port the source's Sendspin server listens on. It must differ from the players' own listen ports (they start at 8928).",
+            "title": "Sendspin Source Port"
           },
           "SESSION_TIMEOUT_HOURS": {
             "anyOf": [
@@ -7154,6 +7192,75 @@
           "adapter"
         ],
         "title": "ScanIn",
+        "type": "object"
+      },
+      "SendspinSourceStatus": {
+        "description": "A phone streaming into the bridge, offered to Sendspin players as a live source.",
+        "properties": {
+          "enabled": {
+            "default": false,
+            "description": "The source server is running.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the source is off: port_in_use.",
+            "title": "Error"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The capture node of the phone that is playing, if any.",
+            "title": "Phone"
+          },
+          "players": {
+            "default": 0,
+            "description": "Sendspin players connected to the source.",
+            "title": "Players",
+            "type": "integer"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The port players connect to (ws://<bridge>:port/sendspin).",
+            "title": "Port"
+          },
+          "streaming": {
+            "default": false,
+            "description": "A player is connected and the phone's audio is being pushed.",
+            "title": "Streaming",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "port",
+          "phone",
+          "players",
+          "streaming",
+          "error"
+        ],
+        "title": "SendspinSourceStatus",
         "type": "object"
       },
       "SendspinTestIn": {

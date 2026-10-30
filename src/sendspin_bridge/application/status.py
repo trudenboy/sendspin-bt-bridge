@@ -14,6 +14,7 @@ from sendspin_bridge.application.models import (
     Device,
     DisabledDevice,
     Group,
+    SendspinSourceStatus,
     StartupProgress,
     UpdateInfo,
 )
@@ -175,6 +176,7 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
         startup=StartupProgress(**startup) if startup else None,
         update_available=UpdateInfo(**snapshot.update_available) if snapshot.update_available else None,
         mock_runtime=snapshot.mock_runtime.to_dict() if snapshot.mock_runtime else None,
+        sendspin_source=_sendspin_source(config),
         preflight=preflight,
         state_model=bridge_state.to_dict(),
         guidance=guidance,
@@ -186,6 +188,15 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
         devices=[_device(device, config) for device in running],
         groups=[Group.from_snapshot(group.to_dict()) for group in snapshot.groups],
     )
+
+
+def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
+    """The source's state, only for a bridge configured to offer one."""
+    if not config.get("SENDSPIN_SOURCE"):
+        return None
+    from sendspin_bridge.services.source.bt_source import source_status
+
+    return SendspinSourceStatus(**source_status())
 
 
 def find_client(device_id: str):

@@ -54,6 +54,7 @@ export interface FieldDef {
 export type SectionComponent =
   | 'maConnection'
   | 'sendspinTest'
+  | 'sourceStatus'
   | 'latencyAssistant'
   | 'adapters'
   | 'haStatus'
@@ -121,13 +122,15 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'SENDSPIN_PAIRING', kind: 'toggle' },
       { key: 'SENDSPIN_OWN_SERVER_ONLY', kind: 'toggle' },
       { key: 'VOLUME_VIA_MA', kind: 'toggle' },
+      { key: 'SENDSPIN_SOURCE', kind: 'toggle', advanced: true },
+      { key: 'SENDSPIN_SOURCE_PORT', kind: 'number', min: 1, max: 65535, advanced: true },
       { key: 'MUTE_VIA_MA', kind: 'toggle' },
       { key: 'MA_WEBSOCKET_MONITOR', kind: 'toggle', advanced: true },
       { key: 'MA_AUTO_SILENT_AUTH', kind: 'toggle', advanced: true },
       { key: 'MA_ADDON_SLUG', kind: 'text', advanced: true },
       { key: 'DUPLICATE_DEVICE_CHECK', kind: 'toggle', advanced: true },
     ],
-    after: ['sendspinTest'],
+    after: ['sendspinTest', 'sourceStatus'],
   },
   {
     id: 'audio',

@@ -5,6 +5,18 @@
   "description": "Machine-readable schema for /config/config.json used by the Sendspin BT Bridge.",
   "type": "object",
   "properties": {
+    "SENDSPIN_SOURCE": {
+      "type": ["boolean", "null"],
+      "default": false,
+      "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source other players can play (#563). Needs PipeWire for the capture."
+    },
+    "SENDSPIN_SOURCE_PORT": {
+      "type": ["integer", "null"],
+      "default": 8940,
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "The port the source's Sendspin server listens on; it must differ from the players' own listen ports (they start at 8928)."
+    },
     "CONFIG_SCHEMA_VERSION": {
       "type": "integer",
       "const": 6,
