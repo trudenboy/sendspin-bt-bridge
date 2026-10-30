@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.25] - 2026-10-31
+
 ### Added
 
-- The bridge can act as a **Sendspin source**: a phone paired to it over Bluetooth becomes a live stream that other Sendspin players can play. It is off by default; set `SENDSPIN_SOURCE=1` and players connect to port 8940 (`ws://<bridge>:8940/sendspin`). The capture is PipeWire-native because PulseAudio never exports the phone's input as a source.
+- The bridge can act as a **Sendspin source**: a phone paired to it over Bluetooth becomes a live stream that other Sendspin players can play. Turn it on in Settings (Music Assistant section, "Accept a phone as a source") or with `SENDSPIN_SOURCE=1`; players connect to port 8940 (`ws://<bridge>:8940/sendspin`). The settings row shows whether a phone is playing, and the capture is PipeWire-native because PulseAudio never exports the phone's input as a source.
 
 ### Fixed
 
@@ -6747,7 +6749,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.23...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.24...HEAD
+[3.1.0-beta.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.23...v3.1.0-beta.24
 [3.1.0-beta.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.21...v3.1.0-beta.23
 [3.1.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.19...v3.1.0-beta.21
 [3.1.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.18...v3.1.0-beta.19
