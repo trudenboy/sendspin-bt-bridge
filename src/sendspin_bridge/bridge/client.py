@@ -2423,7 +2423,13 @@ class SendspinClient:
                             "playout_diag": bool(spawn_config.get("PLAYOUT_DIAG", False)),
                             # PLAYOUT_SYNC: off (legacy player) / measure / loop.
                             # A speaker that opted out (playout_sync_enabled=false) always runs "off".
-                            "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
+                            # A source stream is a live phone feed: the legacy player is
+                            # enough and does not need the sink's audio clock (#563).
+                            "playout": {
+                                "mode": "off"
+                                if self.source_stream_url
+                                else effective_playout_mode(player_cfg, spawn_config)
+                            },
                             # The pre-open (#555) is skipped when the speaker is meant to sleep.
                             "idle_mode": str(getattr(self, "idle_mode", "default") or "default"),
                             # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for

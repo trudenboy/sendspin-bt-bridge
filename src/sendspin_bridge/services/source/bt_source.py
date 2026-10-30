@@ -213,11 +213,21 @@ class BtSendspinSource:
         return identity
 
     def _open_stream(self) -> bool:
-        """Create the push stream on the first connected player; True when one is ready."""
-        if self._stream is not None:
-            return True
+        """Create the push stream on the first connected player, then keep the group whole."""
         assert self._server is not None
         players = self._server.connected_clients
+        if self._stream is not None:
+            # The server makes a one-client group per connection: a player that comes later
+            # must join ours, or it hears nothing.
+            joined = False
+            for player in players:
+                if player not in self._group.clients:
+                    self._group.add_client(player)
+                    joined = True
+            if joined:
+                _set_state(players=len(self._group.clients))
+                logger.info("Bluetooth source: %d player(s) on the stream", len(self._group.clients))
+            return True
         if not players:
             return False
         self._group = players[0].group
