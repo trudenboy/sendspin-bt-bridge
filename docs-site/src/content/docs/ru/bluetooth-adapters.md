@@ -219,4 +219,4 @@ SENDSPIN_SOURCE=1 SENDSPIN_SOURCE_PORT=8940
 - Плееры подключаются к `ws://<bridge>:8940/sendspin`. Порт не должен совпадать с портами самих плееров (они начинаются с 8928).
 - Нужен **PipeWire**: PulseAudio не отдаёт вход телефона как источник захвата, а ноду PipeWire `bluez_input.*` bridge захватывает нативно.
 - Сопрягите телефон один раз, когда адаптер discoverable и pairable. Если телефон видит bridge только как «вызовы», удалите пару на обеих сторонах и спарьте заново с включённым **Media audio**.
-- Переключателя в UI пока нет; в логах видно `Bluetooth source: a player connected, streaming to it` и `N s pushed to the stream`, пока идёт звук.
+- В настройках (Music Assistant) есть **Принимать телефон как источник**, порт и строка статуса (Выключен / Ждёт на порту / Телефон … играет). В логах видно `Bluetooth source: a player connected, streaming to it` и `N s pushed to the stream`, пока идёт звук.

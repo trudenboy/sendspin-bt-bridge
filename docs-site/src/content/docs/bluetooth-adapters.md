@@ -251,4 +251,4 @@ SENDSPIN_SOURCE=1 SENDSPIN_SOURCE_PORT=8940
 - Players connect to `ws://<bridge>:8940/sendspin`. The port must not collide with the players' own listen ports (they start at 8928).
 - It needs **PipeWire**: PulseAudio never exports the phone's input as a capture source, while PipeWire's `bluez_input.*` node is captured natively.
 - Pair the phone once while the adapter is discoverable and pairable. If the phone shows the bridge as "calls only", remove the pairing on both sides and pair again with **Media audio** enabled.
-- There is no UI switch yet; the logs say `Bluetooth source: a player connected, streaming to it` and `N s pushed to the stream` while audio flows.
+- Settings → Music Assistant has **Accept a phone as a source** and the port, plus a status row (Off / Waiting on port / Phone … is playing). The logs say `Bluetooth source: a player connected, streaming to it` and `N s pushed to the stream` while audio flows.
