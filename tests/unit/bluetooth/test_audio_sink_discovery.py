@@ -151,10 +151,17 @@ def test_a_transient_profile_switch_refusal_is_retried(monkeypatch, caplog):
         return len(attempts) >= 3  # refused twice, then accepted
 
     monkeypatch.setattr(audio, "time", type("T", (), {"sleep": staticmethod(lambda _s: None)}))
-    monkeypatch.setattr(audio, "list_cards", lambda: [
-        {"name": "bluez_card.6C_5C_3D_35_17_99", "active_profile": "a2dp_source",
-         "profiles": ["a2dp_source", "a2dp_sink", "off"]},
-    ])
+    monkeypatch.setattr(
+        audio,
+        "list_cards",
+        lambda: [
+            {
+                "name": "bluez_card.6C_5C_3D_35_17_99",
+                "active_profile": "a2dp_source",
+                "profiles": ["a2dp_source", "a2dp_sink", "off"],
+            },
+        ],
+    )
     monkeypatch.setattr(audio, "set_card_profile", _flaky)
 
     with caplog.at_level(logging.INFO, logger=audio.logger.name):
@@ -168,10 +175,17 @@ def test_a_transient_profile_switch_refusal_is_retried(monkeypatch, caplog):
 
 def test_a_card_without_an_a2dp_sink_profile_is_not_retried(monkeypatch):
     calls: list[str] = []
-    monkeypatch.setattr(audio, "list_cards", lambda: [
-        {"name": "bluez_card.6C_5C_3D_35_17_99", "active_profile": "a2dp_source",
-         "profiles": ["a2dp_source", "off"]},
-    ])
+    monkeypatch.setattr(
+        audio,
+        "list_cards",
+        lambda: [
+            {
+                "name": "bluez_card.6C_5C_3D_35_17_99",
+                "active_profile": "a2dp_source",
+                "profiles": ["a2dp_source", "off"],
+            },
+        ],
+    )
     monkeypatch.setattr(audio, "set_card_profile", lambda name, profile: calls.append(profile) or True)
 
     assert audio._switch_card_profile_to_a2dp(_MAC.replace(":", "_")) is False
