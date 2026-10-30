@@ -249,6 +249,9 @@ class HciMonitorHub:
         self._last_record_drops: int | None = None  # drops of the previous record (routing)
         self._records = 0
         self._recv_stamped = 0
+        # Python 3.14 refuses recvmsg/recvfrom on AF_BLUETOOTH (see _read_datagram),
+        # so the reader falls back to plain recv and receive-time stamps.
+        self._recv_only = False
         self._clock_epoch0 = self._clock_map.epoch
         self._tx_links: dict[tuple[int, int], float] = {}
         self._cpu_fraction: float | None = None
@@ -548,15 +551,38 @@ class HciMonitorHub:
 
     def _drain(self, sock: Any) -> bool:
         """Read queued datagrams until EAGAIN or the bound; True when the bound stopped it."""
-        recvmsg = sock.recvmsg
         on_datagram = self._on_datagram
         for _ in range(self._drain_max):
             try:
-                data, ancdata, _flags, _addr = recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
+                data, ancdata = self._read_datagram(sock)
             except BlockingIOError:
                 return False
             on_datagram(data, ancdata)
         return True
+
+    def _read_datagram(self, sock: Any) -> tuple[bytes, Any]:
+        """One monitor record and its ancillary data (the kernel timestamps)."""
+        if not self._recv_only:
+            try:
+                data, ancdata, _flags, _addr = sock.recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
+                return data, ancdata
+            except BlockingIOError:
+                raise
+            except OSError as exc:
+                if "bad family" not in str(exc):
+                    raise
+                # CPython 3.14 sizes a sockaddr for the socket's family in
+                # recvmsg/recvfrom and knows nothing about AF_BLUETOOTH, so it
+                # answers "getsockaddrlen: bad family" for the monitor socket.
+                # Plain recv works; it just carries no SCM_TIMESTAMPNS, so the
+                # records take the receive time (R-3's fallback).
+                self._recv_only = True
+                logger.warning(
+                    "HciMonitorHub: this Python cannot read kernel timestamps on AF_BLUETOOTH (%s) — "
+                    "air times use the receive time; Python 3.13 keeps microsecond kernel stamps",
+                    exc,
+                )
+        return sock.recv(_RECV_BUFSIZE), []
 
     def _stopping_past_deadline(self, now: float) -> bool:
         deadline = self._stop_deadline

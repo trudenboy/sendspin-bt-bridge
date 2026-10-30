@@ -9,6 +9,7 @@ the hub's readability wait (``poll``) behaves as on the real monitor socket.
 from __future__ import annotations
 
 import errno
+import logging
 import os
 import socket
 import struct
@@ -1116,3 +1117,44 @@ def test_the_default_batching_interval_keeps_avrcp_latency_small():
     from sendspin_bridge.services.bluetooth import hci_monitor_hub as mod
 
     assert 0.0 < mod._BATCH_S <= 0.05  # AVRCP correlation tolerates <= 50 ms of extra latency
+
+
+# ---------------------------------------------------------------- Python 3.14
+
+
+class NoRecvmsgMonitorSocket(FakeMonitorSocket):
+    """Python 3.14: recvmsg answers "getsockaddrlen: bad family"; plain recv works."""
+
+    def recvmsg(self, bufsize, ancbufsize=0):
+        raise OSError(errno.EAFNOSUPPORT, "getsockaddrlen: bad family")
+
+    def recv(self, bufsize):
+        if self.closed:
+            raise OSError(errno.EBADF, "closed")
+        if self._records:
+            item = self._records.pop(0)
+            self._sync_ready()
+            return item[0] if isinstance(item, tuple) else item
+        if self.timeouts and self.timeouts[-1] == 0.0:
+            raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        raise TimeoutError("timed out")
+
+
+def test_a_python_without_recvmsg_on_bluetooth_falls_back_to_recv(caplog):
+    """Python 3.14 broke recvmsg for AF_BLUETOOTH; the hub must keep working.
+
+    Without recvmsg there is no SCM_TIMESTAMPNS, so the records are stamped with
+    the receive time (design R-3) instead of the kernel's microsecond time.
+    """
+    recs = [(frame(hs.MONITOR_EVENT_PKT, 0, b"\x13\x00" + struct.pack("<H", i)), []) for i in range(3)]
+    caplog.set_level(logging.WARNING, logger="sendspin_bridge.services.bluetooth.hci_monitor_hub")
+    c = consumer()
+    hub = HciMonitorHub(open_socket=lambda: NoRecvmsgMonitorSocket(recs), seed=lambda m: None)
+    hub.add_consumer(c)
+    hub.start()
+    assert hub.wait_open(2)
+    hub.stop()
+
+    assert [rec.payload for rec in c.seen] == [b"\x13\x00" + struct.pack("<H", i) for i in range(3)]
+    assert all(rec.timestamp == "recv" for rec in c.seen)
+    assert any("receive time" in record.getMessage() for record in caplog.records)
