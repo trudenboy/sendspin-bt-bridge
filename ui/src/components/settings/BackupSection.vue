@@ -61,7 +61,7 @@ function applyRaw() {
       <SbButton variant="outline" size="sm" @click="configStore.downloadConfig()">{{ t('settings.parts.backup.download') }}</SbButton>
     </SettingsRow>
     <SettingsRow :label="t('settings.parts.backup.import')" :help="t('settings.parts.backup.importHelp')">
-      <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" data-testid="file-input" @change="onFile" />
+      <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" tabindex="-1" aria-hidden="true" data-testid="file-input" @change="onFile" />
       <SbButton variant="outline" size="sm" @click="fileInput?.click()">{{ t('settings.parts.backup.choose') }}</SbButton>
     </SettingsRow>
     <SettingsRow :label="t('settings.parts.backup.raw')" :help="t('settings.parts.backup.rawHelp')">
