@@ -70,7 +70,7 @@ def _set_discoverable(adapters: list[str], on: bool) -> bool:
 async def open_window(seconds: int = PAIRING_WINDOW_S) -> dict[str, Any]:
     """Open discoverable/pairable adapters and host a no-PIN agent until the window closes."""
     global _task, _agent
-    if _state["until"] > time.time():
+    if _state["until"] > time.time() + 5:
         return pairing_status()
     adapters = await asyncio.to_thread(_adapters)
     if not adapters:
@@ -80,7 +80,7 @@ async def open_window(seconds: int = PAIRING_WINDOW_S) -> dict[str, Any]:
     if _agent is None:
         from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 
-        agent = PairingAgent(capability="NoInputNoOutput")
+        agent = PairingAgent(capability="DisplayYesNo")
         try:
             await asyncio.to_thread(agent.__enter__)
         except Exception:
