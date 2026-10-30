@@ -89,6 +89,8 @@ def air_vetoes_steady_jump(air_error_us: float | None, jump_us: float) -> bool:
     if air_error_us is None:
         return False
     return abs(air_error_us) < AIR_JUMP_MIN_US
+
+
 PA_STEP_CONFIRM = 0.6  # of PA_STEP_US
 SUMMARY_EVERY_S = 10.0  # DEBUG summary cadence; 1 s with SENDSPIN_PLAYOUT_DEBUG=1
 SUMMARY_DEBUG_EVERY_S = 1.0

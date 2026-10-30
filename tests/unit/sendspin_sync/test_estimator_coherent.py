@@ -275,7 +275,9 @@ def _gain(recording: Recording, gain: float) -> Recording:
     n = len(recording.pcm) // 2
     vals = struct.unpack(f"<{n}h", recording.pcm)
     pcm = struct.pack(f"<{n}h", *[max(-32768, min(32767, int(v * gain))) for v in vals])
-    return Recording(member=recording.member, start_time_s=recording.start_time_s, sample_rate=recording.sample_rate, pcm=pcm)
+    return Recording(
+        member=recording.member, start_time_s=recording.start_time_s, sample_rate=recording.sample_rate, pcm=pcm
+    )
 
 
 def test_a_clipped_recording_says_so_instead_of_no_clicks():

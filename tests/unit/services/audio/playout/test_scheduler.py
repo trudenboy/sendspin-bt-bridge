@@ -213,7 +213,7 @@ def test_a_positive_rate_drops_frames_at_the_write_head():
 
     A frame is 20 us of audio: the discontinuity is inaudible, unlike a 20 ms jump.
     """
-    s, m = sched()
+    s, _m = sched()
     s.submit(1_000_000, tone(4800))
     s.render(audible_us=1_000_000.0, now_us=0.0)
     # 10 ms blocks at 48 kHz: 400 ppm owes one frame every ~5 blocks.
