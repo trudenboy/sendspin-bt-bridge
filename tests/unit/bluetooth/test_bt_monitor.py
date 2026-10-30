@@ -422,6 +422,10 @@ async def test_inner_dbus_monitor_successful_reconnect_starts_subprocess(bt_mana
     async def _mock_run_in_executor(executor, fn, *args):
         return fn(*args)
 
+    # A successful connect configures audio, so the sink is ready by the time
+    # the monitor decides whether to start the player (#476).
+    bt_manager.audio_sink_ready = True
+
     with (
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
@@ -538,7 +542,8 @@ async def test_inner_dbus_monitor_connect_event_wakes_backoff(bt_manager):
 
     # is_device_paired → True, connect_device → False (forces the
     # failed-reconnect branch where the backoff sleep lives).
-    executor_results = iter([True, False])
+    # is_device_paired, handle_reconnect_failure, connect_device, configure audio.
+    executor_results = iter([True, False, False, True])
 
     async def _mock_run_in_executor(executor, fn, *args):
         try:

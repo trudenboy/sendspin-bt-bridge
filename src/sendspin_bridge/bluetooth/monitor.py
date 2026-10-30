@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 # Gives PulseAudio time to create the new sink and module-rescue-streams to act.
 _SINK_CORRECTION_DELAY = 3
 
+# Device-card message for a link that has no A2DP sink (#476). Kept as a
+# constant so a later successful connect can clear exactly this error and
+# nothing else.
+_MISSING_SINK_ERROR = (
+    "Bluetooth link is up but the speaker exposes no audio sink. "
+    "Enable Recover a missing audio sink and reconnect, or pair the speaker again."
+)
+
 # Strong references to fire-and-forget background tasks.  A bare
 # ``asyncio.ensure_future`` keeps no reference, so the event loop may garbage
 # collect the task mid-flight and any exception it raises is silently dropped.
@@ -151,6 +159,33 @@ async def _early_role_flip(mgr: BluetoothManager, loop) -> None:
     await loop.run_in_executor(bt_executor(), mgr.early_a2dp_role_flip)
 
 
+async def _retry_due_early_flip(mgr: BluetoothManager, loop) -> None:
+    """Ask again once the manager's retry schedule comes due (#476).
+
+    A refusal right after pairing is ``br-connection-busy`` — "not now", not
+    "no". The manager schedules the next attempt; without this the promised
+    later attempt never ran, because BlueZ never re-announced the services.
+    """
+    if not mgr.early_role_flip_pending or not mgr.early_flip_retry_due or mgr.connect_in_progress:
+        return
+    await loop.run_in_executor(bt_executor(), mgr.early_a2dp_role_flip)
+
+
+def _connected_wait_timeout(mgr: BluetoothManager) -> float:
+    """How long the connected branch may sleep before looking again.
+
+    The heartbeat cadence, shortened to the next scheduled early-flip retry so
+    a busy speaker is asked again in a second rather than in three heartbeats.
+    """
+    timeout = mgr.check_interval * 3
+    retry_delay = mgr.early_flip_retry_delay
+    if retry_delay is not None and not mgr.connect_in_progress:
+        # A bridge-started connect owns the flip and will ask on its own; its
+        # lock can be held for half a minute, so don't spin waiting for it.
+        timeout = min(timeout, max(retry_delay, 0.05))
+    return timeout
+
+
 async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool:
     """Configure audio and start the player for a link that is already up.
 
@@ -166,10 +201,17 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
             # Waits briefly for a flip another path has in flight, so audio
             # is not configured while the speaker is still choosing its role.
             await loop.run_in_executor(bt_executor(), functools.partial(mgr.early_a2dp_role_flip, wait=2.0))
-        await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
+        sink_ok = await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     finally:
         lease.release()
     if mgr.host:
+        if not sink_ok:
+            # #476: a link with no A2DP sink has nowhere to play. Starting the
+            # daemon anyway parks it on the ``default`` null sink and the
+            # device looks healthy while it is silent.
+            _report_missing_sink(mgr)
+            return True
+        _clear_missing_sink_error(mgr)
         mgr.host.update_status(
             {
                 "bluetooth_connected": True,
@@ -179,6 +221,27 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         await mgr.host.start_subprocess()
     _spawn_background(_correct_other_devices_routing(mgr))
     return True
+
+
+def _report_missing_sink(mgr: BluetoothManager) -> None:
+    """Say on the device card that the link has no sink (#476)."""
+    logger.warning(
+        "[%s] Link is up but the speaker exposes no audio sink — leaving the player stopped",
+        mgr.device_name,
+    )
+    if mgr.host:
+        mgr.host.update_status(
+            {
+                "last_error": _MISSING_SINK_ERROR,
+                "last_error_at": datetime.now(tz=UTC).isoformat(),
+            }
+        )
+
+
+def _clear_missing_sink_error(mgr: BluetoothManager) -> None:
+    """Clear the "no sink" card error once the speaker has a sink again."""
+    if mgr.host and mgr.host.get_status_value("last_error") == _MISSING_SINK_ERROR:
+        mgr.host.update_status({"last_error": None})
 
 
 async def _poll_auto_reclaim(mgr: BluetoothManager, loop) -> bool:
@@ -393,6 +456,9 @@ async def _inner_dbus_monitor(
             continue
 
         if mgr.connected:
+            # #476: a refusal that said "not now" (BlueZ busy right after
+            # pairing) is retried here, on the manager's back-off schedule.
+            await _retry_due_early_flip(mgr, loop)
             # Standby wake: direct connect already finished — trigger reroute
             if mgr.host and mgr.host.get_status_value("bt_waking"):
                 logger.info("[%s] BT already reconnected during wake — triggering reroute", mgr.device_name)
@@ -426,7 +492,7 @@ async def _inner_dbus_monitor(
 
             # Wait for disconnect signal or heartbeat timeout
             try:
-                await asyncio.wait_for(disconnect_event.wait(), timeout=mgr.check_interval * 3)
+                await asyncio.wait_for(disconnect_event.wait(), timeout=_connected_wait_timeout(mgr))
             except TimeoutError:
                 # Heartbeat — verify state directly
                 try:
@@ -535,8 +601,15 @@ async def _inner_dbus_monitor(
                 # Re-subscribe signals — device object may have changed
                 logger.info("[%s] Reconnected, restarting D-Bus subscription...", mgr.device_name)
                 if mgr.host:
-                    logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
-                    await mgr.host.start_subprocess()
+                    if mgr.audio_sink_ready:
+                        _clear_missing_sink_error(mgr)
+                        logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
+                        await mgr.host.start_subprocess()
+                    else:
+                        # #476: the link came back without a sink. Starting the
+                        # daemon here parks it on the ``default`` null sink
+                        # while the device card claims it is playing.
+                        _report_missing_sink(mgr)
                 _spawn_background(_correct_other_devices_routing(mgr))
                 return
             else:
@@ -562,7 +635,8 @@ async def _inner_dbus_monitor(
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:
                     logger.info("[%s] External reconnect detected, configuring audio...", mgr.device_name)
-                    if await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio):
+                    sink_ok = await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
+                    if sink_ok:
                         mgr.reconnect_attempt = 0
                     mgr.policy.record_reconnect()
                     if mgr.host:
@@ -574,7 +648,11 @@ async def _inner_dbus_monitor(
                                 "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
-                        logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
-                        await mgr.host.start_subprocess()
+                        if sink_ok:
+                            _clear_missing_sink_error(mgr)
+                            logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
+                            await mgr.host.start_subprocess()
+                        else:
+                            _report_missing_sink(mgr)
                     _spawn_background(_correct_other_devices_routing(mgr))
                     return

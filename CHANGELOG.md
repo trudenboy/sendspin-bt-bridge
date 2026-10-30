@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- An Echo-style speaker now gets its audio sink on the first connect after pairing: when BlueZ answers "busy", the bridge asks again a few seconds later on a growing schedule instead of waiting for a signal that never comes. It also asks for the sink before switching the sound card profile on a reconnect, which used to fail with "Input/output error".
+- A speaker that reconnects without an audio sink no longer starts a silent player on the default output; the device card says the sink is missing and what to do about it.
+
 ## [3.1.0-beta.21] - 2026-10-30
 
 ### Changed

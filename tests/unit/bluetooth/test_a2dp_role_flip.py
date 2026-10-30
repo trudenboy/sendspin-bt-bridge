@@ -448,3 +448,108 @@ def test_connect_on_a_link_that_is_already_up_asks_for_the_sink(echo):
         mgr.connect_device()
 
     assert _sink_requests(bluez) == [("ConnectProfile", (A2DP_SINK_UUID,))]
+
+
+# ---------------------------------------------------------------------------
+# #476 follow-up: the first connect right after pairing is refused as busy,
+# and the PulseAudio card switch happens with no sink request at all.
+# ---------------------------------------------------------------------------
+
+
+def test_audio_configuration_asks_for_the_sink_before_pactl(echo):
+    mgr, _bluez = echo
+    mgr._apply_connected_state(True)
+    order: list[str] = []
+
+    def _audio(**_kwargs):
+        order.append("pactl")
+        return True
+
+    with (
+        patch("sendspin_bridge.bluetooth.audio.configure_bluetooth_audio", side_effect=_audio),
+        patch.object(
+            mgr,
+            "early_a2dp_role_flip",
+            side_effect=lambda **kwargs: order.append(f"flip unknown={kwargs.get('allow_unknown_uuids')}") or True,
+        ),
+    ):
+        assert mgr.configure_bluetooth_audio() is True
+
+    # The card profile request must come after the sink profile request:
+    # pactl answers "Input/output error" while the sink profile is missing.
+    assert order == ["flip unknown=True", "pactl"]
+
+
+def test_audio_configuration_asks_even_before_bluez_knows_the_services(installed_bluez):
+    installed_bluez.on("show", stdout="")
+    mgr = _manager(enable_a2dp_dance=True)
+    bluez = bluez_knowing(mgr, connected=True, paired=True, services_resolved=False, uuids=())
+    attach(mgr, bluez)
+    mgr._apply_connected_state(True)
+
+    with patch("sendspin_bridge.bluetooth.audio.configure_bluetooth_audio", return_value=True):
+        assert mgr.configure_bluetooth_audio() is True
+
+    assert _sink_requests(bluez) == [("ConnectProfile", (A2DP_SINK_UUID,))]
+
+
+def test_audio_configuration_asks_nothing_without_the_experimental_recovery(installed_bluez):
+    installed_bluez.on("show", stdout="")
+    mgr = _manager(enable_a2dp_dance=False)
+    bluez = bluez_knowing(
+        mgr, connected=True, paired=True, services_resolved=True, uuids=(A2DP_SOURCE_UUID, A2DP_SINK_UUID)
+    )
+    attach(mgr, bluez)
+    mgr._apply_connected_state(True)
+
+    with patch("sendspin_bridge.bluetooth.audio.configure_bluetooth_audio", return_value=False):
+        assert mgr.configure_bluetooth_audio() is False
+
+    assert _profile_calls(bluez) == []
+
+
+def test_a_busy_early_refusal_schedules_a_retry(echo):
+    mgr, bluez = echo
+    mgr._apply_connected_state(True)
+    bluez.fail["ConnectProfile"] = RuntimeError("org.bluez.Error.InProgress: Operation already in progress")
+
+    assert mgr.early_a2dp_role_flip() is False
+    assert mgr.early_role_flip_pending is True
+    delay = mgr.early_flip_retry_delay
+    assert delay is not None and 0 < delay <= 1.0
+    assert mgr.early_flip_retry_due is False
+
+    bluez.fail.pop("ConnectProfile")
+    assert mgr.early_a2dp_role_flip() is True
+    assert mgr.early_flip_retry_delay is None
+
+
+def test_a_hard_early_refusal_does_not_schedule_a_retry(echo):
+    mgr, bluez = echo
+    mgr._apply_connected_state(True)
+    bluez.fail["ConnectProfile"] = RuntimeError("org.bluez.Error.Failed: refused")
+
+    assert mgr.early_a2dp_role_flip() is False
+    assert mgr.early_flip_retry_delay is None
+
+
+def test_unknown_services_schedule_a_retry(installed_bluez):
+    installed_bluez.on("show", stdout="")
+    mgr = _manager(enable_a2dp_dance=True)
+    bluez = bluez_knowing(mgr, connected=True, paired=True, services_resolved=False, uuids=())
+    attach(mgr, bluez)
+    mgr._apply_connected_state(True)
+
+    assert mgr.early_a2dp_role_flip() is False
+    assert mgr.early_flip_retry_delay is not None
+
+
+def test_the_retry_schedule_is_dropped_when_the_link_drops(echo):
+    mgr, bluez = echo
+    mgr._apply_connected_state(True)
+    bluez.fail["ConnectProfile"] = RuntimeError("org.bluez.Error.InProgress")
+    assert mgr.early_a2dp_role_flip() is False
+    assert mgr.early_flip_retry_delay is not None
+
+    mgr._apply_connected_state(False)
+    assert mgr.early_flip_retry_delay is None

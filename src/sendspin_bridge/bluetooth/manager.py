@@ -93,6 +93,12 @@ _PAIRED_UNKNOWN_THRESHOLD = 3
 # moment later (another connect still running, the adapter busy, no reply).
 _TRANSIENT_PROFILE_ERRORS = ("inprogress", "in progress", "busy", "timeout", "timed out", "noreply", "no reply")
 
+# #476: right after pairing an Echo answers the sink request with
+# ``br-connection-busy`` and accepts it a few seconds later. Retry on this
+# schedule (seconds) while the link stays up; exhausting it means this
+# connection refuses to be a speaker.
+_EARLY_FLIP_RETRY_DELAYS_S = (0.5, 1.0, 2.0, 4.0, 8.0)
+
 
 def _is_transient_profile_refusal(reason: str | None) -> bool:
     """Is a refused ConnectProfile worth retrying shortly (#476)?"""
@@ -202,6 +208,11 @@ class BluetoothManager:
         # attempt is keyed to the connection transition it was made on.
         self._early_flip_lock = threading.Lock()
         self._early_flip_seq: int | None = None
+        # When a transient refusal or unknown services leave the flip pending,
+        # this is when to ask again (monotonic) and how far down the back-off
+        # ladder we are. Both reset on every connection transition.
+        self._early_flip_retry_at: float | None = None
+        self._early_flip_retry_index = 0
         # Why the last late role flip was refused (None: accepted or not run).
         self._last_role_flip_refusal: str | None = None
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
@@ -765,6 +776,14 @@ class BluetoothManager:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         if self._reconnect_cancelled():
             return False
+        # #476: with an Echo the card sits in ``a2dp_source`` (or ``off``) and
+        # ``pactl set-card-profile a2dp_sink`` answers "Input/output error"
+        # until BlueZ has connected the sink profile. Ask for it first — this
+        # is also the path a reconnect takes, which never sees the connect
+        # loop's early flip. UUIDs may still be unknown here; the card itself
+        # is proof enough that a sink is expected.
+        if self.connected and self.early_role_flip_pending:
+            self.early_a2dp_role_flip(allow_unknown_uuids=True)
         self.audio_sink_ready = bt_audio.configure_bluetooth_audio(
             mac_address=self.mac_address,
             prefer_sbc=self.prefer_sbc,
@@ -1060,6 +1079,9 @@ class BluetoothManager:
                 self.audio_sink_ready = False
             self._transition_seq += 1
             sequence = self._transition_seq
+            # A new connection gets a fresh early-flip retry ladder; a link
+            # that just dropped must not keep a retry scheduled.
+            self._clear_early_flip_retry()
         # The sampled host probe (paired devices, sinks) is stale from here on.
         from sendspin_bridge.services.diagnostics import preflight_status
 
@@ -1157,7 +1179,39 @@ class BluetoothManager:
         """Is the early role flip on and not yet made for the current connection?"""
         return self._enable_a2dp_dance and self._early_flip_seq != self._transition_seq
 
-    def early_a2dp_role_flip(self, *, wait: float = 0.0) -> bool:
+    @property
+    def early_flip_retry_delay(self) -> float | None:
+        """Seconds until the next early-flip retry, or ``None`` when none is due.
+
+        A transient refusal (BlueZ busy right after pairing) or unknown
+        services leave the flip pending; the monitor re-asks when this
+        reaches zero (#476).
+        """
+        if self._early_flip_retry_at is None or not self.early_role_flip_pending:
+            return None
+        return max(0.0, self._early_flip_retry_at - time.monotonic())
+
+    @property
+    def early_flip_retry_due(self) -> bool:
+        """Is a scheduled early-flip retry due now (#476)?"""
+        delay = self.early_flip_retry_delay
+        return delay is not None and delay <= 0.0
+
+    def _schedule_early_flip_retry(self) -> float | None:
+        """Ask again after a growing pause; ``None`` once the ladder is spent."""
+        if self._early_flip_retry_index >= len(_EARLY_FLIP_RETRY_DELAYS_S):
+            self._early_flip_retry_at = None
+            return None
+        delay = _EARLY_FLIP_RETRY_DELAYS_S[self._early_flip_retry_index]
+        self._early_flip_retry_index += 1
+        self._early_flip_retry_at = time.monotonic() + delay
+        return delay
+
+    def _clear_early_flip_retry(self) -> None:
+        self._early_flip_retry_at = None
+        self._early_flip_retry_index = 0
+
+    def early_a2dp_role_flip(self, *, wait: float = 0.0, allow_unknown_uuids: bool = False) -> bool:
         """Ask a dual-role speaker for its sink as soon as the link is up.
 
         An Echo picks its role per connection; once it has opened its own
@@ -1168,7 +1222,11 @@ class BluetoothManager:
         connection: the connect loop and the monitor both call it, whichever
         sees the link first wins. The attempt is not used up while BlueZ does
         not know the speaker's services yet, nor when the refusal is
-        transient (in progress, busy, no reply), so a later path can retry.
+        transient (in progress, busy, no reply): both schedule a retry.
+
+        *allow_unknown_uuids* asks anyway when BlueZ has not resolved the
+        speaker's services yet — the audio path does, because the card profile
+        it is about to switch is itself proof that a sink should be there.
 
         *wait* bounds how long to wait for an attempt another path has in
         flight; ``0`` returns at once. Blocking: call it off the loop.
@@ -1182,27 +1240,43 @@ class BluetoothManager:
             if not self.early_role_flip_pending:
                 return False
             uuids = {uuid.lower() for uuid in self.device.uuids_blocking()}
-            if not uuids:
+            if not uuids and not allow_unknown_uuids:
                 logger.debug(
                     "[%s] Early role flip skipped: the speaker's UUIDs are not known yet — retrying when BlueZ resolves them",
                     self.device_name,
                 )
+                self._schedule_early_flip_retry()
                 return False
             claimed_at = self._transition_seq
             self._early_flip_seq = claimed_at
-            if A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids:
+            if uuids and (A2DP_SOURCE_UUID not in uuids or A2DP_SINK_UUID not in uuids):
+                # A speaker that cannot be a source never has both roles.
+                self._clear_early_flip_retry()
                 return False
             if self._connect_sink_profile_logged("Early Audio Sink ConnectProfile (source kept)"):
+                self._clear_early_flip_retry()
                 return True
             reason = self.device.last_error
             if _is_transient_profile_refusal(reason):
                 if self._early_flip_seq == claimed_at:
                     self._early_flip_seq = None
-                logger.debug(
-                    "[%s] Early role flip refusal is transient (%s) — leaving it for a later attempt",
-                    self.device_name,
-                    reason,
-                )
+                retry_in = self._schedule_early_flip_retry()
+                if retry_in is None:
+                    logger.debug(
+                        "[%s] Early role flip refusal is transient (%s) — retry ladder spent for this connection",
+                        self.device_name,
+                        reason,
+                    )
+                else:
+                    logger.debug(
+                        "[%s] Early role flip refusal is transient (%s) — retrying in %.1fs",
+                        self.device_name,
+                        reason,
+                        retry_in,
+                    )
+            else:
+                # A hard refusal uses up the flip for this connection.
+                self._clear_early_flip_retry()
             return False
         finally:
             self._early_flip_lock.release()
