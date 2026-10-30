@@ -296,30 +296,53 @@ def _keep_awake_sinks(group_id: str) -> list[str]:
     from sendspin_bridge.bridge import state as bridge_state
     from sendspin_bridge.config import load_config
     from sendspin_bridge.config.players import find_player_by_id
+    from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_player_ids
 
     try:
         members = _control().members(group_id)
     except (ControlError, MaApiError):
         return []
-    clients = {str(getattr(c, "player_id", "") or ""): c for c in bridge_state.get_clients_snapshot()}
+    snapshot = bridge_state.get_clients_snapshot()
+    clients = {str(getattr(c, "player_id", "") or ""): c for c in snapshot}
+    clients.update({str(getattr(c, "config_id", "") or ""): c for c in snapshot if getattr(c, "config_id", None)})
+    # The bridge knows its own player ids; Music Assistant knows its own. A member carries the MA
+    # id, so resolve it back to the bridge's id before looking up the speaker's settings.
+    bridge_by_ma = {ma_id: player_id for player_id, ma_id in get_ma_player_ids().items()}
     config = load_config()
     sinks: list[str] = []
     for member in members:
-        client_id = getattr(member, "client_id", None)
+        ma_player_id = str(getattr(member, "ma_player_id", "") or "")
+        client_id = bridge_by_ma.get(ma_player_id) or getattr(member, "client_id", None)
         if not client_id:
             continue
-        entry = find_player_by_id(config, str(client_id))
-        if not entry or not entry.get("calibration_bed"):
-            continue
         client = clients.get(str(client_id))
+        entry = find_player_by_id(config, str(client_id))
+        if entry is None and client is not None:
+            # The runtime id and the configuration id differ for Bluetooth players.
+            entry = find_player_by_id(config, str(getattr(client, "config_id", "") or ""))
+        if not entry or not entry.get("calibration_bed"):
+            logger.debug(
+                "keep-awake: member %s (bridge %s) skipped: entry=%s flag=%s",
+                ma_player_id,
+                client_id,
+                bool(entry),
+                bool(entry and entry.get("calibration_bed")),
+            )
+            continue
         if client is None:
+            logger.debug("keep-awake: member %s (bridge %s) has the flag but no running client", ma_player_id, client_id)
             continue
         manager = getattr(client, "bt_manager", None)
+        status = getattr(client, "status", {}) or {}
         sink = getattr(manager, "bluetooth_sink_name", None) if manager is not None else None
         if not sink:
-            sink = (getattr(client, "status", {}) or {}).get("sink")
+            sink = getattr(client, "bluetooth_sink_name", None)
+        if not sink:
+            sink = status.get("sink_name") or status.get("sink")
         if isinstance(sink, str) and sink:
             sinks.append(sink)
+        else:
+            logger.debug("keep-awake: member %s (bridge %s) has no sink yet", ma_player_id, client_id)
     return sinks
 
 
@@ -329,7 +352,10 @@ def create_session(body: SessionCreate) -> SyncSessionOut:
     except (ControlError, MaApiError) as exc:
         _raise(exc)
     try:
-        _BEDS.sync(_keep_awake_sinks(body.group_id))
+        sinks = _keep_awake_sinks(body.group_id)
+        if sinks:
+            logger.info("Tuning keep-awake for %d speaker(s): %s", len(sinks), ", ".join(sinks))
+        _BEDS.sync(sinks)
     except Exception:  # a keep-awake stream must never cost the session
         logger.warning("Could not start the tuning keep-awake streams", exc_info=True)
     return _session_out(session)
