@@ -378,7 +378,7 @@ class BridgeConfig(BaseModel):
     """
     EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE: bool | None = True
     """
-    Ask for the speaker's A2DP sink profile first when the sink is missing after connect, and disconnect→reconnect once if that does not help. A speaker that is also an audio source (an Amazon Echo, bluez/bluez#1898) otherwise lands on ``a2dp_source`` and exposes no sink. On by default since 3.1.0-beta.25; may cause extra churn on some devices, turn it off for those.
+    Ask for the speaker's A2DP sink profile first when the sink is missing after connect, and disconnect→reconnect once if that does not help. A speaker that is also an audio source (an Amazon Echo, bluez/bluez#1898) otherwise lands on the a2dp_source profile and exposes no sink. On by default since 3.1.0-beta.25; may cause extra churn on some devices, turn it off for those.
     """
     EXPERIMENTAL_PA_MODULE_RELOAD: bool | None = False
     """
