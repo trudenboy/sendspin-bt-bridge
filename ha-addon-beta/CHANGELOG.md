@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.19] - 2026-10-30
+
+### Added
+
+- The web interface now starts in your Home Assistant language when you have not picked one, loads only the language you use, and its translations are ready for community contributions (see `docs/translations.md`).
+- Playout sync can now be set to "Measure and correct" in Settings; it corrects each start's placement using the experimental air sensor and behaves like measure without it.
+- Handing over or disabling a single speaker now runs at once and shows an Undo button in the confirmation toast.
+
+### Changed
+
+- Turning an adapter off or rebooting it, importing a configuration, restarting the bridge and updating the bridge now ask first and say what stops (the speakers on the adapter, playback, what is playing).
+- Actions now follow one rule: standby, wake, enable, mute all and power save run at once with Undo, while removing a speaker, forgetting a Bluetooth pairing, resetting an adapter, importing a configuration (with a link to download the current one first), restarting and updating ask first and list what happens. Bluetooth scan, pairing, update and restart show what is running, for how long, Cancel where possible, and a next step when they fail; an update says "Updating… the bridge restarts".
+- Error notifications stay until dismissed, the others pause while hovered or focused, and text fields use the same keyboard focus outline as buttons.
+- Speaker actions and states now have consistent names in English and Russian: Release / Reclaim, Power save, Standby / Wake, Enable / Disable, Speaker latency compensation, and Air-to-sound latency.
+- Messages from the bridge (guidance, recovery cards, the header status, action buttons, event timeline and blocked-control reasons) now follow the chosen language instead of always being English.
+- Connection status now uses three separate names everywhere (header, cards, speaker details, Diagnostics): Audio link, Music Assistant account and Bluetooth connection, instead of one "Connected"; the Diagnostics verdict and the header status come from the same list of issues, so Healthy no longer appears above warnings.
+- The speaker panel now has four tabs that fit a phone: Overview (state, the one main action, the audio path and the latest events), Settings, Timing (one value, a link to tune with the group, technical details folded) and History. Settings save as you change them with Saved and Undo (a refused change goes back and shows the reason), recovery tools sit under Troubleshoot (Pair again now asks first), and adapter power and reboot moved to Settings, Bluetooth.
+- Calibration now has one path: a speaker's Timing tab no longer has its own click track or microphone comparison and instead offers "Tune with your group" (or explains how to make a sync group); opening the Manual tab no longer starts a tuning session, the wizard stops the music and starts the clicks in one confirmed step, and the measured Bluetooth latency is shown as a result ("Bluetooth latency measured: N ms, saved"). The matching API endpoints remain and are marked deprecated for the web UI.
+- The web UI now has a "Show technical details" preference (preferences menu, and a default in Settings): off for new installs and on for installs that already had speakers, it hides signal levels, sync counters, Playout, server IDs, the audio path and advanced settings, and shows the Bluetooth and Audio link chips only when something is wrong. Inside Home Assistant the page drops its own brand header and Sponsor link, folds the runtime row into one status pill, starts with a collapsed sidebar, and replaces Security and update settings with "Signed in through Home Assistant" and "Updates come from the Home Assistant add-on store".
+- The Web UI guide (English and Russian) is rewritten for the new interface: pages, the three connection states, the speaker panel, the action rules, Show technical details and the Home Assistant layout.
+
+### Fixed
+
+- An update that never finishes now says so after 3 minutes ("The update did not finish") and points to the logs, instead of showing "Updating…" forever.
+- Signing in with a correct password now takes you to the home page
+  instead of leaving you on the sign-in page with an error, and opening
+  the sign-in page while no sign-in is required goes to the home page
+  instead of showing a blank screen.
+- Bug report: the minimum title and description lengths are shown up front, a diagnostics load error appears inside the dialog with Retry, and the submit button says what it will do (open a GitHub issue, send, or copy).
+- Logs: a failed load says so with Retry instead of "No log entries", and applying the log level confirms or reports the result.
+- Music Assistant sign-in prefills the server address from the speakers' Sendspin server and says when Auto-Discover finds nothing; the empty Groups page links to Music Assistant to create a group.
+- "No results" on the speaker list offers Clear filters, and filters are cleared when the filter bar hides.
+- Close buttons, the sidebar toggle and the device drawer's signal path are translated (RU) and the sidebar toggle announces its state; about 130 unused texts were removed.
+- Accessibility and legibility in the web UI: keyboard focus is now visible on every control, warning text and the secondary and tertiary grey text meet WCAG AA contrast in both themes, dialog, drawer and toast close buttons have a 40 px touch target, and the selection volume slider and the phone update badge have accessible names.
+- Recovery actions on Diagnostics are buttons you can press, the restart error banner can be dismissed and opens the logs, Cancel works while a speaker is recording or the phone sequence plays, "Require sign-in" cannot be switched on before a password exists, and volume, mute and hand-over failures name the speaker and the reason.
+- Diagnostics: the Recovery toolbar wraps on phones instead of widening the page, and the tabs and copy buttons follow the interface language. The air sensor setting stays off until playout sync is in measure or loop mode, and its "seconds ago" value keeps counting.
+
 ## [3.1.0-beta.18] - 2026-10-29
 
 ### Added
