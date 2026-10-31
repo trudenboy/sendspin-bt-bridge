@@ -5,6 +5,7 @@ import { useReversibleActions } from '@/composables/useReversibleActions'
 import { actionFailure } from '@/utils/actionFailure'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
@@ -12,7 +13,6 @@ import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
 import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import StatusState from '@/components/StatusState.vue'
-import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import { openPairingWindow, reconnectDevice, repairDevice, setPowerSave, unmuteSink } from '@/api/devices'
 import { ApiError } from '@/api/client'
 import DeviceSettingsPanel from './DeviceSettingsPanel.vue'
@@ -36,10 +36,10 @@ const { t } = useI18n()
 const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
+const router = useRouter()
 
 const activeTab = ref('overview')
 const managementLoading = ref(false)
-const btInfoOpen = ref(false)
 const reversible = useReversibleActions()
 
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
@@ -179,8 +179,8 @@ async function onRelease(release: boolean) {
   }
 }
 
-function onBtInfo() {
-  btInfoOpen.value = true
+function openHardware() {
+  void router.push('/hardware')
 }
 
 /** The one thing to do about this speaker right now (the rest is under Troubleshoot). */
@@ -264,7 +264,7 @@ function onPrimary() {
                 <SbDropdownItem @click="runAction('unmute')">{{ t('drawer.actions.unmute') }}</SbDropdownItem>
                 <SbDropdownItem v-if="!pulse" @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
                 <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
-                <SbDropdownItem v-if="!pulse" @click="onBtInfo">{{ t('bluetooth.info') }}</SbDropdownItem>
+                <SbDropdownItem v-if="!pulse" @click="openHardware">{{ t('nav.hardware') }}</SbDropdownItem>
               </SbDropdown>
             </div>
 
@@ -362,14 +362,5 @@ function onPrimary() {
     <div v-else-if="disabledTarget" class="text-sm">
       <DeviceSettingsPanel :device="disabledTarget" />
     </div>
-
-    <!-- BT Device Info Modal -->
-    <BtDeviceInfoModal
-      v-if="device"
-      :mac="device.bluetooth?.mac ?? ''"
-      :adapter="device.bluetooth?.adapter.mac ?? ''"
-      :open="btInfoOpen"
-      @update:open="btInfoOpen = $event"
-    />
   </SbDrawer>
 </template>

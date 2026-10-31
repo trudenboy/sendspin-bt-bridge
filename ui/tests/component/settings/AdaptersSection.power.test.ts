@@ -25,7 +25,10 @@ vi.mock('@/api/bluetooth', () => bt)
 
 function section() {
   return mount(AdaptersSection, {
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
+    global: {
+      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+      stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+    },
   })
 }
 
@@ -75,5 +78,11 @@ describe('Settings, Bluetooth: adapter power and reboot', () => {
     await flushPromises()
     expect(confirm.confirmDialog).not.toHaveBeenCalled()
     expect(bt.setAdapterPower).toHaveBeenCalledWith('hci0', true)
+  })
+
+  it('links to the Hardware page for the rest of the adapter view', () => {
+    const link = section().get('[data-hardware-link]')
+    expect(link.attributes('href')).toBe('/hardware')
+    expect(link.text()).toBe(en.adapter.openInHardware)
   })
 })

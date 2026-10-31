@@ -6,7 +6,7 @@ import { useConfigStore } from '@/stores/config'
 import { useBridgeStore } from '@/stores/bridge'
 import { SbBadge, SbButton } from '@/kit'
 import { ref } from 'vue'
-import { Power, RotateCw } from 'lucide-vue-next'
+import { ArrowRight, Power, RotateCw } from 'lucide-vue-next'
 import { setAdapterPower } from '@/api/bluetooth'
 import { confirmAction } from '@/composables/useActionPolicy'
 import { useNotificationStore } from '@/stores/notifications'
@@ -107,8 +107,20 @@ const inputClass =
 
 <template>
   <div class="py-3">
-    <p class="text-sm font-medium text-text-primary">{{ t('settings.parts.adapters.label') }}</p>
-    <p class="mt-0.5 text-[13px] text-text-secondary">{{ t('settings.parts.adapters.help') }}</p>
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <p class="text-sm font-medium text-text-primary">{{ t('settings.parts.adapters.label') }}</p>
+        <p class="mt-0.5 text-[13px] text-text-secondary">{{ t('settings.parts.adapters.help') }}</p>
+      </div>
+      <RouterLink
+        to="/hardware"
+        data-hardware-link
+        class="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary-text hover:underline"
+      >
+        {{ t('adapter.openInHardware') }}
+        <ArrowRight class="h-3.5 w-3.5" aria-hidden="true" />
+      </RouterLink>
+    </div>
     <p v-if="bridge.adapters.length === 0" class="py-4 text-sm text-text-secondary">{{ t('config.noAdapters') }}</p>
     <ul v-else class="mt-3 divide-y divide-border rounded-(--radius-card) border border-border">
       <li

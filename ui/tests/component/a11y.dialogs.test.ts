@@ -6,9 +6,11 @@ import SbDialog from '@/kit/SbDialog.vue'
 import ConfirmConsequences from '@/kit/ConfirmConsequences.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
 import BugReportDialog from '@/components/BugReportDialog.vue'
+import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
 import en from '@/i18n/locales/en.json'
 import ru from '@/i18n/locales/ru.json'
 import { seriousViolations } from '../helpers/axe'
+import { btDevice, controller } from './hardware/support'
 
 // Regression guard (UX stage 8): dialogs have a role, a name and labelled
 // controls, in both languages.
@@ -73,6 +75,29 @@ describe('accessibility: dialogs', () => {
     it(`the bug report dialog has no serious violations (${locale})`, async () => {
       mounted = mount(BugReportDialog, { props: { modelValue: false }, global: global(locale), attachTo: document.body })
       await mounted.setProps({ modelValue: true })
+      await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`the hardware controller drawer has no serious violations (${locale})`, async () => {
+      mounted = mount(EntityDrawer, {
+        props: { open: true, kind: 'controller', controller: controller() as never },
+        global: global(locale),
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`the hardware device drawer has no serious violations (${locale})`, async () => {
+      mounted = mount(EntityDrawer, {
+        props: { open: true, kind: 'device', device: btDevice() as never },
+        global: {
+          ...global(locale),
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
       await flushPromises()
       expect(await seriousViolations()).toEqual([])
     })

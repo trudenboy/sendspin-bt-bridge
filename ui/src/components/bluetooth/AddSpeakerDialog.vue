@@ -7,7 +7,6 @@ import { playClick } from '@/api/calibration'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton, SbDialog, SbInput, SbTabs } from '@/kit'
 import AudioOutputPicker from './AudioOutputPicker.vue'
-import PairedDevicesList from './PairedDevicesList.vue'
 import LongOperation from '@/components/LongOperation.vue'
 import { CheckCircle2, RotateCw, Speaker } from 'lucide-vue-next'
 import type { ScanDevice } from '@/api/types'
@@ -255,10 +254,11 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
       <p class="text-sm text-text-secondary">{{ added?.audio.has_sink ? t('addSpeaker.testHelp') : t('addSpeaker.waiting') }}</p>
     </div>
 
-    <!-- Already paired speakers -->
+    <!-- Already paired speakers live on the Hardware page -->
     <div v-else class="space-y-3">
       <button type="button" class="text-sm text-primary-text hover:underline" @click="step = 'find'">← {{ t('addSpeaker.backToScan') }}</button>
-      <PairedDevicesList />
+      <p class="text-sm text-text-secondary">{{ t('hardware.subtitle') }}</p>
+      <RouterLink to="/hardware" class="text-sm font-medium text-primary-text hover:underline">{{ t('nav.hardware') }}</RouterLink>
     </div>
 
     <LongOperation

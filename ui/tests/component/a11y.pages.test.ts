@@ -6,9 +6,12 @@ import en from '@/i18n/locales/en.json'
 import ru from '@/i18n/locales/ru.json'
 import ConfigView from '@/views/ConfigView.vue'
 import DiagnosticsView from '@/views/DiagnosticsView.vue'
+import HardwareView from '@/views/HardwareView.vue'
 import { getConfig } from '@/api/config'
+import { getHardware } from '@/api/hardware'
 import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { seriousViolations } from '../helpers/axe'
+import { snapshot } from './hardware/support'
 
 // Regression guard (UX stage 8): no serious or critical axe violation on the
 // Settings and Diagnostics pages, in both languages, with technical details on
@@ -60,11 +63,20 @@ vi.mock('@/api/updates', () => ({
   applyUpdate: vi.fn(),
 }))
 vi.mock('@/api/status', () => ({ getStatus: vi.fn(), restartBridge: vi.fn().mockResolvedValue({}) }))
+vi.mock('@/api/hardware', () => ({ getHardware: vi.fn() }))
+vi.mock('@/composables/useEventStream', () => ({
+  DEFAULT_EVENT_TYPES: ['status', 'job'],
+  useEventStream: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
+}))
 const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
 vi.mock('@/composables/useConfirm', () => confirm)
 import { restartBridge } from '@/api/status'
 vi.mock('@/composables/useIngress', () => ({ useIngress: () => ({ basePath: '', apiBase: '' }) }))
-vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), useRoute: () => ({ hash: '', query: {} }) }))
+vi.mock('vue-router', () => ({
+  onBeforeRouteLeave: vi.fn(),
+  useRoute: () => ({ hash: '', query: {} }),
+  useRouter: () => ({ push: vi.fn() }),
+}))
 
 vi.mock('@/stores/diagnostics', () => ({
   useDiagnosticsStore: () => ({ fetchDiagnostics: vi.fn(), fetchRecovery: vi.fn(), loading: false, recovery: null }),
@@ -105,6 +117,19 @@ describe('accessibility: pages', () => {
         global: {
           plugins: [plugin(locale)],
           stubs: { HealthSummary: true, EventTimeline: true, RecoveryPanel: true, LogsViewer: true, SystemPanel: true, BugReportDialog: true },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
         },
         attachTo: document.body,
       })

@@ -13,6 +13,7 @@ function buildRouter() {
       { path: '/groups', name: 'groups', component: { template: '<div />' } },
       { path: '/config', name: 'config', component: { template: '<div />' } },
       { path: '/diagnostics', name: 'diagnostics', component: { template: '<div />' } },
+      { path: '/hardware', name: 'hardware', component: { template: '<div />' } },
     ],
   })
 }
@@ -38,15 +39,15 @@ async function mountMobileNav(initialRoute = '/') {
 }
 
 describe('MobileNav', () => {
-  it('renders 4 tab links', async () => {
+  it('renders 5 tab links', async () => {
     const wrapper = await mountMobileNav()
-    expect(wrapper.findAll('a').length).toBe(4)
+    expect(wrapper.findAll('a').length).toBe(5)
   })
 
   it('renders short tab labels that fit a phone', async () => {
     const wrapper = await mountMobileNav()
     const labels = wrapper.findAll('a').map((a) => a.text())
-    expect(labels).toEqual(['Speakers', 'Groups', 'Settings', 'Health'])
+    expect(labels).toEqual(['Speakers', 'Groups', 'Settings', 'Health', 'Hardware'])
   })
 
   it('highlights active tab', async () => {

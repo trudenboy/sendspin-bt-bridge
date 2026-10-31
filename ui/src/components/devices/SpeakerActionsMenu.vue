@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
@@ -11,7 +11,6 @@ import { speakerName } from '@/utils/speakerName'
 import { useReversibleActions } from '@/composables/useReversibleActions'
 import { canDo } from '@/utils/supportedActions'
 import { SbDropdown, SbDropdownItem } from '@/kit'
-import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import { MoreVertical } from 'lucide-vue-next'
 import type { Device } from '@/api/types'
 
@@ -25,7 +24,6 @@ const props = defineProps<{ device: Device }>()
 const { t } = useI18n()
 const store = useDeviceStore()
 const notifications = useNotificationStore()
-const infoOpen = ref(false)
 const reversible = useReversibleActions()
 
 const name = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
@@ -89,17 +87,8 @@ const heading = 'px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary'
     <SbDropdownItem @click="device.enabled ? reversible.disable(device.id, name) : reversible.enable(device.id, name)">
       {{ device.enabled ? t('speaker.disable') : t('speaker.enable') }}
     </SbDropdownItem>
-    <SbDropdownItem v-if="device.bluetooth?.mac" @click="infoOpen = true">{{ t('speaker.bluetoothInfo') }}</SbDropdownItem>
 
     <div class="my-1 border-t border-border" />
     <SbDropdownItem :destructive="true" @click="remove">{{ t('speaker.remove') }}…</SbDropdownItem>
   </SbDropdown>
-
-  <BtDeviceInfoModal
-    v-if="device.bluetooth?.mac"
-    :mac="device.bluetooth?.mac"
-    :adapter="device.bluetooth?.adapter.mac ?? ''"
-    :open="infoOpen"
-    @update:open="infoOpen = $event"
-  />
 </template>

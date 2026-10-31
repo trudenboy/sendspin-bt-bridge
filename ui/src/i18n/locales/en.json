@@ -138,7 +138,6 @@
       "vban": "VBAN",
       "le_audio": "LE Audio"
     },
-    "adapter": "Adapter {name}",
     "select": "Select {name}",
     "chips": {
       "sync": {
@@ -532,21 +531,15 @@
       "adapter": "Adapter",
       "add": "Add",
       "added": "On this bridge",
-      "addedToast": "{name} added — the player starts in a moment",
       "pairFailed": "Pairing failed: {reason}",
       "quiesce": "Temporarily disconnect other speakers on this adapter while pairing",
       "noIo": "Pair without a PIN prompt (Just Works) — for speakers that cancel pairing",
       "hfp": "Also allow the hands-free profile (calls)"
     },
     "audioOnly": "Audio only",
-    "audioCount": "{audio} audio · {total} total",
-    "addToFleet": "Add to fleet",
-    "info": "Device Info",
     "release": "Release speaker",
     "reclaim": "Reclaim speaker",
-    "released": "Released",
-    "deviceInfo": "Bluetooth Device Info",
-    "noDevices": "No paired devices found"
+    "released": "Released"
   },
   "common": {
     "loading": "Loading...",
@@ -606,13 +599,13 @@
     "powerFailed": "Failed to toggle adapter power",
     "rebooted": "Adapter rebooted",
     "rebootFailed": "Failed to reboot adapter",
-    "confirmNone": "No speakers are using it right now."
+    "confirmNone": "No speakers are using it right now.",
+    "openInHardware": "Open in Hardware"
   },
   "hardware": {
     "subtitle": "The Bluetooth adapters and the devices bonded to them.",
     "refresh": "Refresh",
     "stale": "Data may be out of date",
-    "unavailable": "This host cannot show its hardware.",
     "controllers": "Bluetooth controllers",
     "devices": "Bluetooth devices",
     "noControllers": "No Bluetooth controllers found",
@@ -621,10 +614,54 @@
     "powered": "On",
     "poweredOff": "Off",
     "connected": "Connected",
-    "roleOutput": "Audio output",
-    "roleInput": "Audio input",
+    "paired": "Paired",
+    "trusted": "Trusted",
+    "roleOutput": "Plays audio",
+    "roleInput": "Receives audio",
+    "roleEvidence": "Evidence: {evidence}",
     "battery": "Battery: {pct}%",
-    "player": "Player"
+    "rssi": "Signal: {db} dB",
+    "player": "Player",
+    "controllerId": "Controller",
+    "classOfDevice": "Class of device",
+    "area": "Area",
+    "openDetails": "Show details for {name}",
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown",
+    "unavailable": {
+      "dbusTitle": "This host has no D-Bus",
+      "dbusBody": "D-Bus did not answer, so the bridge cannot ask BlueZ about its adapters.",
+      "bluetoothTitle": "This host has no readable Bluetooth",
+      "bluetoothBody": "The bridge cannot see a Bluetooth adapter on this host.",
+      "hardwareTitle": "This host's hardware cannot be read",
+      "hardwareBody": "Neither D-Bus nor bluetoothctl could answer.",
+      "nextStep": "Check that the bridge can reach the host's Bluetooth stack, then reload this page.",
+      "reason": "Reason code: {reason}"
+    },
+    "unsupported": {
+      "title": "This bridge cannot report hardware",
+      "body": "Its API has no /hardware route. Update the bridge, or use the Settings and Diagnostics pages."
+    },
+    "drawer": {
+      "overview": "Overview",
+      "technical": "Technical details",
+      "power": "Power",
+      "present": "Present",
+      "area": "Area",
+      "classOfDevice": "Class of device",
+      "deviceCount": "Devices on this controller",
+      "roles": "Link roles",
+      "player": "Player",
+      "battery": "Battery",
+      "rssi": "Signal",
+      "bonded": "Bonded",
+      "controllers": "Controllers holding the bond",
+      "synthetic": "Synthetic id (no sysfs entry)",
+      "observedAt": "Observed at",
+      "id": "Id",
+      "mac": "MAC"
+    }
   },
   "kit": {
     "closeDialog": "Close dialog",
@@ -1491,7 +1528,6 @@
     "takeBack": "Reclaim speaker",
     "disable": "Disable",
     "enable": "Enable",
-    "bluetoothInfo": "Bluetooth details",
     "remove": "Remove speaker",
     "removeTitle": "Remove {name}?",
     "removeMessage": "Its player disappears from Music Assistant and its Bluetooth pairing is removed. To use it again, add it as a new speaker.",
@@ -2706,7 +2742,6 @@
     "replacesConfig": "All settings and speakers are replaced with the contents of this file.",
     "noUndo": "This cannot be undone.",
     "rollback": "To go back, install the previous version.",
-    "needsRepair": "The speaker must be paired again.",
     "noReconnect": "The bridge stops managing: {names}. They do not reconnect until you reclaim them.",
     "wakeFromMenu": "Wake them from their menu.",
     "downloadFirst": "Download current config first",

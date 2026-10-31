@@ -24,6 +24,7 @@ function buildRouter(initialRoute = '/') {
       { path: '/groups', name: 'groups', component: { template: '<div />' } },
       { path: '/config', name: 'config', component: { template: '<div />' } },
       { path: '/diagnostics', name: 'diagnostics', component: { template: '<div />' } },
+      { path: '/hardware', name: 'hardware', component: { template: '<div />' } },
     ],
   })
 }
@@ -54,13 +55,14 @@ describe('AppSidebar', () => {
     setActivePinia(createPinia())
   })
 
-  it('links the four places of the app', async () => {
+  it('links the five places of the app', async () => {
     const wrapper = await mountSidebar()
     expect(wrapper.findAll('a').map((a) => [a.attributes('href'), a.text()])).toEqual([
       ['/', 'Speakers'],
       ['/groups', 'Groups'],
       ['/config', 'Settings'],
       ['/diagnostics', 'Diagnostics'],
+      ['/hardware', 'Hardware'],
     ])
   })
 

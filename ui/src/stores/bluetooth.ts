@@ -1,24 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import {
-  forgetBtDevice,
-  getAdapters,
-  getBtDeviceInfo,
-  getKnownDevices,
-  setAdapterPower,
-  startPairing,
-  startReset,
-  startScan as apiStartScan,
-  type PairOptions,
-} from '@/api/bluetooth'
+import { startPairing, startReset, startScan as apiStartScan, type PairOptions } from '@/api/bluetooth'
 import { ApiError } from '@/api/client'
 import { getConfig, saveConfig } from '@/api/config'
 import { cancelJob } from '@/api/jobs'
 import { useJobsStore } from './jobs'
-import type { Adapter, BtDeviceInfo, Job, KnownDevice, ScanDevice, ScanResult } from '@/api/types'
+import type { Job, ScanDevice, ScanResult } from '@/api/types'
 
 export const useBluetoothStore = defineStore('bluetooth', () => {
-  const adapters = ref<Adapter[]>([])
   /** Set by guidance actions; the devices page opens its scan dialog and clears it. */
   const scanRequested = ref(false)
   const scanJob = ref<Job | null>(null)
@@ -33,16 +22,6 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
   const pairJob = ref<Job | null>(null)
   /** Cancel was asked and the bridge has not finished winding the job down yet. */
   const cancelling = ref(false)
-
-  const pairedDevices = ref<KnownDevice[]>([])
-  const loadingPaired = ref(false)
-
-  const btDeviceInfo = ref<BtDeviceInfo | null>(null)
-  const loadingInfo = ref(false)
-
-  async function fetchAdapters() {
-    adapters.value = await getAdapters()
-  }
 
   /** Scan one adapter (about 15 s); the bridge refuses a second scan or one too soon. */
   async function startScan(adapter: string, audioOnly = true) {
@@ -117,32 +96,6 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     return useJobsStore().waitFor(await startReset(mac, { adapter }))
   }
 
-  async function setPower(adapterId: string, on: boolean) {
-    await setAdapterPower(adapterId, on)
-    await fetchAdapters()
-  }
-
-  async function fetchPairedDevices() {
-    loadingPaired.value = true
-    try {
-      pairedDevices.value = await getKnownDevices()
-    } catch {
-      pairedDevices.value = []
-    } finally {
-      loadingPaired.value = false
-    }
-  }
-
-  async function fetchBtDeviceInfo(mac: string, adapter = '') {
-    loadingInfo.value = true
-    btDeviceInfo.value = null
-    try {
-      btDeviceInfo.value = (await getBtDeviceInfo(mac, adapter)) as BtDeviceInfo
-    } finally {
-      loadingInfo.value = false
-    }
-  }
-
   /**
    * Make a paired device a bridge speaker: append it to the configuration
    * (the whole document is saved; the bridge starts the player live).
@@ -173,14 +126,8 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     return true
   }
 
-  async function removePairedDevice(mac: string) {
-    await forgetBtDevice(mac)
-    pairedDevices.value = pairedDevices.value.filter((d) => d.mac !== mac)
-  }
-
   return {
     scanRequested,
-    adapters,
     scanJob,
     scanResults,
     scanError,
@@ -188,11 +135,6 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     pairing,
     pairTarget,
     pairError,
-    pairedDevices,
-    loadingPaired,
-    btDeviceInfo,
-    loadingInfo,
-    fetchAdapters,
     startScan,
     pairDevice,
     resetReconnect,
@@ -201,10 +143,6 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     cancelling,
     cancelScan,
     cancelPairing,
-    setPower,
-    fetchPairedDevices,
-    fetchBtDeviceInfo,
     addToBridge,
-    removePairedDevice,
   }
 })

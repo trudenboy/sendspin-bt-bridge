@@ -19,7 +19,7 @@ vi.mock('@/api/devices', () => ({ claimAudio: vi.fn() }))
 const i18n = () => createI18n({ legacy: false, locale: 'en', messages: { en } })
 
 async function menuItems(device = makeDevice()) {
-  const w = mount(SpeakerActionsMenu, { props: { device }, global: { plugins: [i18n()], stubs: { BtDeviceInfoModal: true } } })
+  const w = mount(SpeakerActionsMenu, { props: { device }, global: { plugins: [i18n()] } })
   await w.get('button[aria-haspopup], button').trigger('click')
   return w.findAll('[role="menuitem"]').map((b) => b.text())
 }
@@ -49,13 +49,12 @@ describe('speaker actions', () => {
       'Use this bridge as the source',
       'Release speaker',
       'Disable',
-      'Bluetooth details',
       'Remove speaker…',
     ])
   })
 
   it('offers no connection actions for a speaker released', async () => {
     const items = await menuItems(makeDevice({ bluetooth: { management_enabled: false } }))
-    expect(items).toEqual(['Reclaim speaker', 'Disable', 'Bluetooth details', 'Remove speaker…'])
+    expect(items).toEqual(['Reclaim speaker', 'Disable', 'Remove speaker…'])
   })
 })

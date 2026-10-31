@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
 vi.mock('@/api/bluetooth', () => ({
-  getAdapters: vi.fn(), getKnownDevices: vi.fn(), getBtDeviceInfo: vi.fn(), forgetBtDevice: vi.fn(),
-  setAdapterPower: vi.fn(), startScan: vi.fn(), startPairing: vi.fn(), startReset: vi.fn(),
+  startScan: vi.fn(), startPairing: vi.fn(), startReset: vi.fn(),
 }))
 vi.mock('@/api/config', () => ({ getConfig: vi.fn(), saveConfig: vi.fn() }))
 vi.mock('@/api/jobs', () => ({ cancelJob: vi.fn().mockResolvedValue(undefined), getJob: vi.fn() }))

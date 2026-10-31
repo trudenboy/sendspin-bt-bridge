@@ -126,6 +126,20 @@ describe('useHardwareStore', () => {
     expect(streams.options).toHaveLength(1)
   })
 
+  it('exposes a missing route as unsupported, but not a server error', async () => {
+    vi.mocked(getHardware).mockRejectedValue(problem(404, 'not_found'))
+    const store = useHardwareStore()
+    store.connect()
+    await flushPromises()
+    expect(store.unsupported).toBe(true)
+
+    vi.mocked(getHardware).mockRejectedValue(problem(500, 'server_error'))
+    setActivePinia(createPinia())
+    const other = useHardwareStore()
+    await other.refresh()
+    expect(other.unsupported).toBe(false)
+  })
+
   it('retries the probe after a network failure instead of giving up', async () => {
     vi.mocked(getHardware).mockRejectedValue(problem(0, 'network_error'))
     const store = useHardwareStore()

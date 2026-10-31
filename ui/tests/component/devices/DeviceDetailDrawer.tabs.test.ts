@@ -8,6 +8,8 @@ import { makeDevice } from '../../fixtures/device'
 
 const api = vi.hoisted(() => ({ repairDevice: vi.fn().mockResolvedValue(undefined), reconnectDevice: vi.fn(), openPairingWindow: vi.fn(), setPowerSave: vi.fn(), unmuteSink: vi.fn() }))
 const confirm = vi.hoisted(() => ({ confirmDialog: vi.fn() }))
+const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('vue-router', () => ({ useRouter: () => router }))
 vi.mock('@/api/devices', async (orig) => ({ ...(await orig<object>()), ...api }))
 vi.mock('@/composables/useConfirm', () => confirm)
 const state = vi.hoisted(() => ({ device: null as unknown }))
@@ -90,6 +92,13 @@ describe('device drawer structure', () => {
     await trigger.trigger('click')
     const items = w.findAll('[role="menuitem"]').map((i) => i.text())
     expect(items).toEqual(expect.arrayContaining([en.drawer.actions.repair, en.drawer.actions.unmute]))
+  })
+
+  it('sends Bluetooth details to the Hardware page instead of a modal', async () => {
+    const w = await open()
+    await w.findAll('button').find((b) => b.text() === en.drawer.troubleshoot.label)!.trigger('click')
+    await w.findAll('[role="menuitem"]').find((i) => i.text() === en.nav.hardware)!.trigger('click')
+    expect(router.push).toHaveBeenCalledWith('/hardware')
   })
 
   it('moved the adapter power and reboot tools out of the drawer', async () => {

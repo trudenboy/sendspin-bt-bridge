@@ -27,7 +27,6 @@ export const ACTION_POLICY = {
   'devices.removeDisabled': 'confirm',
   'devices.standbyMany': 'confirm',
   'devices.releaseMany': 'confirm',
-  'bluetooth.forgetBond': 'confirm',
   'adapter.powerOff': 'confirm',
   'adapter.reboot': 'confirm',
   'config.import': 'confirm',

@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
 vi.mock('@/api/bluetooth', () => ({
-  getAdapters: vi.fn(),
-  getKnownDevices: vi.fn(),
-  getBtDeviceInfo: vi.fn(),
-  forgetBtDevice: vi.fn().mockResolvedValue(undefined),
-  setAdapterPower: vi.fn().mockResolvedValue({ applied: true }),
   startScan: vi.fn(),
   startPairing: vi.fn(),
   startReset: vi.fn(),
@@ -100,21 +95,5 @@ describe('useBluetoothStore', () => {
         { name: 'Desk', enabled: true, backend: { type: 'bluetooth_a2dp', mac: 'CC:00', adapter: 'hci0' }, room_name: 'Office' },
       ],
     })
-  })
-
-  it('powers an adapter and refreshes the list', async () => {
-    vi.mocked(bt.getAdapters).mockResolvedValue([{ id: 'hci0', mac: 'M', name: 'n', powered: false }] as never)
-    const store = useBluetoothStore()
-    await store.setPower('hci0', false)
-    expect(bt.setAdapterPower).toHaveBeenCalledWith('hci0', false)
-    expect(store.adapters[0]!.powered).toBe(false)
-  })
-
-  it('forgets a bond and drops it from the list', async () => {
-    vi.mocked(bt.getKnownDevices).mockResolvedValue([{ mac: 'AA', name: 'a', adapters: [] }, { mac: 'BB', name: 'b', adapters: [] }])
-    const store = useBluetoothStore()
-    await store.fetchPairedDevices()
-    await store.removePairedDevice('AA')
-    expect(store.pairedDevices.map((d) => d.mac)).toEqual(['BB'])
   })
 })

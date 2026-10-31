@@ -35,12 +35,14 @@ vi.mock('@/stores/audio', () => ({ useAudioStore: () => audio }))
 vi.mock('@/stores/bluetooth', () => ({ useBluetoothStore: () => bt }))
 vi.mock('@/stores/bridge', () => ({ useBridgeStore: () => bridge }))
 vi.mock('@/api/calibration', () => ({ playClick: vi.fn().mockResolvedValue(undefined) }))
-vi.mock('./PairedDevicesList.vue', () => ({ default: { template: '<div />' } }))
 
 function mountDialog() {
   return mount(AddSpeakerDialog, {
     props: { open: true },
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })], stubs: { PairedDevicesList: true } },
+    global: {
+      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+      stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+    },
   })
 }
 
@@ -121,6 +123,14 @@ describe('AddSpeakerDialog', () => {
     await flushPromises()
     expect(w.get('[role="alert"]').text()).toContain('PIN required')
     expect(bt.addToBridge).not.toHaveBeenCalled()
+  })
+
+  it('points to the Hardware page for a speaker that is already paired', async () => {
+    const w = mountDialog()
+    await button(w, 'Choose a speaker that is already paired').trigger('click')
+    expect(w.text()).toContain(en.hardware.subtitle)
+    expect(w.get('a[href="/hardware"]').text()).toBe(en.nav.hardware)
+    expect(w.text()).toContain(en.addSpeaker.backToScan)
   })
 
   describe('Audio output tab', () => {
