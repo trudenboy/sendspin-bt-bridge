@@ -11292,6 +11292,7 @@
     },
     "/api/v1/bluetooth/devices/{mac}": {
       "delete": {
+        "description": "Drop the bond; a bond a configured player depends on is refused with 409.",
         "operationId": "remove_api_v1_bluetooth_devices__mac__delete",
         "parameters": [
           {
@@ -11406,6 +11407,64 @@
           }
         },
         "summary": "BlueZ's view of one device",
+        "tags": [
+          "bluetooth"
+        ]
+      }
+    },
+    "/api/v1/bluetooth/devices/{mac}/connect": {
+      "post": {
+        "description": "Bring up the link on the controller that holds the bond; the device must already be known.",
+        "operationId": "connect_api_v1_bluetooth_devices__mac__connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mac",
+            "required": true,
+            "schema": {
+              "title": "Mac",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "adapter_mac",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Adapter Mac",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Connect a known device",
         "tags": [
           "bluetooth"
         ]

@@ -6,6 +6,7 @@ adapter lease for their whole run, so two Bluetooth operations never overlap.
 
 from __future__ import annotations
 
+import asyncio
 import concurrent.futures
 import logging
 import re
@@ -21,7 +22,7 @@ from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.controller import get_controller
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import load_config
-from sendspin_bridge.config.players import device_entries
+from sendspin_bridge.config.players import device_entries, find_player_by_mac
 from sendspin_bridge.services.bluetooth import (
     COMMON_BT_PAIR_PINS,
     build_hci_map,
@@ -424,12 +425,16 @@ def device_info(mac: str, adapter: str = "") -> dict[str, Any]:
     return _get_bt_device_info(canonical_mac(mac), normalize_adapter(adapter))
 
 
-def remove_device(mac: str, adapter_mac: str = "") -> None:
-    """Drop the bond: on *adapter_mac*, or on every adapter when omitted."""
-    mac = canonical_mac(mac)
+def _normalize_adapter_mac(adapter_mac: str) -> str:
+    """The adapter MAC to act on; ``""`` stays "no adapter", anything malformed is a 400."""
     adapter_mac = (adapter_mac or "").strip().upper()
     if adapter_mac and not validate_mac(adapter_mac):
         raise UseCaseError(400, "invalid_adapter", "Invalid adapter MAC")
+    return adapter_mac
+
+
+def _remove_bond(mac: str, adapter_mac: str) -> None:
+    """The blocking half of ``remove_device``: drop the bond on one, or every, adapter."""
     adapters = [str(a).upper() for a in list_bt_adapters() if a]
     if adapter_mac:
         # An unknown controller makes ``select`` fail silently and the remove
@@ -442,6 +447,33 @@ def remove_device(mac: str, adapter_mac: str = "") -> None:
             _bt_remove_device(mac, adapter)
     else:
         _bt_remove_device(mac, "")
+
+
+async def remove_device(mac: str, adapter_mac: str = "") -> None:
+    """Drop the bond: on *adapter_mac*, or on every adapter when omitted.
+
+    A bond that backs a configured ``bluetooth_a2dp`` player is refused with
+    ``bond_in_use_by_player`` — the bridge forgets bonds but does not manage
+    players, so the operator removes the player first (decision 12).  There is
+    deliberately no ``force``.
+    """
+    mac = canonical_mac(mac)
+    adapter_mac = _normalize_adapter_mac(adapter_mac)
+    config = await asyncio.to_thread(load_config)
+    player = find_player_by_mac(config, mac)
+    if player is not None:
+        player_id = str(player.get("id") or "")
+        player_name = str(player.get("name") or "").strip() or mac
+        raise UseCaseError(
+            409,
+            "bond_in_use_by_player",
+            f"The bond for {mac} backs the player {player_name!r}; remove that player before forgetting the bond.",
+            extra={
+                "player_id": player_id,
+                "remediation": f"Remove the player {player_name!r} in Settings → Players, then forget this bond.",
+            },
+        )
+    await asyncio.to_thread(_remove_bond, mac, adapter_mac)
 
 
 def disconnect_device(mac: str) -> None:
@@ -459,6 +491,36 @@ def disconnect_device(mac: str) -> None:
     if not result.ok:
         logger.error("Failed to disconnect device %s: %s", mac, result.detail or result.outcome.value)
         raise UseCaseError(502, "disconnect_failed", "Bluetooth disconnect failed")
+
+
+async def connect_known_device(mac: str, adapter_mac: str = "") -> None:
+    """Connect a device BlueZ already knows, on the controller that holds its bond.
+
+    The bond's adapters come from the same merge as ``GET /bluetooth/devices``;
+    an explicit *adapter_mac* may only narrow that choice, never point
+    elsewhere.  The controller verb runs under the shared adapter lease, so it
+    cannot collide with a scan, a pair or another connect.
+    """
+    mac = canonical_mac(mac)
+    adapter_mac = _normalize_adapter_mac(adapter_mac)
+    devices = await asyncio.to_thread(known_devices, named_only=False)
+    entry = next((d for d in devices if str(d.get("mac") or "").upper() == mac), None)
+    if entry is None:
+        raise UseCaseError(404, "entity_not_found", f"Bluetooth device {mac} is not known to BlueZ")
+    bond_adapters = [str(a).upper() for a in entry.get("adapters") or []]
+    if adapter_mac and adapter_mac not in bond_adapters:
+        raise UseCaseError(400, "unknown_adapter", f"Adapter {adapter_mac} does not hold the bond for {mac}")
+    owner = adapter_mac or (bond_adapters[0] if bond_adapters else "")
+    lease = _lease(f"connect {mac}", adapter=owner)
+    try:
+        result = await lease.async_session.connect(mac)
+    finally:
+        lease.release()
+    if result.outcome is Outcome.FAILED:
+        raise UseCaseError(409, "connect_refused", result.detail or f"BlueZ refused to connect {mac}")
+    if not result.ok:
+        logger.error("Failed to connect device %s: %s", mac, result.detail or result.outcome.value)
+        raise UseCaseError(502, "bluetooth_unavailable", result.detail or "Bluetooth transport unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -717,6 +779,7 @@ def canonical_mac(mac: str) -> str:
 
 __all__ = [
     "canonical_mac",
+    "connect_known_device",
     "device_info",
     "disconnect_device",
     "known_devices",

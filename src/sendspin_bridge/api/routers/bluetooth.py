@@ -115,6 +115,13 @@ def device_info(mac: str, adapter: str = "") -> dict[str, Any]:
     return bt.device_info(mac, adapter)
 
 
+@router.post("/bluetooth/devices/{mac}/connect", status_code=204, summary="Connect a known device")
+async def connect(mac: str, adapter_mac: str = "") -> Response:
+    """Bring up the link on the controller that holds the bond; the device must already be known."""
+    await bt.connect_known_device(mac, adapter_mac)
+    return Response(status_code=204)
+
+
 @router.post("/bluetooth/devices/{mac}/disconnect", status_code=204, summary="Disconnect, keep the bond")
 def disconnect(mac: str) -> Response:
     bt.disconnect_device(mac)
@@ -122,6 +129,7 @@ def disconnect(mac: str) -> Response:
 
 
 @router.delete("/bluetooth/devices/{mac}", status_code=204, summary="Forget a device (remove the bond)")
-def remove(mac: str, adapter_mac: str = "") -> Response:
-    bt.remove_device(mac, adapter_mac)
+async def remove(mac: str, adapter_mac: str = "") -> Response:
+    """Drop the bond; a bond a configured player depends on is refused with 409."""
+    await bt.remove_device(mac, adapter_mac)
     return Response(status_code=204)
