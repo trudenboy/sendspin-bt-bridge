@@ -139,7 +139,12 @@ describe('Hardware page: local outputs', () => {
   })
 
   it('makes an output the default after a neutral question', async () => {
-    vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+    vi.mocked(getHardware)
+      .mockResolvedValueOnce(snapshot() as never)
+      // The refresh after the write is what says who is default now.
+      .mockResolvedValueOnce(
+        snapshot({ audio: audio({ sinks: [audioSink({ is_default: true })] }) }) as never,
+      )
 
     wrapper = mountView()
     await flushPromises()
@@ -151,7 +156,50 @@ describe('Hardware page: local outputs', () => {
     expect(confirm.confirmDialog.mock.calls[0]![0].danger).toBe(false)
     expect(setDefaultSink).toHaveBeenCalledWith(audioSink().name)
     expect(toast(en.hardware.audio.defaultSet.replace('{name}', 'Built-in audio output'))).toBe(true)
+    expect(getHardware).toHaveBeenCalledTimes(2)
     expect(wrapper.find('[data-default-marker]').exists()).toBe(true)
+    expect(wrapper.find('[data-set-default]').exists()).toBe(false)
+  })
+
+  it('shows the Default badge from the read model and offers no redundant action', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ audio: audio({ sinks: [audioSink({ is_default: true })] }) }) as never,
+    )
+
+    wrapper = mountView()
+    await flushPromises()
+
+    const row = wrapper.get('[data-audio-outputs] [data-endpoint-row]')
+    expect(row.find('[data-default-marker]').text()).toBe(en.hardware.audio.default)
+    expect(row.find('[data-set-default]').exists()).toBe(false)
+  })
+
+  it('moves the Default badge off the previous output after the refresh', async () => {
+    const hdmi = audioSink({ name: 'alsa_output.pci-0000_00_1f.3.hdmi-stereo', description: 'HDMI output' })
+    vi.mocked(getHardware)
+      .mockResolvedValueOnce(
+        snapshot({ audio: audio({ sinks: [audioSink({ is_default: true }), hdmi] }) }) as never,
+      )
+      .mockResolvedValueOnce(
+        snapshot({
+          audio: audio({ sinks: [audioSink({ is_default: false }), { ...hdmi, is_default: true }] }),
+        }) as never,
+      )
+
+    wrapper = mountView()
+    await flushPromises()
+
+    let rows = wrapper.findAll('[data-audio-outputs] [data-endpoint-row]')
+    expect(rows[0]!.find('[data-default-marker]').exists()).toBe(true)
+    expect(rows[1]!.find('[data-default-marker]').exists()).toBe(false)
+
+    await rows[1]!.get('[data-set-default]').trigger('click')
+    await flushPromises()
+
+    rows = wrapper.findAll('[data-audio-outputs] [data-endpoint-row]')
+    expect(rows[0]!.find('[data-default-marker]').exists()).toBe(false)
+    expect(rows[1]!.find('[data-default-marker]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-default-marker]')).toHaveLength(1)
   })
 
   it('surfaces the server code when a command is refused', async () => {

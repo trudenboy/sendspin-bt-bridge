@@ -75,6 +75,7 @@ export const audioSink = (overrides: Record<string, unknown> = {}) => ({
   in_use_by: null,
   active_port: 'analog-output-speaker',
   active_port_available: 'available',
+  is_default: false,
   ...overrides,
 })
 
@@ -91,6 +92,7 @@ export const audioSource = (overrides: Record<string, unknown> = {}) => ({
   in_use_by: null,
   active_port: 'analog-input-internal-mic',
   active_port_available: 'unknown',
+  is_default: false,
   ...overrides,
 })
 
@@ -134,6 +136,18 @@ export const audioEndpointDetail = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 })
 
+/** The source feed, as the aggregate returns it; pass ``source: null`` for the off story. */
+export const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
+  enabled: true,
+  port: 8940,
+  state: 'waiting',
+  phone_mac: null,
+  capture: { kind: 'pipewire_node', node: 'bluez_input.FC_58_FA_EB_08_6C.0' },
+  relays: [],
+  error: null,
+  ...overrides,
+})
+
 export const snapshot = (overrides: Record<string, unknown> = {}) => ({
   as_of: '2026-10-31T11:02:13Z',
   stale_after_s: 2,
@@ -142,6 +156,7 @@ export const snapshot = (overrides: Record<string, unknown> = {}) => ({
   controllers: [controller()],
   bluetooth_devices: [btDevice()],
   audio: audio(),
+  source: null,
   degraded: [],
   ...overrides,
 })

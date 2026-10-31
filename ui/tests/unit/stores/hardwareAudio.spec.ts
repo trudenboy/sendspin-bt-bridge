@@ -35,6 +35,7 @@ const sink = (overrides: Record<string, unknown> = {}) => ({
   in_use_by: null,
   active_port: 'analog-output-speaker',
   active_port_available: 'available',
+  is_default: false,
   ...overrides,
 })
 
@@ -151,14 +152,20 @@ describe('useHardwareStore: audio', () => {
     expect(resumeSink).toHaveBeenCalledWith(SINK)
   })
 
-  it('remembers the default output only after the server accepts it', async () => {
-    expect(store.defaultSink).toBeNull()
-    await store.setDefault(SINK)
-    expect(store.defaultSink).toBe(SINK)
+  it('refreshes after a default write so the read model carries the badge', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ audio: audio({ sinks: [sink({ is_default: true })] }) }) as never,
+    )
 
-    store.defaultSink = null
+    await store.setDefault(SINK)
+
+    expect(setDefaultSink).toHaveBeenCalledWith(SINK)
+    expect(getHardware).toHaveBeenCalledOnce()
+    expect(store.audio.sinks[0]!.is_default).toBe(true)
+
     vi.mocked(setDefaultSink).mockRejectedValue(problem(409, 'not_supported_for_backend'))
     await expect(store.setDefault(SINK)).rejects.toMatchObject({ code: 'not_supported_for_backend' })
-    expect(store.defaultSink).toBeNull()
+    // A refused write leaves the last read exactly as it was.
+    expect(store.audio.sinks[0]!.is_default).toBe(true)
   })
 })

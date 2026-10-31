@@ -54,7 +54,7 @@ export interface FieldDef {
 export type SectionComponent =
   | 'maConnection'
   | 'sendspinTest'
-  | 'sourceStatus'
+  | 'sourceLink'
   | 'latencyAssistant'
   | 'adapters'
   | 'haStatus'
@@ -130,7 +130,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'MA_ADDON_SLUG', kind: 'text', advanced: true },
       { key: 'DUPLICATE_DEVICE_CHECK', kind: 'toggle', advanced: true },
     ],
-    after: ['sendspinTest', 'sourceStatus'],
+    after: ['sendspinTest', 'sourceLink'],
   },
   {
     id: 'audio',

@@ -11,7 +11,7 @@ import { getConfig } from '@/api/config'
 import { getHardware } from '@/api/hardware'
 import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { seriousViolations } from '../helpers/axe'
-import { snapshot, capabilities } from './hardware/support'
+import { snapshot, capabilities, sourceFeed } from './hardware/support'
 
 // Regression guard (UX stage 8): no serious or critical axe violation on the
 // Settings and Diagnostics pages, in both languages, with technical details on
@@ -126,6 +126,42 @@ describe('accessibility: pages', () => {
 
     it(`Hardware has no serious violations (${locale})`, async () => {
       vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware with the source strip has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({
+          source: sourceFeed({
+            state: 'streaming',
+            phone_mac: 'FC:58:FA:EB:08:6C',
+            relays: ['eneby20'],
+          }),
+        }) as never,
+      )
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware with a failed source has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({ source: sourceFeed({ state: 'error', error: 'port_in_use' }) }) as never,
+      )
       mounted = mount(HardwareView, {
         global: {
           plugins: [plugin(locale)],

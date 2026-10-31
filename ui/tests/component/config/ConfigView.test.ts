@@ -65,7 +65,11 @@ async function mountView(config: Record<string, unknown> = BASE) {
   const wrapper = mount(ConfigView, {
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
-      stubs: { MaLoginFlow: true, Teleport: true },
+      stubs: {
+        MaLoginFlow: true,
+        Teleport: true,
+        RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+      },
     },
     attachTo: document.body,
   })
@@ -96,6 +100,13 @@ describe('ConfigView (settings)', () => {
       'Guidance',
       'Backup',
     ])
+  })
+
+  it('points to the Hardware page instead of owning the source status row', async () => {
+    const w = await mountView()
+    const link = w.get('[data-source-hardware-link]')
+    expect(link.attributes('href')).toBe('/hardware')
+    expect(link.text()).toBe('Open Hardware')
   })
 
   it('hides advanced settings until asked', async () => {

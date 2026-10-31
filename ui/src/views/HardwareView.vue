@@ -8,6 +8,7 @@ import BtDeviceCard from '@/components/hardware/BtDeviceCard.vue'
 import AudioCardPanel from '@/components/hardware/AudioCardPanel.vue'
 import AudioCaptureNotice from '@/components/hardware/AudioCaptureNotice.vue'
 import EndpointRow from '@/components/hardware/EndpointRow.vue'
+import SourceFeedPanel from '@/components/hardware/SourceFeedPanel.vue'
 import CapabilityBanner from '@/components/hardware/CapabilityBanner.vue'
 import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
 import { useHardwareStore } from '@/stores/hardware'
@@ -39,6 +40,84 @@ const snapshot = computed(() => store.snapshot)
 const controllers = computed(() => snapshot.value?.controllers ?? [])
 const devices = computed(() => snapshot.value?.bluetooth_devices ?? [])
 const capabilities = computed(() => snapshot.value?.capabilities ?? null)
+
+// ---------------------------------------------------------------------------
+// Source strip
+// ---------------------------------------------------------------------------
+
+/** Every player, so a relay reads as a speaker and the sink refusal names one. */
+const sourcePlayers = computed(() =>
+  bridge.devices.map((device) => ({ id: device.id, name: speakerName(device.name) || device.id })),
+)
+
+/** The name the paired device carries, when the Bluetooth list has the streaming phone. */
+const sourcePhoneName = computed(() => {
+  const mac = store.source?.phone_mac
+  if (!mac) return null
+  const device = devices.value.find((entry) => entry.mac.toUpperCase() === mac.toUpperCase())
+  return device ? speakerName(device.alias || device.name) || mac : null
+})
+
+const sourceCommandFailure = (e: unknown) => t('hardware.source.commandFailed', { reason: commandFailure(e) })
+
+function onSourceStart() {
+  void undoable('source.start', () => store.startSource(), () => store.stopSource(), {
+    doneKey: 'undo.sourceStarted',
+    name: '',
+    failure: sourceCommandFailure,
+  })
+}
+
+/** Stopping interrupts whatever the relays are playing, so it asks and names them. */
+async function onSourceStop() {
+  const names = (store.source?.relays ?? []).map(
+    (id) => sourcePlayers.value.find((player) => player.id === id)?.name ?? id,
+  )
+  const ok = await confirmAction('source.stop', {
+    title: t('hardware.source.stopConfirmTitle'),
+    consequences: [
+      names.length ? t('hardware.source.stopConsequence', { players: names.join(', ') }) : t('hardware.source.stopNoRelays'),
+    ],
+    confirmLabel: t('hardware.source.stop'),
+  })
+  if (!ok) return
+  try {
+    await store.stopSource()
+    notifications.success(t('hardware.source.stopped'))
+  } catch (e) {
+    notifications.error(sourceCommandFailure(e))
+  }
+}
+
+function onSourcePair() {
+  void undoable('source.pairing', () => store.startPairingWindow(), () => store.stopPairingWindow(), {
+    doneKey: 'undo.sourcePairingOpen',
+    name: '',
+    failure: sourceCommandFailure,
+  })
+}
+
+function onSourceStopPairing() {
+  void undoable('source.pairingStop', () => store.stopPairingWindow(), () => store.startPairingWindow(), {
+    doneKey: 'undo.sourcePairingClosed',
+    name: '',
+    failure: sourceCommandFailure,
+  })
+}
+
+function onSourceRelay(playerId: string, enabled: boolean) {
+  const name = sourcePlayers.value.find((player) => player.id === playerId)?.name ?? playerId
+  void undoable(
+    'source.relay',
+    () => store.setSourcePlayer(playerId, enabled),
+    () => store.setSourcePlayer(playerId, !enabled),
+    {
+      doneKey: enabled ? 'undo.sourceAttached' : 'undo.sourceDetached',
+      name,
+      failure: sourceCommandFailure,
+    },
+  )
+}
 
 /**
  * Four different answers, never the same screen: a bridge without the route,
@@ -427,6 +506,20 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
     <template v-else-if="snapshot">
       <CapabilityBanner v-if="degradedReason" :reason="degradedReason" :detail="degradedDetail" />
 
+      <SourceFeedPanel
+        :source="store.source"
+        :pairing-seconds-left="store.pairingSecondsLeft"
+        :players="sourcePlayers"
+        :phone-name="sourcePhoneName"
+        :failure="store.sourceError"
+        :busy="store.sourceBusy"
+        @start="onSourceStart"
+        @stop="onSourceStop"
+        @pair="onSourcePair"
+        @stop-pairing="onSourceStopPairing"
+        @relay="onSourceRelay"
+      />
+
       <section class="mb-8" data-controllers-section>
         <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.controllers') }}</h2>
         <div
@@ -540,7 +633,6 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
               v-for="sink in sinks"
               :key="sink.name"
               :endpoint="sink"
-              :default-sink="store.defaultSink === sink.name"
               :allow-default="capabilities?.default_sink ?? false"
               :busy="audioBusy === sink.name"
               @open="openAudioEndpoint('audio-sink', $event)"

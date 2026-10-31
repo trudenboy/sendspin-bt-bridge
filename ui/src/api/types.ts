@@ -132,3 +132,9 @@ export type AudioEndpointDetail = Schemas['EndpointDetail']
 export type AudioEndpointOwner = Schemas['EndpointOwner']
 /** One sink after a command: its level, its mute flag and what it is doing. */
 export type SinkState = Schemas['SinkStateOut']
+
+/** The phone → bridge source, or ``null`` when the feature is off. */
+export type SourceFeed = Schemas['SourceFeed']
+export type SourceCapture = Schemas['SourceCapture']
+export type SourceState = SourceFeed['state']
+export type SourceCaptureKind = SourceCapture['kind']

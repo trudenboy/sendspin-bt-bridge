@@ -15,13 +15,11 @@ import type { AudioEndpointSummary } from '@/api/types'
 const props = withDefaults(
   defineProps<{
     endpoint: AudioEndpointSummary
-    /** This sink is the default this session chose (the read model carries no default flag). */
-    defaultSink?: boolean
     /** Offer the set-default action (the host has a working audio server). */
     allowDefault?: boolean
     busy?: boolean
   }>(),
-  { defaultSink: false, allowDefault: false, busy: false },
+  { allowDefault: false, busy: false },
 )
 
 const emit = defineEmits<{
@@ -36,6 +34,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const isSink = computed(() => props.endpoint.kind === 'sink')
+/** The audio server's own answer, refreshed after every write: no session-local copy. */
+const isDefault = computed(() => props.endpoint.is_default === true)
 const displayName = computed(() => props.endpoint.description || props.endpoint.name)
 const state = computed(() => props.endpoint.state || 'unknown')
 const stateLabel = computed(() => {
@@ -123,7 +123,7 @@ const inputReason = computed(() => {
       <SbBadge v-if="!isSink" data-input-kind :data-kind="kind" tone="info" size="sm">
         {{ kindLabel }}
       </SbBadge>
-      <SbBadge v-if="defaultSink" data-default-marker tone="success" size="sm">
+      <SbBadge v-if="isSink && isDefault" data-default-marker tone="success" size="sm">
         {{ t('hardware.audio.default') }}
       </SbBadge>
     </div>
@@ -180,7 +180,7 @@ const inputReason = computed(() => {
       />
 
       <SbButton
-        v-if="allowDefault && !defaultSink"
+        v-if="allowDefault && !isDefault"
         size="sm"
         variant="ghost"
         data-set-default

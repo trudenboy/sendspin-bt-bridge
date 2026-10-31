@@ -4840,6 +4840,12 @@ export interface components {
              */
             in_use_by: string | null;
             /**
+             * Is Default
+             * @description True only for the audio server's current default sink; always false for sources.
+             * @default false
+             */
+            is_default: boolean;
+            /**
              * Kind
              * @enum {string}
              */
@@ -4939,6 +4945,12 @@ export interface components {
              * @description Player id using this sink, from the config.
              */
             in_use_by: string | null;
+            /**
+             * Is Default
+             * @description True only for the audio server's current default sink; always false for sources.
+             * @default false
+             */
+            is_default: boolean;
             /**
              * Kind
              * @enum {string}
@@ -5129,6 +5141,8 @@ export interface components {
             controllers: components["schemas"]["ControllerSummary"][];
             /** Degraded */
             degraded: components["schemas"]["DegradedSection"][];
+            /** @description null when this bridge does not report a source (the SENDSPIN_SOURCE feature is off). */
+            source: components["schemas"]["SourceFeed"] | null;
             /**
              * Stale
              * @description True when a failed refresh forced the last read to be served.
@@ -6415,10 +6429,60 @@ export interface components {
              */
             sound: "clicks" | "accent" | "noise";
         };
+        /**
+         * SourceCapture
+         * @description How the phone's audio is captured, or why it cannot be.
+         */
+        SourceCapture: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pipewire_node" | "pulse_source" | "unavailable";
+            /** Node */
+            node: string | null;
+        };
         /** SourceEnabledIn */
         SourceEnabledIn: {
             /** Enabled */
             enabled: boolean;
+        };
+        /**
+         * SourceFeed
+         * @description The single Sendspin source (phone → bridge): one phone, one capture node, its relays.
+         */
+        SourceFeed: {
+            /** @description The phone's capture node, or the reason there is none. */
+            capture: components["schemas"]["SourceCapture"];
+            /**
+             * Enabled
+             * @description The source server is running.
+             * @default false
+             */
+            enabled: boolean;
+            /** Error */
+            error: string | null;
+            /**
+             * Phone Mac
+             * @description The paired peer currently streaming, if any.
+             */
+            phone_mac: string | null;
+            /**
+             * Port
+             * @description The port players connect to.
+             */
+            port: number | null;
+            /**
+             * Relays
+             * @description Player ids armed to play the phone.
+             */
+            relays: string[];
+            /**
+             * State
+             * @description off: not running; waiting: running without a phone; streaming: audio is flowing; error: it failed.
+             * @enum {string}
+             */
+            state: "off" | "waiting" | "streaming" | "error";
         };
         /** SourcePairingIn */
         SourcePairingIn: {

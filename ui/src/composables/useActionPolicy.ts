@@ -50,6 +50,13 @@ export const ACTION_POLICY = {
   'audio.resume': 'undo',
   'audio.suspend': 'confirm',
   'audio.defaultSink': 'choice',
+  // Hardware → Source: starting, pairing and relaying are reversible (the undo
+  // is the opposite command); stopping interrupts every relay, so it asks.
+  'source.start': 'undo',
+  'source.stop': 'confirm',
+  'source.pairing': 'undo',
+  'source.pairingStop': 'undo',
+  'source.relay': 'undo',
 } as const
 
 export type ActionId = keyof typeof ACTION_POLICY
