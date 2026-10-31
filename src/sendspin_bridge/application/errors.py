@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 _ADAPTER_ID_RE = re.compile(r"^(hci\d+|[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5})$")
+#: PulseAudio/PipeWire names have no spaces, slashes or wildcards; the grammar
+#: is the URL segment grammar, so a name a client can build is a name we accept.
+_AUDIO_NAME_RE = re.compile(r"^[A-Za-z0-9._:@+-]+$")
 
 
 class UseCaseError(Exception):
@@ -67,6 +70,22 @@ def require_mac(mac: str | None, *, field: str = "mac") -> str:
     value = (mac or "").strip().upper()
     if not validate_mac(value):
         raise UseCaseError(400, "invalid_mac", f"{field} must be a Bluetooth address like AA:BB:CC:DD:EE:FF")
+    return value
+
+
+def require_audio_name(name: str | None, *, field: str = "name") -> str:
+    """Validate a card, sink or source name before it is looked up.
+
+    Outside the grammar is a 400 ``invalid_audio_name``, never a silent miss:
+    a name that cannot exist and a name that is absent are different answers.
+    """
+    value = (name or "").strip()
+    if not _AUDIO_NAME_RE.fullmatch(value):
+        raise UseCaseError(
+            400,
+            "invalid_audio_name",
+            f"{field} must match ^[A-Za-z0-9._:@+-]+$ (an audio server name, not a label)",
+        )
     return value
 
 

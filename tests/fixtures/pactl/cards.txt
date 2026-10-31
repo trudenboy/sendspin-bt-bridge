@@ -1,0 +1,89 @@
+Card #0
+	Name: alsa_card.pci-0000_00_1f.3
+	Driver: module-alsa-card.c
+	Owner Module: 7
+	Properties:
+		alsa.card = "0"
+		alsa.card_name = "HDA Intel PCH"
+		alsa.long_card_name = "HDA Intel PCH at 0xf7f10000 irq 30"
+		device.bus_path = "pci-0000:00:1f.3"
+		device.description = "Built-in Audio"
+		device.vendor.id = "0x8086"
+		device.product.id = "0x9c20"
+	Profiles:
+		output:analog-stereo: Analog Stereo Output (sinks: 1, sources: 0, priority: 6500, available: yes)
+		output:analog-stereo+input:analog-stereo: Analog Stereo Duplex (sinks: 1, sources: 1, priority: 6565, available: yes)
+		input:analog-stereo: Analog Stereo Input (sinks: 0, sources: 1, priority: 65, available: yes)
+		off: Off (sinks: 0, sources: 0, priority: 0, available: yes)
+	Active Profile: output:analog-stereo+input:analog-stereo
+	Ports:
+		analog-output-speaker: Speakers (type: Speaker, priority: 10000, latency offset: 0 usec, availability unknown)
+			Properties:
+				port.type = "speaker"
+			Part of profile(s): output:analog-stereo, output:analog-stereo+input:analog-stereo
+		analog-output-headphones: Headphones (type: Headphones, priority: 9900, latency offset: 0 usec, not available)
+			Properties:
+				port.type = "headphones"
+			Part of profile(s): output:analog-stereo, output:analog-stereo+input:analog-stereo
+		analog-input-mic: Microphone (type: Mic, priority: 8700, latency offset: 0 usec, availability unknown)
+			Part of profile(s): input:analog-stereo, output:analog-stereo+input:analog-stereo
+	Active Port: analog-output-speaker
+	Sinks:
+		41
+	Sources:
+		60
+
+Card #1
+	Name: bluez_card.FC_58_FA_EB_08_6C
+	Driver: module-bluez5-device.c
+	Owner Module: 25
+	Properties:
+		bluez.class = "0x240404"
+		bluez.path = "/org/bluez/hci0/dev_FC_58_FA_EB_08_6C"
+		device.api = "bluez"
+		device.bus = "bluetooth"
+		device.description = "ENEBY20"
+		device.string = "FC:58:FA:EB:08:6C"
+	Profiles:
+		a2dp_sink: High Fidelity Playback (A2DP Sink) (sinks: 1, sources: 0, priority: 40, available: yes)
+		headset_head_unit: Headset Head Unit (HSP/HFP) (sinks: 1, sources: 1, priority: 30, available: yes)
+		off: Off (sinks: 0, sources: 0, priority: 0, available: yes)
+	Active Profile: a2dp_sink
+	Ports:
+		headset-output: ENEBY20 (type: Speaker, priority: 0, latency offset: 0 usec, available)
+			Part of profile(s): a2dp_sink, headset_head_unit
+		headset-input: ENEBY20 (type: Headset, priority: 0, latency offset: 0 usec, availability unknown)
+			Part of profile(s): headset_head_unit
+	Active Port: headset-output
+	Sinks:
+		70
+	Sources:
+		71
+
+Card #2
+	Name: alsa_card.usb-Generic_USB_DAC_0000A1-00
+	Driver: module-alsa-card.c
+	Owner Module: 9
+	Properties:
+		alsa.card = "1"
+		alsa.card_name = "USB DAC"
+		alsa.long_card_name = "Generic USB DAC at usb-0000:00:14.0-2, high speed"
+		device.bus_path = "pci-0000:00:14.0-usb-0:2:1.0"
+		device.description = "USB DAC"
+		device.vendor.id = "0x262a"
+		device.product.id = "0x3b3c"
+	Profiles:
+		output:analog-stereo: Analog Stereo Output (sinks: 1, sources: 0, priority: 6500, available: yes)
+		output:analog-stereo+input:analog-stereo: Analog Stereo Duplex (sinks: 1, sources: 1, priority: 6565, available: yes)
+		output:iec958-stereo: Digital Stereo (IEC958) Output (sinks: 1, sources: 0, priority: 5500, available: yes)
+		pro-audio: Pro Audio (sinks: 1, sources: 0, priority: 1, available: yes)
+		off: Off (sinks: 0, sources: 0, priority: 0, available: yes)
+	Active Profile: output:analog-stereo
+	Ports:
+		analog-output: Analog Output (type: Analog, priority: 9900, latency offset: 0 usec, availability unknown)
+			Part of profile(s): output:analog-stereo, output:analog-stereo+input:analog-stereo
+		iec958-stereo-output: Digital Output (S/PDIF) (type: SPDIF, priority: 0, latency offset: 0 usec, availability unknown)
+			Part of profile(s): output:iec958-stereo
+	Active Port: analog-output
+	Sinks:
+		72

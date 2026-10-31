@@ -6,7 +6,9 @@ that is currently present.  Sink *names* can change across replugs and
 reboots; the identifiers are tried first and the stored name is the last resort.
 
 Source split follows ``pulse.py``: ``pulsectl_asyncio`` first, ``pactl list
-sinks`` subprocess as fallback.  ``parse_pactl_sinks`` is pure.
+sinks`` subprocess as fallback.  ``parse_pactl_sinks`` is pure.  Cards and
+sources are read through ``pactl`` because only its text form carries the
+card's endpoint index lists; the parsers are pure and fixture-testable.
 """
 
 from __future__ import annotations
@@ -27,13 +29,22 @@ from sendspin_bridge.services.audio.pulse import STANDBY_SINK_NAME
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "CardPort",
+    "CardProfile",
+    "LocalCard",
     "LocalSink",
+    "LocalSource",
     "SinkInventoryUnavailable",
     "SinkMatch",
+    "list_all_sinks",
+    "list_local_cards",
     "list_local_sinks",
+    "list_local_sources",
     "match_players",
     "match_sink",
+    "parse_pactl_cards",
     "parse_pactl_sinks",
+    "parse_pactl_sources",
 ]
 
 _EXCLUDED_PREFIXES = ("bluez_", "sendspin_")
@@ -84,6 +95,62 @@ class LocalSink:
     active_port: str | None
     active_port_available: str | None  # "available" | "not available" | "availability unknown" | None
     identifiers: dict[str, str] = field(default_factory=dict)
+    index: int | None = None  # the ``Sink #N`` index, for the card's endpoint lists
+    owner_module: int | None = None  # the module that loaded the card, when it has one
+
+
+@dataclass(frozen=True)
+class CardProfile:
+    """One profile a card can take (``a2dp_sink``, ``output:analog-stereo``…)."""
+
+    name: str
+    description: str
+    available: bool
+
+
+@dataclass(frozen=True)
+class CardPort:
+    """One port a card exposes; ``available=None`` means the server said "unknown".
+
+    The tri-state matters: an unplugged port (``False``) explains silence, an
+    unknown one does not, and collapsing the two would invent a fault.
+    """
+
+    name: str
+    description: str
+    available: bool | None
+    active: bool
+
+
+@dataclass(frozen=True)
+class LocalCard:
+    """An audio server card: its profiles, its ports and the endpoints it owns."""
+
+    name: str
+    driver: str
+    active_profile: str | None
+    profiles: tuple[CardProfile, ...]
+    ports: tuple[CardPort, ...]
+    sink_names: tuple[str, ...] = ()
+    source_names: tuple[str, ...] = ()
+    index: int | None = None
+    owner_module: int | None = None
+
+
+@dataclass(frozen=True)
+class LocalSource:
+    """A capture endpoint: a microphone, a monitor, or a phone's A2DP source."""
+
+    name: str
+    description: str
+    state: str  # running | idle | suspended | unknown
+    sample_spec: str
+    muted: bool
+    volume: int  # 0-100 (loudest channel)
+    identifiers: dict[str, str] = field(default_factory=dict)
+    monitor_of: str | None = None  # the sink this source monitors, if any
+    index: int | None = None
+    owner_module: int | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +170,7 @@ def _normalise_state(raw: str) -> str:
     return state if state in {"running", "idle", "suspended"} else "unknown"
 
 
-def _parse_block(lines: list[str]) -> LocalSink | None:
+def _parse_block(lines: list[str], index: int | None = None) -> LocalSink | None:
     fields: dict[str, str] = {}
     props: dict[str, str] = {}
     ports: dict[str, str] = {}
@@ -144,22 +211,214 @@ def _parse_block(lines: list[str]) -> LocalSink | None:
         active_port=active_port,
         active_port_available=availability,
         identifiers={ident: props[prop] for prop, ident in _PROPERTY_TO_IDENTIFIER.items() if props.get(prop)},
+        index=index,
+        owner_module=_owner_module(fields.get("Owner Module", "")),
     )
+
+
+def _owner_module(raw: str) -> int | None:
+    """``Owner Module: 7`` as an int; ``n/a`` and anything else as unknown."""
+    value = raw.strip()
+    return int(value) if value.isdigit() else None
+
+
+def _block_index(header: str) -> int | None:
+    """The ``N`` of ``Card #N`` / ``Source #N``, or ``None`` when it is not a number."""
+    _, _, raw = header.partition("#")
+    return int(raw) if raw.strip().isdigit() else None
 
 
 def parse_pactl_sinks(text: str) -> list[LocalSink]:
     """Parse ``pactl list sinks`` output into :class:`LocalSink` entries."""
-    blocks: list[list[str]] = []
+    blocks: list[tuple[int | None, list[str]]] = []
     for line in text.splitlines():
         if line.startswith("Sink #"):
-            blocks.append([])
+            blocks.append((_block_index(line), []))
         elif blocks:
-            blocks[-1].append(line)
-    return [s for s in (_parse_block(b) for b in blocks) if s is not None]
+            blocks[-1][1].append(line)
+    return [s for s in (_parse_block(b, i) for i, b in blocks) if s is not None]
+
+
+# ---------------------------------------------------------------------------
+# Cards
+# ---------------------------------------------------------------------------
+
+_PROFILE_META_RE = re.compile(r"\s*\(sinks: \d+, sources: \d+, priority: \d+, available: (yes|no)\)\s*$")
+
+
+def _availability(text: str) -> bool | None:
+    """Port availability: True, False, or None when the server said "unknown"."""
+    tail = text.strip().rstrip(")").strip()
+    if tail.endswith("not available"):
+        return False
+    if tail.endswith("availability unknown"):
+        return None
+    return True if tail.endswith("available") else None
+
+
+def _card_profile(line: str) -> CardProfile | None:
+    name, sep, rest = line.partition(": ")
+    if not sep:
+        return None
+    meta = _PROFILE_META_RE.search(rest)
+    return CardProfile(
+        name=name.strip(),
+        description=_PROFILE_META_RE.sub("", rest).strip(),
+        available=bool(meta and meta.group(1) == "yes"),
+    )
+
+
+def _card_port(line: str, active_port: str | None) -> CardPort | None:
+    name, sep, rest = line.partition(": ")
+    if not sep:
+        return None
+    description, port_type, tail = rest.partition(" (type:")
+    return CardPort(
+        name=name.strip(),
+        description=description.strip(),
+        available=_availability(tail) if port_type else None,
+        active=name.strip() == active_port,
+    )
+
+
+def _card_endpoint_names(entries: list[str], endpoints: Any) -> tuple[str, ...]:
+    """Resolve a card's ``Sinks:``/``Sources:`` entries to names that exist.
+
+    Entries may be endpoint indexes or endpoint names; both are looked up in the
+    list that was actually read, so a stale index becomes nothing rather than a
+    guessed name.
+    """
+    by_index = {item.index: item.name for item in endpoints if getattr(item, "index", None) is not None}
+    known = {item.name for item in endpoints}
+    resolved: list[str] = []
+    for entry in entries:
+        token = entry.split(": ", 1)[0].strip()
+        name = by_index.get(int(token)) if token.isdigit() else (token if token in known else None)
+        if name and name not in resolved:
+            resolved.append(name)
+    return tuple(resolved)
+
+
+def _parse_card(lines: list[str], index: int | None, sinks: Any, sources: Any) -> LocalCard | None:
+    fields: dict[str, str] = {}
+    profile_lines: list[str] = []
+    port_lines: list[str] = []
+    sink_entries: list[str] = []
+    source_entries: list[str] = []
+    section = ""
+    for line in lines:
+        if line.startswith("\t\t\t"):
+            continue  # port properties and "Part of profile(s)" belong to the line above
+        if line.startswith("\t\t"):
+            entry = line.strip()
+            if section == "Profiles":
+                profile_lines.append(entry)
+            elif section == "Ports":
+                port_lines.append(entry)
+            elif section == "Sinks":
+                sink_entries.append(entry)
+            elif section == "Sources":
+                source_entries.append(entry)
+            continue
+        if line.startswith("\t") and not line.startswith("\t "):
+            key, sep, value = line.strip().partition(":")
+            if not sep:
+                continue
+            section = key if key in {"Profiles", "Ports", "Sinks", "Sources"} else ""
+            fields[key] = value.strip()
+    name = fields.get("Name")
+    if not name:
+        return None
+    active_port = fields.get("Active Port") or None
+    profiles = tuple(p for p in (_card_profile(line) for line in profile_lines) if p is not None)
+    ports = tuple(p for p in (_card_port(line, active_port) for line in port_lines) if p is not None)
+    return LocalCard(
+        name=name,
+        driver=fields.get("Driver", ""),
+        active_profile=fields.get("Active Profile") or None,
+        profiles=profiles,
+        ports=ports,
+        sink_names=_card_endpoint_names(sink_entries, sinks),
+        source_names=_card_endpoint_names(source_entries, sources),
+        index=index,
+        owner_module=_owner_module(fields.get("Owner Module", "")),
+    )
+
+
+def parse_pactl_cards(
+    text: str,
+    sinks: Collection[LocalSink] = (),
+    sources: Collection[LocalSource] = (),
+) -> list[LocalCard]:
+    """Parse ``pactl list cards`` output into :class:`LocalCard` entries.
+
+    *sinks* and *sources* are the endpoint lists the same read produced; the
+    card's endpoint index lists are resolved through them and never parsed as
+    names on their own.
+    """
+    blocks: list[tuple[int | None, list[str]]] = []
+    for line in text.splitlines():
+        if line.startswith("Card #"):
+            blocks.append((_block_index(line), []))
+        elif blocks:
+            blocks[-1][1].append(line)
+    return [c for c in (_parse_card(b, i, sinks, sources) for i, b in blocks) if c is not None]
 
 
 # ---------------------------------------------------------------------------
 # Sources
+# ---------------------------------------------------------------------------
+
+
+def _parse_source_block(lines: list[str], index: int | None) -> LocalSource | None:
+    fields: dict[str, str] = {}
+    props: dict[str, str] = {}
+    section = ""
+    for line in lines:
+        if line.startswith("\t\t"):
+            if section == "Properties":
+                m = _PROP_RE.match(line)
+                if m:
+                    props[m.group(1)] = m.group(2)
+            continue
+        if line.startswith("\t") and not line.startswith("\t "):
+            key, sep, value = line.strip().partition(":")
+            if not sep:
+                continue
+            section = key if key == "Properties" else ""
+            fields[key] = value.strip()
+    name = fields.get("Name")
+    if not name:
+        return None
+    percents = [int(p) for p in _PERCENT_RE.findall(fields.get("Volume", ""))]
+    monitor_of = fields.get("Monitor of Sink", "").strip()
+    return LocalSource(
+        name=name,
+        description=fields.get("Description", ""),
+        state=_normalise_state(fields.get("State", "")),
+        sample_spec=fields.get("Sample Specification", ""),
+        muted=fields.get("Mute", "").lower() == "yes",
+        volume=max(percents) if percents else 0,
+        identifiers={ident: props[prop] for prop, ident in _PROPERTY_TO_IDENTIFIER.items() if props.get(prop)},
+        monitor_of=None if monitor_of in ("", "n/a") else monitor_of,
+        index=index,
+        owner_module=_owner_module(fields.get("Owner Module", "")),
+    )
+
+
+def parse_pactl_sources(text: str) -> list[LocalSource]:
+    """Parse ``pactl list sources`` output into :class:`LocalSource` entries."""
+    blocks: list[tuple[int | None, list[str]]] = []
+    for line in text.splitlines():
+        if line.startswith("Source #"):
+            blocks.append((_block_index(line), []))
+        elif blocks:
+            blocks[-1][1].append(line)
+    return [s for s in (_parse_source_block(b, i) for i, b in blocks) if s is not None]
+
+
+# ---------------------------------------------------------------------------
+# pulsectl mapping
 # ---------------------------------------------------------------------------
 
 
@@ -190,32 +449,49 @@ def _from_pulsectl(info: Any) -> LocalSink:
         identifiers={
             ident: str(proplist[prop]) for prop, ident in _PROPERTY_TO_IDENTIFIER.items() if proplist.get(prop)
         },
+        index=getattr(info, "index", None),
+        owner_module=getattr(info, "owner_module", None),
     )
 
 
-async def _pactl_list_sinks_text() -> str | None:
-    """``pactl list sinks`` output, or ``None`` when it could not be run."""
+async def _pactl_list_text(what: str) -> str | None:
+    """``pactl list <what>`` output, or ``None`` when it could not be run."""
     proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             "pactl",
             "list",
-            "sinks",
+            what,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             env={**os.environ, "LC_ALL": "C"},
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=pulse._TIMEOUT)
     except (OSError, TimeoutError) as exc:
-        logger.debug("pactl list sinks failed: %s", exc)
+        logger.debug("pactl list %s failed: %s", what, exc)
         if proc is not None and proc.returncode is None:
             proc.kill()
             await proc.wait()
         return None
     if proc.returncode not in (0, None):
-        logger.debug("pactl list sinks exited with %s", proc.returncode)
+        logger.debug("pactl list %s exited with %s", what, proc.returncode)
         return None
     return out.decode(errors="replace")
+
+
+async def _pactl_list_sinks_text() -> str | None:
+    """``pactl list sinks`` output, or ``None`` when it could not be run."""
+    return await _pactl_list_text("sinks")
+
+
+async def _pactl_list_sources_text() -> str | None:
+    """``pactl list sources`` output, or ``None`` when it could not be run."""
+    return await _pactl_list_text("sources")
+
+
+async def _pactl_list_cards_text() -> str | None:
+    """``pactl list cards`` output, or ``None`` when it could not be run."""
+    return await _pactl_list_text("cards")
 
 
 async def _list_all_sinks_pactl() -> list[LocalSink]:
@@ -273,6 +549,43 @@ async def _list_all_sinks() -> list[LocalSink]:
             return []
     sinks = await _list_all_sinks_pulsectl()
     return sinks if sinks is not None else await _list_all_sinks_pactl()
+
+
+async def list_all_sinks() -> list[LocalSink]:
+    """Every sink the audio server reports, Bluetooth and bridge-internal ones included.
+
+    :func:`list_local_sinks` is the filtered view for player matching; the
+    hardware inventory needs the whole set to classify each endpoint's owner.
+    """
+    return await _list_all_sinks()
+
+
+async def list_local_sources() -> list[LocalSource]:
+    """Every source the audio server reports, monitors included.
+
+    An unreadable source list reads as empty: a host with no capture is a host
+    with no capture, and the caller decides what that means.
+    """
+    text = await _pactl_list_sources_text()
+    return parse_pactl_sources(text) if text is not None else []
+
+
+async def list_local_cards(
+    *,
+    sinks: Collection[LocalSink] | None = None,
+    sources: Collection[LocalSource] | None = None,
+) -> list[LocalCard]:
+    """Every card, with its endpoint index lists resolved through the endpoint lists.
+
+    *sinks* and *sources* are reused when the caller already read them (the
+    hardware reader does), so one refresh still costs one read per kind.
+    """
+    if sinks is None:
+        sinks = await list_all_sinks()
+    if sources is None:
+        sources = await list_local_sources()
+    text = await _pactl_list_cards_text()
+    return parse_pactl_cards(text, sinks, sources) if text is not None else []
 
 
 async def list_local_sinks(*, strict: bool = False) -> list[LocalSink]:

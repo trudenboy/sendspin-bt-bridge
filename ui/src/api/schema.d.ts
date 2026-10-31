@@ -1444,6 +1444,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hardware/audio/cards/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One audio card
+         * @description A card's profiles, ports and the endpoints it owns.
+         */
+        get: operations["get_audio_card_api_v1_hardware_audio_cards__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hardware/audio/sinks/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One audio sink
+         * @description A sink by its audio-server name, with identifiers and its card's ports.
+         */
+        get: operations["get_audio_sink_api_v1_hardware_audio_sinks__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hardware/audio/sources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One audio source
+         * @description A source, including the sink it monitors when it is a monitor source.
+         */
+        get: operations["get_audio_source_api_v1_hardware_audio_sources__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hardware/bluetooth/{mac}": {
         parameters: {
             query?: never;
@@ -2939,6 +2999,18 @@ export interface components {
              */
             include_devices?: boolean;
         };
+        /**
+         * AudioSection
+         * @description The audio half of the read model: one list per entity kind.
+         */
+        AudioSection: {
+            /** Cards */
+            cards: components["schemas"]["CardSummary"][];
+            /** Sinks */
+            sinks: components["schemas"]["EndpointSummary"][];
+            /** Sources */
+            sources: components["schemas"]["EndpointSummary"][];
+        };
         /** AudioSinkOut */
         AudioSinkOut: {
             /**
@@ -3818,6 +3890,104 @@ export interface components {
             point: "device" | "position";
             sequence: components["schemas"]["SequenceOut"] | null;
         };
+        /**
+         * CardDetail
+         * @description One card with every profile, every port and its endpoints.
+         */
+        CardDetail: {
+            /** Active Profile */
+            active_profile: string | null;
+            /**
+             * Driver
+             * @default
+             */
+            driver: string;
+            /** Endpoint Refs */
+            endpoint_refs: components["schemas"]["EndpointRef"][];
+            /** Endpoints */
+            endpoints: components["schemas"]["EndpointSummary"][];
+            /** Name */
+            name: string;
+            /**
+             * Port Count
+             * @default 0
+             */
+            port_count: number;
+            /** Ports */
+            ports: components["schemas"]["CardPort"][];
+            /**
+             * Profile Count
+             * @default 0
+             */
+            profile_count: number;
+            /** Profiles */
+            profiles: components["schemas"]["CardProfile"][];
+        };
+        /**
+         * CardPort
+         * @description One port a card exposes; ``available=null`` means the server said "unknown".
+         */
+        CardPort: {
+            /**
+             * Active
+             * @default false
+             */
+            active: boolean;
+            /** Available */
+            available: boolean | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * CardProfile
+         * @description One profile a card can take.
+         */
+        CardProfile: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * CardSummary
+         * @description An audio card: what it is, and a count of what it can do.
+         */
+        CardSummary: {
+            /** Active Profile */
+            active_profile: string | null;
+            /**
+             * Driver
+             * @default
+             */
+            driver: string;
+            /** Endpoint Refs */
+            endpoint_refs: components["schemas"]["EndpointRef"][];
+            /** Name */
+            name: string;
+            /**
+             * Port Count
+             * @default 0
+             */
+            port_count: number;
+            /**
+             * Profile Count
+             * @default 0
+             */
+            profile_count: number;
+        };
         /** CheckIn */
         CheckIn: {
             /** Device Names */
@@ -4534,6 +4704,163 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * EndpointDetail
+         * @description One endpoint with its stable identifiers and the owning card's ports.
+         */
+        EndpointDetail: {
+            /** Active Port */
+            active_port: string | null;
+            /**
+             * Active Port Available
+             * @description available | not available | availability unknown
+             */
+            active_port_available: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Identifiers */
+            identifiers: {
+                [key: string]: string;
+            };
+            /**
+             * In Use By
+             * @description Player id using this sink, from the config.
+             */
+            in_use_by: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sink" | "source";
+            /**
+             * Monitor Of
+             * @description The sink a source monitors, if any.
+             */
+            monitor_of: string | null;
+            /**
+             * Muted
+             * @description Sinks only; null for sources.
+             */
+            muted: boolean | null;
+            /** Name */
+            name: string;
+            /** @description null when no card or link claims it. */
+            owner: components["schemas"]["EndpointOwner"] | null;
+            /**
+             * Ports
+             * @description All ports of the owning card.
+             */
+            ports: components["schemas"]["CardPort"][];
+            /**
+             * Sample Spec
+             * @default
+             */
+            sample_spec: string;
+            /**
+             * State
+             * @description running | idle | suspended | unknown
+             * @default unknown
+             */
+            state: string;
+            /**
+             * Volume
+             * @description Sinks only, 0-100; null for sources.
+             */
+            volume: number | null;
+        };
+        /**
+         * EndpointOwner
+         * @description What an audio endpoint belongs to: a card, a Bluetooth link, or the bridge.
+         *
+         *     Exactly one of *card*, *bluetooth* and *internal* is set; a Bluetooth
+         *     speaker's sink belongs to the speaker, not to the ``bluez_card`` object.
+         */
+        EndpointOwner: {
+            /**
+             * Bluetooth
+             * @description The speaker MAC, when the endpoint is a BT link.
+             */
+            bluetooth: string | null;
+            /**
+             * Card
+             * @description The card that owns this endpoint.
+             */
+            card: string | null;
+            /**
+             * Internal
+             * @description true for the bridge's own sendspin_* sinks; null otherwise.
+             */
+            internal: boolean | null;
+        };
+        /**
+         * EndpointRef
+         * @description One endpoint belonging to a card, without its detail fields.
+         */
+        EndpointRef: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sink" | "source";
+            /** Name */
+            name: string;
+        };
+        /**
+         * EndpointSummary
+         * @description A sink (output) or source (input) as the audio server names it.
+         */
+        EndpointSummary: {
+            /** Active Port */
+            active_port: string | null;
+            /**
+             * Active Port Available
+             * @description available | not available | availability unknown
+             */
+            active_port_available: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * In Use By
+             * @description Player id using this sink, from the config.
+             */
+            in_use_by: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sink" | "source";
+            /**
+             * Muted
+             * @description Sinks only; null for sources.
+             */
+            muted: boolean | null;
+            /** Name */
+            name: string;
+            /** @description null when no card or link claims it. */
+            owner: components["schemas"]["EndpointOwner"] | null;
+            /**
+             * Sample Spec
+             * @default
+             */
+            sample_spec: string;
+            /**
+             * State
+             * @description running | idle | suspended | unknown
+             * @default unknown
+             */
+            state: string;
+            /**
+             * Volume
+             * @description Sinks only, 0-100; null for sources.
+             */
+            volume: number | null;
+        };
+        /**
          * Group
          * @description A Music Assistant sync group, or a solo speaker as a group of one (``id`` is null).
          */
@@ -4684,6 +5011,7 @@ export interface components {
              * @description ISO-8601 UTC when this read was taken.
              */
             as_of: string;
+            audio: components["schemas"]["AudioSection"];
             /** Bluetooth Devices */
             bluetooth_devices: components["schemas"]["BtDeviceSummary"][];
             capabilities: components["schemas"]["CapabilitySet"];
@@ -10069,6 +10397,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HardwareSnapshot"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_audio_card_api_v1_hardware_audio_cards__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_audio_sink_api_v1_hardware_audio_sinks__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndpointDetail"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_audio_source_api_v1_hardware_audio_sources__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndpointDetail"];
                 };
             };
             /** @description Client error */

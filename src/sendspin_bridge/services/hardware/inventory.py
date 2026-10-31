@@ -19,13 +19,14 @@ When the last refresh failed, the previous read is still returned — with
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import threading
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
@@ -40,19 +41,29 @@ from sendspin_bridge.services.hardware.capabilities import (
     probe_audio_server,
     probe_capture,
 )
-from sendspin_bridge.services.hardware.roles import DeviceLink, RoleEvidence, infer_roles
+from sendspin_bridge.services.hardware.roles import DeviceLink, LinkEndpoint, RoleEvidence, infer_roles
 
 if TYPE_CHECKING:
+    from collections.abc import Collection, Iterable
+
     from sendspin_bridge.bluetooth.bluez import DeviceInfo
+    from sendspin_bridge.services.audio.sink_inventory import LocalCard, LocalSink, LocalSource
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "AudioFacts",
+    "CaptureFacts",
     "ControllerFacts",
     "Degraded",
     "DeviceFacts",
+    "EndpointFacts",
+    "EndpointOwnerFacts",
     "HardwareUnavailable",
     "InventoryRead",
+    "build_audio_facts",
+    "classify_capture",
+    "classify_owner",
     "clear_cache",
     "read_inventory",
 ]
@@ -62,6 +73,14 @@ _LEASE_WAIT_S = 5.0
 _READ_LEASE_REASON = "hardware inventory"
 
 _UUID_RE = re.compile(r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})")
+#: Any of the audio server's names for a Bluetooth endpoint; the address is the
+#: same device in either spelling, so ``DeviceAddress`` folds it.
+_BLUEZ_ENDPOINT_RE = re.compile(
+    r"^bluez_(?:sink|output|source)\."
+    r"(?P<address>[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}|_[0-9A-Fa-f]{2}){5})"
+    r"(?:\..*)?$"
+)
+_BLUEZ_SOURCE_RE = re.compile(r"^bluez_source\.(?P<address>[0-9A-Fa-f_]{17})(?:\..*)?$")
 
 #: One reader per process; the lock serialises refreshes and the cache is shared.
 _reader_lock = threading.Lock()
@@ -125,6 +144,148 @@ class DeviceFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class EndpointOwnerFacts:
+    """Which object owns an endpoint: a card, a Bluetooth link, or the bridge itself."""
+
+    kind: Literal["card", "bluetooth", "internal"]
+    card: str | None = None
+    bluetooth: str | None = None
+    internal: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointFacts:
+    """One sink or source, already classified and ready for the read model."""
+
+    kind: Literal["sink", "source"]
+    name: str
+    description: str
+    state: str
+    sample_spec: str
+    muted: bool | None
+    volume: int | None
+    active_port: str | None
+    active_port_available: str | None
+    identifiers: dict[str, str]
+    monitor_of: str | None
+    owner: EndpointOwnerFacts | None
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureFacts:
+    """The phone's A2DP capture node, or the reason there is none."""
+
+    kind: Literal["pipewire_node", "pulse_source", "unavailable"] = "unavailable"
+    node: str | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AudioFacts:
+    """The audio half of one refresh: cards, endpoints and the capture node."""
+
+    cards: tuple[LocalCard, ...] = ()
+    sinks: tuple[EndpointFacts, ...] = ()
+    sources: tuple[EndpointFacts, ...] = ()
+    capture: CaptureFacts = field(default_factory=CaptureFacts)
+
+
+def classify_owner(
+    name: str,
+    kind: Literal["sink", "source"],
+    cards: Iterable[LocalCard],
+    *,
+    owner_module: int | None = None,
+) -> EndpointOwnerFacts | None:
+    """Classify an endpoint's owner from its name, then its card's membership.
+
+    Bluetooth and bridge-internal names are self-describing.  A local endpoint
+    belongs to the card whose endpoint list names it (or, when the server omits
+    that list, to the one card loaded by the same module).  No match stays
+    ``None``: an unknown owner is not the same as an internal one.
+    """
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+
+    match = _BLUEZ_ENDPOINT_RE.match(name)
+    if match is not None:
+        address = DeviceAddress.parse(match.group("address"))
+        if address is not None:
+            return EndpointOwnerFacts(kind="bluetooth", bluetooth=address.colons)
+    if name.startswith("sendspin_"):
+        return EndpointOwnerFacts(kind="internal", internal=True)
+    known_cards = list(cards)
+    for card in known_cards:
+        if name in (card.sink_names if kind == "sink" else card.source_names):
+            return EndpointOwnerFacts(kind="card", card=card.name)
+    if owner_module is not None:
+        by_module = [card for card in known_cards if card.owner_module == owner_module]
+        if len(by_module) == 1:
+            return EndpointOwnerFacts(kind="card", card=by_module[0].name)
+    return None
+
+
+def _endpoint_facts(
+    kind: Literal["sink", "source"], endpoint: LocalSink | LocalSource, cards: Iterable[LocalCard]
+) -> EndpointFacts:
+    is_sink = kind == "sink"
+    return EndpointFacts(
+        kind=kind,
+        name=endpoint.name,
+        description=endpoint.description,
+        state=endpoint.state,
+        sample_spec=endpoint.sample_spec,
+        muted=endpoint.muted if is_sink else None,
+        volume=endpoint.volume if is_sink else None,
+        active_port=getattr(endpoint, "active_port", None) if is_sink else None,
+        active_port_available=getattr(endpoint, "active_port_available", None) if is_sink else None,
+        identifiers=dict(endpoint.identifiers),
+        monitor_of=None if is_sink else getattr(endpoint, "monitor_of", None),
+        owner=classify_owner(endpoint.name, kind, cards, owner_module=endpoint.owner_module),
+    )
+
+
+def build_audio_facts(
+    cards: Collection[LocalCard],
+    sinks: Collection[LocalSink],
+    sources: Collection[LocalSource],
+    capture: CaptureFacts,
+) -> AudioFacts:
+    """Assemble the audio half from one read of each list (pure)."""
+    return AudioFacts(
+        cards=tuple(cards),
+        sinks=tuple(_endpoint_facts("sink", sink, cards) for sink in sinks),
+        sources=tuple(_endpoint_facts("source", source, cards) for source in sources),
+        capture=capture,
+    )
+
+
+def classify_capture(
+    wpctl_status: str | None,
+    sources: Iterable[LocalSource],
+    *,
+    wpctl_available: bool,
+) -> CaptureFacts:
+    """Find the phone's capture node, preferring the PipeWire node over a PA source.
+
+    Neither existing is a truthful "unavailable" with a reason, not an error:
+    a phone that is not streaming is not a fault.
+    """
+    from sendspin_bridge.services.source.bt_source import find_bluez_input
+
+    node = find_bluez_input(wpctl_status or "")
+    if node:
+        return CaptureFacts(kind="pipewire_node", node=node)
+    for source in sources:
+        if _BLUEZ_SOURCE_RE.match(source.name):
+            return CaptureFacts(kind="pulse_source", node=source.name)
+    if not wpctl_available:
+        reason = "wpctl is not installed, so no bluez_input node can be read; no bluez_source is present either."
+    else:
+        reason = "No bluez_input.<MAC>.<n> capture node and no bluez_source is present; the phone is not streaming."
+    return CaptureFacts(kind="unavailable", node=None, reason=reason)
+
+
+@dataclass(frozen=True, slots=True)
 class InventoryRead:
     """One answer from the reader, cached for :data:`_TTL_S` seconds."""
 
@@ -135,6 +296,7 @@ class InventoryRead:
     controllers: tuple[ControllerFacts, ...]
     devices: tuple[DeviceFacts, ...]
     degraded: tuple[Degraded, ...]
+    audio: AudioFacts = field(default_factory=AudioFacts)
 
 
 def _monotonic() -> float:
@@ -285,7 +447,11 @@ def _with_unique_ids(controllers: list[ControllerFacts]) -> list[ControllerFacts
 
 
 def _device_facts(
-    mac: str, record: dict[str, Any], info: DeviceInfo | None, runtime: dict[str, dict[str, Any]]
+    mac: str,
+    record: dict[str, Any],
+    info: DeviceInfo | None,
+    runtime: dict[str, dict[str, Any]],
+    endpoints: Iterable[LinkEndpoint] = (),
 ) -> DeviceFacts:
     """One bond, merged across the controllers that hold it."""
     entry = record["entry"]
@@ -293,7 +459,7 @@ def _device_facts(
     alias = (getattr(info, "alias", "") or name) if info else name
     status = runtime.get(mac, {})
     transport_state = status.get("transport_state")
-    roles = infer_roles(DeviceLink(mac, transport_state=transport_state), (), None)
+    roles = infer_roles(DeviceLink(mac, transport_state=transport_state), endpoints, None)
     return DeviceFacts(
         mac=mac,
         name=name,
@@ -315,7 +481,9 @@ def _device_facts(
     )
 
 
-def _read_from(reader: Any, hci_by_mac: dict[str, str]) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
+def _read_from(
+    reader: Any, hci_by_mac: dict[str, str], endpoints: Iterable[LinkEndpoint] = ()
+) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
     """One full read through *reader* (a D-Bus backend or the bluetoothctl transport).
 
     A batched ``inventory()`` answer is consumed in one go; duck-typed readers
@@ -328,11 +496,13 @@ def _read_from(reader: Any, hci_by_mac: dict[str, str]) -> tuple[list[Controller
         readings = batched()
         if readings is None:
             raise _BusUnavailable("the reader could not answer")
-        return _from_readings(readings, hci_by_mac)
-    return _from_questions(reader, hci_by_mac)
+        return _from_readings(readings, hci_by_mac, endpoints)
+    return _from_questions(reader, hci_by_mac, endpoints)
 
 
-def _from_readings(readings: list[Any], hci_by_mac: dict[str, str]) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
+def _from_readings(
+    readings: list[Any], hci_by_mac: dict[str, str], endpoints: Iterable[LinkEndpoint] = ()
+) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
     runtime = _runtime_status()
     controllers: list[ControllerFacts] = []
     merged: dict[str, dict[str, Any]] = {}
@@ -355,11 +525,13 @@ def _from_readings(readings: list[Any], hci_by_mac: dict[str, str]) -> tuple[lis
             if target is not None and target["info"] is None:
                 target["info"] = info
         controllers.append(replace(facts, device_macs=tuple(device_macs)))
-    devices = [_device_facts(mac, record, record.get("info"), runtime) for mac, record in merged.items()]
+    devices = [_device_facts(mac, record, record.get("info"), runtime, endpoints) for mac, record in merged.items()]
     return _with_unique_ids(controllers), devices
 
 
-def _from_questions(reader: Any, hci_by_mac: dict[str, str]) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
+def _from_questions(
+    reader: Any, hci_by_mac: dict[str, str], endpoints: Iterable[LinkEndpoint] = ()
+) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
     """The legacy per-question read, for a reader without a batched answer."""
     adapters = reader.list_adapters()
     if adapters is None:
@@ -385,8 +557,77 @@ def _from_questions(reader: Any, hci_by_mac: dict[str, str]) -> tuple[list[Contr
     for mac, record in merged.items():
         owner = record["controller_macs"][0]
         record["info"] = reader.device_info(mac, Adapter.select(owner))
-    devices = [_device_facts(mac, record, record.get("info"), runtime) for mac, record in merged.items()]
+    devices = [_device_facts(mac, record, record.get("info"), runtime, endpoints) for mac, record in merged.items()]
     return _with_unique_ids(controllers), devices
+
+
+# ---------------------------------------------------------------------------
+# The audio half
+# ---------------------------------------------------------------------------
+
+
+async def _wpctl_status() -> str | None:
+    """``wpctl status`` output, or ``None`` when it could not be run."""
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "wpctl",
+            "status",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+    except (OSError, TimeoutError) as exc:
+        logger.debug("wpctl status failed: %s", exc)
+        if proc is not None and proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        return None
+    if proc.returncode not in (0, None):
+        return None
+    return out.decode(errors="replace")
+
+
+async def _capture_facts(sources: Collection[LocalSource]) -> CaptureFacts:
+    wpctl_available = probe_capture()
+    status = await _wpctl_status() if wpctl_available else None
+    return classify_capture(status, sources, wpctl_available=wpctl_available)
+
+
+async def _read_audio_async() -> AudioFacts:
+    """One read of each audio list, then one assembly (pure)."""
+    from sendspin_bridge.services.audio import sink_inventory
+
+    sinks = await sink_inventory.list_all_sinks()
+    sources = await sink_inventory.list_local_sources()
+    cards = await sink_inventory.list_local_cards(sinks=sinks, sources=sources)
+    return build_audio_facts(cards, sinks, sources, await _capture_facts(sources))
+
+
+def _read_audio(server_name: str) -> AudioFacts:
+    """The audio half for a worker thread; empty when no server answers.
+
+    The async readers use ``asyncio`` subprocesses and are bridged with
+    ``asyncio.run`` because this reader is synchronous by contract and always
+    runs in a worker thread.  A failure reads as empty — the caller already
+    knows from *server_name* whether "empty" means "none" or "unreadable".
+    """
+    if classify_audio_server(server_name) == "none":
+        return AudioFacts()
+    try:
+        return asyncio.run(_read_audio_async())
+    except Exception as exc:
+        logger.debug("Hardware inventory: audio read failed (%s)", exc)
+        return AudioFacts()
+
+
+def _role_endpoints(audio: AudioFacts) -> tuple[LinkEndpoint, ...]:
+    """The endpoints and capture node role inference reads, in one tuple."""
+    endpoints = [LinkEndpoint("sink", sink.name, sink.state) for sink in audio.sinks]
+    endpoints.extend(LinkEndpoint("source", source.name, source.state) for source in audio.sources)
+    if audio.capture.node:
+        endpoints.append(LinkEndpoint("capture", audio.capture.node, ""))
+    return tuple(endpoints)
 
 
 # ---------------------------------------------------------------------------
@@ -401,13 +642,16 @@ def _assemble(
     dbus: bool,
     bluetooth: bool,
     degraded: list[Degraded],
+    audio: AudioFacts | None = None,
+    server_name: str | None = None,
 ) -> InventoryRead:
-    server_name = probe_audio_server()
-    audio_server = classify_audio_server(server_name)
+    resolved_name = probe_audio_server() if server_name is None else server_name
+    audio_facts = audio if audio is not None else AudioFacts()
+    audio_server = classify_audio_server(resolved_name)
     capabilities = build_capabilities(
         bluetooth=bluetooth,
         dbus=dbus,
-        server_name=server_name,
+        server_name=resolved_name,
         capture=probe_capture(),
         default_sink=audio_server != "none",
     )
@@ -420,6 +664,14 @@ def _assemble(
                 "No PulseAudio-compatible server answered; cards, sinks and sources cannot be read.",
             )
         )
+    elif audio_facts.capture.kind == "unavailable":
+        entries.append(
+            Degraded(
+                "audio",
+                "capture_unavailable",
+                audio_facts.capture.reason or "No Bluetooth capture node or source is present.",
+            )
+        )
     return InventoryRead(
         as_of=_as_of(),
         stale=False,
@@ -428,29 +680,35 @@ def _assemble(
         controllers=tuple(controllers),
         devices=tuple(devices),
         degraded=tuple(entries),
+        audio=audio_facts,
     )
 
 
 def _refresh() -> InventoryRead:
+    server_name = probe_audio_server()
+    audio = _read_audio(server_name)
+    endpoints = _role_endpoints(audio)
     bluez = get_bluez()
     hci_by_mac = build_hci_map()
     backend = getattr(bluez, "query_backend", None)
     if backend is not None:
         try:
-            controllers, devices = _read_from(backend, hci_by_mac)
+            controllers, devices = _read_from(backend, hci_by_mac, endpoints)
         except _BusUnavailable as exc:
             logger.debug("Hardware inventory: D-Bus could not answer (%s); asking bluetoothctl", exc)
         except Exception as exc:  # the bus could not be asked — the transport decides
             logger.debug("Hardware inventory: D-Bus read failed (%s); asking bluetoothctl", exc)
         else:
-            return _assemble(controllers, devices, dbus=True, bluetooth=True, degraded=[])
+            return _assemble(
+                controllers, devices, dbus=True, bluetooth=True, degraded=[], audio=audio, server_name=server_name
+            )
 
     # The bus already said no — ask bluetoothctl without letting every verb
     # spend the same bus timeout before it answers.
     reader = bluez.without_query_backend() if backend is not None else bluez
     with _take_read_lease():
         try:
-            controllers, devices = _read_from(reader, hci_by_mac)
+            controllers, devices = _read_from(reader, hci_by_mac, endpoints)
         except _BusUnavailable as exc:
             raise HardwareUnavailable(f"Neither D-Bus nor bluetoothctl could answer: {exc}") from exc
     return _assemble(
@@ -465,6 +723,8 @@ def _refresh() -> InventoryRead:
                 "D-Bus did not answer; the inventory was read through bluetoothctl under the adapter lease.",
             )
         ],
+        audio=audio,
+        server_name=server_name,
     )
 
 

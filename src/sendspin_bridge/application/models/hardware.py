@@ -100,6 +100,97 @@ class ControllerDetail(ControllerSummary):
     address_forms: AddressForms
 
 
+class EndpointOwner(ResponseModel):
+    """What an audio endpoint belongs to: a card, a Bluetooth link, or the bridge.
+
+    Exactly one of *card*, *bluetooth* and *internal* is set; a Bluetooth
+    speaker's sink belongs to the speaker, not to the ``bluez_card`` object.
+    """
+
+    card: str | None = Field(default=None, description="The card that owns this endpoint.")
+    bluetooth: str | None = Field(default=None, description="The speaker MAC, when the endpoint is a BT link.")
+    internal: bool | None = Field(
+        default=None, description="true for the bridge's own sendspin_* sinks; null otherwise."
+    )
+
+
+class EndpointRef(ResponseModel):
+    """One endpoint belonging to a card, without its detail fields."""
+
+    kind: Literal["sink", "source"]
+    name: str
+
+
+class CardProfile(ResponseModel):
+    """One profile a card can take."""
+
+    name: str
+    description: str = ""
+    available: bool = True
+
+
+class CardPort(ResponseModel):
+    """One port a card exposes; ``available=null`` means the server said "unknown"."""
+
+    name: str
+    description: str = ""
+    available: bool | None = None
+    active: bool = False
+
+
+class EndpointSummary(ResponseModel):
+    """A sink (output) or source (input) as the audio server names it."""
+
+    kind: Literal["sink", "source"]
+    name: str
+    description: str = ""
+    owner: EndpointOwner | None = Field(default=None, description="null when no card or link claims it.")
+    state: str = Field(default="unknown", description="running | idle | suspended | unknown")
+    sample_spec: str = ""
+    muted: bool | None = Field(default=None, description="Sinks only; null for sources.")
+    volume: int | None = Field(default=None, description="Sinks only, 0-100; null for sources.")
+    in_use_by: str | None = Field(default=None, description="Player id using this sink, from the config.")
+    active_port: str | None = None
+    active_port_available: str | None = Field(
+        default=None, description="available | not available | availability unknown"
+    )
+
+
+class EndpointDetail(EndpointSummary):
+    """One endpoint with its stable identifiers and the owning card's ports."""
+
+    identifiers: dict[str, str] = Field(default_factory=dict)
+    ports: list[CardPort] = Field(default_factory=list, description="All ports of the owning card.")
+    monitor_of: str | None = Field(default=None, description="The sink a source monitors, if any.")
+
+
+class CardSummary(ResponseModel):
+    """An audio card: what it is, and a count of what it can do."""
+
+    name: str
+    driver: str = ""
+    active_profile: str | None = None
+    profile_count: int = 0
+    port_count: int = 0
+    endpoint_refs: list[EndpointRef] = Field(default_factory=list)
+
+
+class CardDetail(CardSummary):
+    """One card with every profile, every port and its endpoints."""
+
+    profiles: list[CardProfile] = Field(default_factory=list)
+    ports: list[CardPort] = Field(default_factory=list)
+    endpoints: list[EndpointSummary] = Field(default_factory=list)
+
+
+class AudioSection(ResponseModel):
+    """The audio half of the read model: one list per entity kind."""
+
+    cards: list[CardSummary] = Field(default_factory=list)
+    sinks: list[EndpointSummary] = Field(default_factory=list)
+    sources: list[EndpointSummary] = Field(default_factory=list)
+
+
 class CapabilitySet(ResponseModel):
     """What this host can show, plus the reason code for every no."""
 
@@ -128,4 +219,5 @@ class HardwareSnapshot(ResponseModel):
     capabilities: CapabilitySet
     controllers: list[ControllerSummary] = Field(default_factory=list)
     bluetooth_devices: list[BtDeviceSummary] = Field(default_factory=list)
+    audio: AudioSection
     degraded: list[DegradedSection] = Field(default_factory=list)

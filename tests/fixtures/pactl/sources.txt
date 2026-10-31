@@ -1,0 +1,70 @@
+Source #60
+	State: SUSPENDED
+	Name: alsa_input.pci-0000_00_1f.3.analog-stereo
+	Description: Built-in Audio Analog Stereo
+	Driver: module-alsa-card.c
+	Sample Specification: s16le 2ch 44100Hz
+	Channel Map: front-left,front-right
+	Owner Module: 7
+	Mute: no
+	Volume: front-left: 45875 /  70% / -9.29 dB,   front-right: 45875 /  70% / -9.29 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor of Sink: n/a
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY
+	Properties:
+		alsa.card = "0"
+		alsa.card_name = "HDA Intel PCH"
+		alsa.long_card_name = "HDA Intel PCH at 0xf7f10000 irq 30"
+		device.bus_path = "pci-0000:00:1f.3"
+		device.class = "sound"
+		device.product.id = "0x9c20"
+		device.vendor.id = "0x8086"
+	Formats:
+		pcm
+
+Source #61
+	State: IDLE
+	Name: alsa_output.pci-0000_00_1f.3.analog-stereo.monitor
+	Description: Monitor of Built-in Audio Analog Stereo
+	Driver: module-alsa-card.c
+	Sample Specification: s16le 2ch 44100Hz
+	Channel Map: front-left,front-right
+	Owner Module: 7
+	Mute: no
+	Volume: front-left: 65536 / 100% / 0.00 dB,   front-right: 65536 / 100% / 0.00 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor of Sink: alsa_output.pci-0000_00_1f.3.analog-stereo
+	Latency: 0 usec, configured 0 usec
+	Flags: DECIBEL_VOLUME LATENCY
+	Properties:
+		device.class = "monitor"
+		device.description = "Monitor of Built-in Audio Analog Stereo"
+	Formats:
+		pcm
+
+Source #71
+	State: RUNNING
+	Name: bluez_source.FC_58_FA_EB_08_6C
+	Description: ENEBY20
+	Driver: module-bluez5-device.c
+	Sample Specification: s16le 2ch 44100Hz
+	Channel Map: front-left,front-right
+	Owner Module: 25
+	Mute: no
+	Volume: front-left: 65536 / 100% / 0.00 dB,   front-right: 65536 / 100% / 0.00 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor of Sink: n/a
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE DECIBEL_VOLUME LATENCY
+	Properties:
+		bluez.path = "/org/bluez/hci0/dev_FC_58_FA_EB_08_6C"
+		device.api = "bluez"
+		device.bus = "bluetooth"
+		device.description = "ENEBY20"
+		device.string = "FC:58:FA:EB:08:6C"
+	Formats:
+		pcm

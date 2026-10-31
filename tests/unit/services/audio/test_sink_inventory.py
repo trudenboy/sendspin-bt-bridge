@@ -11,10 +11,15 @@ import pytest
 from sendspin_bridge.services.audio import sink_inventory
 from sendspin_bridge.services.audio.sink_inventory import (
     LocalSink,
+    LocalSource,
+    list_local_cards,
     list_local_sinks,
+    list_local_sources,
     match_players,
     match_sink,
+    parse_pactl_cards,
     parse_pactl_sinks,
+    parse_pactl_sources,
 )
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "pactl"
@@ -474,3 +479,188 @@ def test_mock_sinks_unreadable_file_is_unavailable_in_strict_mode(monkeypatch, t
     with pytest.raises(sink_inventory.SinkInventoryUnavailable):
         asyncio.run(list_local_sinks(strict=True))
     assert asyncio.run(list_local_sinks()) == []
+
+
+# ---------------------------------------------------------------------------
+# Cards and sources — the Hardware page's audio half
+# ---------------------------------------------------------------------------
+
+BLUEZ_CARD = "bluez_card.FC_58_FA_EB_08_6C"
+ANALOG_CARD = "alsa_card.pci-0000_00_1f.3"
+USB_CARD = "alsa_card.usb-Generic_USB_DAC_0000A1-00"
+ANALOG_SINK = "alsa_output.pci-0000_00_1f.3.analog-stereo"
+ANALOG_SOURCE = "alsa_input.pci-0000_00_1f.3.analog-stereo"
+BLUEZ_SINK = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+BLUEZ_SOURCE = "bluez_source.FC_58_FA_EB_08_6C"
+
+
+def _cards_text() -> str:
+    return (FIXTURES / "cards.txt").read_text()
+
+
+def _sources() -> list[LocalSource]:
+    return parse_pactl_sources((FIXTURES / "sources.txt").read_text())
+
+
+def _card_sinks() -> list[LocalSink]:
+    return [
+        LocalSink(
+            ANALOG_SINK,
+            "Built-in Audio Analog Stereo",
+            "running",
+            "s16le 2ch 44100Hz",
+            False,
+            100,
+            "analog-output-speaker",
+            "availability unknown",
+            {},
+            index=41,
+        ),
+        LocalSink(
+            BLUEZ_SINK,
+            "ENEBY20",
+            "idle",
+            "s16le 2ch 44100Hz",
+            False,
+            80,
+            "headset-output",
+            "available",
+            {},
+            index=70,
+        ),
+        LocalSink(
+            "alsa_output.usb-Generic_USB_DAC_0000A1-00.analog-stereo",
+            "USB DAC Analog Stereo",
+            "idle",
+            "s24le 2ch 96000Hz",
+            False,
+            100,
+            "analog-output",
+            "availability unknown",
+            {},
+            index=72,
+        ),
+    ]
+
+
+def test_parse_cards_keeps_every_profile_and_port():
+    cards = parse_pactl_cards(_cards_text())
+
+    assert [card.name for card in cards] == [ANALOG_CARD, BLUEZ_CARD, USB_CARD]
+    analog = cards[0]
+    assert analog.driver == "module-alsa-card.c"
+    assert analog.active_profile == "output:analog-stereo+input:analog-stereo"
+    assert [profile.name for profile in analog.profiles] == [
+        "output:analog-stereo",
+        "output:analog-stereo+input:analog-stereo",
+        "input:analog-stereo",
+        "off",
+    ]
+    assert analog.profiles[1].description == "Analog Stereo Duplex"
+    assert analog.profiles[1].available is True
+
+    speaker = next(port for port in analog.ports if port.name == "analog-output-speaker")
+    headphones = next(port for port in analog.ports if port.name == "analog-output-headphones")
+    mic = next(port for port in analog.ports if port.name == "analog-input-mic")
+    assert speaker.active is True and speaker.available is None  # availability unknown
+    assert headphones.active is False and headphones.available is False  # unplugged
+    assert mic.active is False and mic.available is None
+    assert speaker.description == "Speakers"
+
+
+def test_parse_cards_reads_a_bluez_card_and_a_card_with_several_profiles():
+    cards = parse_pactl_cards(_cards_text())
+    bluez = cards[1]
+    usb = cards[2]
+
+    assert bluez.driver == "module-bluez5-device.c"
+    assert bluez.active_profile == "a2dp_sink"
+    assert [(profile.name, profile.available) for profile in bluez.profiles] == [
+        ("a2dp_sink", True),
+        ("headset_head_unit", True),
+        ("off", True),
+    ]
+    assert [port.name for port in bluez.ports] == ["headset-output", "headset-input"]
+    assert next(port for port in bluez.ports if port.name == "headset-input").available is None
+
+    assert len(usb.profiles) == 5
+    assert usb.active_profile == "output:analog-stereo"
+
+
+def test_card_endpoint_indexes_are_resolved_through_the_endpoint_lists():
+    cards = parse_pactl_cards(_cards_text(), sinks=_card_sinks(), sources=_sources())
+    by_name = {card.name: card for card in cards}
+
+    assert by_name[ANALOG_CARD].sink_names == (ANALOG_SINK,)
+    assert by_name[ANALOG_CARD].source_names == (ANALOG_SOURCE,)
+    assert by_name[BLUEZ_CARD].sink_names == (BLUEZ_SINK,)
+    assert by_name[BLUEZ_CARD].source_names == (BLUEZ_SOURCE,)
+    assert by_name[USB_CARD].sink_names == ("alsa_output.usb-Generic_USB_DAC_0000A1-00.analog-stereo",)
+    assert by_name[USB_CARD].source_names == ()
+
+    # An index the endpoint list does not know is dropped, never turned into a name.
+    unknown = _cards_text().replace("\tSinks:\n\t\t72", "\tSinks:\n\t\t999")
+    usb = next(card for card in parse_pactl_cards(unknown, sinks=_card_sinks()) if card.name == USB_CARD)
+    assert usb.sink_names == ()
+
+
+def test_parse_cards_without_endpoint_lists_keeps_membership_unknown():
+    cards = parse_pactl_cards(_cards_text())
+
+    assert all(card.sink_names == () and card.source_names == () for card in cards)
+    assert parse_pactl_cards("") == []
+
+
+def test_parse_sources_keeps_state_monitor_and_identifiers():
+    sources = _sources()
+
+    assert [source.name for source in sources] == [
+        ANALOG_SOURCE,
+        "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+        BLUEZ_SOURCE,
+    ]
+    analog, monitor, bluez = sources
+    assert analog.state == "suspended"
+    assert analog.sample_spec == "s16le 2ch 44100Hz"
+    assert analog.muted is False
+    assert analog.volume == 70
+    assert analog.monitor_of is None
+    assert analog.identifiers["bus_path"] == "pci-0000:00:1f.3"
+    assert analog.identifiers["alsa_long_card_name"] == "HDA Intel PCH at 0xf7f10000 irq 30"
+
+    assert monitor.description == "Monitor of Built-in Audio Analog Stereo"
+    assert monitor.monitor_of == ANALOG_SINK
+    assert bluez.state == "running"
+    assert bluez.monitor_of is None
+    assert parse_pactl_sources("") == []
+
+
+def test_list_local_sources_reads_pactl(monkeypatch):
+    async def fake_text():
+        return (FIXTURES / "sources.txt").read_text()
+
+    monkeypatch.setattr(sink_inventory, "_pactl_list_sources_text", fake_text)
+
+    assert [source.name for source in asyncio.run(list_local_sources())] == [
+        ANALOG_SOURCE,
+        "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+        BLUEZ_SOURCE,
+    ]
+
+
+def test_list_local_cards_reads_the_endpoint_lists_it_needs(monkeypatch):
+    async def fake_sinks():
+        return _card_sinks()
+
+    async def fake_sources():
+        return _sources()
+
+    async def fake_text():
+        return _cards_text()
+
+    monkeypatch.setattr(sink_inventory, "list_all_sinks", fake_sinks)
+    monkeypatch.setattr(sink_inventory, "list_local_sources", fake_sources)
+    monkeypatch.setattr(sink_inventory, "_pactl_list_cards_text", fake_text)
+
+    by_name = {card.name: card for card in asyncio.run(list_local_cards())}
+    assert by_name[BLUEZ_CARD].sink_names == (BLUEZ_SINK,)

@@ -1139,6 +1139,39 @@
         "title": "AreasIn",
         "type": "object"
       },
+      "AudioSection": {
+        "description": "The audio half of the read model: one list per entity kind.",
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/CardSummary"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "sinks": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointSummary"
+            },
+            "title": "Sinks",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointSummary"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cards",
+          "sinks",
+          "sources"
+        ],
+        "title": "AudioSection",
+        "type": "object"
+      },
       "AudioSinkOut": {
         "properties": {
           "active_port_available": {
@@ -3119,6 +3152,198 @@
         "title": "CaptureStateOut",
         "type": "object"
       },
+      "CardDetail": {
+        "description": "One card with every profile, every port and its endpoints.",
+        "properties": {
+          "active_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Profile"
+          },
+          "driver": {
+            "default": "",
+            "title": "Driver",
+            "type": "string"
+          },
+          "endpoint_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointRef"
+            },
+            "title": "Endpoint Refs",
+            "type": "array"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointSummary"
+            },
+            "title": "Endpoints",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "port_count": {
+            "default": 0,
+            "title": "Port Count",
+            "type": "integer"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/CardPort"
+            },
+            "title": "Ports",
+            "type": "array"
+          },
+          "profile_count": {
+            "default": 0,
+            "title": "Profile Count",
+            "type": "integer"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/CardProfile"
+            },
+            "title": "Profiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "driver",
+          "active_profile",
+          "profile_count",
+          "port_count",
+          "endpoint_refs",
+          "profiles",
+          "ports",
+          "endpoints"
+        ],
+        "title": "CardDetail",
+        "type": "object"
+      },
+      "CardPort": {
+        "description": "One port a card exposes; ``available=null`` means the server said \"unknown\".",
+        "properties": {
+          "active": {
+            "default": false,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "available",
+          "active"
+        ],
+        "title": "CardPort",
+        "type": "object"
+      },
+      "CardProfile": {
+        "description": "One profile a card can take.",
+        "properties": {
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "available"
+        ],
+        "title": "CardProfile",
+        "type": "object"
+      },
+      "CardSummary": {
+        "description": "An audio card: what it is, and a count of what it can do.",
+        "properties": {
+          "active_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Profile"
+          },
+          "driver": {
+            "default": "",
+            "title": "Driver",
+            "type": "string"
+          },
+          "endpoint_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointRef"
+            },
+            "title": "Endpoint Refs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "port_count": {
+            "default": 0,
+            "title": "Port Count",
+            "type": "integer"
+          },
+          "profile_count": {
+            "default": 0,
+            "title": "Profile Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "driver",
+          "active_profile",
+          "profile_count",
+          "port_count",
+          "endpoint_refs"
+        ],
+        "title": "CardSummary",
+        "type": "object"
+      },
       "CheckIn": {
         "properties": {
           "device_names": {
@@ -5024,6 +5249,343 @@
         "title": "DisabledDevice",
         "type": "object"
       },
+      "EndpointDetail": {
+        "description": "One endpoint with its stable identifiers and the owning card's ports.",
+        "properties": {
+          "active_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Port"
+          },
+          "active_port_available": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "available | not available | availability unknown",
+            "title": "Active Port Available"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "identifiers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Identifiers",
+            "type": "object"
+          },
+          "in_use_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Player id using this sink, from the config.",
+            "title": "In Use By"
+          },
+          "kind": {
+            "enum": [
+              "sink",
+              "source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "monitor_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The sink a source monitors, if any.",
+            "title": "Monitor Of"
+          },
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sinks only; null for sources.",
+            "title": "Muted"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndpointOwner"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null when no card or link claims it."
+          },
+          "ports": {
+            "description": "All ports of the owning card.",
+            "items": {
+              "$ref": "#/components/schemas/CardPort"
+            },
+            "title": "Ports",
+            "type": "array"
+          },
+          "sample_spec": {
+            "default": "",
+            "title": "Sample Spec",
+            "type": "string"
+          },
+          "state": {
+            "default": "unknown",
+            "description": "running | idle | suspended | unknown",
+            "title": "State",
+            "type": "string"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sinks only, 0-100; null for sources.",
+            "title": "Volume"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "description",
+          "owner",
+          "state",
+          "sample_spec",
+          "muted",
+          "volume",
+          "in_use_by",
+          "active_port",
+          "active_port_available",
+          "identifiers",
+          "ports",
+          "monitor_of"
+        ],
+        "title": "EndpointDetail",
+        "type": "object"
+      },
+      "EndpointOwner": {
+        "description": "What an audio endpoint belongs to: a card, a Bluetooth link, or the bridge.\n\nExactly one of *card*, *bluetooth* and *internal* is set; a Bluetooth\nspeaker's sink belongs to the speaker, not to the ``bluez_card`` object.",
+        "properties": {
+          "bluetooth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker MAC, when the endpoint is a BT link.",
+            "title": "Bluetooth"
+          },
+          "card": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card that owns this endpoint.",
+            "title": "Card"
+          },
+          "internal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true for the bridge's own sendspin_* sinks; null otherwise.",
+            "title": "Internal"
+          }
+        },
+        "required": [
+          "card",
+          "bluetooth",
+          "internal"
+        ],
+        "title": "EndpointOwner",
+        "type": "object"
+      },
+      "EndpointRef": {
+        "description": "One endpoint belonging to a card, without its detail fields.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "sink",
+              "source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "EndpointRef",
+        "type": "object"
+      },
+      "EndpointSummary": {
+        "description": "A sink (output) or source (input) as the audio server names it.",
+        "properties": {
+          "active_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Port"
+          },
+          "active_port_available": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "available | not available | availability unknown",
+            "title": "Active Port Available"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "in_use_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Player id using this sink, from the config.",
+            "title": "In Use By"
+          },
+          "kind": {
+            "enum": [
+              "sink",
+              "source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sinks only; null for sources.",
+            "title": "Muted"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndpointOwner"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null when no card or link claims it."
+          },
+          "sample_spec": {
+            "default": "",
+            "title": "Sample Spec",
+            "type": "string"
+          },
+          "state": {
+            "default": "unknown",
+            "description": "running | idle | suspended | unknown",
+            "title": "State",
+            "type": "string"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sinks only, 0-100; null for sources.",
+            "title": "Volume"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "description",
+          "owner",
+          "state",
+          "sample_spec",
+          "muted",
+          "volume",
+          "in_use_by",
+          "active_port",
+          "active_port_available"
+        ],
+        "title": "EndpointSummary",
+        "type": "object"
+      },
       "Group": {
         "description": "A Music Assistant sync group, or a solo speaker as a group of one (``id`` is null).",
         "properties": {
@@ -5358,6 +5920,9 @@
             "title": "As Of",
             "type": "string"
           },
+          "audio": {
+            "$ref": "#/components/schemas/AudioSection"
+          },
           "bluetooth_devices": {
             "items": {
               "$ref": "#/components/schemas/BtDeviceSummary"
@@ -5400,6 +5965,7 @@
           "capabilities",
           "controllers",
           "bluetooth_devices",
+          "audio",
           "degraded"
         ],
         "title": "HardwareSnapshot",
@@ -14089,6 +14655,171 @@
           }
         },
         "summary": "Hardware inventory",
+        "tags": [
+          "hardware"
+        ]
+      }
+    },
+    "/api/v1/hardware/audio/cards/{name}": {
+      "get": {
+        "description": "A card's profiles, ports and the endpoints it owns.",
+        "operationId": "get_audio_card_api_v1_hardware_audio_cards__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One audio card",
+        "tags": [
+          "hardware"
+        ]
+      }
+    },
+    "/api/v1/hardware/audio/sinks/{name}": {
+      "get": {
+        "description": "A sink by its audio-server name, with identifiers and its card's ports.",
+        "operationId": "get_audio_sink_api_v1_hardware_audio_sinks__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One audio sink",
+        "tags": [
+          "hardware"
+        ]
+      }
+    },
+    "/api/v1/hardware/audio/sources/{name}": {
+      "get": {
+        "description": "A source, including the sink it monitors when it is a monitor source.",
+        "operationId": "get_audio_source_api_v1_hardware_audio_sources__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One audio source",
         "tags": [
           "hardware"
         ]

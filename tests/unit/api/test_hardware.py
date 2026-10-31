@@ -8,6 +8,7 @@ from datetime import datetime
 import pytest
 
 from sendspin_bridge.services.hardware import inventory
+from tests.support import hardware_audio
 from tests.support.api_client import make_client
 
 ADAPTER = "C0:FB:F9:62:D7:D6"
@@ -150,3 +151,126 @@ def test_bluetooth_detail_has_uuids_and_manufacturer(installed_bluez):
     assert body["uuids"] == ["0000110b-0000-1000-8000-00805f9b34fb"]
     assert body["manufacturer"] == "Nordic Semiconductor"
     assert body["bonds"] == [ADAPTER]
+
+
+# ---------------------------------------------------------------------------
+# The audio half
+# ---------------------------------------------------------------------------
+
+
+def _use_audio(monkeypatch) -> None:
+    async def fake_audio():
+        return hardware_audio.facts()
+
+    monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
+
+
+def test_snapshot_has_the_audio_section_with_owner_shapes(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    audio = body["audio"]
+    assert {card["name"] for card in audio["cards"]} == {
+        hardware_audio.ANALOG_CARD,
+        hardware_audio.BLUEZ_CARD,
+        hardware_audio.USB_CARD,
+    }
+    by_name = {sink["name"]: sink for sink in audio["sinks"]}
+    assert by_name[hardware_audio.ANALOG_SINK]["owner"] == {
+        "card": hardware_audio.ANALOG_CARD,
+        "bluetooth": None,
+        "internal": None,
+    }
+    assert by_name[hardware_audio.BLUEZ_SINK]["owner"] == {
+        "card": None,
+        "bluetooth": hardware_audio.SPEAKER_MAC,
+        "internal": None,
+    }
+    assert by_name[hardware_audio.INTERNAL_SINK]["owner"] == {
+        "card": None,
+        "bluetooth": None,
+        "internal": True,
+    }
+    by_name = {source["name"]: source for source in audio["sources"]}
+    assert by_name[hardware_audio.BLUEZ_SOURCE]["owner"]["bluetooth"] == hardware_audio.SPEAKER_MAC
+
+
+def test_audio_card_route_returns_profiles_ports_and_endpoints(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    response = make_client().get(f"/api/v1/hardware/audio/cards/{hardware_audio.ANALOG_CARD}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == hardware_audio.ANALOG_CARD
+    assert next(profile["name"] for profile in body["profiles"]) == "output:analog-stereo"
+    assert next(port for port in body["ports"] if port["name"] == "analog-output-headphones")["available"] is False
+    assert {endpoint["name"] for endpoint in body["endpoints"]} == {
+        hardware_audio.ANALOG_SINK,
+        hardware_audio.ANALOG_SOURCE,
+        hardware_audio.MONITOR_SOURCE,
+    }
+
+
+def test_audio_sink_route_returns_identifiers_and_card_ports(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    response = make_client().get(f"/api/v1/hardware/audio/sinks/{hardware_audio.ANALOG_SINK}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "sink"
+    assert body["identifiers"]["bus_path"] == "pci-0000:00:1f.3"
+    assert body["owner"]["card"] == hardware_audio.ANALOG_CARD
+    assert {port["name"] for port in body["ports"]} == {
+        "analog-output-speaker",
+        "analog-output-headphones",
+        "analog-input-mic",
+    }
+
+
+def test_audio_source_route_names_the_monitored_sink(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    response = make_client().get(f"/api/v1/hardware/audio/sources/{hardware_audio.MONITOR_SOURCE}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "source"
+    assert body["monitor_of"] == hardware_audio.ANALOG_SINK
+
+
+def test_unknown_audio_entities_are_404(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    for kind in ("cards", "sinks", "sources"):
+        response = make_client().get(f"/api/v1/hardware/audio/{kind}/no.such.entity")
+        assert response.status_code == 404
+        assert response.json()["code"] == "entity_not_found"
+
+
+def test_a_name_outside_the_grammar_is_400(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    for kind in ("cards", "sinks", "sources"):
+        response = make_client().get(f"/api/v1/hardware/audio/{kind}/not%20a%20name")
+        assert response.status_code == 400
+        assert response.json()["code"] == "invalid_audio_name"
+
+
+def test_an_unusual_but_legal_name_is_not_a_400(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    response = make_client().get("/api/v1/hardware/audio/sinks/bluez_output.FC:58:FA:EB:08:6C.1")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "entity_not_found"
+
+
+def test_no_audio_server_gives_an_empty_audio_section(installed_bluez, monkeypatch):
+    monkeypatch.setattr(inventory, "probe_audio_server", lambda: "not available")
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    assert body["audio"] == {"cards": [], "sinks": [], "sources": []}

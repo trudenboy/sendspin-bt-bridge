@@ -217,6 +217,23 @@ def _reset_shared_module_state():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _no_real_audio_inventory(monkeypatch):
+    """No test reads the developer's own cards, sinks or sources.
+
+    The hardware reader now includes the audio half.  A test that means to
+    exercise it patches ``_read_audio_async`` itself; every other test gets an
+    empty, truthful answer instead of a real ``pactl``/``wpctl`` round trip.
+    """
+    from sendspin_bridge.services.hardware import inventory
+
+    async def _empty():
+        return inventory.AudioFacts()
+
+    monkeypatch.setattr(inventory, "_read_audio_async", _empty)
+    yield
+
+
 @pytest.fixture
 def api_client():
     """The bridge API with authentication off."""

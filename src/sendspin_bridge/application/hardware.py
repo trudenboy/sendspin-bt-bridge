@@ -9,18 +9,27 @@ a config migration should run.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from sendspin_bridge.application.errors import not_found, unavailable
+from sendspin_bridge.application.errors import not_found, require_audio_name, unavailable
 from sendspin_bridge.application.models.hardware import (
     AddressForms,
     AreaRef,
+    AudioSection,
     BtDeviceDetail,
     BtDeviceSummary,
     CapabilitySet,
+    CardDetail,
+    CardPort,
+    CardProfile,
+    CardSummary,
     ControllerDetail,
     ControllerSummary,
     DegradedSection,
+    EndpointDetail,
+    EndpointOwner,
+    EndpointRef,
+    EndpointSummary,
     HardwareSnapshot,
     RoleEvidence,
     RssiSummary,
@@ -30,17 +39,23 @@ from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.config import load_config
 from sendspin_bridge.config.players import player_id_for_mac
 from sendspin_bridge.services.hardware.inventory import (
+    AudioFacts,
     ControllerFacts,
     DeviceFacts,
+    EndpointFacts,
+    EndpointOwnerFacts,
     HardwareUnavailable,
     InventoryRead,
     read_inventory,
 )
 
 if TYPE_CHECKING:
+    from sendspin_bridge.services.audio.sink_inventory import CardPort as LocalCardPort
+    from sendspin_bridge.services.audio.sink_inventory import LocalCard
     from sendspin_bridge.services.hardware.capabilities import Capabilities
 
 _BLUETOOTH_BACKEND = "bluetooth_a2dp"
+_PULSE_SINK_BACKEND = "pulse_sink"
 
 
 # ---------------------------------------------------------------------------
@@ -73,17 +88,24 @@ def _canonical(value: Any) -> str:
     return address.colons if address is not None else ""
 
 
-def _config_view(config: dict[str, Any]) -> tuple[dict[str, str], dict[str, AreaRef]]:
-    """``{mac: player_id}`` and ``{mac: area}`` from the loaded config."""
+def _config_view(config: dict[str, Any]) -> tuple[dict[str, str], dict[str, AreaRef], dict[str, str]]:
+    """``{mac: player_id}``, ``{mac: area}`` and ``{sink: player_id}`` from one config scan."""
     players: dict[str, str] = {}
+    sink_players: dict[str, str] = {}
     for player in config.get("players") or []:
         backend = player.get("backend") if isinstance(player, dict) else None
-        if not isinstance(backend, dict) or backend.get("type") != _BLUETOOTH_BACKEND:
+        if not isinstance(player, dict) or not isinstance(backend, dict):
             continue
-        mac = _canonical(backend.get("mac"))
-        if not mac:
-            continue
-        players[mac] = str(player.get("id") or player_id_for_mac(mac))
+        if backend.get("type") == _BLUETOOTH_BACKEND:
+            mac = _canonical(backend.get("mac"))
+            if not mac:
+                continue
+            players[mac] = str(player.get("id") or player_id_for_mac(mac))
+        elif backend.get("type") == _PULSE_SINK_BACKEND:
+            sink = backend.get("sink")
+            player_id = str(player.get("id") or "").strip()
+            if isinstance(sink, str) and sink and player_id:
+                sink_players.setdefault(sink, player_id)
 
     areas: dict[str, AreaRef] = {}
     raw_areas = config.get("HA_ADAPTER_AREA_MAP")
@@ -97,7 +119,7 @@ def _config_view(config: dict[str, Any]) -> tuple[dict[str, str], dict[str, Area
                 continue
             raw_name = entry.get("area_name")
             areas[mac] = AreaRef(id=area_id, name=str(raw_name) if raw_name else None)
-    return players, areas
+    return players, areas, sink_players
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +199,116 @@ def _degraded(read: InventoryRead) -> list[DegradedSection]:
 
 
 # ---------------------------------------------------------------------------
+# The audio half
+# ---------------------------------------------------------------------------
+
+
+def _owner(facts: EndpointOwnerFacts | None) -> EndpointOwner | None:
+    if facts is None:
+        return None
+    if facts.kind == "card":
+        return EndpointOwner(card=facts.card)
+    if facts.kind == "bluetooth":
+        return EndpointOwner(bluetooth=facts.bluetooth)
+    return EndpointOwner(internal=facts.internal)
+
+
+def _endpoint_summary(facts: EndpointFacts, sink_players: dict[str, str]) -> EndpointSummary:
+    return EndpointSummary(
+        kind=facts.kind,
+        name=facts.name,
+        description=facts.description,
+        owner=_owner(facts.owner),
+        state=facts.state,
+        sample_spec=facts.sample_spec,
+        muted=facts.muted,
+        volume=facts.volume,
+        in_use_by=sink_players.get(facts.name) if facts.kind == "sink" else None,
+        active_port=facts.active_port,
+        active_port_available=facts.active_port_available,
+    )
+
+
+def _audio_endpoints(audio: AudioFacts) -> list[EndpointFacts]:
+    return [*audio.sinks, *audio.sources]
+
+
+def _owned_by_card(facts: EndpointFacts, card: LocalCard) -> bool:
+    owner = facts.owner
+    return owner is not None and owner.kind == "card" and owner.card == card.name
+
+
+def _card_endpoints(card: LocalCard, endpoints: list[EndpointFacts]) -> list[EndpointFacts]:
+    """The endpoints belonging to *card*: its own lists first, then classified members.
+
+    Branch membership and endpoint ownership are different facts: a Bluetooth
+    sink belongs to its ``bluez_card`` (the card lists it) while its owner is
+    the speaker link.  The classified fallback covers hosts whose ``pactl``
+    omits the card's endpoint lists.
+    """
+    by_name = {facts.name: facts for facts in endpoints}
+    members: list[EndpointFacts] = []
+    seen: set[str] = set()
+    for kind, names in (("sink", card.sink_names), ("source", card.source_names)):
+        for name in names:
+            facts = by_name.get(name)
+            if facts is not None and facts.kind == kind and facts.name not in seen:
+                members.append(facts)
+                seen.add(facts.name)
+    for facts in endpoints:
+        if facts.name not in seen and _owned_by_card(facts, card):
+            members.append(facts)
+            seen.add(facts.name)
+    return members
+
+
+def _card_summary(card: LocalCard, endpoints: list[EndpointFacts]) -> CardSummary:
+    return CardSummary(
+        name=card.name,
+        driver=card.driver,
+        active_profile=card.active_profile,
+        profile_count=len(card.profiles),
+        port_count=len(card.ports),
+        endpoint_refs=[EndpointRef(kind=facts.kind, name=facts.name) for facts in _card_endpoints(card, endpoints)],
+    )
+
+
+def _card_profile(profile: Any) -> CardProfile:
+    return CardProfile(name=profile.name, description=profile.description, available=profile.available)
+
+
+def _card_port(port: LocalCardPort) -> CardPort:
+    return CardPort(
+        name=port.name,
+        description=port.description,
+        available=port.available,
+        active=port.active,
+    )
+
+
+def _audio_section(audio: AudioFacts, sink_players: dict[str, str]) -> AudioSection:
+    endpoints = _audio_endpoints(audio)
+    return AudioSection(
+        cards=[_card_summary(card, endpoints) for card in audio.cards],
+        sinks=[_endpoint_summary(facts, sink_players) for facts in audio.sinks],
+        sources=[_endpoint_summary(facts, sink_players) for facts in audio.sources],
+    )
+
+
+def _endpoint_card(facts: EndpointFacts, cards: tuple[LocalCard, ...]) -> LocalCard | None:
+    """The card whose ports describe this endpoint, even when its owner is a link."""
+    if facts.owner is not None and facts.owner.kind == "card":
+        owned = next((card for card in cards if card.name == facts.owner.card), None)
+        if owned is not None:
+            return owned
+    for card in cards:
+        names = card.sink_names if facts.kind == "sink" else card.source_names
+        if facts.name in names:
+            return card
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Use cases
 # ---------------------------------------------------------------------------
 
@@ -184,7 +316,7 @@ def _degraded(read: InventoryRead) -> list[DegradedSection]:
 async def snapshot() -> HardwareSnapshot:
     """One aggregate read of the physical layer."""
     read, config = await _read()
-    players, areas = _config_view(config)
+    players, areas, sink_players = _config_view(config)
     return HardwareSnapshot(
         as_of=read.as_of,
         stale_after_s=read.stale_after_s,
@@ -192,6 +324,7 @@ async def snapshot() -> HardwareSnapshot:
         capabilities=_capabilities(read.capabilities),
         controllers=[_controller_summary(facts, areas) for facts in read.controllers],
         bluetooth_devices=[_device_summary(facts, players) for facts in read.devices],
+        audio=_audio_section(read.audio, sink_players),
         degraded=_degraded(read),
     )
 
@@ -211,7 +344,7 @@ async def controller(controller_id: str) -> ControllerDetail:
     facts = _find_controller(read.controllers, controller_id)
     if facts is None:
         raise not_found(f"Unknown controller: {controller_id}", code="entity_not_found")
-    players, areas = _config_view(config)
+    players, areas, _sink_players = _config_view(config)
     by_mac = {device.mac: device for device in read.devices}
     return ControllerDetail(
         **_controller_summary(facts, areas).model_dump(),
@@ -229,7 +362,7 @@ async def bluetooth_device(mac: str) -> BtDeviceDetail:
     facts = next((device for device in read.devices if device.mac == address.colons), None)
     if facts is None:
         raise not_found(f"Unknown Bluetooth device: {mac}", code="entity_not_found")
-    players, _areas = _config_view(config)
+    players, _areas, _sink_players = _config_view(config)
     summary = _device_summary(facts, players)
     return BtDeviceDetail(
         **summary.model_dump(),
@@ -239,3 +372,47 @@ async def bluetooth_device(mac: str) -> BtDeviceDetail:
         manufacturer=vendor_from_modalias(facts.modalias),
         bonds=list(facts.controller_macs),
     )
+
+
+async def audio_card(name: str) -> CardDetail:
+    """One card with every profile, every port and its endpoints."""
+    wanted = require_audio_name(name, field="card name")
+    read, config = await _read()
+    _players, _areas, sink_players = _config_view(config)
+    card = next((item for item in read.audio.cards if item.name == wanted), None)
+    if card is None:
+        raise not_found(f"Unknown audio card: {name}", code="entity_not_found")
+    endpoints = _audio_endpoints(read.audio)
+    return CardDetail(
+        **_card_summary(card, endpoints).model_dump(),
+        profiles=[_card_profile(profile) for profile in card.profiles],
+        ports=[_card_port(port) for port in card.ports],
+        endpoints=[_endpoint_summary(facts, sink_players) for facts in endpoints if _owned_by_card(facts, card)],
+    )
+
+
+async def _audio_endpoint(kind: Literal["sink", "source"], name: str) -> EndpointDetail:
+    wanted = require_audio_name(name, field=f"{kind} name")
+    read, config = await _read()
+    _players, _areas, sink_players = _config_view(config)
+    pool = read.audio.sinks if kind == "sink" else read.audio.sources
+    facts = next((item for item in pool if item.name == wanted), None)
+    if facts is None:
+        raise not_found(f"Unknown audio {kind}: {name}", code="entity_not_found")
+    card = _endpoint_card(facts, read.audio.cards)
+    return EndpointDetail(
+        **_endpoint_summary(facts, sink_players).model_dump(),
+        identifiers=dict(facts.identifiers),
+        ports=[_card_port(port) for port in card.ports] if card is not None else [],
+        monitor_of=facts.monitor_of,
+    )
+
+
+async def audio_sink(name: str) -> EndpointDetail:
+    """One sink with its stable identifiers and the owning card's ports."""
+    return await _audio_endpoint("sink", name)
+
+
+async def audio_source(name: str) -> EndpointDetail:
+    """One source, including the sink it monitors when it is a monitor source."""
+    return await _audio_endpoint("source", name)
