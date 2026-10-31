@@ -230,6 +230,15 @@ Screenshots are listed in `SCREENSHOTS_TO_RETAKE.md` but not yet captured: they
 need a running demo instance and a browser, which this environment does not
 have.
 
+Acceptance evidence for the whole section: `uv run pytest tests/unit` — 6646
+passed; `NODE_ENV=test npm test` — 1697 passed; `npm run build` and the docs-site
+build are clean; `ruff` over `src tests demo scripts custom_components`, `mypy`
+(244 files), `export_openapi.py --check` and `lint_changelog.py` are clean.
+`DEMO_MODE=true` now starts (it had been broken since the v3 rewrite, which is
+why no screenshot stand existed) and serves `GET /api/v1/hardware` with 3
+controllers, 9 paired devices, 9 cards, 9 sinks, 1 source and no degraded
+sections.
+
 * `docs/adr/0002-hardware-inventory.md` (accepted).
 * `CONTEXT.md` — **Card**, **Audio endpoint**, **Link role**, **Source feed**.
 * `docs/ux-glossary.md` — **Hardware / Оборудование**, **Audio input / Аудиовход**.
