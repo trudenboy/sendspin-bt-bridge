@@ -24,8 +24,10 @@ export const useHardwareStore = defineStore('hardware', () => {
   const sseConnected = ref(false)
   const degraded = computed(() => snapshot.value?.degraded ?? [])
 
-  /** The bridge said it does not know the ``hardware`` type: never mention it again. */
-  let unsupported = false
+  /** The API has no `/hardware` route: the page shows its unsupported screen. */
+  const unsupported = ref(false)
+  /** A 404/405/5xx probe means the event type will never be accepted. */
+  let eventsUnsupported = false
   /** The current stream already carries hardware events: nothing left to probe. */
   let streaming = false
   let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -60,9 +62,15 @@ export const useHardwareStore = defineStore('hardware', () => {
     return e.status === 404 || e.status === 405 || e.status >= 500
   }
 
+  /** The route itself is absent: the page has an "unsupported bridge" screen for that. */
+  function missingRoute(e: unknown) {
+    if (!(e instanceof ApiError)) return false
+    return e.status === 404 || e.status === 405
+  }
+
   /** Swap the default stream for one that also carries hardware events. */
   function enableEvents() {
-    if (unsupported || streaming) return
+    if (eventsUnsupported || streaming) return
     streaming = true
     stream.disconnect()
     stream = makeStream(true)
@@ -77,7 +85,8 @@ export const useHardwareStore = defineStore('hardware', () => {
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)
       loading.value = false
-      if (givesUp(e)) unsupported = true
+      if (givesUp(e)) eventsUnsupported = true
+      if (missingRoute(e)) unsupported.value = true
     }
   }
 
@@ -103,5 +112,5 @@ export const useHardwareStore = defineStore('hardware', () => {
     sseConnected.value = false
   }
 
-  return { snapshot, loading, error, degraded, sseConnected, connect, disconnect, refresh }
+  return { snapshot, loading, error, degraded, sseConnected, unsupported, connect, disconnect, refresh }
 })

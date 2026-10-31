@@ -1,29 +1,149 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useHardwareStore } from '@/stores/hardware'
-import { SbBadge, SbButton, SbEmptyState, SbSpinner } from '@/kit'
 import { RefreshCw } from 'lucide-vue-next'
+import { SbBadge, SbButton, SbEmptyState, SbSpinner } from '@/kit'
+import ControllerCard from '@/components/hardware/ControllerCard.vue'
+import BtDeviceCard from '@/components/hardware/BtDeviceCard.vue'
+import CapabilityBanner from '@/components/hardware/CapabilityBanner.vue'
+import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
+import { useHardwareStore } from '@/stores/hardware'
+import { useBridgeStore } from '@/stores/bridge'
+import { useNotificationStore } from '@/stores/notifications'
+import { confirmAction } from '@/composables/useActionPolicy'
+import { setAdapterPower } from '@/api/bluetooth'
+import { speakerName } from '@/utils/speakerName'
+import type { ControllerSummary } from '@/api/types'
 
 const { t } = useI18n()
 const store = useHardwareStore()
+const bridge = useBridgeStore()
+const notifications = useNotificationStore()
 
 onMounted(() => store.connect())
 onUnmounted(() => store.disconnect())
+
+const snapshot = computed(() => store.snapshot)
+const controllers = computed(() => snapshot.value?.controllers ?? [])
+const devices = computed(() => snapshot.value?.bluetooth_devices ?? [])
+const capabilities = computed(() => snapshot.value?.capabilities ?? null)
+
+/**
+ * Four different answers, never the same screen: a bridge without the route,
+ * a host that cannot read Bluetooth, a host whose read failed, and "nothing is
+ * paired" (a truth, not a failure). Only the last one is empty.
+ */
+const state = computed<'loading' | 'unsupported' | 'unavailable' | 'empty' | 'ready'>(() => {
+  if (store.unsupported) return 'unsupported'
+  if (store.loading && !snapshot.value) return 'loading'
+  if (!snapshot.value) return store.error ? 'unavailable' : 'loading'
+  if (!snapshot.value.capabilities.bluetooth) return 'unavailable'
+  return devices.value.length === 0 ? 'empty' : 'ready'
+})
+
+/** The code the banner names; D-Bus first because it is the deeper cause. */
+const unavailableReason = computed(() => {
+  const caps = capabilities.value
+  if (!caps) return 'hardware_unavailable'
+  return caps.reasons.dbus ?? caps.reasons.bluetooth ?? 'hardware_unavailable'
+})
+
+const unavailableDetail = computed(() => {
+  const degraded = snapshot.value?.degraded ?? []
+  const section = degraded.find((entry) => entry.code === unavailableReason.value)
+  return section?.detail ?? (snapshot.value ? undefined : store.error ?? undefined)
+})
+
+/**
+ * D-Bus can be down while bluetoothctl still answers: that read is real but
+ * partial, so the lists stay and the banner explains the fallback.
+ */
+const degradedReason = computed(() =>
+  capabilities.value && capabilities.value.bluetooth && !capabilities.value.dbus ? 'dbus_unavailable' : null,
+)
+
+const degradedDetail = computed(() => {
+  const code = degradedReason.value
+  if (!code) return undefined
+  return snapshot.value?.degraded.find((entry) => entry.code === code)?.detail
+})
+
+const busy = ref<string | null>(null)
+
+/** Every speaker on this adapter loses its link when the adapter is powered off. */
+function consequences(controller: ControllerSummary) {
+  const names = bridge.devices
+    .filter((device) => device.bluetooth?.adapter.hci === controller.id)
+    .map((device) => speakerName(device.name))
+    .join(', ')
+  return names ? [t('consequence.adapterDisconnects', { names })] : [t('adapter.confirmNone')]
+}
+
+async function togglePower(controller: ControllerSummary) {
+  const name = controller.alias || controller.name || controller.id
+  if (controller.powered) {
+    const ok = await confirmAction('adapter.powerOff', {
+      title: t('adapter.confirmOffTitle', { adapter: name }),
+      consequences: consequences(controller),
+      confirmLabel: t('adapter.turnOff'),
+    })
+    if (!ok) return
+  }
+  busy.value = controller.id
+  try {
+    await setAdapterPower(controller.id, !controller.powered)
+    await store.refresh()
+    notifications.success(t('adapter.powerToggled'))
+  } catch {
+    notifications.error(t('adapter.powerFailed'))
+  } finally {
+    busy.value = null
+  }
+}
+
+const drawerOpen = ref(false)
+const selected = ref<{ kind: 'controller' | 'device'; id: string } | null>(null)
+const selectedController = computed(() =>
+  selected.value?.kind === 'controller'
+    ? controllers.value.find((controller) => controller.id === selected.value!.id) ?? null
+    : null,
+)
+const selectedDevice = computed(() =>
+  selected.value?.kind === 'device'
+    ? devices.value.find((device) => device.mac === selected.value!.id) ?? null
+    : null,
+)
+
+function openController(id: string) {
+  selected.value = { kind: 'controller', id }
+  drawerOpen.value = true
+}
+
+function openDevice(mac: string) {
+  selected.value = { kind: 'device', id: mac }
+  drawerOpen.value = true
+}
+
+/* The drawer belongs to the selected entity: a refresh that drops it closes the drawer. */
+watch([selectedController, selectedDevice], ([controller, device]) => {
+  if (selected.value && !controller && !device) drawerOpen.value = false
+})
 </script>
 
 <template>
-  <div>
+  <div :data-state="state">
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div class="min-w-0">
         <h1 class="text-2xl font-semibold tracking-tight text-text-primary">{{ t('nav.hardware') }}</h1>
         <p class="mt-1 text-sm text-text-secondary">{{ t('hardware.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
-        <SbBadge v-if="store.snapshot?.stale" tone="warning" size="sm">{{ t('hardware.stale') }}</SbBadge>
+        <SbBadge v-if="snapshot?.stale" data-hardware-stale tone="warning" size="sm">
+          {{ t('hardware.stale') }}
+        </SbBadge>
         <SbButton size="sm" variant="outline" :loading="store.loading" @click="store.refresh()">
           <template #icon-left>
-            <RefreshCw class="h-3.5 w-3.5" />
+            <RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
           </template>
           {{ t('hardware.refresh') }}
         </SbButton>
@@ -31,96 +151,71 @@ onUnmounted(() => store.disconnect())
     </div>
 
     <div
-      v-if="store.error"
+      v-if="store.error && snapshot"
       role="alert"
       class="mb-4 rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
     >
       {{ store.error }}
     </div>
 
-    <div
-      v-if="store.snapshot && !store.snapshot.capabilities.bluetooth"
-      role="status"
-      class="mb-4 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
-    >
-      {{ t('hardware.unavailable') }}
-    </div>
-
-    <div
-      v-if="store.loading && !store.snapshot"
-      class="flex items-center gap-2 text-sm text-text-secondary"
-      aria-busy="true"
-    >
-      <SbSpinner />
+    <div v-if="state === 'loading'" class="flex items-center gap-2 text-sm text-text-secondary" aria-busy="true">
+      <SbSpinner :label="t('common.loading')" />
       {{ t('common.loading') }}
     </div>
 
-    <template v-else-if="store.snapshot">
-      <section class="mb-8">
+    <section v-else-if="state === 'unsupported'" data-unsupported class="rounded-(--radius-card) border border-border bg-surface-card p-6">
+      <h2 class="text-lg font-semibold text-text-primary">{{ t('hardware.unsupported.title') }}</h2>
+      <p class="mt-2 max-w-2xl text-sm text-text-secondary">{{ t('hardware.unsupported.body') }}</p>
+    </section>
+
+    <CapabilityBanner
+      v-else-if="state === 'unavailable'"
+      :reason="unavailableReason"
+      :detail="unavailableDetail"
+    />
+
+    <template v-else-if="snapshot">
+      <CapabilityBanner v-if="degradedReason" :reason="degradedReason" :detail="degradedDetail" />
+
+      <section class="mb-8" data-controllers-section>
         <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.controllers') }}</h2>
         <div
-          v-if="store.snapshot.controllers.length"
+          v-if="controllers.length"
           class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"
         >
-          <article
-            v-for="controller in store.snapshot.controllers"
+          <ControllerCard
+            v-for="controller in controllers"
             :key="controller.id"
-            class="rounded-(--radius-card) border border-border bg-surface-card p-4"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <p class="truncate font-medium text-text-primary">{{ controller.alias || controller.name }}</p>
-                <p class="truncate font-mono text-xs text-text-secondary">{{ controller.mac }}</p>
-              </div>
-              <SbBadge size="sm" :tone="controller.powered ? 'success' : 'neutral'">
-                {{ controller.powered ? t('hardware.powered') : t('hardware.poweredOff') }}
-              </SbBadge>
-            </div>
-            <p class="mt-3 text-sm text-text-secondary">
-              <span class="font-mono text-xs">{{ controller.id }}</span>
-              · {{ t('hardware.deviceCount', { n: controller.device_count }) }}
-            </p>
-          </article>
+            :controller="controller"
+            :busy="busy === controller.id"
+            @open="openController"
+            @toggle-power="togglePower"
+          />
         </div>
         <SbEmptyState v-else :title="t('hardware.noControllers')" />
       </section>
 
-      <section>
+      <section data-devices-section>
         <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.devices') }}</h2>
-        <ul v-if="store.snapshot.bluetooth_devices.length" class="space-y-2">
-          <li
-            v-for="device in store.snapshot.bluetooth_devices"
-            :key="device.mac"
-            class="rounded-(--radius-card) border border-border bg-surface-card px-4 py-3"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="min-w-0">
-                <p class="truncate font-medium text-text-primary">{{ device.alias || device.name }}</p>
-                <p class="font-mono text-xs text-text-secondary">{{ device.mac }}</p>
-              </div>
-              <div class="flex flex-wrap items-center gap-1.5">
-                <SbBadge v-if="device.connected" size="sm" tone="success">{{ t('hardware.connected') }}</SbBadge>
-                <SbBadge v-for="role in device.roles" :key="role.role" size="sm">
-                  {{ role.role === 'input' ? t('hardware.roleInput') : t('hardware.roleOutput') }}
-                </SbBadge>
-                <SbBadge v-if="device.battery_pct !== null" size="sm">
-                  {{ t('hardware.battery', { pct: device.battery_pct }) }}
-                </SbBadge>
-                <router-link
-                  v-if="device.player_id"
-                  to="/"
-                  class="text-sm text-primary-text underline-offset-2 hover:underline"
-                >
-                  {{ t('hardware.player') }}
-                </router-link>
-              </div>
-            </div>
+        <ul
+          v-if="devices.length"
+          class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4"
+        >
+          <li v-for="device in devices" :key="device.mac" class="min-w-0">
+            <BtDeviceCard :device="device" @open="openDevice" />
           </li>
         </ul>
         <SbEmptyState v-else :title="t('hardware.noDevices')" />
       </section>
     </template>
 
-    <SbEmptyState v-else-if="!store.loading && !store.error" :title="t('hardware.unavailable')" />
+    <EntityDrawer
+      v-model:open="drawerOpen"
+      :kind="selected?.kind ?? 'controller'"
+      :controller="selectedController"
+      :device="selectedDevice"
+      :busy="busy === selectedController?.id"
+      @toggle-power="togglePower"
+    />
   </div>
 </template>
