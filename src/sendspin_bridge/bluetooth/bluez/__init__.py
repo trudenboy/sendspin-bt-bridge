@@ -383,14 +383,29 @@ class BluezControl:
         timeout: float | None = None,
     ) -> list[DeviceEntry]:
         """``devices [filter]`` → ``(mac, name)`` entries; ``[]`` on transport failure."""
+        return self.list_devices_with_outcome(adapter, filter=filter, timeout=timeout)[0]
+
+    def list_devices_with_outcome(
+        self,
+        adapter: Adapter = Adapter.DEFAULT,
+        *,
+        filter: str = "Paired",
+        timeout: float | None = None,
+    ) -> tuple[list[DeviceEntry], Outcome]:
+        """``devices [filter]`` plus the transport's verdict.
+
+        ``[]`` alone cannot say whether the controller has no devices or the
+        command never answered; callers that must distinguish the two (a 404
+        versus a 502) read the outcome here.
+        """
         answer = self._ask_backend("list_devices", adapter, filter=filter, timeout=timeout)
         if answer is not None:
-            return answer
+            return answer, Outcome.OK
         verb = f"devices {filter}".rstrip()
         result = self.run([verb], adapter=adapter, tier=Deadline.QUERY, timeout=timeout)
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
-            return []
-        return parse_devices(result.stdout)
+            return [], result.outcome
+        return parse_devices(result.stdout), result.outcome
 
     # ------------------------------------------------------------------
     # Mutations

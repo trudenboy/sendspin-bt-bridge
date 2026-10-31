@@ -249,6 +249,7 @@ Reused as-is (no copies):
 | Adapter power | `PUT /adapters/{id}/power` |
 | Scan | `POST /bluetooth/scans` (job) |
 | Pair | `POST /bluetooth/pairings` (job) |
+| Connect a known device | `POST /bluetooth/devices/{mac}/connect?adapter_mac=` |
 | Disconnect | `POST /bluetooth/devices/{mac}/disconnect` |
 | Forget bond | `DELETE /bluetooth/devices/{mac}?adapter_mac=` |
 
@@ -277,6 +278,8 @@ player-to-sink routing.
 | `source_sink_missing` | 409 | asked to play the source on a speaker with no audio output |
 | `invalid_audio_name` | 400 | name outside the allowed grammar |
 | `bond_in_use_by_player` | 409 | forgetting a bond that backs a player; carries `remediation` and the player id |
+| `connect_refused` | 409 | BlueZ refused the connect — out of range, or the bond is gone |
+| `bluetooth_unavailable` | 502 | BlueZ could not answer; the verb or the device list is unreadable |
 
 A degraded *section* is not an error: it is `degraded[]` in a 200 response.
 Only a request that cannot be answered at all returns 503.

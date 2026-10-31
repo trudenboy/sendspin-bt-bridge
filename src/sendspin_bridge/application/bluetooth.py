@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import functools
 import logging
 import re
 import threading
@@ -17,12 +18,12 @@ from typing import Any
 from sendspin_bridge.application.errors import UseCaseError, normalize_adapter, validate_mac
 from sendspin_bridge.application.jobs import Job, JobContext, jobs
 from sendspin_bridge.bluetooth.adapter_map import hci_for
-from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, Lease, bt_executor
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.controller import get_controller
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import load_config
-from sendspin_bridge.config.players import device_entries, find_player_by_mac
+from sendspin_bridge.config.players import device_entries, find_player_by_mac, player_id_for_mac
 from sendspin_bridge.services.bluetooth import (
     COMMON_BT_PAIR_PINS,
     build_hci_map,
@@ -344,6 +345,35 @@ def start_leased_job(kind: str, work, *, lease, subject: str | None = None, prog
         raise
 
 
+def _run_leased(lease: Lease, fn) -> concurrent.futures.Future:
+    """Submit *fn* to the BT executor, releasing *lease* when it returns.
+
+    The release belongs to the worker, never to the awaiting coroutine: a
+    cancelled request leaves the executor thread driving the controller (a
+    10 s ``connect`` outlives uvicorn's 3 s graceful shutdown), and freeing
+    the process-wide lease there would let a scan start on top of a verb that
+    is still running.  The done-callback covers the one other edge — a work
+    item cancelled before the pool picked it up, whose worker will never run.
+    """
+    started = threading.Event()
+
+    def _work():
+        started.set()
+        try:
+            return fn()
+        finally:
+            lease.release()
+
+    future = bt_executor().submit(_work)
+
+    def _dropped(done: concurrent.futures.Future) -> None:
+        if done.cancelled() and not started.is_set():
+            lease.release()
+
+    future.add_done_callback(_dropped)
+    return future
+
+
 # ---------------------------------------------------------------------------
 # Adapters
 # ---------------------------------------------------------------------------
@@ -391,10 +421,17 @@ def set_adapter_power(adapter: str, on: bool) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def known_devices(*, named_only: bool = True) -> list[dict[str, Any]]:
-    """Devices BlueZ knows (paired or cached) across every adapter; bridge speakers first."""
+def _read_known_devices(*, named_only: bool = True, config: dict | None = None) -> tuple[list[dict[str, Any]], bool]:
+    """Devices BlueZ knows, and whether every device list actually answered.
+
+    ``list_devices`` returns ``[]`` both for "this controller has no devices"
+    and for a timeout or an unavailable transport.  Callers that must tell a
+    missing device from an unreadable stack (``connect``) need that second
+    value; the read model keeps the list-only shape.
+    """
     adapter_macs = [str(mac).upper() for mac in list_bt_adapters() if mac]
     merged: dict[str, dict] = {}
+    answered = True
 
     def _ingest(pairs, adapter_mac: str = "") -> None:
         for mac, name in pairs:
@@ -404,20 +441,35 @@ def known_devices(*, named_only: bool = True) -> list[dict[str, Any]]:
             if adapter_mac:
                 entry["adapters"].add(adapter_mac)
 
-    bluez = get_bluez()
+    def _read(adapter: Adapter, **kwargs) -> None:
+        nonlocal answered
+        pairs, outcome = get_bluez().list_devices_with_outcome(adapter, **kwargs)
+        if outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            answered = False
+        _ingest(pairs, adapter.ident.upper() if adapter.mode == "select" else "")
+
     if adapter_macs:
-        for adapter in adapter_macs:
-            _ingest(list(bluez.list_devices(Adapter.select(adapter))), adapter)
+        for adapter_mac in adapter_macs:
+            _read(Adapter.select(adapter_mac))
     else:
-        _ingest(list(bluez.list_devices(filter="")))
+        _read(Adapter.DEFAULT, filter="")
     devices: list[dict[str, Any]] = [
         {"mac": mac, "name": entry["name"] or mac, "adapters": sorted(entry["adapters"])}
         for mac, entry in merged.items()
         if entry["name"] or not named_only
     ]
-    bridge_macs = {d.get("mac", "").upper() for d in device_entries(load_config()) if d.get("mac")}
+    bridge_macs = {
+        d.get("mac", "").upper()
+        for d in device_entries(config if config is not None else load_config())
+        if d.get("mac")
+    }
     devices.sort(key=lambda d: (0 if d["mac"] in bridge_macs else 1, d["name"].lower()))
-    return devices
+    return devices, answered
+
+
+def known_devices(*, named_only: bool = True) -> list[dict[str, Any]]:
+    """Devices BlueZ knows (paired or cached) across every adapter; bridge speakers first."""
+    return _read_known_devices(named_only=named_only)[0]
 
 
 def device_info(mac: str, adapter: str = "") -> dict[str, Any]:
@@ -449,20 +501,53 @@ def _remove_bond(mac: str, adapter_mac: str) -> None:
         _bt_remove_device(mac, "")
 
 
+def _player_depends_on_adapter(player: dict[str, Any], adapter_mac: str) -> bool:
+    """Whether clearing *adapter_mac* would take away this player's bond.
+
+    Omitting ``adapter_mac`` clears every controller, so every player with the
+    MAC is affected.  Otherwise only a player whose configured adapter is the
+    one being cleared — or a player with no adapter configured, which may use
+    the bond on any controller — depends on the operation.
+    """
+    if not adapter_mac:
+        return True
+    backend = player.get("backend")
+    configured = str(backend.get("adapter") or "").strip() if isinstance(backend, dict) else ""
+    if not configured:
+        return True
+    return _resolve_adapter_to_mac(configured).strip().upper() == adapter_mac
+
+
+def _dependent_player(config: dict[str, Any], mac: str, adapter_mac: str) -> dict[str, Any] | None:
+    """The player whose bond *adapter_mac* would take away, or ``None``.
+
+    Runs in a worker: deciding the dependency can resolve an ``hciN`` through
+    sysfs/bluetoothctl, which is blocking work.
+    """
+    player = find_player_by_mac(config, mac)
+    if player is None or not _player_depends_on_adapter(player, adapter_mac):
+        return None
+    return player
+
+
 async def remove_device(mac: str, adapter_mac: str = "") -> None:
     """Drop the bond: on *adapter_mac*, or on every adapter when omitted.
 
     A bond that backs a configured ``bluetooth_a2dp`` player is refused with
     ``bond_in_use_by_player`` — the bridge forgets bonds but does not manage
     players, so the operator removes the player first (decision 12).  There is
-    deliberately no ``force``.
+    deliberately no ``force``.  Clearing one controller is allowed while the
+    player's own bond lives on another; only the bond the player depends on is
+    protected.
     """
     mac = canonical_mac(mac)
     adapter_mac = _normalize_adapter_mac(adapter_mac)
     config = await asyncio.to_thread(load_config)
-    player = find_player_by_mac(config, mac)
+    player = await asyncio.to_thread(_dependent_player, config, mac, adapter_mac)
     if player is not None:
-        player_id = str(player.get("id") or "")
+        # The read model falls back to the MAC-derived id; the guard must
+        # report the same identity the Home page shows.
+        player_id = str(player.get("id") or "").strip() or player_id_for_mac(mac)
         player_name = str(player.get("name") or "").strip() or mac
         raise UseCaseError(
             409,
@@ -470,7 +555,7 @@ async def remove_device(mac: str, adapter_mac: str = "") -> None:
             f"The bond for {mac} backs the player {player_name!r}; remove that player before forgetting the bond.",
             extra={
                 "player_id": player_id,
-                "remediation": f"Remove the player {player_name!r} in Settings → Players, then forget this bond.",
+                "remediation": f"Remove the player {player_id} on the Home page, then forget this bond.",
             },
         )
     await asyncio.to_thread(_remove_bond, mac, adapter_mac)
@@ -493,29 +578,76 @@ def disconnect_device(mac: str) -> None:
         raise UseCaseError(502, "disconnect_failed", "Bluetooth disconnect failed")
 
 
+def _configured_adapter(config: dict[str, Any], mac: str) -> str:
+    """The adapter a player pins its bond to, or ``""`` when it follows the default."""
+    player = find_player_by_mac(config, mac)
+    backend = player.get("backend") if isinstance(player, dict) else None
+    return str(backend.get("adapter") or "").strip() if isinstance(backend, dict) else ""
+
+
+def _choose_bond_adapter(bond_adapters: list[str], configured_adapter: str) -> str:
+    """Pick the controller to connect through when the bond lives on several.
+
+    Rule: the player's own adapter when it holds the bond, then a powered
+    controller, then the lowest MAC — the last only so the choice is
+    deterministic when nothing distinguishes the controllers.
+    """
+    if not bond_adapters:
+        return ""
+    if len(bond_adapters) == 1:
+        return bond_adapters[0]
+    preferred = _resolve_adapter_to_mac(configured_adapter).strip().upper() if configured_adapter else ""
+    if preferred in bond_adapters:
+        return preferred
+    for adapter in sorted(bond_adapters):
+        if get_adapter_alias(adapter)[1]:
+            return adapter
+    return sorted(bond_adapters)[0]
+
+
+def _connect_target(mac: str, adapter_mac: str) -> str:
+    """The controller to connect through, raising the request's own refusal.
+
+    Runs in a worker: it loads the config, enumerates every controller's
+    devices and may probe controller power — all blocking ``bluetoothctl``
+    work.  An unreadable BlueZ is a 502, not a missing device: "the stack did
+    not answer" and "no such device" are different answers.
+    """
+    config = load_config()
+    devices, readable = _read_known_devices(named_only=False, config=config)
+    entry = next((d for d in devices if str(d.get("mac") or "").upper() == mac), None)
+    if entry is None:
+        if not readable:
+            raise UseCaseError(
+                502,
+                "bluetooth_unavailable",
+                "Bluetooth stack did not answer — the device list could not be read",
+            )
+        raise UseCaseError(404, "entity_not_found", f"Bluetooth device {mac} is not known to BlueZ")
+    bond_adapters = [str(a).upper() for a in entry.get("adapters") or []]
+    if adapter_mac and adapter_mac not in bond_adapters:
+        raise UseCaseError(400, "unknown_adapter", f"Adapter {adapter_mac} does not hold the bond for {mac}")
+    return adapter_mac or _choose_bond_adapter(bond_adapters, _configured_adapter(config, mac))
+
+
 async def connect_known_device(mac: str, adapter_mac: str = "") -> None:
     """Connect a device BlueZ already knows, on the controller that holds its bond.
 
     The bond's adapters come from the same merge as ``GET /bluetooth/devices``;
     an explicit *adapter_mac* may only narrow that choice, never point
-    elsewhere.  The controller verb runs under the shared adapter lease, so it
-    cannot collide with a scan, a pair or another connect.
+    elsewhere.  The controller verb runs under the shared adapter lease and
+    releases it from the executor thread once the command has returned.
     """
     mac = canonical_mac(mac)
     adapter_mac = _normalize_adapter_mac(adapter_mac)
-    devices = await asyncio.to_thread(known_devices, named_only=False)
-    entry = next((d for d in devices if str(d.get("mac") or "").upper() == mac), None)
-    if entry is None:
-        raise UseCaseError(404, "entity_not_found", f"Bluetooth device {mac} is not known to BlueZ")
-    bond_adapters = [str(a).upper() for a in entry.get("adapters") or []]
-    if adapter_mac and adapter_mac not in bond_adapters:
-        raise UseCaseError(400, "unknown_adapter", f"Adapter {adapter_mac} does not hold the bond for {mac}")
-    owner = adapter_mac or (bond_adapters[0] if bond_adapters else "")
+    owner = await asyncio.to_thread(_connect_target, mac, adapter_mac)
     lease = _lease(f"connect {mac}", adapter=owner)
     try:
-        result = await lease.async_session.connect(mac)
-    finally:
+        future = _run_leased(lease, functools.partial(lease.session.connect, mac))
+    except Exception:
         lease.release()
+        raise
+    result = await asyncio.wrap_future(future, loop=asyncio.get_running_loop())
     if result.outcome is Outcome.FAILED:
         raise UseCaseError(409, "connect_refused", result.detail or f"BlueZ refused to connect {mac}")
     if not result.ok:
