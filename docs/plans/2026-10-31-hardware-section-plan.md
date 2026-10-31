@@ -99,13 +99,13 @@ reconnect; axe passes.
 
 ## E2 — Audio: cards, ports, outputs and inputs
 
-**Status (2026-10-31): backend delivered, UI in progress.** The read model now
-covers cards, ports, profiles, sinks and sources; the five safe commands exist;
-demo mode serves a real audio section. Review found that on PipeWire every
-endpoint lost its card (`Owner Module: n/a`, no `Sinks:` lists) — ownership now
-joins the sink's `device.name` to the card's `Name`, with a real PipeWire
-fixture pinning it. A failed `pactl` read is reported as unavailable rather than
-as an empty list, and a timed-out `wpctl` no longer claims the phone is silent.
+**Status (2026-10-31): delivered.** Read model, five safe commands and the audio
+section of the page are in place; demo mode serves a real audio section. Review
+found that on PipeWire every endpoint lost its card (`Owner Module: n/a`, no
+`Sinks:` lists) — ownership now joins the sink's `device.name` to the card's
+`Name`, with a real PipeWire fixture pinning it. A failed `pactl` read is
+reported as unavailable rather than as an empty list, and a timed-out `wpctl`
+no longer claims the phone is silent.
 
 **Scope.** The audio half of the read model, plus the safe commands.
 
@@ -145,6 +145,14 @@ round-trip; BT-derived sinks still do not appear in the local output list.
 ---
 
 ## E3 — Source feed
+
+**Status (2026-10-31): delivered.** `application/source.py` carries the source
+orchestration; `SourceFeed` is in the aggregate and the phone gets an `input`
+role with `source_feed:<MAC>` evidence; the settings row moved to the hardware
+page as a strip with four states. Review found that `POST /bridge/source`
+returned 200 on a host that cannot capture, and that a failed pairing window
+painted a streaming source as `error` — both fixed (`422 capture_unavailable`,
+`pairing_error` kept separate).
 
 **Scope.** The phone→bridge source becomes an entity, and the settings row moves.
 
