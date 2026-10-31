@@ -1,7 +1,7 @@
 """Demo mode — run the web UI against a canonical nine-player demo stand.
 
 Usage:
-    DEMO_MODE=true python sendspin_client.py
+    DEMO_MODE=true python -m sendspin_bridge
 
 All hardware-dependent layers (BlueZ, D-Bus, PulseAudio, Music Assistant,
 and per-device subprocesses) are replaced with deterministic mocks so the
@@ -14,7 +14,6 @@ import asyncio
 import logging
 import os
 import re
-import subprocess as _real_subprocess
 import sys
 import threading
 import time
@@ -187,7 +186,7 @@ def _demo_invalidate_hardware() -> None:
 
 
 def _demo_pulse_list_sinks() -> list[dict[str, Any]]:
-    """The legacy Flask sink list: connected demo speakers, with live volume/mute."""
+    """The audio server's sink list: connected demo speakers, with live volume/mute."""
     from demo.fixtures import DEMO_DEVICE_STATUS
 
     listed: list[dict[str, Any]] = []
@@ -262,14 +261,99 @@ def _demo_install_audio() -> None:
     _sp.set_default_sink = _demo_set_default_sink  # type: ignore[assignment]
 
 
+def build_demo_config() -> dict[str, Any]:
+    """The canonical config demo mode seeds into its isolated config directory.
+
+    The fixtures are the legacy ``BLUETOOTH_DEVICES`` shape (they are the
+    screenshot stand's source of truth); the real migration turns them into
+    ``players`` exactly as it does for an operator's file, so demo mode never
+    carries a second config schema of its own.
+    """
+    from demo.fixtures import (
+        DEMO_ADAPTERS,
+        DEMO_DEVICES,
+        DEMO_MA_TOKEN,
+        DEMO_MA_URL,
+    )
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION, migrate_config_payload
+
+    base: dict[str, Any] = {
+        "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
+        "BLUETOOTH_DEVICES": deepcopy(DEMO_DEVICES),
+        "BLUETOOTH_ADAPTERS": deepcopy(DEMO_ADAPTERS),
+        "AUTH_ENABLED": False,
+        "CHECK_UPDATES": True,
+        "UPDATE_CHANNEL": "stable",
+        "AUTO_UPDATE": False,
+        "BRIDGE_NAME": os.getenv("BRIDGE_NAME") or "DEMO",
+        # Always inject canonical MA credentials in demo mode.
+        "MA_API_URL": DEMO_MA_URL,
+        "MA_API_TOKEN": DEMO_MA_TOKEN,
+        # Demo MA state and commands are fully simulated in-process.  Disable
+        # the production websocket monitor so bootstrap can never leak a real
+        # connection attempt to the intentionally fake demo-ma.local host.
+        "MA_WEBSOCKET_MONITOR": False,
+        "DUPLICATE_DEVICE_CHECK": False,
+        # The phone source is part of the stand: the Hardware page's source
+        # strip must be present, and the orchestrator's start call is served
+        # by the demo manager below.
+        "SENDSPIN_SOURCE": True,
+        "SENDSPIN_SOURCE_PORT": 8940,
+    }
+    return migrate_config_payload(base).normalized_config
+
+
+def _demo_source_node() -> str | None:
+    """The capture node the demo phone streams into, or ``None``."""
+    from demo.fixtures import DEMO_SOURCES
+
+    return str(DEMO_SOURCES[0]["name"]) if DEMO_SOURCES else None
+
+
+def _demo_publish_source(enabled: bool = True) -> None:
+    """Publish the demo phone source's runtime snapshot."""
+    from sendspin_bridge.services.source import state as _source_state
+
+    node = _demo_source_node()
+    _source_state.publish(
+        enabled=enabled,
+        port=8940 if enabled else None,
+        phone=node if enabled else None,
+        players=0,
+        streaming=False,
+        error=None,
+    )
+
+
 def install() -> None:
     """Monkey-patch all hardware-dependent modules for demo mode.
 
-    Must be called at the very beginning of ``main()`` before any
-    BluetoothManager or SendspinClient instances are created and before
-    ``web_interface`` is imported (so that route modules pick up the
-    patched functions).
+    Must be called before the bridge's config is loaded and before any
+    BluetoothManager or SendspinClient instances are created.
     """
+    # ------------------------------------------------------------------
+    # 0. Isolate the config directory and seed it with the fixture stand
+    # ------------------------------------------------------------------
+    # The rest of the app keeps using the real config layer; only the path it
+    # reads and writes is redirected, so API saves, migrations and runtime
+    # state all behave exactly as they do in production.
+    import sendspin_bridge.config as _config_mod
+
+    _demo_config_dir = Path(os.getenv("SENDSPIN_DEMO_CONFIG_DIR") or "/tmp/sendspin-demo-config")
+    _demo_config_file = _demo_config_dir / "config.json"
+    os.environ["CONFIG_DIR"] = str(_demo_config_dir)
+    _config_mod.CONFIG_DIR = _demo_config_dir
+    _config_mod.CONFIG_FILE = _demo_config_file
+
+    def _seed_demo_config() -> None:
+        _config_mod.write_config_file(
+            build_demo_config(),
+            config_file=_demo_config_file,
+            config_dir=_demo_config_dir,
+        )
+
+    _seed_demo_config()
+
     # ------------------------------------------------------------------
     # 1. Patch BluetoothManager class
     # ------------------------------------------------------------------
@@ -282,7 +366,6 @@ def install() -> None:
         DEMO_BT_DEVICE_INFO,
         DEMO_DEVICE_STATUS,
         DEMO_DEVICES,
-        DEMO_DISPLAY_VERSION,
         DEMO_LOG_LINES,
         DEMO_MA_ALL_GROUPS,
         DEMO_MA_NAME_MAP,
@@ -304,7 +387,6 @@ def install() -> None:
     _demo_state_lock = threading.RLock()
     _demo_runtime_scan_results = deepcopy(DEMO_SCAN_RESULTS)
     _demo_runtime_paired_devices = deepcopy(DEMO_PAIRED_DEVICES)
-    _demo_runtime_config: dict[str, Any] | None = None
     _canonical_bt_info_macs = {str(item["mac"]).upper() for item in DEMO_BT_DEVICE_INFO}
 
     def _demo_enabled() -> bool:
@@ -346,17 +428,18 @@ def install() -> None:
             return deepcopy(_demo_runtime_bt_device_info)
 
     def _current_demo_excluded_scan_macs() -> set[str]:
+        from sendspin_bridge.config import load_config
+        from sendspin_bridge.config.players import device_entries
+
         with _demo_state_lock:
-            configured_macs = {
-                str(device.get("mac") or "").upper()
-                for device in (_demo_runtime_config or {}).get("BLUETOOTH_DEVICES", [])
-                if str(device.get("mac") or "").strip()
-            }
             paired_macs = {
                 str(device.get("mac") or "").upper()
                 for device in _demo_runtime_paired_devices
                 if str(device.get("mac") or "").strip()
             }
+        configured_macs = {
+            str(device.get("mac") or "").upper() for device in device_entries(load_config()) if device.get("mac")
+        }
         return configured_macs | paired_macs
 
     def _find_demo_device(mac: str) -> dict[str, Any] | None:
@@ -431,11 +514,6 @@ def install() -> None:
     import sendspin_bridge.bridge.client as _bridge_client_mod
 
     _bridge_client_mod.BluetoothManager = DemoBluetoothManager  # type: ignore[attr-defined]
-    # Also patch the already-imported name in __main__ (legacy sendspin_client.py path).
-    # When running as `python -m sendspin_bridge` __main__ has no BluetoothManager, skip.
-    _sc_mod = sys.modules.get("__main__")
-    if _sc_mod and hasattr(_sc_mod, "BluetoothManager"):
-        _sc_mod.BluetoothManager = DemoBluetoothManager  # type: ignore[attr-defined]
 
     # ------------------------------------------------------------------
     # 2. Patch services.bluetooth
@@ -473,31 +551,15 @@ def install() -> None:
     _sbt.bt_remove_device = _demo_bt_remove_device
 
     # ------------------------------------------------------------------
-    # 3. Patch services.pulse (sync wrappers used by routes/api.py)
+    # 3. Patch services.pulse (the audio commands behind the Hardware page)
     # ------------------------------------------------------------------
-    import sendspin_bridge.services.audio.pulse as _sp
-
     # Volume/mute/suspend/default-sink state is shared with the Hardware page's
     # audio half, so a command and a read describe the same sink.
     _demo_install_audio()
 
-    # Also patch names already imported into routes.api (from X import Y binds locally)
-    import sendspin_bridge.web.routes.api as _api_mod
-
-    _api_mod.set_sink_volume = _sp.set_sink_volume
-    _api_mod.set_sink_mute = _sp.set_sink_mute
-    _api_mod.get_sink_mute = _sp.get_sink_mute
-
-    import sendspin_bridge.web.routes.api_status as _api_status_mod
-
-    _api_status_mod.get_server_name = _sp.get_server_name
-    _api_status_mod.list_sinks = _sp.list_sinks
-
     # ------------------------------------------------------------------
     # 4. Patch SendspinClient methods
     # ------------------------------------------------------------------
-    # Import directly so the patch works with both the legacy monolithic entry
-    # point (where SendspinClient lived in __main__) and `python -m sendspin_bridge`.
     import sendspin_bridge.bridge.client as _client_mod
 
     _SendspinClient = _client_mod.SendspinClient
@@ -643,19 +705,31 @@ def install() -> None:
     _SendspinClient.stop_sendspin = _demo_stop_sendspin
 
     # ------------------------------------------------------------------
-    # 5. Patch routes.api_bt (scan, paired, adapters)
+    # 5. Patch the Bluetooth use cases (discovery, pairing, adapters)
     # ------------------------------------------------------------------
-    import sendspin_bridge.web.routes.api_bt as _abt
+    # The v3 API reads BlueZ through application.bluetooth, not through the
+    # deleted Flask route module.  Patching the use cases keeps the job
+    # machinery, the adapter lease and the response models intact while the
+    # answers come from the fixture stand.
+    import sendspin_bridge.application.bluetooth as _app_bt
 
-    _original_run_bt_scan = _abt._run_bt_scan
-    _original_run_standalone_pair = _abt._run_standalone_pair
+    _original_scan = _app_bt._scan
+    _original_run_standalone_pair = _app_bt._run_standalone_pair
+    _demo_adapter_macs = [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
 
-    def _demo_run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> None:
+    def _demo_list_bt_adapters(timeout: int = 5) -> list[str]:
+        return list(_demo_adapter_macs) if _demo_enabled() else _original_list_bt_adapters(timeout=timeout)
+
+    _sbt.list_bt_adapters = _demo_list_bt_adapters  # type: ignore[assignment]
+    _app_bt.list_bt_adapters = _demo_list_bt_adapters  # type: ignore[assignment]
+    # The adapter ids are synthetic hciN labels in fixture order; sysfs on a
+    # dev host would otherwise re-map them to whatever radio is installed.
+    _app_bt.build_hci_map = lambda: {}  # type: ignore[assignment]
+    _app_bt._last_scan_completed = 0.0
+
+    def _demo_scan(adapter: str, audio_only: bool) -> dict[str, Any]:
         if not _demo_enabled():
-            _original_run_bt_scan(job_id, adapter, audio_only)
-            return
-        from sendspin_bridge.bridge.state import finish_scan_job
-
+            return _original_scan(adapter, audio_only)
         time.sleep(1.5)
         selected_adapter = str(get_demo_adapter(adapter)["id"]) if adapter else ""
         excluded_macs = _current_demo_excluded_scan_macs()
@@ -674,47 +748,42 @@ def install() -> None:
                 entry.setdefault("supports_import", entry.get("audio_capable", True))
                 entry.setdefault("kind", "audio" if entry.get("audio_capable", True) else "other")
                 devices.append(entry)
-        finish_scan_job(
-            job_id,
-            {
-                "devices": devices,
-                "stats": {
-                    "total_candidates": len(devices),
-                    "returned_candidates": len(devices),
-                    "audio_candidates": sum(1 for item in devices if item.get("audio_capable", True)),
-                    "audio_only": audio_only,
-                },
+        return {
+            "devices": devices,
+            "stats": {
+                "total_candidates": len(devices),
+                "returned_candidates": len(devices),
+                "audio_candidates": sum(1 for item in devices if item.get("audio_capable", True)),
+                "audio_only": audio_only,
             },
-        )
+        }
 
     def _demo_run_standalone_pair(
-        job_id: str,
         mac: str,
         adapter: str,
         *,
-        quiesce: bool = False,
-        no_input_no_output_agent: bool | None = None,
-    ) -> None:
+        quiesce_adapter: bool = False,
+        no_input_no_output_agent: bool = False,
+        allow_hfp_profile: bool = False,
+    ) -> dict[str, Any]:
         if not _demo_enabled():
-            _original_run_standalone_pair(
-                job_id,
+            return _original_run_standalone_pair(
                 mac,
                 adapter,
-                quiesce=quiesce,
+                quiesce_adapter=quiesce_adapter,
                 no_input_no_output_agent=no_input_no_output_agent,
+                allow_hfp_profile=allow_hfp_profile,
             )
-            return
-        del quiesce, no_input_no_output_agent  # demo mode ignores per-pair flags
-        from sendspin_bridge.bridge.state import finish_scan_job
-
-        del adapter
+        del quiesce_adapter, no_input_no_output_agent, allow_hfp_profile
         nonlocal _demo_runtime_paired_devices, _demo_runtime_bt_device_info
         normalized = str(mac or "").strip().upper()
+        del adapter  # the demo stand pairs on whichever controller owns the device
         time.sleep(2.0)
         device = _find_demo_device(normalized)
         if not device:
-            finish_scan_job(job_id, {"success": False, "mac": normalized, "error": "Demo device not found"})
-            return
+            from sendspin_bridge.application.errors import UseCaseError
+
+            raise UseCaseError(422, "pairing_failed", "Demo device not found")
         with _demo_state_lock:
             existing = next(
                 (item for item in _demo_runtime_paired_devices if str(item.get("mac") or "").upper() == normalized),
@@ -733,186 +802,48 @@ def install() -> None:
                 )
             _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
         logger.info("[demo] Standalone pair %s: OK", normalized)
-        finish_scan_job(job_id, {"success": True, "mac": normalized})
+        return {"mac": normalized, "paired": True, "agent_telemetry": {}}
 
-    _abt._run_bt_scan = _demo_run_bt_scan
-    _abt._run_standalone_pair = _demo_run_standalone_pair
-    _original_api_bt_list_adapters = _abt.list_bt_adapters
-    _abt.list_bt_adapters = (  # type: ignore[assignment]
-        lambda timeout=5: (
-            [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
-            if _demo_enabled()
-            else _original_api_bt_list_adapters(timeout=timeout)
-        )
-    )
+    _app_bt._scan = _demo_scan
+    _app_bt._run_standalone_pair = _demo_run_standalone_pair
 
-    # Replace subprocess module reference in api_bt so that handlers
-    # calling subprocess.run(["bluetoothctl"], ...) get fake output.
-    class _DemoSubprocess:
-        """Intercept bluetoothctl subprocess calls in routes.api_bt."""
+    def _demo_list_adapters() -> list[dict[str, Any]]:
+        return [
+            {
+                "id": str(adapter["id"]),
+                "mac": str(adapter["mac"]),
+                "name": str(adapter["name"]),
+                "powered": bool(adapter.get("powered", True)),
+                "live_class": None,
+            }
+            for adapter in DEMO_ADAPTERS
+        ]
 
-        def __getattr__(self, name: str) -> Any:
-            return getattr(_real_subprocess, name)
+    _app_bt.list_adapters = _demo_list_adapters
 
-        def run(self, args: Any, *a: Any, **kw: Any) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            if not _demo_enabled():
-                return _real_subprocess.run(args, *a, **kw)
-            if args == ["bluetoothctl"]:
-                input_text = kw.get("input", "")
-                if "devices" in input_text:
-                    return self._paired_output()
-                if "show" in input_text:
-                    return self._adapter_output(input_text)
-                if "info " in input_text:
-                    return self._info_output(input_text)
-            if args == ["bluetoothctl", "list"]:
-                return self._adapter_list_output()
-            if args == ["bluetoothctl", "devices", "Paired"]:
-                return self._paired_devices_output()
-            if args == ["bluetoothctl", "--version"]:
-                return _real_subprocess.CompletedProcess(args, 0, stdout="bluetoothctl: 5.72-demo\n", stderr="")
-            if args == ["systemctl", "is-active", "bluetooth"]:
-                return _real_subprocess.CompletedProcess(args, 0, stdout="active\n", stderr="")
-            if args == ["systemctl", "restart", "sendspin-client"]:
-                _simulate_demo_restart()
-                return _real_subprocess.CompletedProcess(args, 0, stdout="demo restart complete\n", stderr="")
-            if args == ["pactl", "info"]:
-                return _real_subprocess.CompletedProcess(
-                    args,
-                    0,
-                    stdout="Server Name: pulseaudio (demo)\nDefault Sink: bluez_output.AA_BB_CC_DD_EE_01.1\n",
-                    stderr="",
-                )
-            if args == ["pactl", "list", "sink-inputs"]:
-                return self._sink_inputs_output()
-            if args == ["pulseaudio", "--version"]:
-                return _real_subprocess.CompletedProcess(args, 0, stdout="pulseaudio 17.0-demo\n", stderr="")
-            if args == ["pipewire", "--version"]:
-                return _real_subprocess.CompletedProcess(args, 127, stdout="", stderr="pipewire not installed\n")
-            if args[:3] == ["git", "describe", "--tags"]:
-                return _real_subprocess.CompletedProcess(args, 0, stdout=f"{DEMO_DISPLAY_VERSION}\n", stderr="")
-            return _real_subprocess.run(args, *a, **kw)
+    def _demo_known_devices(*, named_only: bool = True) -> list[dict[str, Any]]:
+        devices: list[dict[str, Any]] = []
+        for item in _current_demo_paired_devices():
+            mac = str(item.get("mac") or "").upper()
+            if not mac:
+                continue
+            if named_only and not item.get("name"):
+                continue
+            devices.append({"mac": mac, "name": str(item.get("name") or mac), "adapters": []})
+        return devices
 
-        def _paired_output(self) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            del self
-            lines = [f"Device {d['mac']} {d['name']}" for d in _current_demo_paired_devices()]
-            return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout="\n".join(lines), stderr="")
+    def _demo_device_info(mac: str, adapter: str = "") -> dict[str, Any]:
+        del adapter
+        normalized = str(mac or "").strip().upper()
+        info = next((item for item in _current_demo_bt_device_info() if item["mac"] == normalized), None)
+        if info is None:
+            return {"mac": normalized, "raw": []}
+        fields = {key: value for key, value in info.items() if key != "mac"}
+        raw = [f"Device {info['mac']} {info['name']}"] + [f"\t{key}: {value}" for key, value in fields.items()]
+        return {"mac": info["mac"], "raw": raw, **fields}
 
-        def _paired_devices_output(self) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            del self
-            lines = [f"Device {d['mac']} {d['name']}" for d in _current_demo_paired_devices()]
-            return _real_subprocess.CompletedProcess(
-                ["bluetoothctl", "devices", "Paired"], 0, stdout="\n".join(lines), stderr=""
-            )
-
-        @staticmethod
-        def _adapter_list_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            lines = []
-            for idx, adapter in enumerate(DEMO_ADAPTERS):
-                suffix = " [default]" if idx == 0 else ""
-                lines.append(f"Controller {adapter['mac']} {adapter['name']}{suffix}")
-            return _real_subprocess.CompletedProcess(["bluetoothctl", "list"], 0, stdout="\n".join(lines), stderr="")
-
-        @staticmethod
-        def _adapter_output(input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            # Match both the legacy ``select <MAC>; show`` recipe and the
-            # new ``show <MAC>`` form ``services.bluetooth.get_adapter_alias``
-            # uses (issue #193 fix).  Falling back to the first DEMO_ADAPTER
-            # would re-introduce the alias-swap bug under demo mode.
-            selected = ""
-            for line in str(input_text).splitlines():
-                stripped = line.strip()
-                if stripped.startswith("select "):
-                    selected = stripped.split(" ", 1)[1].strip()
-                    break
-                if stripped.startswith("show "):
-                    selected = stripped.split(" ", 1)[1].strip()
-                    break
-            adapter_info = get_demo_adapter(selected)
-            mac = str(adapter_info["mac"])
-            name = str(adapter_info["name"])
-            powered = "yes" if adapter_info.get("powered", True) else "no"
-            pairable = "yes" if adapter_info.get("pairable", True) else "no"
-            discoverable = "yes" if adapter_info.get("discoverable", False) else "no"
-            stdout = (
-                f"Controller {mac} {name}\n"
-                f"\tPowered: {powered}\n"
-                f"\tAlias: {name}\n"
-                f"\tDiscoverable: {discoverable}\n"
-                f"\tPairable: {pairable}\n"
-            )
-            return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout=stdout, stderr="")
-
-        def _info_output(self, input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            del self
-            selected_mac = ""
-            for line in str(input_text).splitlines():
-                if line.startswith("info "):
-                    selected_mac = line.split(" ", 1)[1].strip().upper()
-                    break
-            device = next(
-                (item for item in _current_demo_bt_device_info() if str(item.get("mac", "")).upper() == selected_mac),
-                None,
-            )
-            if not device:
-                return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout="", stderr="")
-            stdout = (
-                f"Device {device['mac']} {device['name']}\n"
-                f"\tPaired: {device.get('paired', 'yes')}\n"
-                f"\tBonded: {device.get('bonded', 'yes')}\n"
-                f"\tTrusted: {device.get('trusted', 'yes')}\n"
-                f"\tBlocked: {device.get('blocked', 'no')}\n"
-                f"\tConnected: {device.get('connected', 'no')}\n"
-                f"\tIcon: {device.get('icon', 'audio-card')}\n"
-            )
-            return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout=stdout, stderr="")
-
-        @staticmethod
-        def _sink_inputs_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            blocks = []
-            sink_input_id = 40
-            for device in DEMO_DEVICES:
-                mac = str(device["mac"])
-                status = DEMO_DEVICE_STATUS.get(mac, {})
-                if not status.get("playing"):
-                    continue
-                sink_input_id += 1
-                sink_name = f"bluez_output.{mac.replace(':', '_')}.1"
-                blocks.extend(
-                    [
-                        f"Sink Input #{sink_input_id}",
-                        f"Sink: {sink_name}",
-                        "State: RUNNING",
-                        "application.name = Sendspin Bridge",
-                        "application.process.binary = python3",
-                        f"media.name = {status.get('current_track', 'Demo Track')}",
-                        f"media.title = {status.get('current_artist', 'Demo Artist')}",
-                        "",
-                    ]
-                )
-            return _real_subprocess.CompletedProcess(
-                ["pactl", "list", "sink-inputs"], 0, stdout="\n".join(blocks).strip(), stderr=""
-            )
-
-    _demo_subprocess = _DemoSubprocess()
-    _abt.subprocess = _demo_subprocess  # type: ignore[assignment]
-    # services.bluetooth.get_adapter_alias (added in #193 fix) is now the
-    # path the /api/bt/adapters route uses, so the demo intercept must
-    # also patch services.bluetooth.subprocess — otherwise the helper
-    # falls back to a real bluetoothctl invocation that doesn't exist
-    # in the test runner and the endpoint returns hci-prefixed labels.
-    _sbt.subprocess = _demo_subprocess  # type: ignore[assignment]
-    _api_status_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
-    _api_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
-    # Fall back to api_config's _detect_runtime if a prior test's monkeypatch
-    # teardown stripped the re-imported alias from the api module (the
-    # `from X import Y` binding can disappear under pytest's restore logic
-    # if a sibling test set it with raising=False).
-    import sendspin_bridge.web.routes.api_config as _api_config_for_runtime
-
-    _original_api_detect_runtime = getattr(_api_mod, "_detect_runtime", _api_config_for_runtime._detect_runtime)
-    _api_mod._detect_runtime = lambda: "systemd" if _demo_enabled() else _original_api_detect_runtime()  # type: ignore[assignment]
-    _abt._last_scan_completed = 0.0
+    _app_bt.known_devices = _demo_known_devices
+    _app_bt.device_info = _demo_device_info
 
     # ------------------------------------------------------------------
     # 6. Patch state module
@@ -920,115 +851,47 @@ def install() -> None:
     _st.get_adapter_name = lambda mac: _adapter_names_by_mac.get(str(mac).upper())  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
-    # 7. Inject demo devices + MA credentials into config
+    # 7. Config, runtime label, updates and the emulated restart
     # ------------------------------------------------------------------
-    from sendspin_bridge.config import load_config
+    # The config layer resolves CONFIG_FILE at call time, so redirecting the
+    # module global is enough for load_config/update_config/write_config_file
+    # everywhere.  ``application.config`` and the HA command helpers bound the
+    # value at import time and are redirected explicitly.
+    import sendspin_bridge.application.bridge_control as _bridge_control
+    import sendspin_bridge.application.config as _app_config
+    import sendspin_bridge.services.bluetooth.bt_commands as _bt_commands
 
-    _cfg = load_config()
-    import sendspin_bridge.config as _config_mod
+    _app_config.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
+    _bt_commands.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
+    _original_detect_runtime = _app_config._detect_runtime
+    _app_config._detect_runtime = lambda: "systemd" if _demo_enabled() else _original_detect_runtime()  # type: ignore[assignment]
+    _original_bridge_detect_runtime = _bridge_control.detect_runtime
+    _bridge_control.detect_runtime = (  # type: ignore[assignment]
+        lambda: "systemd" if _demo_enabled() else _original_bridge_detect_runtime()
+    )
+    _original_detect_installation = _st.detect_installation_type
+    _st.detect_installation_type = (  # type: ignore[assignment]
+        lambda: "systemd" if _demo_enabled() else _original_detect_installation()
+    )
 
-    _original_load = _config_mod.load_config
-    _original_write_config_file = _config_mod.write_config_file
-    _original_update_config = _config_mod.update_config
-
-    def _build_demo_base_config() -> dict:
-        result = _original_load()
-        result["BLUETOOTH_DEVICES"] = deepcopy(DEMO_DEVICES)
-        result["BLUETOOTH_ADAPTERS"] = deepcopy(DEMO_ADAPTERS)
-        result["AUTH_ENABLED"] = False
-        result["CHECK_UPDATES"] = True
-        result["UPDATE_CHANNEL"] = "stable"
-        result["AUTO_UPDATE"] = False
-        if not result.get("BRIDGE_NAME"):
-            result["BRIDGE_NAME"] = "DEMO"
-        # Always inject canonical MA credentials in demo mode.
-        result["MA_API_URL"] = DEMO_MA_URL
-        result["MA_API_TOKEN"] = DEMO_MA_TOKEN
-        # Demo MA state and commands are fully simulated in-process.  Disable
-        # the production websocket monitor so bootstrap can never leak a real
-        # connection attempt to the intentionally fake demo-ma.local host.
-        result["MA_WEBSOCKET_MONITOR"] = False
-        result["DUPLICATE_DEVICE_CHECK"] = False
-        return result
-
-    _demo_canonical_config = _build_demo_base_config()
-    _demo_runtime_config = deepcopy(_demo_canonical_config)
-    _demo_config_dir = Path(os.getenv("SENDSPIN_DEMO_CONFIG_DIR") or "/tmp/sendspin-demo-config")
-    _demo_config_file = _demo_config_dir / "config.json"
-    os.environ["CONFIG_DIR"] = str(_demo_config_dir)
-    _config_mod.CONFIG_DIR = _demo_config_dir
-    _config_mod.CONFIG_FILE = _demo_config_file
-    if _sc_mod and hasattr(_sc_mod, "CONFIG_FILE"):
-        _sc_mod.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
-    bluetooth_manager.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
-    _sbt._CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
-
-    def _reset_demo_runtime_state() -> None:
-        nonlocal \
-            _demo_runtime_config, \
-            _demo_runtime_scan_results, \
-            _demo_runtime_paired_devices, \
-            _demo_runtime_bt_device_info
-        with _demo_state_lock:
-            _demo_runtime_config = deepcopy(_demo_canonical_config)
-            _demo_runtime_scan_results = deepcopy(DEMO_SCAN_RESULTS)
-            _demo_runtime_paired_devices = deepcopy(DEMO_PAIRED_DEVICES)
-            _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
-
-    def _demo_load_config() -> dict:
-        if not _demo_enabled():
-            return _original_load()
-        with _demo_state_lock:
-            return deepcopy(_demo_runtime_config if _demo_runtime_config is not None else _demo_canonical_config)
-
-    def _demo_write_config_file(config: dict, *, config_file=None, config_dir=None) -> None:
-        if not _demo_enabled():
-            _original_write_config_file(config, config_file=config_file, config_dir=config_dir)
-            return
-        del config_file, config_dir
-        nonlocal _demo_runtime_config
-        with _demo_state_lock:
-            _demo_runtime_config = deepcopy(config)
-
-    def _demo_update_config(mutator) -> dict[str, Any] | None:
-        if not _demo_enabled():
-            return _original_update_config(mutator)
-        nonlocal _demo_runtime_config
-        with _demo_state_lock:
-            current = deepcopy(_demo_runtime_config if _demo_runtime_config is not None else _demo_canonical_config)
-            mutator(current)
-            _demo_runtime_config = current
-            return deepcopy(current)
-
-    _config_mod.load_config = _demo_load_config
-    _config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
-    _config_mod.update_config = _demo_update_config  # type: ignore[assignment]
-    if _sc_mod and hasattr(_sc_mod, "load_config"):
-        _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
-    import sendspin_bridge.bridge.orchestrator as _bridge_orchestrator
-    import sendspin_bridge.web.routes.api_config as _api_config_mod
-
-    _bridge_orchestrator.load_config = _demo_load_config
-    if hasattr(_bridge_orchestrator, "CONFIG_FILE"):
-        _bridge_orchestrator.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
-    _api_config_mod.load_config = _demo_load_config
-    _api_config_mod.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
-    _api_config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
-    _api_config_mod.update_config = _demo_update_config  # type: ignore[assignment]
-    _original_sync_ha_options = _api_config_mod._sync_ha_options
-    _original_read_log_lines = _api_config_mod._read_log_lines
-    _api_config_mod._sync_ha_options = (  # type: ignore[assignment]
+    _original_sync_ha_options = _app_config._sync_ha_options
+    _app_config._sync_ha_options = (  # type: ignore[assignment]
         lambda config: None if _demo_enabled() else _original_sync_ha_options(config)
     )
-    _abt.load_config = _demo_load_config
-    if hasattr(_abt, "CONFIG_FILE"):
-        _abt.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
-    _api_config_mod._read_log_lines = (  # type: ignore[assignment]
+    _original_read_log_lines = _app_config._read_log_lines
+    _app_config._read_log_lines = (  # type: ignore[assignment]
         lambda runtime, lines: (
             list(DEMO_LOG_LINES)[-lines:] if _demo_enabled() else _original_read_log_lines(runtime, lines)
         )
     )
-    _api_config_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
+
+    def _reset_demo_runtime_state() -> None:
+        nonlocal _demo_runtime_scan_results, _demo_runtime_paired_devices, _demo_runtime_bt_device_info
+        with _demo_state_lock:
+            _demo_runtime_scan_results = deepcopy(DEMO_SCAN_RESULTS)
+            _demo_runtime_paired_devices = deepcopy(DEMO_PAIRED_DEVICES)
+            _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
+        _seed_demo_config()
 
     def _simulate_demo_restart() -> None:
         if not _demo_enabled():
@@ -1082,23 +945,23 @@ def install() -> None:
             },
         )
 
-    def _demo_api_restart():
+    def _demo_restart_override() -> None:
         if not _demo_enabled():
-            return None
-        from flask import jsonify
+            return
 
         def _run_demo_restart() -> None:
             time.sleep(0.1)
             _simulate_demo_restart()
 
         threading.Thread(target=_run_demo_restart, daemon=True, name="demo-restart").start()
-        return jsonify({"success": True, "runtime": "systemd", "emulated": True})
 
-    _api_mod._restart_override = _demo_api_restart  # type: ignore[assignment]
+    _bridge_control.restart_override = _demo_restart_override
 
     # ------------------------------------------------------------------
     # 8. Patch diagnostics / bugreport helpers
     # ------------------------------------------------------------------
+    import sendspin_bridge.application.diagnostics as _diag
+
     def _demo_collect_subprocess_info() -> list[dict]:
         info = []
         for idx, client in enumerate(_st.clients, start=1):
@@ -1118,38 +981,62 @@ def install() -> None:
                     "reconnect_attempt": status.get("reconnect_attempt", 0),
                     "last_error": status.get("last_error"),
                     "last_error_at": status.get("last_error_at"),
+                    "process_rss_mb": None,
                 }
             )
         return info
 
     def _demo_collect_preflight_status() -> dict:
+        """The host diagnostics probes against, answered by the fixture stand."""
+        paired = len(_current_demo_paired_devices())
         return {
+            "status": "ok",
+            "failed_collections": [],
+            "collections_status": {
+                "audio": {"status": "ok", "count": len(DEMO_DEVICES)},
+                "bluetooth": {"status": "ok", "count": paired},
+                "memory": {"status": "ok"},
+                "config_writable": {"status": "ok"},
+            },
             "platform": "demo",
             "audio": {
                 "system": "pulseaudio",
                 "socket": "unix:/tmp/sendspin-demo-pulse.sock",
+                "socket_exists": True,
+                "socket_reachable": True,
                 "sinks": len(DEMO_DEVICES),
+                "last_error": None,
             },
             "bluetooth": {
                 "controller": True,
                 "adapter": DEMO_ADAPTERS[0]["mac"],
-                "paired_devices": len(_current_demo_paired_devices()),
+                "paired_devices": paired,
+                "daemon": "active",
             },
             "dbus": True,
             "memory_mb": 512,
-            "version": _api_status_mod.VERSION,
+            "config_writable": {
+                "status": "ok",
+                "writable": True,
+                "remediation": None,
+                "config_dir": str(_demo_config_dir),
+                "uid": getattr(os, "getuid", lambda: 0)(),
+            },
+            "version": _diag.VERSION,
         }
 
-    _original_collect_preflight_status = _api_status_mod._collect_preflight_status
-    _api_status_mod._collect_preflight_status = (  # type: ignore[assignment]
+    _original_collect_preflight_status = _diag._collect_preflight_status
+    _diag._collect_preflight_status = (  # type: ignore[assignment]
         lambda: _demo_collect_preflight_status() if _demo_enabled() else _original_collect_preflight_status()
     )
-    _api_status_mod._collect_recent_logs = lambda n=100: list(DEMO_LOG_LINES)[-n:]
-    _original_collect_bt_device_info = _api_status_mod._collect_bt_device_info
-    _api_status_mod._collect_bt_device_info = (  # type: ignore[assignment]
+    # The sampler may have measured the real host before demo mode installed.
+    _diag.reset_preflight_probe()
+    _diag._collect_recent_logs = lambda n=100: list(DEMO_LOG_LINES)[-n:]  # type: ignore[assignment]
+    _original_collect_bt_device_info = _diag._collect_bt_device_info
+    _diag._collect_bt_device_info = (  # type: ignore[assignment]
         lambda: _current_demo_bt_device_info() if _demo_enabled() else _original_collect_bt_device_info()
     )
-    _api_status_mod._collect_subprocess_info = _demo_collect_subprocess_info
+    _diag._collect_subprocess_info = _demo_collect_subprocess_info  # type: ignore[assignment]
 
     # Never import the real audio modules in demo mode.  PortAudio probing can
     # block indefinitely on a headless host before we get a chance to patch
@@ -1363,25 +1250,54 @@ def install() -> None:
         return payload
 
     _update_checker.check_latest_version = _demo_check_latest_version
-    _api_config_mod.check_latest_version = _demo_check_latest_version
+    _app_config.check_latest_version = _demo_check_latest_version  # type: ignore[assignment]
 
     install_inventory()
     logger.info("🎭 Demo mode installed — all hardware interactions are simulated")
 
 
+def _demo_install_source() -> None:
+    """Point the phone source's runtime snapshot and lifecycle at the stand.
+
+    The read models (``/hardware``'s source strip and ``/status``) read the
+    source's runtime snapshot, and the orchestrator starts the real capture
+    server from config.  Publishing the fixture node and serving start/stop
+    locally keeps both surfaces truthful without opening a capture pipeline.
+    """
+    from sendspin_bridge.services.source import manager as _source_manager
+    from sendspin_bridge.services.source import state as _source_state
+
+    _demo_publish_source(True)
+
+    async def _demo_source_start(config: dict[str, Any], config_dir: Any) -> dict[str, Any]:
+        del config, config_dir
+        _demo_publish_source(True)
+        return {"started": True, "port": 8940}
+
+    async def _demo_source_stop() -> dict[str, Any]:
+        _demo_publish_source(False)
+        return {"started": False}
+
+    _source_manager.start = _demo_source_start  # type: ignore[assignment]
+    _source_manager.stop = _demo_source_stop  # type: ignore[assignment]
+    _source_manager.running = lambda: _source_state.snapshot().enabled  # type: ignore[assignment]
+
+
 def install_inventory() -> None:
-    """Point the hardware reader and the audio commands at the demo fixtures.
+    """Point the hardware reader, the audio commands and the source at the demo fixtures.
 
     The orchestrator installs this *after* the D-Bus resolver, so a later
     ``set_bluez()`` cannot put the real host back in front of the page.  The
     reader's refresh is replaced rather than its transport, so no bus and no
     ``bluetoothctl`` is ever asked — the demo stand is the only answer.  The
-    audio helpers are installed here too: a test that only wants the inventory
-    still gets working volume, mute and suspend commands.
+    audio helpers and the source runtime are installed here too: a test that
+    only wants the inventory still gets working volume, mute, suspend and
+    source reads.
     """
     from sendspin_bridge.services.hardware import inventory as _inventory
 
     _demo_install_audio()
+    _demo_install_source()
     _inventory._refresh = _demo_inventory_refresh
     _inventory.clear_cache()
 

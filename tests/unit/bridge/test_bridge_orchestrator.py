@@ -162,15 +162,25 @@ async def test_initialize_runtime_wires_the_dbus_hci_resolver_into_the_transport
 
 @pytest.mark.asyncio
 async def test_initialize_runtime_invokes_demo_install_when_enabled(monkeypatch):
+    from sendspin_bridge.bridge import orchestrator as orchestrator_mod
+
     orchestrator = BridgeOrchestrator()
-    called: list[str] = []
+    calls: list[str] = []
+    real_load_config = orchestrator_mod.load_config
+
+    def _record_load_config():
+        calls.append("load_config")
+        return real_load_config()
+
     monkeypatch.setenv("DEMO_MODE", "true")
-    monkeypatch.setattr("demo.install", lambda: called.append("install"))
+    monkeypatch.setattr("demo.install", lambda: calls.append("install"))
+    monkeypatch.setattr(orchestrator_mod, "load_config", _record_load_config)
 
     bootstrap = await orchestrator.initialize_runtime()
 
     assert bootstrap.demo_mode is True
-    assert called == ["install"]
+    # The demo layer must be in place before the config it seeds is read.
+    assert calls[:2] == ["install", "load_config"]
     progress = state.get_startup_progress()
     assert progress["details"]["demo_mode"] is True
 

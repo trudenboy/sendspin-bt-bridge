@@ -92,6 +92,11 @@ class DemoBluetoothManager:
 
         self._running = True
         self._sink_name = self._make_sink_name()
+        # A speaker that is already connected at startup already has its sink:
+        # announce it the way a real connect would, so the device's audio path
+        # is resolved before the first status build.
+        if self.connected:
+            self.configure_bluetooth_audio()
 
     def _make_sink_name(self) -> str:
         mac_under = self.mac_address.replace(":", "_")
