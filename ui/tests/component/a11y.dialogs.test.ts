@@ -10,7 +10,7 @@ import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
 import en from '@/i18n/locales/en.json'
 import ru from '@/i18n/locales/ru.json'
 import { seriousViolations } from '../helpers/axe'
-import { btDevice, controller } from './hardware/support'
+import { audioCardDetail, audioEndpointDetail, audioSink, btDevice, controller } from './hardware/support'
 
 // Regression guard (UX stage 8): dialogs have a role, a name and labelled
 // controls, in both languages.
@@ -26,6 +26,12 @@ const api = vi.hoisted(() => ({
   getBugreport: vi.fn(), checkProxyAvailable: vi.fn(), submitBugreport: vi.fn(), downloadBugreport: vi.fn(),
 }))
 vi.mock('@/api/diagnostics', () => api)
+const hardwareApi = vi.hoisted(() => ({
+  getHardwareAudioCard: vi.fn(),
+  getHardwareAudioSink: vi.fn(),
+  getHardwareAudioSource: vi.fn(),
+}))
+vi.mock('@/api/hardware', () => hardwareApi)
 
 let mounted: VueWrapper | null = null
 afterEach(() => {
@@ -41,6 +47,11 @@ describe('accessibility: dialogs', () => {
     setActivePinia(createPinia())
     api.getBugreport.mockResolvedValue({ markdown_short: 'm', text_full: 't', suggested_description: '' })
     api.checkProxyAvailable.mockResolvedValue({ available: true })
+    hardwareApi.getHardwareAudioCard.mockResolvedValue(audioCardDetail())
+    hardwareApi.getHardwareAudioSink.mockResolvedValue(audioEndpointDetail())
+    hardwareApi.getHardwareAudioSource.mockResolvedValue(
+      audioEndpointDetail({ kind: 'source', volume: null, muted: null, in_use_by: null, monitor_of: audioSink().name }),
+    )
   })
 
   for (const locale of ['en', 'ru'] as const) {
@@ -86,6 +97,28 @@ describe('accessibility: dialogs', () => {
         attachTo: document.body,
       })
       await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`the hardware audio card drawer has no serious violations (${locale})`, async () => {
+      mounted = mount(EntityDrawer, {
+        props: { open: true, kind: 'audio-card', audioName: audioCardDetail().name, audioLabel: audioCardDetail().name },
+        global: global(locale),
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(document.body.querySelector('[data-audio-detail]')).not.toBeNull()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`the hardware audio endpoint drawer has no serious violations (${locale})`, async () => {
+      mounted = mount(EntityDrawer, {
+        props: { open: true, kind: 'audio-sink', audioName: audioSink().name, audioLabel: audioSink().description },
+        global: global(locale),
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(document.body.querySelector('[data-audio-detail]')).not.toBeNull()
       expect(await seriousViolations()).toEqual([])
     })
 

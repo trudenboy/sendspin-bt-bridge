@@ -1,4 +1,4 @@
-/* The host's hardware: Bluetooth controllers, the devices bonded to them, capabilities. */
+/* The host's hardware: Bluetooth controllers, the devices bonded to them, audio, capabilities. */
 import { api, unwrap } from './client'
 
 export function getHardware() {
@@ -13,4 +13,18 @@ export function getHardwareController(controllerId: string) {
 
 export function getHardwareBluetoothDevice(mac: string) {
   return unwrap(api().GET('/api/v1/hardware/bluetooth/{mac}', { params: { path: { mac } } }))
+}
+
+/* Detail reads: the aggregate carries counts, the drawer needs the full lists. */
+
+export function getHardwareAudioCard(name: string) {
+  return unwrap(api().GET('/api/v1/hardware/audio/cards/{name}', { params: { path: { name } } }))
+}
+
+export function getHardwareAudioSink(name: string) {
+  return unwrap(api().GET('/api/v1/hardware/audio/sinks/{name}', { params: { path: { name } } }))
+}
+
+export function getHardwareAudioSource(name: string) {
+  return unwrap(api().GET('/api/v1/hardware/audio/sources/{name}', { params: { path: { name } } }))
 }

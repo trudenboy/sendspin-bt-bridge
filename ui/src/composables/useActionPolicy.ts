@@ -42,6 +42,14 @@ export const ACTION_POLICY = {
   'timing.forgetCalibration': 'confirm',
   'timing.forgetLearned': 'confirm',
   'sync.saveManualOnLeave': 'choice',
+  // Hardware → Audio: the safe audio writes. Suspend silences an output, so it
+  // asks first; volume, mute and resume are reversible; the default output is a
+  // neutral question, not a destructive one.
+  'audio.volume': 'undo',
+  'audio.mute': 'undo',
+  'audio.resume': 'undo',
+  'audio.suspend': 'confirm',
+  'audio.defaultSink': 'choice',
 } as const
 
 export type ActionId = keyof typeof ACTION_POLICY

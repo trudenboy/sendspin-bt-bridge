@@ -3,18 +3,25 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Power } from 'lucide-vue-next'
 import { SbBadge, SbButton, SbDrawer } from '@/kit'
+import AudioEntityBody from './AudioEntityBody.vue'
 import { technicalDetails } from '@/composables/useTechnicalDetails'
 import type { BtDeviceSummary, ControllerSummary } from '@/api/types'
+
+type DrawerKind = 'controller' | 'device' | 'audio-card' | 'audio-sink' | 'audio-source'
 
 const props = withDefaults(
   defineProps<{
     open: boolean
-    kind: 'controller' | 'device'
+    kind: DrawerKind
     controller?: ControllerSummary | null
     device?: BtDeviceSummary | null
+    /** Audio entities are addressed by their stable name, not by a synthetic id. */
+    audioName?: string | null
+    /** What the page already knows, so the drawer title is right before the read lands. */
+    audioLabel?: string | null
     busy?: boolean
   }>(),
-  { controller: null, device: null, busy: false },
+  { controller: null, device: null, audioName: null, audioLabel: null, busy: false },
 )
 
 const emit = defineEmits<{
@@ -26,7 +33,11 @@ const { t } = useI18n()
 
 const controller = computed(() => (props.kind === 'controller' ? props.controller : null))
 const device = computed(() => (props.kind === 'device' ? props.device : null))
+const audioKind = computed<'audio-card' | 'audio-sink' | 'audio-source' | null>(() =>
+  props.kind === 'audio-card' || props.kind === 'audio-sink' || props.kind === 'audio-source' ? props.kind : null,
+)
 const name = computed(() => {
+  if (audioKind.value) return props.audioLabel || props.audioName || ''
   const entry = controller.value ?? device.value
   return entry ? entry.alias || entry.name || entry.mac : ''
 })
@@ -47,7 +58,9 @@ const rssi = computed(() => {
     @update:model-value="(value: unknown) => emit('update:open', Boolean(value))"
   >
     <div class="space-y-6 py-2">
-      <p class="font-mono text-xs text-text-secondary">{{ mac }}</p>
+      <p v-if="mac" class="font-mono text-xs text-text-secondary">{{ mac }}</p>
+
+      <AudioEntityBody v-if="audioKind && audioName" :kind="audioKind" :name="audioName" />
 
       <section v-if="controller" data-drawer-overview class="space-y-3">
         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-secondary">

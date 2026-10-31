@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RefreshCw } from 'lucide-vue-next'
+import { AlertTriangle, RefreshCw } from 'lucide-vue-next'
 import { SbBadge, SbButton, SbEmptyState, SbSpinner } from '@/kit'
 import ControllerCard from '@/components/hardware/ControllerCard.vue'
 import BtDeviceCard from '@/components/hardware/BtDeviceCard.vue'
+import AudioCardPanel from '@/components/hardware/AudioCardPanel.vue'
+import AudioCaptureNotice from '@/components/hardware/AudioCaptureNotice.vue'
+import EndpointRow from '@/components/hardware/EndpointRow.vue'
 import CapabilityBanner from '@/components/hardware/CapabilityBanner.vue'
 import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
 import { useHardwareStore } from '@/stores/hardware'
 import { useBridgeStore } from '@/stores/bridge'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useNotificationStore } from '@/stores/notifications'
-import { confirmAction } from '@/composables/useActionPolicy'
+import { confirmAction, undoable } from '@/composables/useActionPolicy'
 import { forgetBtDevice, setAdapterPower } from '@/api/bluetooth'
 import { ApiError } from '@/api/client'
 import { speakerName } from '@/utils/speakerName'
-import type { BtDeviceSummary, ControllerSummary } from '@/api/types'
+import type {
+  AudioCardSummary,
+  AudioEndpointRef,
+  AudioEndpointSummary,
+  BtDeviceSummary,
+  ControllerSummary,
+} from '@/api/types'
 
 const { t } = useI18n()
 const store = useHardwareStore()
@@ -71,6 +80,143 @@ const degradedDetail = computed(() => {
   return snapshot.value?.degraded.find((entry) => entry.code === code)?.detail
 })
 
+// ---------------------------------------------------------------------------
+// Audio group
+// ---------------------------------------------------------------------------
+
+const audio = computed(() => store.audio)
+const audioCards = computed(() => audio.value.cards)
+const sinks = computed(() => audio.value.sinks)
+const sources = computed(() => audio.value.sources)
+
+/** An older bridge omits ``audio`` entirely: that is unsupported, not "no audio". */
+const audioReported = computed(() => store.audioReported)
+
+/** Whole-section failure: the audio server did not answer, so the lists mean nothing. */
+const audioUnavailable = computed(() => {
+  const entry = store.degraded.find((item) => item.section === 'audio' && item.code === 'pulse_unavailable')
+  if (entry) return entry
+  if (capabilities.value?.audio_server === 'none') {
+    return { section: 'audio', code: 'pulse_unavailable', detail: '' }
+  }
+  return null
+})
+
+/** The phone capture is a different gap from a missing local input; it gets the reason. */
+const captureUnavailable = computed(
+  () => store.degraded.find((item) => item.section === 'audio' && item.code === 'capture_unavailable') ?? null,
+)
+
+/** A truthful "nothing is there": the audio server answered, and listed nothing. */
+const audioEmpty = computed(
+  () =>
+    audioReported.value &&
+    !audioUnavailable.value &&
+    !captureUnavailable.value &&
+    audioCards.value.length === 0 &&
+    sinks.value.length === 0 &&
+    sources.value.length === 0,
+)
+
+/** Nothing local, and the only input is a phone the bridge cannot capture. */
+const audioCaptureOnly = computed(
+  () =>
+    audioReported.value &&
+    !audioUnavailable.value &&
+    !!captureUnavailable.value &&
+    audioCards.value.length === 0 &&
+    sinks.value.length === 0 &&
+    sources.value.length === 0,
+)
+
+function endpointLabel(endpoint: { description?: string; name: string }) {
+  return endpoint.description || endpoint.name
+}
+
+function commandFailure(e: unknown) {
+  return e instanceof ApiError ? `${e.code}: ${e.message}` : t('common.error')
+}
+
+function commandFailed(e: unknown, name: string) {
+  notifications.error(t('hardware.audio.commandFailed', { name, reason: commandFailure(e) }))
+}
+
+/** The slider debounces in the row; one undo toast belongs to the level it settles on. */
+function onVolume(endpoint: AudioEndpointSummary, value: number) {
+  const previous = endpoint.volume ?? 0
+  if (value === previous) return
+  const name = endpointLabel(endpoint)
+  void undoable(
+    'audio.volume',
+    () => store.setVolume(endpoint.name, value),
+    () => store.setVolume(endpoint.name, previous),
+    {
+      doneKey: 'undo.audioVolume',
+      name: `${name} (${value}%)`,
+      failure: (e) => t('hardware.audio.commandFailed', { name, reason: commandFailure(e) }),
+    },
+  )
+}
+
+function onMute(endpoint: AudioEndpointSummary, muted: boolean) {
+  const name = endpointLabel(endpoint)
+  void undoable('audio.mute', () => store.setMute(endpoint.name, muted), () => store.setMute(endpoint.name, !muted), {
+    doneKey: muted ? 'undo.audioMuted' : 'undo.audioUnmuted',
+    name,
+    failure: (e) => t('hardware.audio.commandFailed', { name, reason: commandFailure(e) }),
+  })
+}
+
+const audioBusy = ref<string | null>(null)
+
+async function onDefault(endpoint: AudioEndpointSummary) {
+  const name = endpointLabel(endpoint)
+  const ok = await confirmAction('audio.defaultSink', {
+    title: t('hardware.audio.defaultConfirmTitle', { name }),
+    consequences: [t('hardware.audio.defaultConsequence', { name })],
+    confirmLabel: t('hardware.audio.makeDefault'),
+  })
+  if (!ok) return
+  audioBusy.value = endpoint.name
+  try {
+    await store.setDefault(endpoint.name)
+    notifications.success(t('hardware.audio.defaultSet', { name }))
+  } catch (e) {
+    commandFailed(e, name)
+  } finally {
+    audioBusy.value = null
+  }
+}
+
+async function onSuspend(endpoint: AudioEndpointSummary) {
+  const name = endpointLabel(endpoint)
+  const ok = await confirmAction('audio.suspend', {
+    title: t('hardware.audio.suspendConfirmTitle', { name }),
+    consequences: [t('hardware.audio.suspendConsequence', { name })],
+    confirmLabel: t('hardware.audio.suspend'),
+  })
+  if (!ok) return
+  audioBusy.value = endpoint.name
+  try {
+    await store.suspend(endpoint.name)
+    notifications.success(t('hardware.audio.suspended', { name }))
+  } catch (e) {
+    commandFailed(e, name)
+  } finally {
+    audioBusy.value = null
+  }
+}
+
+/** Undo of a resume is a suspend, and the user just chose to go back; no second dialog. */
+function onResume(endpoint: AudioEndpointSummary) {
+  const name = endpointLabel(endpoint)
+  void undoable('audio.resume', () => store.resume(endpoint.name), () => store.suspend(endpoint.name), {
+    doneKey: 'undo.audioResumed',
+    name,
+    failure: (e) => t('hardware.audio.commandFailed', { name, reason: commandFailure(e) }),
+  })
+}
+
 const busy = ref<string | null>(null)
 
 /** Every speaker on this adapter loses its link when the adapter is powered off. */
@@ -106,7 +252,13 @@ async function togglePower(controller: ControllerSummary) {
 }
 
 const drawerOpen = ref(false)
-const selected = ref<{ kind: 'controller' | 'device'; id: string } | null>(null)
+
+type Selection =
+  | { kind: 'controller' | 'device'; id: string }
+  | { kind: 'audio-card' | 'audio-sink' | 'audio-source'; id: string; label: string }
+
+const selected = ref<Selection | null>(null)
+
 const selectedController = computed(() =>
   selected.value?.kind === 'controller'
     ? controllers.value.find((controller) => controller.id === selected.value!.id) ?? null
@@ -117,6 +269,21 @@ const selectedDevice = computed(() =>
     ? devices.value.find((device) => device.mac === selected.value!.id) ?? null
     : null,
 )
+const selectedAudio = computed(() => {
+  const entry = selected.value
+  if (!entry) return null
+  if (entry.kind !== 'audio-card' && entry.kind !== 'audio-sink' && entry.kind !== 'audio-source') return null
+  const exists =
+    entry.kind === 'audio-card'
+      ? audioCards.value.some((card) => card.name === entry.id)
+      : entry.kind === 'audio-sink'
+        ? sinks.value.some((sink) => sink.name === entry.id)
+        : entry.kind === 'audio-source'
+          ? sources.value.some((source) => source.name === entry.id)
+          : false
+  if (!exists) return null
+  return { kind: entry.kind, name: entry.id, label: entry.label }
+})
 
 const deviceBusy = ref<string | null>(null)
 
@@ -191,9 +358,25 @@ function openDevice(mac: string) {
   drawerOpen.value = true
 }
 
+function openAudioCard(card: AudioCardSummary) {
+  selected.value = { kind: 'audio-card', id: card.name, label: card.name }
+  drawerOpen.value = true
+}
+
+function openAudioEndpoint(kind: 'audio-sink' | 'audio-source', endpoint: { name: string; description?: string }) {
+  selected.value = { kind, id: endpoint.name, label: endpointLabel(endpoint) }
+  drawerOpen.value = true
+}
+
+function openAudioRef(ref: AudioEndpointRef) {
+  const list = ref.kind === 'sink' ? sinks.value : sources.value
+  const found = list.find((entry) => entry.name === ref.name)
+  openAudioEndpoint(ref.kind === 'sink' ? 'audio-sink' : 'audio-source', found ?? { name: ref.name })
+}
+
 /* The drawer belongs to the selected entity: a refresh that drops it closes the drawer. */
-watch([selectedController, selectedDevice], ([controller, device]) => {
-  if (selected.value && !controller && !device) drawerOpen.value = false
+watch([selectedController, selectedDevice, selectedAudio], ([controller, device, audioEntry]) => {
+  if (selected.value && !controller && !device && !audioEntry) drawerOpen.value = false
 })
 </script>
 
@@ -262,7 +445,7 @@ watch([selectedController, selectedDevice], ([controller, device]) => {
         <SbEmptyState v-else :title="t('hardware.noControllers')" />
       </section>
 
-      <section data-devices-section>
+      <section class="mb-8" data-devices-section>
         <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.devices') }}</h2>
         <ul
           v-if="devices.length"
@@ -281,6 +464,118 @@ watch([selectedController, selectedDevice], ([controller, device]) => {
         </ul>
         <SbEmptyState v-else :title="t('hardware.noDevices')" />
       </section>
+
+      <section data-audio-section>
+        <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.audio.title') }}</h2>
+
+        <!-- An older bridge omits `audio`: unsupported, not a host without audio. -->
+        <section
+          v-if="!audioReported"
+          data-audio-not-reported
+          role="status"
+          class="rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3"
+        >
+          <h3 class="text-sm font-medium text-text-primary">{{ t('hardware.audio.notReportedTitle') }}</h3>
+          <p class="mt-1 max-w-2xl text-sm text-text-secondary">{{ t('hardware.audio.notReportedBody') }}</p>
+        </section>
+
+        <!-- No audio server at all: the lists would be a lie, so only the reason shows. -->
+        <section
+          v-else-if="audioUnavailable"
+          data-audio-unavailable
+          role="status"
+          class="flex items-start gap-3 rounded-(--radius-card) border border-warning/40 bg-warning/10 px-4 py-3"
+        >
+          <AlertTriangle class="mt-0.5 size-5 shrink-0 text-warning-text" aria-hidden="true" />
+          <div class="min-w-0">
+            <h3 class="text-sm font-medium text-text-primary">{{ t('hardware.audio.unavailableTitle') }}</h3>
+            <p class="mt-1 text-sm text-text-secondary">{{ t('hardware.audio.unavailableBody') }}</p>
+            <p v-if="audioUnavailable.detail" class="mt-1 text-sm text-text-secondary">{{ audioUnavailable.detail }}</p>
+            <p class="mt-1 font-mono text-xs text-text-secondary">
+              {{ t('hardware.unavailable.reason', { reason: audioUnavailable.code }) }}
+            </p>
+          </div>
+        </section>
+
+        <!-- The audio server answered and listed nothing: a truth, so the empty state. -->
+        <SbEmptyState
+          v-else-if="audioEmpty"
+          data-audio-empty
+          :title="t('hardware.audio.noDevices')"
+          :description="t('hardware.audio.noDevicesBody')"
+        />
+
+        <!-- Nothing local and no capture: the capture reason is the only real answer. -->
+        <div v-else-if="audioCaptureOnly">
+          <AudioCaptureNotice :detail="captureUnavailable?.detail" :code="captureUnavailable?.code" />
+        </div>
+
+        <template v-else>
+          <h3 class="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">
+            {{ t('hardware.audio.cards') }}
+          </h3>
+          <div
+            v-if="audioCards.length"
+            class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4"
+          >
+            <AudioCardPanel
+              v-for="card in audioCards"
+              :key="card.name"
+              :card="card"
+              @open="openAudioCard"
+              @open-endpoint="openAudioRef"
+            />
+          </div>
+          <p v-else class="text-sm text-text-secondary">{{ t('hardware.audio.noCards') }}</p>
+
+          <h3 class="mb-2 mt-5 text-sm font-semibold uppercase tracking-wider text-text-secondary">
+            {{ t('hardware.audio.outputs') }}
+          </h3>
+          <ul
+            v-if="sinks.length"
+            data-audio-outputs
+            class="divide-y divide-border rounded-(--radius-card) border border-border"
+          >
+            <EndpointRow
+              v-for="sink in sinks"
+              :key="sink.name"
+              :endpoint="sink"
+              :default-sink="store.defaultSink === sink.name"
+              :allow-default="capabilities?.default_sink ?? false"
+              :busy="audioBusy === sink.name"
+              @open="openAudioEndpoint('audio-sink', $event)"
+              @volume="onVolume(sink, $event)"
+              @mute="onMute(sink, $event)"
+              @default="onDefault(sink)"
+              @suspend="onSuspend(sink)"
+              @resume="onResume(sink)"
+            />
+          </ul>
+          <p v-else data-audio-no-outputs class="text-sm text-text-secondary">{{ t('hardware.audio.noOutputs') }}</p>
+
+          <h3 class="mb-2 mt-5 text-sm font-semibold uppercase tracking-wider text-text-secondary">
+            {{ t('hardware.audio.inputs') }}
+          </h3>
+          <ul
+            v-if="sources.length"
+            data-audio-inputs
+            class="divide-y divide-border rounded-(--radius-card) border border-border"
+          >
+            <EndpointRow
+              v-for="source in sources"
+              :key="source.name"
+              :endpoint="source"
+              @open="openAudioEndpoint('audio-source', $event)"
+            />
+          </ul>
+          <p v-else-if="!captureUnavailable" data-audio-no-inputs class="text-sm text-text-secondary">
+            {{ t('hardware.audio.noInputs') }}
+          </p>
+          <div v-if="captureUnavailable" class="mt-3">
+            <AudioCaptureNotice :detail="captureUnavailable.detail" :code="captureUnavailable.code" />
+          </div>
+        </template>
+      </section>
     </template>
 
     <EntityDrawer
@@ -288,6 +583,8 @@ watch([selectedController, selectedDevice], ([controller, device]) => {
       :kind="selected?.kind ?? 'controller'"
       :controller="selectedController"
       :device="selectedDevice"
+      :audio-name="selectedAudio?.name ?? null"
+      :audio-label="selectedAudio?.label ?? null"
       :busy="busy === selectedController?.id"
       @toggle-power="togglePower"
     />

@@ -178,6 +178,32 @@ describe('accessibility: pages', () => {
       expect(await seriousViolations()).toEqual([])
     })
 
+    it(`Hardware audio unavailable has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({
+          audio: { cards: [], sinks: [], sources: [] },
+          capabilities: capabilities({ audio_server: 'none', default_sink: false }),
+          degraded: [
+            {
+              section: 'audio',
+              code: 'pulse_unavailable',
+              detail: 'No PulseAudio-compatible server answered; cards, sinks and sources cannot be read.',
+            },
+          ],
+        }) as never,
+      )
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(mounted.get('[data-audio-unavailable]').exists()).toBe(true)
+      expect(await seriousViolations()).toEqual([])
+    })
+
     it(`Hardware degraded has no serious violations (${locale})`, async () => {
       vi.mocked(getHardware).mockResolvedValue(
         snapshot({

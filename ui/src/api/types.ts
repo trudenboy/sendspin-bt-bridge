@@ -119,3 +119,16 @@ export type BtDeviceSummary = Schemas['BtDeviceSummary']
 export type BtDeviceDetail = Schemas['BtDeviceDetail']
 export type HardwareCapabilities = Schemas['CapabilitySet']
 export type DegradedSection = Schemas['DegradedSection']
+
+/** The audio half of the hardware read: cards, local outputs and inputs. */
+export type AudioSection = Schemas['AudioSection']
+export type AudioCardSummary = Schemas['CardSummary']
+export type AudioCardDetail = Schemas['CardDetail']
+export type AudioCardPort = Schemas['CardPort']
+export type AudioCardProfile = Schemas['CardProfile']
+export type AudioEndpointRef = Schemas['EndpointRef']
+export type AudioEndpointSummary = Schemas['EndpointSummary']
+export type AudioEndpointDetail = Schemas['EndpointDetail']
+export type AudioEndpointOwner = Schemas['EndpointOwner']
+/** One sink after a command: its level, its mute flag and what it is doing. */
+export type SinkState = Schemas['SinkStateOut']

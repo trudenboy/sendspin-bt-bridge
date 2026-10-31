@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audio/default-sink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the default output
+         * @description Make the named sink the audio server's default.
+         */
+        put: operations["set_default_sink_api_v1_audio_default_sink_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audio/sinks": {
         parameters: {
             query?: never;
@@ -51,6 +71,86 @@ export interface paths {
          */
         get: operations["list_sinks_api_v1_audio_sinks_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audio/sinks/{name}/mute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mute or unmute an output
+         * @description Mute (``true``) or unmute (``false``) the sink.
+         */
+        put: operations["set_sink_mute_api_v1_audio_sinks__name__mute_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audio/sinks/{name}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume an output
+         * @description Resume a suspended sink.
+         */
+        post: operations["resume_sink_api_v1_audio_sinks__name__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audio/sinks/{name}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend an output
+         * @description Suspend the sink: it keeps existing, but no longer plays.
+         */
+        post: operations["suspend_sink_api_v1_audio_sinks__name__suspend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audio/sinks/{name}/volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set an output's volume
+         * @description Set the sink's level, 0-100 inclusive.
+         */
+        put: operations["set_sink_volume_api_v1_audio_sinks__name__volume_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3942,17 +4042,19 @@ export interface components {
             description: string;
             /** Name */
             name: string;
+            /**
+             * Profiles
+             * @description Profiles this port can be part of; empty when the server omits them.
+             */
+            profiles: string[];
         };
         /**
          * CardProfile
-         * @description One profile a card can take.
+         * @description One profile a card can take; ``available=null`` means the server said "unknown".
          */
         CardProfile: {
-            /**
-             * Available
-             * @default true
-             */
-            available: boolean;
+            /** Available */
+            available: boolean | null;
             /**
              * Description
              * @default
@@ -4096,6 +4198,14 @@ export interface components {
              * @default true
              */
             present: boolean;
+        };
+        /** DefaultSinkIn */
+        DefaultSinkIn: {
+            /**
+             * Name
+             * @description The sink that becomes the audio server's default.
+             */
+            name: string;
         };
         /**
          * DegradedSection
@@ -5341,14 +5451,6 @@ export interface components {
              */
             username?: string;
         };
-        /** MuteIn */
-        MuteIn: {
-            /**
-             * Muted
-             * @description Omit to toggle.
-             */
-            muted?: boolean | null;
-        };
         /** MuteOut */
         MuteOut: {
             /** Muted */
@@ -6268,6 +6370,32 @@ export interface components {
             /** Vendor Id */
             vendor_id?: string | null;
         };
+        /**
+         * SinkStateOut
+         * @description One sink after a command: the level, the mute flag and what it is doing.
+         */
+        SinkStateOut: {
+            /**
+             * Muted
+             * @default false
+             */
+            muted: boolean;
+            /**
+             * Name
+             * @description PulseAudio/PipeWire sink name.
+             */
+            name: string;
+            /**
+             * State
+             * @description running | idle | suspended | unknown
+             */
+            state: string;
+            /**
+             * Volume
+             * @description Loudest channel, percent.
+             */
+            volume: number;
+        };
         /** SkipIn */
         SkipIn: {
             /** Member */
@@ -6656,11 +6784,6 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /** VolumeIn */
-        VolumeIn: {
-            /** Level */
-            level: number;
-        };
         /** VolumeOut */
         VolumeOut: {
             /** Results */
@@ -6669,6 +6792,32 @@ export interface components {
             }[] | null;
             /** Volume */
             volume: number;
+        };
+        /** MuteIn */
+        sendspin_bridge__api__routers__audio__MuteIn: {
+            /** Muted */
+            muted: boolean;
+        };
+        /** VolumeIn */
+        sendspin_bridge__api__routers__audio__VolumeIn: {
+            /**
+             * Volume
+             * @description 0-100 inclusive; anything else is a 400 invalid_volume.
+             */
+            volume: number;
+        };
+        /** MuteIn */
+        sendspin_bridge__api__routers__devices__MuteIn: {
+            /**
+             * Muted
+             * @description Omit to toggle.
+             */
+            muted?: boolean | null;
+        };
+        /** VolumeIn */
+        sendspin_bridge__api__routers__devices__VolumeIn: {
+            /** Level */
+            level: number;
         };
     };
     responses: never;
@@ -6765,6 +6914,50 @@ export interface operations {
             };
         };
     };
+    set_default_sink_api_v1_audio_default_sink_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultSinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SinkStateOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     list_sinks_api_v1_audio_sinks_get: {
         parameters: {
             query?: never;
@@ -6781,6 +6974,182 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AudioSinkOut"][];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_sink_mute_api_v1_audio_sinks__name__mute_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["sendspin_bridge__api__routers__audio__MuteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SinkStateOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    resume_sink_api_v1_audio_sinks__name__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SinkStateOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    suspend_sink_api_v1_audio_sinks__name__suspend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SinkStateOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_sink_volume_api_v1_audio_sinks__name__volume_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["sendspin_bridge__api__routers__audio__VolumeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SinkStateOut"];
                 };
             };
             /** @description Client error */
@@ -8822,7 +9191,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MuteIn"];
+                "application/json": components["schemas"]["sendspin_bridge__api__routers__devices__MuteIn"];
             };
         };
         responses: {
@@ -9212,7 +9581,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VolumeIn"];
+                "application/json": components["schemas"]["sendspin_bridge__api__routers__devices__VolumeIn"];
             };
         };
         responses: {
@@ -10002,7 +10371,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VolumeIn"];
+                "application/json": components["schemas"]["sendspin_bridge__api__routers__devices__VolumeIn"];
             };
         };
         responses: {
