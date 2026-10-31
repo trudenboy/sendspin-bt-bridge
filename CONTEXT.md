@@ -55,6 +55,27 @@ WirePlumber and PulseAudio each spell it differently, so the bridge tries
 several candidates when connecting and must be able to read any of them back.
 Written and parsed by one grammar.
 
+**Card** — the audio server's object for one sound device: the profiles it can
+take and the ports it exposes. Every sink and source belongs to a card, and the
+card is where "this output is silent" is answered — the profile is `off`, or the
+active port is not available. A Bluetooth speaker has a card too; it is not the
+speaker's D-Bus object and must not be confused with it.
+
+**Audio endpoint** — a sink (output) or a source (input) as the audio server
+names it. It carries a direction, a state, volume and mute for outputs, and the
+identifiers (serial, bus path, vendor and product ids, ALSA long card name) that
+let it be recognised after a rename. The name is how it is addressed; the
+identifiers are how it is matched.
+
+**Link role** — what a Bluetooth link is doing: `output` when the bridge plays
+to the device, `input` when the device sends audio to the bridge. One device can
+hold both at once. The role is derived from evidence — an active transport, a
+capture node, a source — never from the spelling of a sink name.
+
+**Source feed** — the phone→bridge Sendspin source: one phone, one capture node,
+and the players it is armed to feed. It is not a Player and not a Device; it has
+no playback of its own.
+
 **Daemon** — the per-speaker subprocess that runs the Sendspin client.
 One speaker, one daemon, one Player.
 

@@ -11,8 +11,10 @@ same thing, the one in the "Use" columns wins.
 
 | Concept | Use (EN) | Use (RU) | Short definition | Do not use |
 |---|---|---|---|---|
+| The physical layer as a whole: adapters, paired Bluetooth devices, local audio devices | Hardware | Оборудование | The page that shows what the bridge can talk to, whether or not a player uses it. The documentation keeps its "Devices" rubric; the app says Hardware. | Devices, Equipment, Gear |
 | Bluetooth device the bridge plays to | Speaker | Колонка | A Bluetooth speaker or headset. | Device, sink, BT device (except while scanning for unpaired devices) |
 | Wired or local device | Audio output | Аудиовыход | A sound output of the bridge computer (USB DAC, sound card, HDMI). | Sink, local output, ALSA/PulseAudio names in default text |
+| Sound input of the bridge computer | Audio input | Аудиовход | A microphone, line-in, monitor, or the phone streaming into the bridge. Always says which kind, not just "input". | Source (that is the Sendspin source), capture device, input device |
 | Either of the two, as seen by Music Assistant | Player | Плеер | The Music Assistant player the bridge creates for a speaker or audio output. | Device, client, daemon (outside technical details) |
 
 ## Actions and states
