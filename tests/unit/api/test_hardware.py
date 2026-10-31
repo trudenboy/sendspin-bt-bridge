@@ -268,6 +268,15 @@ def test_an_unusual_but_legal_name_is_not_a_400(installed_bluez, monkeypatch):
     assert response.json()["code"] == "entity_not_found"
 
 
+def test_a_slash_in_a_name_never_reaches_the_validation_400(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    response = make_client().get("/api/v1/hardware/audio/sinks/not/a/name")
+
+    assert response.status_code == 404
+    assert response.json().get("code") != "invalid_audio_name"
+
+
 def test_no_audio_server_gives_an_empty_audio_section(installed_bluez, monkeypatch):
     monkeypatch.setattr(inventory, "probe_audio_server", lambda: "not available")
 

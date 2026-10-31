@@ -29,6 +29,13 @@ def _load(name: str) -> list[LocalSink]:
     return parse_pactl_sinks((FIXTURES / name).read_text())
 
 
+def _async(value):
+    async def _return():
+        return value
+
+    return _return()
+
+
 def _sink(name: str, **ids: str) -> LocalSink:
     return LocalSink(name, name, "idle", "s16le 2ch 48000Hz", False, 100, None, None, dict(ids))
 
@@ -611,6 +618,53 @@ def test_parse_cards_without_endpoint_lists_keeps_membership_unknown():
     assert parse_pactl_cards("") == []
 
 
+def test_parse_card_ports_keep_their_profile_sets():
+    analog = parse_pactl_cards(_cards_text())[0]
+    speaker = next(port for port in analog.ports if port.name == "analog-output-speaker")
+    headphones = next(port for port in analog.ports if port.name == "analog-output-headphones")
+
+    assert speaker.profiles == ("output:analog-stereo", "output:analog-stereo+input:analog-stereo")
+    assert headphones.profiles == ("output:analog-stereo", "output:analog-stereo+input:analog-stereo")
+
+
+def test_a_profile_with_unknown_availability_is_unknown_not_false():
+    text = (
+        "Card #1\n"
+        "\tName: alsa_card.test\n"
+        "\tProfiles:\n"
+        "\t\toutput:analog-stereo: Analog Stereo (sinks: 1, sources: 0, priority: 100, available: yes)\n"
+        "\t\toutput:iec958-stereo: Digital (sinks: 1, sources: 0, priority: 50, available: unknown)\n"
+        "\t\tinput:analog-stereo: Input (sinks: 0, sources: 1, priority: 10, available: no)\n"
+    )
+
+    profiles = {profile.name: profile for profile in parse_pactl_cards(text)[0].profiles}
+
+    assert profiles["output:analog-stereo"].available is True
+    assert profiles["output:iec958-stereo"].available is None
+    assert profiles["input:analog-stereo"].available is False
+    assert profiles["output:iec958-stereo"].description == "Digital"
+
+
+def test_parse_pipewire_cards_have_no_endpoint_lists_but_their_ports():
+    text = (FIXTURES / "pipewire_cards.txt").read_text()
+
+    (card,) = parse_pactl_cards(text)
+
+    assert card.name == "alsa_card.pci-0000_00_1b.0"
+    assert card.owner_module is None
+    assert card.sink_names == () and card.source_names == ()
+    assert [profile.name for profile in card.profiles] == [
+        "output:analog-stereo",
+        "output:analog-stereo+input:analog-stereo",
+        "input:analog-stereo",
+        "off",
+    ]
+    assert next(profile for profile in card.profiles if profile.name == "input:analog-stereo").available is None
+    speaker = next(port for port in card.ports if port.name == "analog-output-speaker")
+    assert speaker.available is None and speaker.active is True
+    assert speaker.profiles == ("output:analog-stereo", "output:analog-stereo+input:analog-stereo")
+
+
 def test_parse_sources_keeps_state_monitor_and_identifiers():
     sources = _sources()
 
@@ -625,6 +679,8 @@ def test_parse_sources_keeps_state_monitor_and_identifiers():
     assert analog.muted is False
     assert analog.volume == 70
     assert analog.monitor_of is None
+    assert analog.active_port == "analog-input-headset-mic"
+    assert analog.active_port_available == "not available"
     assert analog.identifiers["bus_path"] == "pci-0000:00:1f.3"
     assert analog.identifiers["alsa_long_card_name"] == "HDA Intel PCH at 0xf7f10000 irq 30"
 
@@ -646,6 +702,40 @@ def test_list_local_sources_reads_pactl(monkeypatch):
         "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
         BLUEZ_SOURCE,
     ]
+
+
+def test_an_empty_source_list_is_empty_when_the_read_succeeded(monkeypatch):
+    async def empty_text():
+        return ""
+
+    monkeypatch.setattr(sink_inventory, "_pactl_list_sources_text", empty_text)
+
+    assert asyncio.run(list_local_sources()) == []
+    assert asyncio.run(list_local_sources(strict=True)) == []
+
+
+def test_a_failed_source_list_is_unavailable_in_strict_mode(monkeypatch):
+    async def failed_text():
+        return None
+
+    monkeypatch.setattr(sink_inventory, "_pactl_list_sources_text", failed_text)
+
+    assert asyncio.run(list_local_sources()) == []
+    with pytest.raises(sink_inventory.SinkInventoryUnavailable):
+        asyncio.run(list_local_sources(strict=True))
+
+
+def test_a_failed_card_list_is_unavailable_in_strict_mode(monkeypatch):
+    async def failed_text():
+        return None
+
+    monkeypatch.setattr(sink_inventory, "_pactl_list_cards_text", failed_text)
+    monkeypatch.setattr(sink_inventory, "list_all_sinks", lambda *, strict=False: _async([]))
+    monkeypatch.setattr(sink_inventory, "list_local_sources", lambda *, strict=False: _async([]))
+
+    assert asyncio.run(list_local_cards()) == []
+    with pytest.raises(sink_inventory.SinkInventoryUnavailable):
+        asyncio.run(list_local_cards(strict=True))
 
 
 def test_list_local_cards_reads_the_endpoint_lists_it_needs(monkeypatch):

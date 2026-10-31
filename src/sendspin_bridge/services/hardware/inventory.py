@@ -182,12 +182,17 @@ class CaptureFacts:
 
 @dataclass(frozen=True, slots=True)
 class AudioFacts:
-    """The audio half of one refresh: cards, endpoints and the capture node."""
+    """The audio half of one refresh: cards, endpoints and the capture node.
+
+    ``unavailable`` says the server answered but a list could not be read; an
+    empty list with no entry here is a truthful "nothing is there".
+    """
 
     cards: tuple[LocalCard, ...] = ()
     sinks: tuple[EndpointFacts, ...] = ()
     sources: tuple[EndpointFacts, ...] = ()
     capture: CaptureFacts = field(default_factory=CaptureFacts)
+    unavailable: tuple[str, ...] = ()
 
 
 def classify_owner(
@@ -196,13 +201,20 @@ def classify_owner(
     cards: Iterable[LocalCard],
     *,
     owner_module: int | None = None,
+    device_name: str | None = None,
+    monitor_owner: EndpointOwnerFacts | None = None,
 ) -> EndpointOwnerFacts | None:
-    """Classify an endpoint's owner from its name, then its card's membership.
+    """Classify an endpoint's owner from its name, membership, then its properties.
 
     Bluetooth and bridge-internal names are self-describing.  A local endpoint
-    belongs to the card whose endpoint list names it (or, when the server omits
-    that list, to the one card loaded by the same module).  No match stays
-    ``None``: an unknown owner is not the same as an internal one.
+    belongs to the card whose endpoint list names it.  When the server omits
+    that list (PipeWire never prints ``Sinks:``/``Sources:`` and reports no
+    module), the ``device.name`` property is the card's ``Name:``, so that join
+    is used next; a monitor source is resolved through the sink it monitors.
+    The one-card-per-module fallback runs when neither property is present.
+
+    Two property matches are ambiguous and stay ``None`` rather than guessing:
+    an unknown owner is not the same as an internal or a chosen one.
     """
     from sendspin_bridge.bluetooth.address import DeviceAddress
 
@@ -217,15 +229,27 @@ def classify_owner(
     for card in known_cards:
         if name in (card.sink_names if kind == "sink" else card.source_names):
             return EndpointOwnerFacts(kind="card", card=card.name)
+    if device_name:
+        by_property = [card for card in known_cards if card.name == device_name]
+        if len(by_property) == 1:
+            return EndpointOwnerFacts(kind="card", card=by_property[0].name)
+        if len(by_property) > 1:
+            return None
     if owner_module is not None:
         by_module = [card for card in known_cards if card.owner_module == owner_module]
         if len(by_module) == 1:
             return EndpointOwnerFacts(kind="card", card=by_module[0].name)
+    if kind == "source" and monitor_owner is not None:
+        return monitor_owner
     return None
 
 
 def _endpoint_facts(
-    kind: Literal["sink", "source"], endpoint: LocalSink | LocalSource, cards: Iterable[LocalCard]
+    kind: Literal["sink", "source"],
+    endpoint: LocalSink | LocalSource,
+    cards: Iterable[LocalCard],
+    *,
+    monitor_owner: EndpointOwnerFacts | None = None,
 ) -> EndpointFacts:
     is_sink = kind == "sink"
     return EndpointFacts(
@@ -236,11 +260,18 @@ def _endpoint_facts(
         sample_spec=endpoint.sample_spec,
         muted=endpoint.muted if is_sink else None,
         volume=endpoint.volume if is_sink else None,
-        active_port=getattr(endpoint, "active_port", None) if is_sink else None,
-        active_port_available=getattr(endpoint, "active_port_available", None) if is_sink else None,
+        active_port=getattr(endpoint, "active_port", None),
+        active_port_available=getattr(endpoint, "active_port_available", None),
         identifiers=dict(endpoint.identifiers),
         monitor_of=None if is_sink else getattr(endpoint, "monitor_of", None),
-        owner=classify_owner(endpoint.name, kind, cards, owner_module=endpoint.owner_module),
+        owner=classify_owner(
+            endpoint.name,
+            kind,
+            cards,
+            owner_module=endpoint.owner_module,
+            device_name=getattr(endpoint, "device_name", None),
+            monitor_owner=monitor_owner,
+        ),
     )
 
 
@@ -249,13 +280,28 @@ def build_audio_facts(
     sinks: Collection[LocalSink],
     sources: Collection[LocalSource],
     capture: CaptureFacts,
+    *,
+    unavailable: tuple[str, ...] = (),
 ) -> AudioFacts:
     """Assemble the audio half from one read of each list (pure)."""
+    sink_facts = tuple(_endpoint_facts("sink", sink, cards) for sink in sinks)
+    by_sink_name = {facts.name: facts for facts in sink_facts}
+
+    def _monitor_owner(source: LocalSource) -> EndpointOwnerFacts | None:
+        sink = by_sink_name.get(source.monitor_of or "")
+        if sink is None or sink.owner is None or sink.owner.kind != "card":
+            return None
+        return sink.owner
+
+    source_facts = tuple(
+        _endpoint_facts("source", source, cards, monitor_owner=_monitor_owner(source)) for source in sources
+    )
     return AudioFacts(
         cards=tuple(cards),
-        sinks=tuple(_endpoint_facts("sink", sink, cards) for sink in sinks),
-        sources=tuple(_endpoint_facts("source", source, cards) for source in sources),
+        sinks=sink_facts,
+        sources=source_facts,
         capture=capture,
+        unavailable=unavailable,
     )
 
 
@@ -280,6 +326,11 @@ def classify_capture(
             return CaptureFacts(kind="pulse_source", node=source.name)
     if not wpctl_available:
         reason = "wpctl is not installed, so no bluez_input node can be read; no bluez_source is present either."
+    elif wpctl_status is None:
+        reason = (
+            "wpctl status could not be queried (it failed or timed out), so the phone's "
+            "streaming state is unknown; no bluez_source is present either."
+        )
     else:
         reason = "No bluez_input.<MAC>.<n> capture node and no bluez_source is present; the phone is not streaming."
     return CaptureFacts(kind="unavailable", node=None, reason=reason)
@@ -595,13 +646,33 @@ async def _capture_facts(sources: Collection[LocalSource]) -> CaptureFacts:
 
 
 async def _read_audio_async() -> AudioFacts:
-    """One read of each audio list, then one assembly (pure)."""
-    from sendspin_bridge.services.audio import sink_inventory
+    """One read of each audio list, then one assembly (pure).
 
-    sinks = await sink_inventory.list_all_sinks()
-    sources = await sink_inventory.list_local_sources()
-    cards = await sink_inventory.list_local_cards(sinks=sinks, sources=sources)
-    return build_audio_facts(cards, sinks, sources, await _capture_facts(sources))
+    Each list is read strictly so a failed ``pactl list`` is remembered as
+    unavailable instead of becoming an empty list; the lists that did answer
+    are still returned, so one broken read does not hide the others.
+    """
+    from sendspin_bridge.services.audio import sink_inventory
+    from sendspin_bridge.services.audio.sink_inventory import SinkInventoryUnavailable
+
+    unavailable: list[str] = []
+    sinks: list[LocalSink] = []
+    sources: list[LocalSource] = []
+    cards: list[LocalCard] = []
+    try:
+        sinks = await sink_inventory.list_all_sinks(strict=True)
+    except SinkInventoryUnavailable as exc:
+        unavailable.append(f"sinks: {exc}")
+    try:
+        sources = await sink_inventory.list_local_sources(strict=True)
+    except SinkInventoryUnavailable as exc:
+        unavailable.append(f"sources: {exc}")
+    try:
+        cards = await sink_inventory.list_local_cards(sinks=sinks, sources=sources, strict=True)
+    except SinkInventoryUnavailable as exc:
+        unavailable.append(f"cards: {exc}")
+    capture = await _capture_facts(sources)
+    return build_audio_facts(cards, sinks, sources, capture, unavailable=tuple(unavailable))
 
 
 def _read_audio(server_name: str) -> AudioFacts:
@@ -609,8 +680,9 @@ def _read_audio(server_name: str) -> AudioFacts:
 
     The async readers use ``asyncio`` subprocesses and are bridged with
     ``asyncio.run`` because this reader is synchronous by contract and always
-    runs in a worker thread.  A failure reads as empty — the caller already
-    knows from *server_name* whether "empty" means "none" or "unreadable".
+    runs in a worker thread.  A server that does not answer reads as empty;
+    a server that answered but whose lists failed keeps the failure in
+    ``unavailable`` so the API can say why instead of "no audio".
     """
     if classify_audio_server(server_name) == "none":
         return AudioFacts()
@@ -618,7 +690,7 @@ def _read_audio(server_name: str) -> AudioFacts:
         return asyncio.run(_read_audio_async())
     except Exception as exc:
         logger.debug("Hardware inventory: audio read failed (%s)", exc)
-        return AudioFacts()
+        return AudioFacts(unavailable=(f"the audio read failed: {exc}",))
 
 
 def _role_endpoints(audio: AudioFacts) -> tuple[LinkEndpoint, ...]:
@@ -662,6 +734,15 @@ def _assemble(
                 "audio",
                 "pulse_unavailable",
                 "No PulseAudio-compatible server answered; cards, sinks and sources cannot be read.",
+            )
+        )
+    elif audio_facts.unavailable:
+        entries.append(
+            Degraded(
+                "audio",
+                "pulse_unavailable",
+                "The audio server answered, but its inventory could not be fully read: "
+                + "; ".join(audio_facts.unavailable),
             )
         )
     elif audio_facts.capture.kind == "unavailable":

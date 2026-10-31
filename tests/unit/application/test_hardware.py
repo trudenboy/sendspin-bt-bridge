@@ -237,11 +237,27 @@ async def test_card_detail_lists_profiles_ports_and_owned_endpoints(installed_bl
     assert headphones.available is False and headphones.active is False
     speaker = next(port for port in detail.ports if port.name == "analog-output-speaker")
     assert speaker.available is None and speaker.active is True
+    assert speaker.profiles == ["output:analog-stereo", "output:analog-stereo+input:analog-stereo"]
     assert {endpoint.name for endpoint in detail.endpoints} == {
         hardware_audio.ANALOG_SINK,
         hardware_audio.ANALOG_SOURCE,
         hardware_audio.MONITOR_SOURCE,
     }
+
+
+async def test_card_detail_lists_the_bluetooth_endpoints_the_summary_lists(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    detail = await hardware_uc.audio_card(hardware_audio.BLUEZ_CARD)
+
+    assert {endpoint.name for endpoint in detail.endpoints} == {
+        hardware_audio.BLUEZ_SINK,
+        hardware_audio.BLUEZ_SOURCE,
+    }
+    assert {endpoint.kind for endpoint in detail.endpoints} == {"sink", "source"}
+    by_name = {endpoint.name: endpoint for endpoint in detail.endpoints}
+    assert by_name[hardware_audio.BLUEZ_SINK].owner is not None
+    assert by_name[hardware_audio.BLUEZ_SINK].owner.bluetooth == hardware_audio.SPEAKER_MAC
 
 
 async def test_sink_detail_carries_identifiers_and_the_owning_cards_ports(installed_bluez, monkeypatch):
@@ -270,6 +286,15 @@ async def test_source_detail_names_the_sink_a_monitor_source_watches(installed_b
     assert detail.identifiers == {}
 
 
+async def test_source_detail_carries_its_active_port(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    detail = await hardware_uc.audio_source(hardware_audio.ANALOG_SOURCE)
+
+    assert detail.active_port == "analog-input-headset-mic"
+    assert detail.active_port_available == "not available"
+
+
 async def test_unknown_audio_entities_are_entity_not_found(installed_bluez, monkeypatch):
     _use_audio(monkeypatch)
 
@@ -288,6 +313,16 @@ async def test_a_name_outside_the_grammar_is_a_400_before_any_lookup(installed_b
             await lookup("not a name")
         assert exc.value.status == 400
         assert exc.value.code == "invalid_audio_name"
+
+
+async def test_surrounding_spaces_are_not_silently_stripped(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    with pytest.raises(UseCaseError) as exc:
+        await hardware_uc.audio_sink(" name ")
+
+    assert exc.value.status == 400
+    assert exc.value.code == "invalid_audio_name"
 
 
 async def test_no_audio_server_means_an_empty_audio_section(installed_bluez, monkeypatch):

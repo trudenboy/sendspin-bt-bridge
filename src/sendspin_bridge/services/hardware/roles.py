@@ -95,7 +95,7 @@ def _input_evidence(
         if endpoint.kind == "capture":
             if _address_from_name(endpoint.name, _CAPTURE_NAME_RE) == address:
                 return f"capture:{endpoint.name}"
-        elif endpoint.kind == "source" and source_evidence is None:
+        elif endpoint.kind == "source" and source_evidence is None and endpoint.state != "suspended":
             if _address_from_name(endpoint.name, _SOURCE_NAME_RE) == address:
                 source_evidence = f"source:{endpoint.name}"
     if source_evidence is not None:

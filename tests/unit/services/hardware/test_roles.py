@@ -81,6 +81,13 @@ def _roles(*pairs: tuple[str, str]) -> list[RoleEvidence]:
             _roles(("input", f"source:bluez_source.{UNDERSCORES}")),
         ),
         (
+            "a suspended source claims nothing",
+            DeviceLink(MAC),
+            [LinkEndpoint("source", f"bluez_source.{UNDERSCORES}", "suspended")],
+            None,
+            [],
+        ),
+        (
             "a capture node named for the speaker is the input",
             DeviceLink(MAC),
             [LinkEndpoint("capture", f"bluez_input.{UNDERSCORES}.2", "")],

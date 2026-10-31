@@ -21,3 +21,12 @@ class AudioSinkOut(ResponseModel):
         default_factory=dict, description="Stable hardware identifiers kept as the player's match."
     )
     in_use_by: str | None = Field(default=None, description="Config id of the pulse_sink player using this sink.")
+
+
+class SinkStateOut(ResponseModel):
+    """One sink after a command: the level, the mute flag and what it is doing."""
+
+    name: str = Field(description="PulseAudio/PipeWire sink name.")
+    volume: int = Field(description="Loudest channel, percent.")
+    muted: bool = False
+    state: str = Field(description="running | idle | suspended | unknown")

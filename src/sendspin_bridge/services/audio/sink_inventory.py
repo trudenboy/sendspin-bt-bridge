@@ -97,6 +97,8 @@ class LocalSink:
     identifiers: dict[str, str] = field(default_factory=dict)
     index: int | None = None  # the ``Sink #N`` index, for the card's endpoint lists
     owner_module: int | None = None  # the module that loaded the card, when it has one
+    #: The ``device.name`` property: under PipeWire this is the card's ``Name:``.
+    device_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,7 @@ class CardProfile:
 
     name: str
     description: str
-    available: bool
+    available: bool | None
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,7 @@ class CardPort:
     description: str
     available: bool | None
     active: bool
+    profiles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,10 @@ class LocalSource:
     monitor_of: str | None = None  # the sink this source monitors, if any
     index: int | None = None
     owner_module: int | None = None
+    active_port: str | None = None
+    active_port_available: str | None = None  # "available" | "not available" | "availability unknown" | None
+    #: The ``device.name`` property: under PipeWire this is the card's ``Name:``.
+    device_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -197,10 +204,6 @@ def _parse_block(lines: list[str], index: int | None = None) -> LocalSink | None
         return None
     percents = [int(p) for p in _PERCENT_RE.findall(fields.get("Volume", ""))]
     active_port = fields.get("Active Port") or None
-    availability: str | None = None
-    if active_port and active_port in ports:
-        text = ports[active_port].rstrip(")")
-        availability = next((a for a in _PORT_AVAILABILITY if text.endswith(a)), None)
     return LocalSink(
         name=name,
         description=fields.get("Description", ""),
@@ -209,17 +212,29 @@ def _parse_block(lines: list[str], index: int | None = None) -> LocalSink | None
         muted=fields.get("Mute", "").lower() == "yes",
         volume=max(percents) if percents else 0,
         active_port=active_port,
-        active_port_available=availability,
+        active_port_available=_active_port_availability(active_port, ports),
         identifiers={ident: props[prop] for prop, ident in _PROPERTY_TO_IDENTIFIER.items() if props.get(prop)},
         index=index,
         owner_module=_owner_module(fields.get("Owner Module", "")),
+        device_name=props.get("device.name") or None,
     )
 
 
 def _owner_module(raw: str) -> int | None:
-    """``Owner Module: 7`` as an int; ``n/a`` and anything else as unknown."""
+    """``Owner Module: 7`` as an int; ``n/a`` and PipeWire's ``4294967295`` as unknown."""
     value = raw.strip()
-    return int(value) if value.isdigit() else None
+    if not value.isdigit():
+        return None
+    module = int(value)
+    return None if module == 4294967295 else module
+
+
+def _active_port_availability(active_port: str | None, ports: dict[str, str]) -> str | None:
+    """The availability phrase of *active_port*, from the port line that describes it."""
+    if not active_port or active_port not in ports:
+        return None
+    text = ports[active_port].rstrip(")")
+    return next((availability for availability in _PORT_AVAILABILITY if text.endswith(availability)), None)
 
 
 def _block_index(header: str) -> int | None:
@@ -243,7 +258,9 @@ def parse_pactl_sinks(text: str) -> list[LocalSink]:
 # Cards
 # ---------------------------------------------------------------------------
 
-_PROFILE_META_RE = re.compile(r"\s*\(sinks: \d+, sources: \d+, priority: \d+, available: (yes|no)\)\s*$")
+_PROFILE_META_RE = re.compile(
+    r"\s*\(sinks: \d+, sources: \d+, priority: \d+, available: (yes|no|unknown|availability unknown)\)\s*$"
+)
 
 
 def _availability(text: str) -> bool | None:
@@ -261,14 +278,17 @@ def _card_profile(line: str) -> CardProfile | None:
     if not sep:
         return None
     meta = _PROFILE_META_RE.search(rest)
+    availability: bool | None = None
+    if meta is not None:
+        availability = {"yes": True, "no": False}.get(meta.group(1))
     return CardProfile(
         name=name.strip(),
         description=_PROFILE_META_RE.sub("", rest).strip(),
-        available=bool(meta and meta.group(1) == "yes"),
+        available=availability,
     )
 
 
-def _card_port(line: str, active_port: str | None) -> CardPort | None:
+def _card_port(line: str, active_port: str | None, profiles: tuple[str, ...] = ()) -> CardPort | None:
     name, sep, rest = line.partition(": ")
     if not sep:
         return None
@@ -278,6 +298,7 @@ def _card_port(line: str, active_port: str | None) -> CardPort | None:
         description=description.strip(),
         available=_availability(tail) if port_type else None,
         active=name.strip() == active_port,
+        profiles=profiles,
     )
 
 
@@ -303,18 +324,25 @@ def _parse_card(lines: list[str], index: int | None, sinks: Any, sources: Any) -
     fields: dict[str, str] = {}
     profile_lines: list[str] = []
     port_lines: list[str] = []
+    port_profiles: list[list[str]] = []
     sink_entries: list[str] = []
     source_entries: list[str] = []
     section = ""
     for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("Part of profile(s):") and section == "Ports" and port_profiles:
+            # The line under a port names the profiles that can use it.
+            port_profiles[-1].extend(part.strip() for part in stripped.split(":", 1)[1].split(",") if part.strip())
+            continue
         if line.startswith("\t\t\t"):
-            continue  # port properties and "Part of profile(s)" belong to the line above
+            continue  # port properties belong to the port line above
         if line.startswith("\t\t"):
-            entry = line.strip()
+            entry = stripped
             if section == "Profiles":
                 profile_lines.append(entry)
             elif section == "Ports":
                 port_lines.append(entry)
+                port_profiles.append([])
             elif section == "Sinks":
                 sink_entries.append(entry)
             elif section == "Sources":
@@ -331,7 +359,13 @@ def _parse_card(lines: list[str], index: int | None, sinks: Any, sources: Any) -
         return None
     active_port = fields.get("Active Port") or None
     profiles = tuple(p for p in (_card_profile(line) for line in profile_lines) if p is not None)
-    ports = tuple(p for p in (_card_port(line, active_port) for line in port_lines) if p is not None)
+    ports = tuple(
+        port
+        for port in (
+            _card_port(line, active_port, tuple(port_profiles[index])) for index, line in enumerate(port_lines)
+        )
+        if port is not None
+    )
     return LocalCard(
         name=name,
         driver=fields.get("Driver", ""),
@@ -373,6 +407,7 @@ def parse_pactl_cards(
 def _parse_source_block(lines: list[str], index: int | None) -> LocalSource | None:
     fields: dict[str, str] = {}
     props: dict[str, str] = {}
+    ports: dict[str, str] = {}
     section = ""
     for line in lines:
         if line.startswith("\t\t"):
@@ -380,18 +415,23 @@ def _parse_source_block(lines: list[str], index: int | None) -> LocalSource | No
                 m = _PROP_RE.match(line)
                 if m:
                     props[m.group(1)] = m.group(2)
+            elif section == "Ports":
+                port_name, sep, rest = line.strip().partition(": ")
+                if sep:
+                    ports[port_name] = rest
             continue
         if line.startswith("\t") and not line.startswith("\t "):
             key, sep, value = line.strip().partition(":")
             if not sep:
                 continue
-            section = key if key == "Properties" else ""
+            section = key if key in {"Properties", "Ports"} else ""
             fields[key] = value.strip()
     name = fields.get("Name")
     if not name:
         return None
     percents = [int(p) for p in _PERCENT_RE.findall(fields.get("Volume", ""))]
     monitor_of = fields.get("Monitor of Sink", "").strip()
+    active_port = fields.get("Active Port") or None
     return LocalSource(
         name=name,
         description=fields.get("Description", ""),
@@ -403,6 +443,9 @@ def _parse_source_block(lines: list[str], index: int | None) -> LocalSource | No
         monitor_of=None if monitor_of in ("", "n/a") else monitor_of,
         index=index,
         owner_module=_owner_module(fields.get("Owner Module", "")),
+        active_port=active_port,
+        active_port_available=_active_port_availability(active_port, ports),
+        device_name=props.get("device.name") or None,
     )
 
 
@@ -551,41 +594,53 @@ async def _list_all_sinks() -> list[LocalSink]:
     return sinks if sinks is not None else await _list_all_sinks_pactl()
 
 
-async def list_all_sinks() -> list[LocalSink]:
+async def list_all_sinks(*, strict: bool = False) -> list[LocalSink]:
     """Every sink the audio server reports, Bluetooth and bridge-internal ones included.
 
     :func:`list_local_sinks` is the filtered view for player matching; the
     hardware inventory needs the whole set to classify each endpoint's owner.
+    *strict* turns an unreadable list into :class:`SinkInventoryUnavailable`.
     """
-    return await _list_all_sinks()
+    return await (_list_all_sinks_strict() if strict else _list_all_sinks())
 
 
-async def list_local_sources() -> list[LocalSource]:
+async def list_local_sources(*, strict: bool = False) -> list[LocalSource]:
     """Every source the audio server reports, monitors included.
 
-    An unreadable source list reads as empty: a host with no capture is a host
-    with no capture, and the caller decides what that means.
+    An unreadable source list reads as empty unless *strict*: then it raises
+    :class:`SinkInventoryUnavailable`, so a caller can tell "none" from
+    "cannot read" instead of rendering both as an empty section.
     """
     text = await _pactl_list_sources_text()
-    return parse_pactl_sources(text) if text is not None else []
+    if text is None:
+        if strict:
+            raise SinkInventoryUnavailable("could not list PulseAudio sources")
+        return []
+    return parse_pactl_sources(text)
 
 
 async def list_local_cards(
     *,
     sinks: Collection[LocalSink] | None = None,
     sources: Collection[LocalSource] | None = None,
+    strict: bool = False,
 ) -> list[LocalCard]:
     """Every card, with its endpoint index lists resolved through the endpoint lists.
 
     *sinks* and *sources* are reused when the caller already read them (the
     hardware reader does), so one refresh still costs one read per kind.
+    *strict* turns an unreadable list into :class:`SinkInventoryUnavailable`.
     """
     if sinks is None:
-        sinks = await list_all_sinks()
+        sinks = await (list_all_sinks(strict=True) if strict else list_all_sinks())
     if sources is None:
-        sources = await list_local_sources()
+        sources = await (list_local_sources(strict=True) if strict else list_local_sources())
     text = await _pactl_list_cards_text()
-    return parse_pactl_cards(text, sinks, sources) if text is not None else []
+    if text is None:
+        if strict:
+            raise SinkInventoryUnavailable("could not list PulseAudio cards")
+        return []
+    return parse_pactl_cards(text, sinks, sources)
 
 
 async def list_local_sinks(*, strict: bool = False) -> list[LocalSink]:

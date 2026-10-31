@@ -283,6 +283,7 @@ def _card_port(port: LocalCardPort) -> CardPort:
         description=port.description,
         available=port.available,
         active=port.active,
+        profiles=list(port.profiles),
     )
 
 
@@ -387,7 +388,9 @@ async def audio_card(name: str) -> CardDetail:
         **_card_summary(card, endpoints).model_dump(),
         profiles=[_card_profile(profile) for profile in card.profiles],
         ports=[_card_port(port) for port in card.ports],
-        endpoints=[_endpoint_summary(facts, sink_players) for facts in endpoints if _owned_by_card(facts, card)],
+        # The same membership the summary uses: a bluez_card lists its Bluetooth
+        # sink and source even though their *owner* is the speaker link.
+        endpoints=[_endpoint_summary(facts, sink_players) for facts in _card_endpoints(card, endpoints)],
     )
 
 

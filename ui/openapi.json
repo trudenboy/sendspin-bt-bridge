@@ -3255,24 +3255,39 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "profiles": {
+            "description": "Profiles this port can be part of; empty when the server omits them.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
           }
         },
         "required": [
           "name",
           "description",
           "available",
-          "active"
+          "active",
+          "profiles"
         ],
         "title": "CardPort",
         "type": "object"
       },
       "CardProfile": {
-        "description": "One profile a card can take.",
+        "description": "One profile a card can take; ``available=null`` means the server said \"unknown\".",
         "properties": {
           "available": {
-            "default": true,
-            "title": "Available",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available"
           },
           "description": {
             "default": "",
@@ -3553,6 +3568,20 @@
           "device_count"
         ],
         "title": "ControllerSummary",
+        "type": "object"
+      },
+      "DefaultSinkIn": {
+        "properties": {
+          "name": {
+            "description": "The sink that becomes the audio server's default.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DefaultSinkIn",
         "type": "object"
       },
       "DegradedSection": {
@@ -6667,24 +6696,6 @@
         "title": "MqttTestIn",
         "type": "object"
       },
-      "MuteIn": {
-        "properties": {
-          "muted": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Omit to toggle.",
-            "title": "Muted"
-          }
-        },
-        "title": "MuteIn",
-        "type": "object"
-      },
       "MuteOut": {
         "properties": {
           "muted": {
@@ -9034,6 +9045,39 @@
         "title": "SinkMatch",
         "type": "object"
       },
+      "SinkStateOut": {
+        "description": "One sink after a command: the level, the mute flag and what it is doing.",
+        "properties": {
+          "muted": {
+            "default": false,
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "PulseAudio/PipeWire sink name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "description": "running | idle | suspended | unknown",
+            "title": "State",
+            "type": "string"
+          },
+          "volume": {
+            "description": "Loudest channel, percent.",
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "volume",
+          "muted",
+          "state"
+        ],
+        "title": "SinkStateOut",
+        "type": "object"
+      },
       "SkipIn": {
         "properties": {
           "member": {
@@ -10136,21 +10180,6 @@
         "title": "ValidationError",
         "type": "object"
       },
-      "VolumeIn": {
-        "properties": {
-          "level": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Level",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "level"
-        ],
-        "title": "VolumeIn",
-        "type": "object"
-      },
       "VolumeOut": {
         "properties": {
           "results": {
@@ -10177,6 +10206,66 @@
           "volume"
         ],
         "title": "VolumeOut",
+        "type": "object"
+      },
+      "sendspin_bridge__api__routers__audio__MuteIn": {
+        "properties": {
+          "muted": {
+            "title": "Muted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "muted"
+        ],
+        "title": "MuteIn",
+        "type": "object"
+      },
+      "sendspin_bridge__api__routers__audio__VolumeIn": {
+        "properties": {
+          "volume": {
+            "description": "0-100 inclusive; anything else is a 400 invalid_volume.",
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "volume"
+        ],
+        "title": "VolumeIn",
+        "type": "object"
+      },
+      "sendspin_bridge__api__routers__devices__MuteIn": {
+        "properties": {
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to toggle.",
+            "title": "Muted"
+          }
+        },
+        "title": "MuteIn",
+        "type": "object"
+      },
+      "sendspin_bridge__api__routers__devices__VolumeIn": {
+        "properties": {
+          "level": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Level",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "title": "VolumeIn",
         "type": "object"
       }
     }
@@ -10299,6 +10388,60 @@
         ]
       }
     },
+    "/api/v1/audio/default-sink": {
+      "put": {
+        "description": "Make the named sink the audio server's default.",
+        "operationId": "set_default_sink_api_v1_audio_default_sink_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefaultSinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Set the default output",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
     "/api/v1/audio/sinks": {
       "get": {
         "description": "Sinks a ``pulse_sink`` player can use (Bluetooth and bridge-internal sinks left out).",
@@ -10342,6 +10485,246 @@
           }
         },
         "summary": "Local audio outputs",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/sinks/{name}/mute": {
+      "put": {
+        "description": "Mute (``true``) or unmute (``false``) the sink.",
+        "operationId": "set_sink_mute_api_v1_audio_sinks__name__mute_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sendspin_bridge__api__routers__audio__MuteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Mute or unmute an output",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/sinks/{name}/resume": {
+      "post": {
+        "description": "Resume a suspended sink.",
+        "operationId": "resume_sink_api_v1_audio_sinks__name__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resume an output",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/sinks/{name}/suspend": {
+      "post": {
+        "description": "Suspend the sink: it keeps existing, but no longer plays.",
+        "operationId": "suspend_sink_api_v1_audio_sinks__name__suspend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Suspend an output",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/sinks/{name}/volume": {
+      "put": {
+        "description": "Set the sink's level, 0-100 inclusive.",
+        "operationId": "set_sink_volume_api_v1_audio_sinks__name__volume_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sendspin_bridge__api__routers__audio__VolumeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Set an output's volume",
         "tags": [
           "audio"
         ]
@@ -12761,7 +13144,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MuteIn"
+                "$ref": "#/components/schemas/sendspin_bridge__api__routers__devices__MuteIn"
               }
             }
           },
@@ -13272,7 +13655,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VolumeIn"
+                "$ref": "#/components/schemas/sendspin_bridge__api__routers__devices__VolumeIn"
               }
             }
           },
@@ -14190,7 +14573,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VolumeIn"
+                "$ref": "#/components/schemas/sendspin_bridge__api__routers__devices__VolumeIn"
               }
             }
           },

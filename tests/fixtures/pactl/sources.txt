@@ -21,6 +21,16 @@ Source #60
 		device.class = "sound"
 		device.product.id = "0x9c20"
 		device.vendor.id = "0x8086"
+	Ports:
+		analog-input-mic: Microphone (type: Mic, priority: 8700, availability unknown)
+			Properties:
+				port.type = "mic"
+			Part of profile(s): input:analog-stereo, output:analog-stereo+input:analog-stereo
+		analog-input-headset-mic: Headset Microphone (type: Headset, priority: 8800, not available)
+			Properties:
+				port.type = "headset"
+			Part of profile(s): input:analog-stereo, output:analog-stereo+input:analog-stereo
+	Active Port: analog-input-headset-mic
 	Formats:
 		pcm
 

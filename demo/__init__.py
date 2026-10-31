@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import subprocess as _real_subprocess
 import sys
 import threading
@@ -23,6 +24,242 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Demo audio state (the Hardware page's audio half and the safe commands)
+# ---------------------------------------------------------------------------
+
+_DEMO_BLUEZ_NAME_RE = re.compile(r"(?P<address>[0-9A-F]{2}(?:_[0-9A-F]{2}){5})")
+
+_demo_audio_lock = threading.RLock()
+_demo_sink_volume: dict[str, int] = {}
+_demo_sink_muted: dict[str, bool] = {}
+_demo_sink_suspended: dict[str, bool] = {}
+_demo_default_sink: str | None = None
+_demo_audio_ready = False
+
+
+def _demo_name_mac(name: str) -> str:
+    """The MAC embedded in a demo ``bluez_card.*`` / ``bluez_output.*`` name."""
+    match = _DEMO_BLUEZ_NAME_RE.search(str(name).upper())
+    return match.group("address").replace("_", ":") if match else ""
+
+
+def _demo_audio_state() -> None:
+    """Seed the in-memory volume/mute state once, from the fixture stand."""
+    global _demo_audio_ready, _demo_default_sink
+    with _demo_audio_lock:
+        if _demo_audio_ready:
+            return
+        from demo.fixtures import DEMO_CARDS, DEMO_DEVICE_STATUS
+
+        for card in DEMO_CARDS:
+            for endpoint in card.get("endpoints", []):
+                if endpoint.get("kind") != "sink":
+                    continue
+                name = str(endpoint["name"])
+                status = DEMO_DEVICE_STATUS.get(_demo_name_mac(name), {})
+                _demo_sink_volume[name] = int(status.get("volume", 50))
+                _demo_sink_muted[name] = bool(status.get("muted", False))
+                _demo_sink_suspended[name] = False
+        _demo_default_sink = next(iter(_demo_sink_volume), None)
+        _demo_audio_ready = True
+
+
+def _demo_local_sinks() -> list[Any]:
+    """The fixture sinks as ``LocalSink`` objects, with the live demo state."""
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
+
+    _demo_audio_state()
+    from demo.fixtures import DEMO_CARDS
+
+    result: list[LocalSink] = []
+    with _demo_audio_lock:
+        for card in DEMO_CARDS:
+            ports = card.get("ports") or []
+            port = next((item for item in ports if item.get("active")), ports[0] if ports else {})
+            for endpoint in card.get("endpoints", []):
+                if endpoint.get("kind") != "sink":
+                    continue
+                name = str(endpoint["name"])
+                result.append(
+                    LocalSink(
+                        name=name,
+                        description=str(port.get("description") or name),
+                        state="suspended" if _demo_sink_suspended.get(name) else "idle",
+                        sample_spec="s16le 2ch 48000Hz",
+                        muted=bool(_demo_sink_muted.get(name, False)),
+                        volume=int(_demo_sink_volume.get(name, 50)),
+                        active_port=str(port.get("name") or "") or None,
+                        active_port_available="available" if port.get("available", True) else "not available",
+                        identifiers={},
+                    )
+                )
+    return result
+
+
+def _demo_local_sources() -> list[Any]:
+    """The fixture sources as ``LocalSource`` objects."""
+    from demo.fixtures import DEMO_SOURCES
+    from sendspin_bridge.services.audio.sink_inventory import LocalSource
+
+    result: list[LocalSource] = []
+    for index, source in enumerate(DEMO_SOURCES):
+        raw_state = str(source.get("state") or "").strip().lower()
+        result.append(
+            LocalSource(
+                name=str(source["name"]),
+                description=str(source.get("description") or ""),
+                state=raw_state if raw_state in {"running", "idle", "suspended"} else "unknown",
+                sample_spec="s16le 2ch 44100Hz",
+                muted=False,
+                volume=100,
+                index=index,
+            )
+        )
+    return result
+
+
+def _demo_local_cards() -> list[Any]:
+    """The fixture cards as ``LocalCard`` objects, with their endpoints attached."""
+    from demo.fixtures import DEMO_CARDS
+    from sendspin_bridge.services.audio.sink_inventory import CardPort, CardProfile, LocalCard
+
+    sink_names = [sink.name for sink in _demo_local_sinks()]
+    source_names = [source.name for source in _demo_local_sources()]
+    result: list[LocalCard] = []
+    for index, card in enumerate(DEMO_CARDS):
+        card_name = str(card["name"])
+        profiles = tuple(
+            CardProfile(
+                name=str(profile.get("name", "")),
+                description=str(profile.get("description", "")),
+                available=bool(profile.get("available", True)),
+            )
+            for profile in card.get("profiles", [])
+            if profile.get("name")
+        )
+        ports = tuple(
+            CardPort(
+                name=str(port.get("name", "")),
+                description=str(port.get("description", "")),
+                available=bool(port.get("available", True)),
+                active=bool(port.get("active", False)),
+            )
+            for port in card.get("ports", [])
+            if port.get("name")
+        )
+        endpoints = {str(endpoint.get("name") or "") for endpoint in card.get("endpoints", [])}
+        card_mac = _demo_name_mac(card_name)
+        result.append(
+            LocalCard(
+                name=card_name,
+                driver=str(card.get("driver") or ""),
+                active_profile=str(card.get("active_profile") or "") or None,
+                profiles=profiles,
+                ports=ports,
+                sink_names=tuple(name for name in sink_names if name in endpoints),
+                source_names=tuple(name for name in source_names if _demo_name_mac(name) == card_mac),
+                index=index,
+            )
+        )
+    return result
+
+
+def _demo_audio_facts() -> Any:
+    """One ``AudioFacts`` assembled from the fixture cards, sinks and sources."""
+    from sendspin_bridge.services.hardware.inventory import CaptureFacts, build_audio_facts
+
+    sources = _demo_local_sources()
+    capture = (
+        CaptureFacts(kind="pulse_source", node=sources[0].name)
+        if sources
+        else CaptureFacts(kind="unavailable", reason="The demo stand has no capture source.")
+    )
+    return build_audio_facts(_demo_local_cards(), _demo_local_sinks(), sources, capture)
+
+
+def _demo_invalidate_hardware() -> None:
+    from sendspin_bridge.services.hardware import inventory as _inventory
+
+    _inventory.clear_cache()
+
+
+def _demo_pulse_list_sinks() -> list[dict[str, Any]]:
+    """The legacy Flask sink list: connected demo speakers, with live volume/mute."""
+    from demo.fixtures import DEMO_DEVICE_STATUS
+
+    listed: list[dict[str, Any]] = []
+    for sink in _demo_local_sinks():
+        status = DEMO_DEVICE_STATUS.get(_demo_name_mac(sink.name), {})
+        if not status.get("bluetooth_connected"):
+            continue
+        if not status.get("bt_management_enabled", True):
+            continue
+        listed.append(
+            {
+                "name": sink.name,
+                "description": sink.description,
+                "volume": sink.volume,
+                "muted": sink.muted,
+            }
+        )
+    return listed
+
+
+def _demo_set_sink_volume(sink_name: str, volume_pct: int) -> bool:
+    _demo_audio_state()
+    with _demo_audio_lock:
+        _demo_sink_volume[sink_name] = int(volume_pct)
+    _demo_invalidate_hardware()
+    return True
+
+
+def _demo_set_sink_mute(sink_name: str, muted: object) -> bool:
+    _demo_audio_state()
+    with _demo_audio_lock:
+        _demo_sink_muted[sink_name] = bool(muted)
+    _demo_invalidate_hardware()
+    return True
+
+
+def _demo_suspend_sink(sink_name: str, suspend: bool) -> bool:
+    _demo_audio_state()
+    with _demo_audio_lock:
+        _demo_sink_suspended[sink_name] = bool(suspend)
+    _demo_invalidate_hardware()
+    return True
+
+
+def _demo_set_default_sink(sink_name: str) -> bool:
+    global _demo_default_sink
+    _demo_audio_state()
+    with _demo_audio_lock:
+        _demo_default_sink = sink_name
+    _demo_invalidate_hardware()
+    return True
+
+
+def _demo_install_audio() -> None:
+    """Point the audio helpers, the command state and the inventory at the demo stand.
+
+    Idempotent: ``install()`` calls it before the legacy routes bind their
+    imports, and ``install_inventory()`` calls it again so a test that only
+    installs the inventory still gets working commands.
+    """
+    from sendspin_bridge.services.audio import pulse as _sp
+
+    _demo_audio_state()
+    _sp.list_sinks = _demo_pulse_list_sinks  # type: ignore[assignment]
+    _sp.get_sink_description = lambda _name: "Demo audio output"  # type: ignore[assignment]
+    _sp.get_server_name = lambda: "pulseaudio (demo)"  # type: ignore[assignment]
+    _sp.set_sink_volume = _demo_set_sink_volume  # type: ignore[assignment]
+    _sp.get_sink_volume = lambda name: _demo_sink_volume.get(name, 50)  # type: ignore[assignment]
+    _sp.set_sink_mute = _demo_set_sink_mute  # type: ignore[assignment]
+    _sp.get_sink_mute = lambda name: _demo_sink_muted.get(name, False)  # type: ignore[assignment]
+    _sp.suspend_sink = _demo_suspend_sink  # type: ignore[assignment]
+    _sp.set_default_sink = _demo_set_default_sink  # type: ignore[assignment]
 
 
 def install() -> None:
@@ -240,56 +477,16 @@ def install() -> None:
     # ------------------------------------------------------------------
     import sendspin_bridge.services.audio.pulse as _sp
 
-    def _demo_status_for(mac: str) -> dict[str, Any]:
-        status = DEMO_DEVICE_STATUS.get(mac)
-        return status if isinstance(status, dict) else {}
-
-    _sp.list_sinks = lambda: [
-        {
-            "name": f"bluez_output.{str(d['mac']).replace(':', '_')}.1",
-            "description": d.get("player_name", d["mac"]),
-        }
-        for d in DEMO_DEVICES
-        if _demo_status_for(str(d["mac"])).get("bluetooth_connected")
-        and _demo_status_for(str(d["mac"])).get("bt_management_enabled", True)
-    ]
-    # Stateful sink volume/mute so API reads back correct values
-    _demo_sink_vol: dict[str, int] = {
-        f"bluez_output.{str(d['mac']).replace(':', '_')}.1": int(_demo_status_for(str(d["mac"])).get("volume", 100))
-        for d in DEMO_DEVICES
-    }
-    _demo_sink_mute: dict[str, bool] = {
-        f"bluez_output.{str(d['mac']).replace(':', '_')}.1": bool(_demo_status_for(str(d["mac"])).get("muted", False))
-        for d in DEMO_DEVICES
-    }
-
-    def _sp_set_volume(sink_name: str, volume_pct: int) -> bool:
-        _demo_sink_vol[sink_name] = volume_pct
-        return True
-
-    def _sp_get_volume(sink_name: str) -> int:
-        return _demo_sink_vol.get(sink_name, 100)
-
-    def _sp_set_mute(sink_name: str, muted: object) -> bool:
-        _demo_sink_mute[sink_name] = bool(muted)
-        return True
-
-    def _sp_get_mute(sink_name: str) -> bool:
-        return _demo_sink_mute.get(sink_name, False)
-
-    _sp.set_sink_volume = _sp_set_volume
-    _sp.get_sink_volume = _sp_get_volume
-    _sp.set_sink_mute = _sp_set_mute
-    _sp.get_sink_mute = _sp_get_mute
-    _sp.get_sink_description = lambda sink_name: "Demo BT Speaker"
-    _sp.get_server_name = lambda: "pulseaudio (demo)"
+    # Volume/mute/suspend/default-sink state is shared with the Hardware page's
+    # audio half, so a command and a read describe the same sink.
+    _demo_install_audio()
 
     # Also patch names already imported into routes.api (from X import Y binds locally)
     import sendspin_bridge.web.routes.api as _api_mod
 
-    _api_mod.set_sink_volume = _sp_set_volume
-    _api_mod.set_sink_mute = _sp_set_mute
-    _api_mod.get_sink_mute = _sp_get_mute
+    _api_mod.set_sink_volume = _sp.set_sink_volume
+    _api_mod.set_sink_mute = _sp.set_sink_mute
+    _api_mod.get_sink_mute = _sp.get_sink_mute
 
     import sendspin_bridge.web.routes.api_status as _api_status_mod
 
@@ -1173,15 +1370,18 @@ def install() -> None:
 
 
 def install_inventory() -> None:
-    """Point the hardware reader at the demo fixtures.
+    """Point the hardware reader and the audio commands at the demo fixtures.
 
     The orchestrator installs this *after* the D-Bus resolver, so a later
     ``set_bluez()`` cannot put the real host back in front of the page.  The
     reader's refresh is replaced rather than its transport, so no bus and no
-    ``bluetoothctl`` is ever asked — the demo stand is the only answer.
+    ``bluetoothctl`` is ever asked — the demo stand is the only answer.  The
+    audio helpers are installed here too: a test that only wants the inventory
+    still gets working volume, mute and suspend commands.
     """
     from sendspin_bridge.services.hardware import inventory as _inventory
 
+    _demo_install_audio()
     _inventory._refresh = _demo_inventory_refresh
     _inventory.clear_cache()
 
@@ -1281,4 +1481,5 @@ def _demo_inventory_refresh():
         controllers=tuple(controllers),
         devices=tuple(devices),
         degraded=(),
+        audio=_demo_audio_facts(),
     )

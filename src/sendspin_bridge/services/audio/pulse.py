@@ -37,6 +37,7 @@ __all__ = [
     "apid_sink_input_latency",
     "areload_bluez5_discover_module",
     "aset_card_profile",
+    "aset_default_sink",
     "asuspend_sink",
     "cycle_card_profile",
     "ensure_null_sink",
@@ -50,6 +51,7 @@ __all__ = [
     "reload_bluez5_discover_module",
     "remove_null_sink",
     "set_card_profile",
+    "set_default_sink",
     "set_sink_mute",
     "set_sink_volume",
     "suspend_sink",
@@ -235,6 +237,24 @@ async def aget_sink_mute(sink_name: str) -> bool | None:
     except Exception as exc:
         logger.debug("aget_sink_mute(%s) error: %s — falling back", sink_name, exc)
         return _fallback_get_mute(sink_name)
+
+
+async def aset_default_sink(sink_name: str) -> bool:
+    """Make *sink_name* the audio server's default sink.  Returns True on success."""
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_set_default_sink(sink_name)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                sink = await _aget_sink(pulse, sink_name)
+                if sink is None:
+                    logger.warning("aset_default_sink: sink %s not found", sink_name)
+                    return False
+                await pulse.sink_default_set(sink)
+                return True
+    except Exception as exc:
+        logger.debug("aset_default_sink(%s) error: %s — falling back", sink_name, exc)
+        return _fallback_set_default_sink(sink_name)
 
 
 async def asuspend_sink(sink_name: str, suspend: bool) -> bool:
@@ -741,6 +761,10 @@ def get_sink_mute(sink_name: str) -> bool | None:
     return _run(aget_sink_mute(sink_name))
 
 
+def set_default_sink(sink_name: str) -> bool:
+    return _run(aset_default_sink(sink_name))
+
+
 def suspend_sink(sink_name: str, suspend: bool) -> bool:
     return _run(asuspend_sink(sink_name, suspend))
 
@@ -877,6 +901,23 @@ def _fallback_get_mute(sink_name: str) -> bool | None:
     return None
 
 
+def _fallback_set_default_sink(sink_name: str) -> bool:
+    try:
+        r = subprocess.run(
+            ["pactl", "set-default-sink", sink_name],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if r.returncode == 0:
+            logger.debug("pactl set-default-sink %s ok", sink_name)
+            return True
+        logger.warning("pactl set-default-sink failed: %s", r.stderr.strip())
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("set-default-sink fallback failed: %s", exc)
+    return False
+
+
 def _fallback_suspend_sink(sink_name: str, suspend: bool) -> bool:
     try:
         r = subprocess.run(
@@ -895,48 +936,28 @@ def _fallback_suspend_sink(sink_name: str, suspend: bool) -> bool:
 
 
 def _fallback_list_cards() -> list[dict]:
-    """Parse `pactl list cards` output into name/driver/active_profile/profiles dicts."""
+    """Parse `pactl list cards` output into name/driver/active_profile/profiles dicts.
+
+    The text parser itself lives in :mod:`sink_inventory` (it also reads ports
+    and endpoint sets); this adapter only reshapes its cards for ``bt_audio``.
+    """
+    from sendspin_bridge.services.audio.sink_inventory import parse_pactl_cards
+
     try:
         r = subprocess.run(["pactl", "list", "cards"], capture_output=True, text=True, timeout=5)
     except (subprocess.SubprocessError, OSError):
         return []
     if r.returncode != 0:
         return []
-    cards: list[dict] = []
-    current: dict | None = None
-    in_profiles = False
-    for raw in r.stdout.splitlines():
-        line = raw.rstrip()
-        stripped = line.strip()
-        if line.startswith("Card #"):
-            if current is not None:
-                cards.append(current)
-            current = {"name": "", "driver": "", "active_profile": None, "profiles": []}
-            in_profiles = False
-            continue
-        if current is None:
-            continue
-        if stripped.startswith("Name:"):
-            current["name"] = stripped.split(":", 1)[1].strip()
-            in_profiles = False
-        elif stripped.startswith("Driver:"):
-            current["driver"] = stripped.split(":", 1)[1].strip()
-            in_profiles = False
-        elif stripped.startswith("Active Profile:"):
-            current["active_profile"] = stripped.split(":", 1)[1].strip()
-            in_profiles = False
-        elif stripped == "Profiles:":
-            in_profiles = True
-        elif in_profiles and ":" in stripped and not stripped.startswith(("Ports", "Sinks", "Sources", "Properties")):
-            # Profile line: "a2dp_sink: High Fidelity Playback (A2DP Sink) (sinks: 1, ...)"
-            prof_name = stripped.split(":", 1)[0].strip()
-            if prof_name:
-                current["profiles"].append(prof_name)
-        elif stripped.startswith(("Ports:", "Sinks:", "Sources:", "Properties:")):
-            in_profiles = False
-    if current is not None:
-        cards.append(current)
-    return cards
+    return [
+        {
+            "name": card.name,
+            "driver": card.driver,
+            "active_profile": card.active_profile,
+            "profiles": [profile.name for profile in card.profiles],
+        }
+        for card in parse_pactl_cards(r.stdout)
+    ]
 
 
 def _fallback_set_card_profile(card_name: str, profile: str) -> bool:

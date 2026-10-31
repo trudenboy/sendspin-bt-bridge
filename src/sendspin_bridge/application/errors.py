@@ -78,8 +78,12 @@ def require_audio_name(name: str | None, *, field: str = "name") -> str:
 
     Outside the grammar is a 400 ``invalid_audio_name``, never a silent miss:
     a name that cannot exist and a name that is absent are different answers.
+    The check is strict — no surrounding whitespace is stripped, because a
+    stripped name would answer for a different one.  A ``/`` cannot reach this
+    function through a route: it is a path separator, so the router answers
+    its own 404 before the segment is handed to a handler as a name.
     """
-    value = (name or "").strip()
+    value = name or ""
     if not _AUDIO_NAME_RE.fullmatch(value):
         raise UseCaseError(
             400,

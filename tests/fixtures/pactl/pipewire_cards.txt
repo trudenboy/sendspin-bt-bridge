@@ -1,0 +1,28 @@
+Card #48
+	Name: alsa_card.pci-0000_00_1b.0
+	Driver: PipeWire
+	Owner Module: n/a
+	Properties:
+		device.api = "alsa"
+		device.bus = "pci"
+		device.bus_path = "pci-0000:00:1b.0"
+		device.description = "Built-in Audio"
+		device.name = "alsa_card.pci-0000_00_1b.0"
+		device.product.id = "0x8c20"
+		device.vendor.id = "0x8086"
+	Profiles:
+		output:analog-stereo: Analog Stereo Output (sinks: 1, sources: 0, priority: 9900, available: yes)
+		output:analog-stereo+input:analog-stereo: Analog Stereo Duplex (sinks: 1, sources: 1, priority: 9950, available: yes)
+		input:analog-stereo: Analog Stereo Input (sinks: 0, sources: 1, priority: 65, available: unknown)
+		off: Off (sinks: 0, sources: 0, priority: 0, available: yes)
+	Active Profile: output:analog-stereo
+	Ports:
+		analog-output-lineout: Line Out (type: Line, priority: 9000, availability group: Legacy 3, not available)
+			Properties:
+				port.type = "line"
+			Part of profile(s): output:analog-stereo, output:analog-stereo+input:analog-stereo
+		analog-output-speaker: Speakers (type: Speaker, priority: 10000, availability group: Legacy 4, availability unknown)
+			Properties:
+				port.type = "speaker"
+			Part of profile(s): output:analog-stereo, output:analog-stereo+input:analog-stereo
+	Active Port: analog-output-speaker

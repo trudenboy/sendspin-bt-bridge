@@ -122,11 +122,11 @@ class EndpointRef(ResponseModel):
 
 
 class CardProfile(ResponseModel):
-    """One profile a card can take."""
+    """One profile a card can take; ``available=null`` means the server said "unknown"."""
 
     name: str
     description: str = ""
-    available: bool = True
+    available: bool | None = None
 
 
 class CardPort(ResponseModel):
@@ -136,6 +136,9 @@ class CardPort(ResponseModel):
     description: str = ""
     available: bool | None = None
     active: bool = False
+    profiles: list[str] = Field(
+        default_factory=list, description="Profiles this port can be part of; empty when the server omits them."
+    )
 
 
 class EndpointSummary(ResponseModel):

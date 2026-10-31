@@ -7,11 +7,13 @@ import logging
 import threading
 import time
 
-from sendspin_bridge.application.errors import UseCaseError
-from sendspin_bridge.application.models.audio import AudioSinkOut
+from sendspin_bridge.application.errors import UseCaseError, require_audio_name
+from sendspin_bridge.application.models.audio import AudioSinkOut, SinkStateOut
 from sendspin_bridge.application.runtime import run_on_loop
 from sendspin_bridge.config import load_config
 from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_sinks
+from sendspin_bridge.services.hardware import capabilities
+from sendspin_bridge.services.hardware.inventory import HardwareUnavailable, read_inventory
 
 logger = logging.getLogger(__name__)
 
@@ -87,3 +89,108 @@ def read_local_sinks_recent() -> list[LocalSink]:
         sinks = read_local_sinks()
         _recent = (time.monotonic(), sinks)
         return list(sinks)
+
+
+# ---------------------------------------------------------------------------
+# Commands (safe audio writes)
+# ---------------------------------------------------------------------------
+
+_NO_SERVER = "No PulseAudio-compatible audio server answered; this host does not support audio commands."
+
+
+def _refused(action: str, name: str) -> UseCaseError:
+    return UseCaseError(
+        409,
+        "not_supported_for_backend",
+        f"The audio server did not accept {action} for {name}.",
+    )
+
+
+async def _require_sink(wanted: str) -> LocalSink:
+    """The named sink from the current inventory, after the backend check.
+
+    The order is the contract: 409 when nothing answers, 404 when a server
+    answers but the sink is not there.  The reader is blocking, so it runs in a
+    worker thread; every hardware consumer reads through the same one.
+    """
+    try:
+        read = await asyncio.to_thread(read_inventory)
+    except HardwareUnavailable as exc:
+        # The Bluetooth half failed; the audio answer is still the first one the
+        # contract asks for, so a dead server stays a 409 before the 503.
+        server_name = await asyncio.to_thread(capabilities.probe_audio_server)
+        if capabilities.classify_audio_server(server_name) == "none":
+            raise UseCaseError(409, "not_supported_for_backend", _NO_SERVER) from exc
+        raise UseCaseError(503, "hardware_unavailable", str(exc)) from exc
+    if read.capabilities.audio_server == "none":
+        raise UseCaseError(409, "not_supported_for_backend", _NO_SERVER)
+    sink = next((item for item in read.audio.sinks if item.name == wanted), None)
+    if sink is None:
+        raise UseCaseError(404, "entity_not_found", f"Unknown audio sink: {wanted}")
+    return LocalSink(
+        name=sink.name,
+        description=sink.description,
+        state=sink.state,
+        sample_spec=sink.sample_spec,
+        muted=bool(sink.muted),
+        volume=int(sink.volume or 0),
+        active_port=sink.active_port,
+        active_port_available=sink.active_port_available,
+        identifiers=dict(sink.identifiers),
+    )
+
+
+async def set_sink_volume(name: str, volume: int) -> SinkStateOut:
+    """Set one sink's level (0-100 inclusive)."""
+    wanted = require_audio_name(name, field="sink name")
+    if not 0 <= volume <= 100:
+        raise UseCaseError(400, "invalid_volume", "volume must be an integer from 0 to 100")
+    sink = await _require_sink(wanted)
+    from sendspin_bridge.services.audio import pulse
+
+    if not await asyncio.to_thread(pulse.set_sink_volume, wanted, volume):
+        raise _refused("a volume change", wanted)
+    return SinkStateOut(name=wanted, volume=volume, muted=sink.muted, state=sink.state)
+
+
+async def set_sink_mute(name: str, muted: bool) -> SinkStateOut:
+    """Mute or unmute one sink."""
+    wanted = require_audio_name(name, field="sink name")
+    sink = await _require_sink(wanted)
+    from sendspin_bridge.services.audio import pulse
+
+    if not await asyncio.to_thread(pulse.set_sink_mute, wanted, muted):
+        raise _refused("a mute change", wanted)
+    return SinkStateOut(name=wanted, volume=sink.volume, muted=muted, state=sink.state)
+
+
+async def set_default_sink(name: str) -> SinkStateOut:
+    """Make one sink the audio server's default."""
+    wanted = require_audio_name(name, field="sink name")
+    sink = await _require_sink(wanted)
+    from sendspin_bridge.services.audio import pulse
+
+    if not await asyncio.to_thread(pulse.set_default_sink, wanted):
+        raise _refused("a default-sink change", wanted)
+    return SinkStateOut(name=wanted, volume=sink.volume, muted=sink.muted, state=sink.state)
+
+
+async def _set_suspended(name: str, suspend: bool) -> SinkStateOut:
+    wanted = require_audio_name(name, field="sink name")
+    sink = await _require_sink(wanted)
+    from sendspin_bridge.services.audio import pulse
+
+    if not await asyncio.to_thread(pulse.suspend_sink, wanted, suspend):
+        raise _refused("a suspend change", wanted)
+    state = "suspended" if suspend else sink.state
+    return SinkStateOut(name=wanted, volume=sink.volume, muted=sink.muted, state=state)
+
+
+async def suspend_sink(name: str) -> SinkStateOut:
+    """Suspend one sink (it keeps existing, but no longer plays)."""
+    return await _set_suspended(name, True)
+
+
+async def resume_sink(name: str) -> SinkStateOut:
+    """Resume one suspended sink."""
+    return await _set_suspended(name, False)
