@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 PAIRING_WINDOW_S = 120
 _CONTROLLER_RE = re.compile(r"Controller\s+([0-9A-Fa-f:]{17})", re.IGNORECASE)
 
-#: The one open window, if any (the API and the status read it from any thread).
-_state: dict[str, Any] = {"until": 0.0, "adapters": [], "error": None}
+#: The one open window lives on the source's shared typed snapshot, so the
+#: status read from another thread sees the whole window or none of it.
 _known_devices: set[str] = set()
 _task: asyncio.Task[None] | None = None
 _agent: Any = None
@@ -31,8 +31,14 @@ _AGENT_PATH = "/io/sendspin/bridge/SourceAgent"
 
 def pairing_status() -> dict[str, Any]:
     """Seconds left in the pairing window (0 when closed) and the adapters it opened."""
-    left = max(0, int(_state["until"] - time.time())) if _state["until"] else 0
-    return {"pairing_seconds_left": left, "pairing_adapters": list(_state["adapters"]), "error": _state["error"]}
+    from sendspin_bridge.services.source import state as source_state
+
+    current = source_state.snapshot()
+    return {
+        "pairing_seconds_left": current.pairing_seconds_left(),
+        "pairing_adapters": list(current.pairing_adapters),
+        "error": current.pairing_error,
+    }
 
 
 def _run_bluetoothctl(commands: list[str]) -> tuple[bool, str]:
@@ -116,21 +122,27 @@ async def close_agent() -> None:
 
 async def open_window(seconds: int = PAIRING_WINDOW_S) -> dict[str, Any]:
     """Open discoverable/pairable adapters and host a no-PIN agent until the window closes."""
+    from sendspin_bridge.services.source import state as source_state
+
     global _task, _agent
-    if _state["until"] > time.time() + 5:
+    if source_state.snapshot().pairing_until > time.time() + 5:
         return pairing_status()
     adapters = await asyncio.to_thread(_adapters)
     if not adapters:
-        _state.update(until=0.0, adapters=[], error="no_adapter")
+        source_state.publish(pairing_until=0.0, pairing_adapters=(), pairing_error="no_adapter")
         return pairing_status()
     global _known_devices
     _known_devices = await asyncio.to_thread(_devices)
     await asyncio.to_thread(_set_discoverable, adapters, True)
     if not await ensure_agent():
         await asyncio.to_thread(_set_discoverable, adapters, False)
-        _state.update(until=0.0, adapters=[], error="no_agent")
+        source_state.publish(pairing_until=0.0, pairing_adapters=(), pairing_error="no_agent")
         return pairing_status()
-    _state.update(until=time.time() + max(30, int(seconds)), adapters=adapters, error=None)
+    source_state.publish(
+        pairing_until=time.time() + max(30, int(seconds)),
+        pairing_adapters=tuple(adapters),
+        pairing_error=None,
+    )
     logger.info("Bluetooth pairing window open for %d s on %s", seconds, ", ".join(adapters))
     _task = asyncio.create_task(_close_after(seconds), name="source-pairing-window")
     return pairing_status()
@@ -144,13 +156,15 @@ async def _close_after(seconds: int) -> None:
 
 async def close_window() -> dict[str, Any]:
     """Close the window: stop being discoverable and unregister the agent."""
+    from sendspin_bridge.services.source import state as source_state
+
     global _task, _agent
     if _task is not None and _task is not asyncio.current_task():
         _task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _task
     _task = None
-    adapters = list(_state["adapters"])
+    adapters = list(source_state.snapshot().pairing_adapters)
     if adapters:
         await asyncio.to_thread(_set_discoverable, adapters, False)
         # A phone paired in the window would lose its agent with the window; trusting it lets
@@ -161,5 +175,5 @@ async def close_window() -> dict[str, Any]:
             await asyncio.to_thread(_trust, newly_paired)
     if adapters:
         logger.info("Bluetooth pairing window closed")
-    _state.update(until=0.0, adapters=[])
+    source_state.publish(pairing_until=0.0, pairing_adapters=())
     return pairing_status()

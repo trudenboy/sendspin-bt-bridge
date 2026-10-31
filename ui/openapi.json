@@ -5328,6 +5328,12 @@
             "description": "Player id using this sink, from the config.",
             "title": "In Use By"
           },
+          "is_default": {
+            "default": false,
+            "description": "True only for the audio server's current default sink; always false for sources.",
+            "title": "Is Default",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "sink",
@@ -5419,6 +5425,7 @@
           "in_use_by",
           "active_port",
           "active_port_available",
+          "is_default",
           "identifiers",
           "ports",
           "monitor_of"
@@ -5540,6 +5547,12 @@
             "description": "Player id using this sink, from the config.",
             "title": "In Use By"
           },
+          "is_default": {
+            "default": false,
+            "description": "True only for the audio server's current default sink; always false for sources.",
+            "title": "Is Default",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "sink",
@@ -5610,7 +5623,8 @@
           "volume",
           "in_use_by",
           "active_port",
-          "active_port_available"
+          "active_port_available",
+          "is_default"
         ],
         "title": "EndpointSummary",
         "type": "object"
@@ -5976,6 +5990,17 @@
             "title": "Degraded",
             "type": "array"
           },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceFeed"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null when this bridge does not report a source (the SENDSPIN_SOURCE feature is off)."
+          },
           "stale": {
             "description": "True when a failed refresh forced the last read to be served.",
             "title": "Stale",
@@ -5995,6 +6020,7 @@
           "controllers",
           "bluetooth_devices",
           "audio",
+          "source",
           "degraded"
         ],
         "title": "HardwareSnapshot",
@@ -9130,6 +9156,37 @@
         "title": "SoundIn",
         "type": "object"
       },
+      "SourceCapture": {
+        "description": "How the phone's audio is captured, or why it cannot be.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "pipewire_node",
+              "pulse_source",
+              "unavailable"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          }
+        },
+        "required": [
+          "kind",
+          "node"
+        ],
+        "title": "SourceCapture",
+        "type": "object"
+      },
       "SourceEnabledIn": {
         "properties": {
           "enabled": {
@@ -9141,6 +9198,86 @@
           "enabled"
         ],
         "title": "SourceEnabledIn",
+        "type": "object"
+      },
+      "SourceFeed": {
+        "description": "The single Sendspin source (phone → bridge): one phone, one capture node, its relays.",
+        "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/SourceCapture",
+            "description": "The phone's capture node, or the reason there is none."
+          },
+          "enabled": {
+            "default": false,
+            "description": "The source server is running.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "phone_mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The paired peer currently streaming, if any.",
+            "title": "Phone Mac"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The port players connect to.",
+            "title": "Port"
+          },
+          "relays": {
+            "description": "Player ids armed to play the phone.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Relays",
+            "type": "array"
+          },
+          "state": {
+            "description": "off: not running; waiting: running without a phone; streaming: audio is flowing; error: it failed.",
+            "enum": [
+              "off",
+              "waiting",
+              "streaming",
+              "error"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "port",
+          "state",
+          "phone_mac",
+          "capture",
+          "relays",
+          "error"
+        ],
+        "title": "SourceFeed",
         "type": "object"
       },
       "SourcePairingIn": {

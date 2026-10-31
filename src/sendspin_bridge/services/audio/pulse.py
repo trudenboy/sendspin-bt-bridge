@@ -32,6 +32,7 @@ __all__ = [
     "_PULSECTL_AVAILABLE",
     "acycle_card_profile",
     "aensure_null_sink",
+    "aget_default_sink_name",
     "alist_cards",
     "amove_pid_sink_inputs",
     "apid_sink_input_latency",
@@ -41,6 +42,7 @@ __all__ = [
     "asuspend_sink",
     "cycle_card_profile",
     "ensure_null_sink",
+    "get_default_sink_name",
     "get_server_name",
     "get_sink_description",
     "get_sink_input_ids",
@@ -611,6 +613,26 @@ async def aget_server_name() -> str:
         return _fallback_server_name()
 
 
+async def aget_default_sink_name() -> str | None:
+    """The audio server's current default sink, or ``None`` when it cannot say.
+
+    The server's own answer is authoritative; ``pactl get-default-sink`` is the
+    fallback for hosts where the native client cannot reach it.  ``None`` is a
+    truthful "unknown", never an invented default.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_default_sink_name()
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                info = await pulse.server_info()
+                name = str(getattr(info, "default_sink_name", "") or "").strip()
+                return name or None
+    except Exception as exc:
+        logger.debug("aget_default_sink_name error: %s — falling back", exc)
+        return _fallback_default_sink_name()
+
+
 # ---------------------------------------------------------------------------
 # Null sink for standby (Phase 2: keep daemon alive on silent sink)
 # ---------------------------------------------------------------------------
@@ -771,6 +793,10 @@ def suspend_sink(sink_name: str, suspend: bool) -> bool:
 
 def get_server_name() -> str:
     return _run(aget_server_name())
+
+
+def get_default_sink_name() -> str | None:
+    return _run(aget_default_sink_name())
 
 
 def get_audio_server_snapshot() -> tuple[str, list[dict]]:
@@ -1012,6 +1038,18 @@ def _fallback_server_name() -> str:
     except Exception as exc:
         logger.debug("get server name failed: %s", exc)
     return "not available"
+
+
+def _fallback_default_sink_name() -> str | None:
+    """``pactl get-default-sink``; ``None`` when the command cannot answer."""
+    try:
+        r = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True, timeout=3)
+        if r.returncode == 0:
+            name = r.stdout.strip()
+            return name or None
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("get default sink failed: %s", exc)
+    return None
 
 
 def _fallback_sink_input_ids() -> set[int]:

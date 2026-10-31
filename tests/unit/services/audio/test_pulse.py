@@ -714,3 +714,39 @@ async def test_pid_sink_input_latency_is_none_without_a_stream():
         patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
     ):
         assert await _pulse_mod.apid_sink_input_latency(1234) is None
+
+
+# -- the default sink -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_default_sink_comes_from_the_server_info_first():
+    pulse = MagicMock()
+    pulse.server_info = AsyncMock(return_value=SimpleNamespace(default_sink_name="alsa_output.usb.dac"))
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+        patch.object(_pulse_mod.subprocess, "run") as run,
+    ):
+        assert await _pulse_mod.aget_default_sink_name() == "alsa_output.usb.dac"
+
+    run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_the_default_sink_falls_back_to_pactl():
+    pulse = MagicMock()
+    pulse.server_info = AsyncMock(side_effect=RuntimeError("no server"))
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+        patch.object(_pulse_mod.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="bluez_sink.x\n")),
+    ):
+        assert await _pulse_mod.aget_default_sink_name() == "bluez_sink.x"
+
+
+def test_pactl_saying_nothing_means_none():
+    with patch.object(_pulse_mod.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="")):
+        assert _pulse_mod._fallback_default_sink_name() is None

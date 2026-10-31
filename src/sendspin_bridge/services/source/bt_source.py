@@ -33,28 +33,20 @@ CHUNK_MS = 10
 NODE_POLL_S = 2.0
 
 
-#: What the bridge status reports about the source (read by the API from another thread).
-_STATE: dict[str, Any] = {
-    "enabled": False,
-    "port": None,
-    "phone": None,
-    "players": 0,
-    "streaming": False,
-    "error": None,
-}
-
-
+#: What the bridge status reports about the source.  The state itself lives in
+#: ``services.source.state``: one typed, thread-safe snapshot shared with the
+#: pairing window, instead of two module-level dicts read from other threads.
 def source_status() -> dict[str, Any]:
     """The source's state for the bridge status: enabled, port, phone node, players, streaming."""
-    from sendspin_bridge.services.source.pairing import pairing_status
+    from sendspin_bridge.services.source import state as source_state
 
-    state = dict(_STATE)
-    state.update(pairing_status())
-    return state
+    return source_state.snapshot().status_dict()
 
 
 def _set_state(**changes: Any) -> None:
-    _STATE.update(changes)
+    from sendspin_bridge.services.source import state as source_state
+
+    source_state.publish(**changes)
 
 
 @dataclass(frozen=True)

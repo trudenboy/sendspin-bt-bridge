@@ -9,8 +9,10 @@ a config migration should run.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import TYPE_CHECKING, Any, Literal
 
+from sendspin_bridge.application import source as source_uc
 from sendspin_bridge.application.errors import not_found, require_audio_name, unavailable
 from sendspin_bridge.application.models.hardware import (
     AddressForms,
@@ -33,6 +35,8 @@ from sendspin_bridge.application.models.hardware import (
     HardwareSnapshot,
     RoleEvidence,
     RssiSummary,
+    SourceCapture,
+    SourceFeed,
 )
 from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
@@ -56,6 +60,11 @@ if TYPE_CHECKING:
 
 _BLUETOOTH_BACKEND = "bluetooth_a2dp"
 _PULSE_SINK_BACKEND = "pulse_sink"
+
+#: The two audio-server spellings of the phone's capture, as a source feed
+#: reports it; the address is folded by ``DeviceAddress``.
+_CAPTURE_NODE_RE = re.compile(r"^bluez_input\.(?P<address>[0-9A-Fa-f_]{17})\.\d+$")
+_PULSE_SOURCE_RE = re.compile(r"^bluez_source\.(?P<address>[0-9A-Fa-f_]{17})(?:\..*)?$")
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +153,14 @@ def _rssi(facts: DeviceFacts) -> RssiSummary | None:
     return RssiSummary(delta_db=facts.rssi_delta_db, at=facts.rssi_at)
 
 
-def _device_summary(facts: DeviceFacts, players: dict[str, str]) -> BtDeviceSummary:
+def _device_summary(facts: DeviceFacts, players: dict[str, str], source: SourceFeed | None = None) -> BtDeviceSummary:
+    roles = [RoleEvidence(role=role.role, evidence=role.evidence) for role in facts.roles]
+    source_phone = source is not None and source.phone_mac == facts.mac
+    # The source feed is evidence in its own right, but the capture node (when
+    # the inventory found one) is the more specific proof and already claimed
+    # the role; only a device with no input evidence gets ``source_feed:<mac>``.
+    if source_phone and not any(role.role == "input" for role in roles):
+        roles.append(RoleEvidence(role="input", evidence=f"source_feed:{facts.mac}"))
     return BtDeviceSummary(
         mac=facts.mac,
         name=facts.name,
@@ -159,10 +175,9 @@ def _device_summary(facts: DeviceFacts, players: dict[str, str]) -> BtDeviceSumm
         # The transport's codec and delay are E2's audio half; the role evidence
         # already carries the one transport fact this stage consumes.
         transport=None,
-        roles=[RoleEvidence(role=role.role, evidence=role.evidence) for role in facts.roles],
+        roles=roles,
         player_id=players.get(facts.mac),
-        # The source feed is E3; until then no device is the streaming phone.
-        source_phone=False,
+        source_phone=source_phone,
     )
 
 
@@ -199,6 +214,53 @@ def _degraded(read: InventoryRead) -> list[DegradedSection]:
 
 
 # ---------------------------------------------------------------------------
+# The source feed
+# ---------------------------------------------------------------------------
+
+
+def _phone_mac(node: str | None) -> str | None:
+    """The MAC inside a capture node's name (``bluez_input.<mac>.<n>``)."""
+    if not node:
+        return None
+    for pattern in (_CAPTURE_NODE_RE, _PULSE_SOURCE_RE):
+        match = pattern.match(node.strip())
+        if match is not None:
+            address = DeviceAddress.parse(match.group("address"))
+            return address.colons if address is not None else None
+    return None
+
+
+def _source_state(view: source_uc.SourceStatus) -> Literal["off", "waiting", "streaming", "error"]:
+    if view.error:
+        return "error"
+    if view.streaming:
+        return "streaming"
+    if view.enabled:
+        return "waiting"
+    return "off"
+
+
+def _source_feed(config: dict[str, Any], audio: AudioFacts) -> SourceFeed | None:
+    """The source as the page shows it, or ``None`` when the feature is off.
+
+    ``None`` is "this bridge does not report a source", not an empty feed: the
+    SPA hides the strip instead of claiming a stopped phone that never existed.
+    """
+    if not config.get("SENDSPIN_SOURCE"):
+        return None
+    view = source_uc.status(config)
+    return SourceFeed(
+        enabled=view.enabled,
+        port=view.port,
+        state=_source_state(view),
+        phone_mac=_phone_mac(view.phone),
+        capture=SourceCapture(kind=audio.capture.kind, node=audio.capture.node),
+        relays=list(view.attached_devices),
+        error=view.error,
+    )
+
+
+# ---------------------------------------------------------------------------
 # The audio half
 # ---------------------------------------------------------------------------
 
@@ -213,7 +275,9 @@ def _owner(facts: EndpointOwnerFacts | None) -> EndpointOwner | None:
     return EndpointOwner(internal=facts.internal)
 
 
-def _endpoint_summary(facts: EndpointFacts, sink_players: dict[str, str]) -> EndpointSummary:
+def _endpoint_summary(
+    facts: EndpointFacts, sink_players: dict[str, str], default_sink: str | None = None
+) -> EndpointSummary:
     return EndpointSummary(
         kind=facts.kind,
         name=facts.name,
@@ -226,6 +290,7 @@ def _endpoint_summary(facts: EndpointFacts, sink_players: dict[str, str]) -> End
         in_use_by=sink_players.get(facts.name) if facts.kind == "sink" else None,
         active_port=facts.active_port,
         active_port_available=facts.active_port_available,
+        is_default=facts.kind == "sink" and default_sink is not None and facts.name == default_sink,
     )
 
 
@@ -291,8 +356,8 @@ def _audio_section(audio: AudioFacts, sink_players: dict[str, str]) -> AudioSect
     endpoints = _audio_endpoints(audio)
     return AudioSection(
         cards=[_card_summary(card, endpoints) for card in audio.cards],
-        sinks=[_endpoint_summary(facts, sink_players) for facts in audio.sinks],
-        sources=[_endpoint_summary(facts, sink_players) for facts in audio.sources],
+        sinks=[_endpoint_summary(facts, sink_players, audio.default_sink) for facts in audio.sinks],
+        sources=[_endpoint_summary(facts, sink_players, audio.default_sink) for facts in audio.sources],
     )
 
 
@@ -318,14 +383,16 @@ async def snapshot() -> HardwareSnapshot:
     """One aggregate read of the physical layer."""
     read, config = await _read()
     players, areas, sink_players = _config_view(config)
+    source = _source_feed(config, read.audio)
     return HardwareSnapshot(
         as_of=read.as_of,
         stale_after_s=read.stale_after_s,
         stale=read.stale,
         capabilities=_capabilities(read.capabilities),
         controllers=[_controller_summary(facts, areas) for facts in read.controllers],
-        bluetooth_devices=[_device_summary(facts, players) for facts in read.devices],
+        bluetooth_devices=[_device_summary(facts, players, source) for facts in read.devices],
         audio=_audio_section(read.audio, sink_players),
+        source=source,
         degraded=_degraded(read),
     )
 
@@ -347,9 +414,10 @@ async def controller(controller_id: str) -> ControllerDetail:
         raise not_found(f"Unknown controller: {controller_id}", code="entity_not_found")
     players, areas, _sink_players = _config_view(config)
     by_mac = {device.mac: device for device in read.devices}
+    source = _source_feed(config, read.audio)
     return ControllerDetail(
         **_controller_summary(facts, areas).model_dump(),
-        devices=[_device_summary(by_mac[mac], players) for mac in facts.device_macs if mac in by_mac],
+        devices=[_device_summary(by_mac[mac], players, source) for mac in facts.device_macs if mac in by_mac],
         address_forms=_address_forms(facts.mac),
     )
 
@@ -364,7 +432,7 @@ async def bluetooth_device(mac: str) -> BtDeviceDetail:
     if facts is None:
         raise not_found(f"Unknown Bluetooth device: {mac}", code="entity_not_found")
     players, _areas, _sink_players = _config_view(config)
-    summary = _device_summary(facts, players)
+    summary = _device_summary(facts, players, _source_feed(config, read.audio))
     return BtDeviceDetail(
         **summary.model_dump(),
         uuids=list(facts.uuids),
@@ -390,7 +458,10 @@ async def audio_card(name: str) -> CardDetail:
         ports=[_card_port(port) for port in card.ports],
         # The same membership the summary uses: a bluez_card lists its Bluetooth
         # sink and source even though their *owner* is the speaker link.
-        endpoints=[_endpoint_summary(facts, sink_players) for facts in _card_endpoints(card, endpoints)],
+        endpoints=[
+            _endpoint_summary(facts, sink_players, read.audio.default_sink)
+            for facts in _card_endpoints(card, endpoints)
+        ],
     )
 
 
@@ -404,7 +475,7 @@ async def _audio_endpoint(kind: Literal["sink", "source"], name: str) -> Endpoin
         raise not_found(f"Unknown audio {kind}: {name}", code="entity_not_found")
     card = _endpoint_card(facts, read.audio.cards)
     return EndpointDetail(
-        **_endpoint_summary(facts, sink_players).model_dump(),
+        **_endpoint_summary(facts, sink_players, read.audio.default_sink).model_dump(),
         identifiers=dict(facts.identifiers),
         ports=[_card_port(port) for port in card.ports] if card is not None else [],
         monitor_of=facts.monitor_of,

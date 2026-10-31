@@ -192,6 +192,8 @@ class AudioFacts:
     sinks: tuple[EndpointFacts, ...] = ()
     sources: tuple[EndpointFacts, ...] = ()
     capture: CaptureFacts = field(default_factory=CaptureFacts)
+    #: The audio server's current default sink; ``None`` when it cannot say.
+    default_sink: str | None = None
     unavailable: tuple[str, ...] = ()
 
 
@@ -281,6 +283,7 @@ def build_audio_facts(
     sources: Collection[LocalSource],
     capture: CaptureFacts,
     *,
+    default_sink: str | None = None,
     unavailable: tuple[str, ...] = (),
 ) -> AudioFacts:
     """Assemble the audio half from one read of each list (pure)."""
@@ -301,6 +304,7 @@ def build_audio_facts(
         sinks=sink_facts,
         sources=source_facts,
         capture=capture,
+        default_sink=default_sink,
         unavailable=unavailable,
     )
 
@@ -652,7 +656,7 @@ async def _read_audio_async() -> AudioFacts:
     unavailable instead of becoming an empty list; the lists that did answer
     are still returned, so one broken read does not hide the others.
     """
-    from sendspin_bridge.services.audio import sink_inventory
+    from sendspin_bridge.services.audio import pulse, sink_inventory
     from sendspin_bridge.services.audio.sink_inventory import SinkInventoryUnavailable
 
     unavailable: list[str] = []
@@ -672,7 +676,8 @@ async def _read_audio_async() -> AudioFacts:
     except SinkInventoryUnavailable as exc:
         unavailable.append(f"cards: {exc}")
     capture = await _capture_facts(sources)
-    return build_audio_facts(cards, sinks, sources, capture, unavailable=tuple(unavailable))
+    default_sink = await pulse.aget_default_sink_name()
+    return build_audio_facts(cards, sinks, sources, capture, default_sink=default_sink, unavailable=tuple(unavailable))
 
 
 def _read_audio(server_name: str) -> AudioFacts:

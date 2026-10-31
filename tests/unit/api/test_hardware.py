@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
 
 from sendspin_bridge.services.hardware import inventory
+from sendspin_bridge.services.source import state as source_state
 from tests.support import hardware_audio
 from tests.support.api_client import make_client
 
@@ -51,6 +53,13 @@ def _fresh(monkeypatch, tmp_config):
     )
     yield
     inventory.clear_cache()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_source_state():
+    source_state.reset()
+    yield
+    source_state.reset()
 
 
 def test_snapshot_lists_controllers_and_devices(installed_bluez):
@@ -283,3 +292,65 @@ def test_no_audio_server_gives_an_empty_audio_section(installed_bluez, monkeypat
     body = make_client().get("/api/v1/hardware").json()
 
     assert body["audio"] == {"cards": [], "sinks": [], "sources": []}
+
+
+# ---------------------------------------------------------------------------
+# The default sink and the source feed
+# ---------------------------------------------------------------------------
+
+
+def test_the_default_sink_is_a_flag_on_the_endpoints(installed_bluez, monkeypatch):
+    async def fake_audio():
+        return replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK)
+
+    monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    assert [sink["name"] for sink in body["audio"]["sinks"] if sink["is_default"]] == [hardware_audio.USB_SINK]
+    assert all(source["is_default"] is False for source in body["audio"]["sources"])
+
+
+def test_no_source_key_when_the_feature_is_off(installed_bluez):
+    body = make_client().get("/api/v1/hardware").json()
+
+    assert body["source"] is None
+
+
+def test_the_source_feed_has_the_contract_shape(installed_bluez, monkeypatch, tmp_config):
+    from sendspin_bridge.services.source import relay
+
+    _use_audio(monkeypatch)
+    source_state.publish(enabled=True, port=8940, phone="bluez_input.6C_5C_3D_35_17_99.1")
+    monkeypatch.setattr(relay, "armed_devices", lambda: ["eneby"])
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "SENDSPIN_SOURCE": True,
+                "SENDSPIN_SOURCE_PORT": 8940,
+                "players": [
+                    {
+                        "id": "eneby",
+                        "name": "ENEBY",
+                        "backend": {"type": "bluetooth_a2dp", "mac": DEVICE, "adapter": "hci0"},
+                    }
+                ],
+            }
+        )
+    )
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    assert body["source"] == {
+        "enabled": True,
+        "port": 8940,
+        "state": "waiting",
+        "phone_mac": DEVICE,
+        "capture": {"kind": "pipewire_node", "node": hardware_audio.CAPTURE_NODE},
+        "relays": ["eneby"],
+        "error": None,
+    }
+    phone = next(device for device in body["bluetooth_devices"] if device["mac"] == DEVICE)
+    assert phone["source_phone"] is True
+    assert {"role": "input", "evidence": f"source_feed:{DEVICE}"} in phone["roles"]

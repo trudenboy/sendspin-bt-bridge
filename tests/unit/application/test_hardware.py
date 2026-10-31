@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
 from sendspin_bridge.application import hardware as hardware_uc
 from sendspin_bridge.application.errors import UseCaseError
+from sendspin_bridge.application.models.hardware import RoleEvidence
 from sendspin_bridge.services.hardware import inventory
+from sendspin_bridge.services.source import relay
+from sendspin_bridge.services.source import state as source_state
 from tests.support import hardware_audio
 
 ADAPTER = "C0:FB:F9:62:D7:D6"
@@ -51,6 +55,14 @@ def _configured(monkeypatch, tmp_config):
     )
     yield
     inventory.clear_cache()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_source_state():
+    """The source snapshot is a process-wide singleton; no test inherits another's phone."""
+    source_state.reset()
+    yield
+    source_state.reset()
 
 
 async def test_snapshot_joins_player_id_and_adapter_area(installed_bluez):
@@ -331,3 +343,121 @@ async def test_no_audio_server_means_an_empty_audio_section(installed_bluez, mon
     snapshot = await hardware_uc.snapshot()
 
     assert snapshot.audio.cards == [] and snapshot.audio.sinks == [] and snapshot.audio.sources == []
+
+
+# ---------------------------------------------------------------------------
+# The source feed
+# ---------------------------------------------------------------------------
+
+PHONE_NODE = "bluez_input.6C_5C_3D_35_17_99.1"
+
+
+def _use_audio_facts(monkeypatch, audio: inventory.AudioFacts) -> None:
+    async def fake_audio() -> inventory.AudioFacts:
+        return audio
+
+    monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
+
+
+def _write_source_config(tmp_config) -> None:
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "SENDSPIN_SOURCE": True,
+                "SENDSPIN_SOURCE_PORT": 8940,
+                "players": [
+                    {
+                        "id": "eneby",
+                        "name": "ENEBY",
+                        "backend": {"type": "bluetooth_a2dp", "mac": DEVICE, "adapter": "hci0"},
+                    }
+                ],
+            }
+        )
+    )
+
+
+async def test_no_source_feed_when_the_feature_is_off(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch)
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert snapshot.source is None
+
+
+async def test_the_source_feed_is_built_from_the_runtime_and_the_capture_facts(
+    installed_bluez, monkeypatch, tmp_config
+):
+    _write_source_config(tmp_config)
+    _use_audio(monkeypatch)
+    source_state.publish(enabled=True, port=8940, phone=PHONE_NODE)
+    monkeypatch.setattr(relay, "armed_devices", lambda: ["eneby"])
+
+    snapshot = await hardware_uc.snapshot()
+
+    feed = snapshot.source
+    assert feed is not None
+    assert (feed.enabled, feed.port, feed.state, feed.phone_mac) == (True, 8940, "waiting", DEVICE)
+    assert (feed.capture.kind, feed.capture.node) == ("pipewire_node", hardware_audio.CAPTURE_NODE)
+    assert feed.relays == ["eneby"]
+    assert feed.error is None
+
+    by_mac = {device.mac: device for device in snapshot.bluetooth_devices}
+    assert by_mac[DEVICE].source_phone is True
+    assert RoleEvidence(role="input", evidence=f"source_feed:{DEVICE}") in by_mac[DEVICE].roles
+
+
+async def test_a_streaming_source_reports_streaming(installed_bluez, monkeypatch, tmp_config):
+    _write_source_config(tmp_config)
+    _use_audio(monkeypatch)
+    source_state.publish(enabled=True, port=8940, phone=PHONE_NODE, players=1, streaming=True)
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert snapshot.source is not None and snapshot.source.state == "streaming"
+
+
+async def test_a_stopped_source_is_off(installed_bluez, monkeypatch, tmp_config):
+    _write_source_config(tmp_config)
+    _use_audio(monkeypatch)
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert snapshot.source is not None
+    assert (snapshot.source.enabled, snapshot.source.state, snapshot.source.phone_mac) == (False, "off", None)
+
+
+# ---------------------------------------------------------------------------
+# The audio server's default sink
+# ---------------------------------------------------------------------------
+
+
+async def test_exactly_the_audio_servers_default_sink_is_marked(installed_bluez, monkeypatch):
+    _use_audio_facts(monkeypatch, replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK))
+
+    snapshot = await hardware_uc.snapshot()
+
+    defaults = [sink.name for sink in snapshot.audio.sinks if sink.is_default]
+    assert defaults == [hardware_audio.USB_SINK]
+    assert all(source.is_default is False for source in snapshot.audio.sources)
+
+
+async def test_no_endpoint_is_default_when_the_server_cannot_say(installed_bluez, monkeypatch):
+    _use_audio_facts(monkeypatch, replace(hardware_audio.facts(), default_sink=None))
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert all(not endpoint.is_default for endpoint in [*snapshot.audio.sinks, *snapshot.audio.sources])
+
+
+async def test_the_sink_detail_carries_the_same_default_flag(installed_bluez, monkeypatch):
+    _use_audio_facts(monkeypatch, replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK))
+
+    default = await hardware_uc.audio_sink(hardware_audio.USB_SINK)
+    other = await hardware_uc.audio_sink(hardware_audio.ANALOG_SINK)
+    source = await hardware_uc.audio_source(hardware_audio.ANALOG_SOURCE)
+
+    assert default.is_default is True
+    assert other.is_default is False
+    assert source.is_default is False

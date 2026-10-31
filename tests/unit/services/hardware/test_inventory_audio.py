@@ -441,3 +441,51 @@ def test_no_audio_server_is_pulse_unavailable_and_not_capture_unavailable(instal
     codes = {(section.section, section.code) for section in read.degraded}
     assert ("audio", "pulse_unavailable") in codes
     assert ("audio", "capture_unavailable") not in codes
+
+
+# -- the audio server's default sink --------------------------------------------------------------
+
+
+def test_build_audio_facts_carries_the_default_sink():
+    facts = inventory.build_audio_facts(
+        hardware_audio.cards(),
+        hardware_audio.sinks(),
+        hardware_audio.sources(),
+        hardware_audio.capture(),
+        default_sink=hardware_audio.USB_SINK,
+    )
+
+    assert facts.default_sink == hardware_audio.USB_SINK
+
+
+def test_the_composition_reads_the_default_sink_once(installed_bluez, monkeypatch):
+    from sendspin_bridge.services.audio import pulse, sink_inventory
+
+    calls: list[int] = []
+
+    async def sinks(**kwargs) -> list:
+        return []
+
+    async def sources(**kwargs) -> list:
+        return []
+
+    async def cards(**kwargs) -> list:
+        return []
+
+    async def no_wpctl() -> str:
+        return ""
+
+    async def default_sink() -> str | None:
+        calls.append(1)
+        return hardware_audio.USB_SINK
+
+    monkeypatch.setattr(sink_inventory, "list_all_sinks", sinks)
+    monkeypatch.setattr(sink_inventory, "list_local_sources", sources)
+    monkeypatch.setattr(sink_inventory, "list_local_cards", cards)
+    monkeypatch.setattr(inventory, "_wpctl_status", no_wpctl)
+    monkeypatch.setattr(pulse, "aget_default_sink_name", default_sink)
+
+    facts = asyncio.run(_REAL_READ_AUDIO_ASYNC())
+
+    assert facts.default_sink == hardware_audio.USB_SINK
+    assert calls == [1]
