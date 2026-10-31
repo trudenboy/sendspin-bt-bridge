@@ -21,6 +21,7 @@ def _fresh_inventory(monkeypatch):
     monkeypatch.setenv("DEMO_MODE", "true")
     from sendspin_bridge.services.audio import pulse
     from sendspin_bridge.services.source import manager as source_manager
+    from sendspin_bridge.services.source import pairing as source_pairing
     from sendspin_bridge.services.source import state as source_state
 
     originals = {
@@ -38,6 +39,7 @@ def _fresh_inventory(monkeypatch):
         )
     }
     source_originals = {name: getattr(source_manager, name) for name in ("start", "stop", "running")}
+    pairing_originals = {name: getattr(source_pairing, name) for name in ("open_window", "close_window")}
     original_source_state = source_state.snapshot()
     original_refresh = inventory._refresh
     inventory.clear_cache()
@@ -47,6 +49,8 @@ def _fresh_inventory(monkeypatch):
         setattr(module, name, value)
     for name, value in source_originals.items():
         setattr(source_manager, name, value)
+    for name, value in pairing_originals.items():
+        setattr(source_pairing, name, value)
     source_state.publish(**asdict(original_source_state))
     inventory.clear_cache()
 
@@ -171,3 +175,24 @@ def test_demo_install_seeds_the_current_tree_and_its_source(tmp_path):
     assert payload["source_running"] is True
     assert payload["source_status"]["enabled"] is True
     assert payload["source_status"]["phone"] == "bluez_source.AA_BB_CC_DD_EE_01"
+
+
+def test_demo_mode_opens_a_pairing_window_the_strip_can_count_down():
+    from demo import install_inventory
+
+    install_inventory()
+    client = make_client(config={"SENDSPIN_SOURCE": True})
+
+    opened = client.post("/api/v1/bridge/source/pairing", json={})
+
+    assert opened.status_code == 200
+    assert opened.json()["pairing_seconds_left"] > 0
+    assert opened.json()["error"] is None
+
+    # A second visit sees the window still open: the countdown lives on the
+    # source's shared snapshot, which is what the strip adopts after a reload.
+    again = client.post("/api/v1/bridge/source/pairing", json={})
+    assert again.json()["pairing_seconds_left"] > 0
+    assert again.json()["pairing_adapters"]
+
+    assert client.delete("/api/v1/bridge/source/pairing").status_code == 204

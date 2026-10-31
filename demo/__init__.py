@@ -1282,6 +1282,28 @@ def _demo_install_source() -> None:
     _source_manager.stop = _demo_source_stop  # type: ignore[assignment]
     _source_manager.running = lambda: _source_state.snapshot().enabled  # type: ignore[assignment]
 
+    # The pairing window normally opens discoverable/pairable mode through the
+    # real BlueZ agent.  The demo has no adapter to open, so it publishes the
+    # window on the same typed snapshot the status read uses: the strip counts
+    # down, the countdown survives a page reload, and "Stop pairing" closes it.
+    from sendspin_bridge.services.source import pairing as _source_pairing
+    from demo.fixtures import DEMO_ADAPTERS
+
+    async def _demo_open_window(seconds: int = _source_pairing.PAIRING_WINDOW_S) -> dict[str, Any]:
+        _source_state.publish(
+            pairing_until=time.time() + max(30, int(seconds)),
+            pairing_adapters=(str(DEMO_ADAPTERS[0]["mac"]),),
+            pairing_error=None,
+        )
+        return _source_pairing.pairing_status()
+
+    async def _demo_close_window() -> dict[str, Any]:
+        _source_state.publish(pairing_until=0.0, pairing_adapters=(), pairing_error=None)
+        return _source_pairing.pairing_status()
+
+    _source_pairing.open_window = _demo_open_window  # type: ignore[assignment]
+    _source_pairing.close_window = _demo_close_window  # type: ignore[assignment]
+
 
 def install_inventory() -> None:
     """Point the hardware reader, the audio commands and the source at the demo fixtures.
