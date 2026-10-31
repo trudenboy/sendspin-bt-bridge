@@ -339,6 +339,15 @@ export const useHardwareStore = defineStore('hardware', () => {
     stopPairingTicker()
   }
 
+  // The status stream already carries the window's remaining seconds. The view
+  // hands it over, so a page reloaded mid-window picks the countdown up again
+  // instead of offering to open a second one. Adopted only when it is longer
+  // than what we already count, so a lagging status event cannot shorten a
+  // window a command has just opened.
+  function adoptPairingWindow(seconds: number) {
+    if (seconds > pairingSecondsLeft.value) setPairingWindow(seconds)
+  }
+
   async function startSource() {
     return command(async () => {
       try {
@@ -476,6 +485,7 @@ export const useHardwareStore = defineStore('hardware', () => {
     stopSource,
     setSourcePlayer,
     startPairingWindow,
+    adoptPairingWindow,
     stopPairingWindow,
     clearSourceError,
   }

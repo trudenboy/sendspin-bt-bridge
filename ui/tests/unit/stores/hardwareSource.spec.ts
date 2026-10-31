@@ -135,6 +135,23 @@ describe('useHardwareStore: source', () => {
     expect(store.pairingSecondsLeft).toBe(47)
   })
 
+  it('adopts a window the bridge reports, so a reload keeps the countdown', async () => {
+    vi.useFakeTimers()
+
+    store.adoptPairingWindow(47)
+
+    expect(store.pairingSecondsLeft).toBe(47)
+  })
+
+  it('never shortens a window it already counts', async () => {
+    vi.useFakeTimers()
+    store.adoptPairingWindow(90)
+
+    store.adoptPairingWindow(20)
+
+    expect(store.pairingSecondsLeft).toBe(90)
+  })
+
   it('surfaces a window the server could not open', async () => {
     vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 0, error: 'no_adapter' }) as never)
 

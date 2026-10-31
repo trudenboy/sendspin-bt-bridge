@@ -216,6 +216,24 @@ describe('Hardware page: source strip', () => {
     expect(wrapper.find('[data-source-pair]').exists()).toBe(true)
   })
 
+  it('picks the countdown up from the bridge status after a reload', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ source: sourceFeed({ enabled: true, state: 'waiting' }) }) as never,
+    )
+    useBridgeStore().snapshot = {
+      bridge: { sendspin_source: { pairing_seconds_left: 47 } },
+      devices: [],
+      groups: [],
+    } as never
+
+    wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-source-pairing]').text()).toContain(
+      en.hardware.source.pairing.replace('{time}', '0:47'),
+    )
+  })
+
   it('tells an absent source apart from one that is configured but off', async () => {
     vi.mocked(getHardware).mockResolvedValue(snapshot({ source: null }) as never)
 

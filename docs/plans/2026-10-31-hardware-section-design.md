@@ -424,8 +424,9 @@ imports `api`; no blocking call appears in a coroutine (the existing
    Settings for v1 (no config-write surface in the new page), link both ways.
 3. Does the `sbb` CLI want the aggregate endpoint as-is, or a `--section` flag?
    Default: as-is; the CLI filters client-side.
-4. Should `SourceFeed` carry the remaining pairing window (`pairing_seconds_left`)
-   so a page reload mid-window keeps the countdown? Today the SPA seeds it from
-   the pairing response and re-adopts the server window on the next attempt, so a
-   reload loses only the local countdown, not the window itself. Default: add the
-   field when the source panel is next touched; it is additive.
+4. ~~Should `SourceFeed` carry the remaining pairing window?~~ **Resolved
+   (2026-10-31) without a new field.** The status stream already carries
+   `sendspin_source.pairing_seconds_left` (it is part of `SendspinSourceStatus`),
+   so the SPA adopts it on load and the countdown survives a page reload without
+   duplicating the value in `SourceFeed`. A bridge restart ends the window with
+   the process, so there is nothing to carry across one.
