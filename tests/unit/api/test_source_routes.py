@@ -126,3 +126,27 @@ def test_closing_the_pairing_window_is_still_a_204_without_a_body(api_client, mo
     assert response.status_code == 204
     assert response.content == b""
     assert called == [1]
+
+
+def test_starting_the_source_through_the_real_use_case_reaches_the_manager(api_client, monkeypatch):
+    from sendspin_bridge.services.source import manager
+
+    seen: list[dict] = []
+
+    async def fake_start(config, config_dir):
+        seen.append(config)
+        return {"started": True, "port": 8940}
+
+    async def capture_available():
+        return True
+
+    monkeypatch.setattr(source_uc, "_capture_available", capture_available)
+    monkeypatch.setattr(manager, "start", fake_start)
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {"SENDSPIN_SOURCE": True})
+    monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: None)
+
+    response = api_client.post("/api/v1/bridge/source", json={"enabled": True})
+
+    assert response.status_code == 200
+    assert response.json() == {"started": True, "port": 8940}
+    assert seen == [{"SENDSPIN_SOURCE": True}]

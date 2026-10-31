@@ -9,7 +9,7 @@ a config migration should run.
 from __future__ import annotations
 
 import asyncio
-import re
+from collections.abc import Collection
 from typing import TYPE_CHECKING, Any, Literal
 
 from sendspin_bridge.application import source as source_uc
@@ -52,6 +52,8 @@ from sendspin_bridge.services.hardware.inventory import (
     InventoryRead,
     read_inventory,
 )
+from sendspin_bridge.services.hardware.roles import CAPTURE_NAME_RE, SOURCE_NAME_RE
+from sendspin_bridge.services.source import manager as source_manager
 
 if TYPE_CHECKING:
     from sendspin_bridge.services.audio.sink_inventory import CardPort as LocalCardPort
@@ -60,11 +62,6 @@ if TYPE_CHECKING:
 
 _BLUETOOTH_BACKEND = "bluetooth_a2dp"
 _PULSE_SINK_BACKEND = "pulse_sink"
-
-#: The two audio-server spellings of the phone's capture, as a source feed
-#: reports it; the address is folded by ``DeviceAddress``.
-_CAPTURE_NODE_RE = re.compile(r"^bluez_input\.(?P<address>[0-9A-Fa-f_]{17})\.\d+$")
-_PULSE_SOURCE_RE = re.compile(r"^bluez_source\.(?P<address>[0-9A-Fa-f_]{17})(?:\..*)?$")
 
 
 # ---------------------------------------------------------------------------
@@ -218,15 +215,22 @@ def _degraded(read: InventoryRead) -> list[DegradedSection]:
 # ---------------------------------------------------------------------------
 
 
-def _phone_mac(node: str | None) -> str | None:
-    """The MAC inside a capture node's name (``bluez_input.<mac>.<n>``)."""
+def _phone_mac(node: str | None, known_macs: Collection[str]) -> str | None:
+    """The MAC inside a capture node's name, when it is a device this bridge knows.
+
+    A node name is the audio server's spelling, not proof that the peer is one
+    of our devices: only a MAC that is in the inventory (a paired/bonded
+    device) may claim the phone role.
+    """
     if not node:
         return None
-    for pattern in (_CAPTURE_NODE_RE, _PULSE_SOURCE_RE):
+    for pattern in (CAPTURE_NAME_RE, SOURCE_NAME_RE):
         match = pattern.match(node.strip())
         if match is not None:
             address = DeviceAddress.parse(match.group("address"))
-            return address.colons if address is not None else None
+            if address is not None and address.colons in known_macs:
+                return address.colons
+            return None
     return None
 
 
@@ -240,20 +244,22 @@ def _source_state(view: source_uc.SourceStatus) -> Literal["off", "waiting", "st
     return "off"
 
 
-def _source_feed(config: dict[str, Any], audio: AudioFacts) -> SourceFeed | None:
+def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collection[str]) -> SourceFeed | None:
     """The source as the page shows it, or ``None`` when the feature is off.
 
     ``None`` is "this bridge does not report a source", not an empty feed: the
     SPA hides the strip instead of claiming a stopped phone that never existed.
+    A source enabled through the ``SENDSPIN_SOURCE`` environment variable runs
+    without the config key, so the running manager is evidence too.
     """
-    if not config.get("SENDSPIN_SOURCE"):
+    if not config.get("SENDSPIN_SOURCE") and not source_manager.running():
         return None
     view = source_uc.status(config)
     return SourceFeed(
         enabled=view.enabled,
         port=view.port,
         state=_source_state(view),
-        phone_mac=_phone_mac(view.phone),
+        phone_mac=_phone_mac(view.phone, known_macs),
         capture=SourceCapture(kind=audio.capture.kind, node=audio.capture.node),
         relays=list(view.attached_devices),
         error=view.error,
@@ -383,7 +389,7 @@ async def snapshot() -> HardwareSnapshot:
     """One aggregate read of the physical layer."""
     read, config = await _read()
     players, areas, sink_players = _config_view(config)
-    source = _source_feed(config, read.audio)
+    source = _source_feed(config, read.audio, {device.mac for device in read.devices})
     return HardwareSnapshot(
         as_of=read.as_of,
         stale_after_s=read.stale_after_s,
@@ -414,7 +420,7 @@ async def controller(controller_id: str) -> ControllerDetail:
         raise not_found(f"Unknown controller: {controller_id}", code="entity_not_found")
     players, areas, _sink_players = _config_view(config)
     by_mac = {device.mac: device for device in read.devices}
-    source = _source_feed(config, read.audio)
+    source = _source_feed(config, read.audio, set(by_mac))
     return ControllerDetail(
         **_controller_summary(facts, areas).model_dump(),
         devices=[_device_summary(by_mac[mac], players, source) for mac in facts.device_macs if mac in by_mac],
@@ -432,7 +438,7 @@ async def bluetooth_device(mac: str) -> BtDeviceDetail:
     if facts is None:
         raise not_found(f"Unknown Bluetooth device: {mac}", code="entity_not_found")
     players, _areas, _sink_players = _config_view(config)
-    summary = _device_summary(facts, players, _source_feed(config, read.audio))
+    summary = _device_summary(facts, players, _source_feed(config, read.audio, {device.mac for device in read.devices}))
     return BtDeviceDetail(
         **summary.model_dump(),
         uuids=list(facts.uuids),

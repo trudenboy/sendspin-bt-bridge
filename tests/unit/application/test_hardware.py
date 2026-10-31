@@ -418,6 +418,45 @@ async def test_a_streaming_source_reports_streaming(installed_bluez, monkeypatch
     assert snapshot.source is not None and snapshot.source.state == "streaming"
 
 
+async def test_a_pairing_error_does_not_make_a_streaming_source_an_error(installed_bluez, monkeypatch, tmp_config):
+    _write_source_config(tmp_config)
+    _use_audio(monkeypatch)
+    source_state.publish(
+        enabled=True, port=8940, phone=PHONE_NODE, players=1, streaming=True, pairing_error="no_adapter"
+    )
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert snapshot.source is not None
+    assert snapshot.source.state == "streaming"
+    assert snapshot.source.error is None
+
+
+async def test_an_env_started_source_is_reported_without_the_config_key(installed_bluez, monkeypatch):
+    from sendspin_bridge.services.source import manager as source_manager
+
+    _use_audio(monkeypatch)
+    monkeypatch.setattr(source_manager, "running", lambda: True)
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert snapshot.source is not None
+    assert (snapshot.source.enabled, snapshot.source.state) == (False, "off")
+
+
+async def test_only_a_known_device_is_marked_as_the_source_phone(installed_bluez, monkeypatch, tmp_config):
+    _write_source_config(tmp_config)
+    _use_audio(monkeypatch)
+    unknown_node = f"bluez_input.{UNPAIRED.replace(':', '_')}.3"
+    source_state.publish(enabled=True, port=8940, phone=unknown_node, streaming=True)
+
+    snapshot = await hardware_uc.snapshot()
+
+    assert snapshot.source is not None
+    assert snapshot.source.phone_mac is None
+    assert all(not device.source_phone for device in snapshot.bluetooth_devices)
+
+
 async def test_a_stopped_source_is_off(installed_bluez, monkeypatch, tmp_config):
     _write_source_config(tmp_config)
     _use_audio(monkeypatch)

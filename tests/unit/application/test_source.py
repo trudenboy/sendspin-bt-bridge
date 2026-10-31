@@ -67,6 +67,16 @@ def test_status_falls_back_to_the_configured_port_before_the_source_runs():
     assert (view.enabled, view.streaming) == (False, False)
 
 
+def test_status_keeps_a_pairing_error_separate_from_the_source_error():
+    source_state.publish(pairing_error="no_adapter")
+
+    view = source_uc.status({"SENDSPIN_SOURCE": True})
+
+    assert view.error is None
+    assert view.pairing_error == "no_adapter"
+    assert view.as_status_dict()["error"] is None
+
+
 def test_status_keeps_every_key_the_spa_reads():
     source_state.publish(error="port_in_use")
     view = source_uc.status({"SENDSPIN_SOURCE": True})
@@ -95,6 +105,10 @@ async def test_start_hands_the_loaded_config_and_its_directory_to_the_manager(mo
         seen.append((config, config_dir))
         return {"started": True, "port": 8940}
 
+    async def capture_available():
+        return True
+
+    monkeypatch.setattr(source_uc, "_capture_available", capture_available)
     monkeypatch.setattr(manager, "start", fake_start)
     monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: tmp_config.parent)
     tmp_config.write_text(json.dumps({"SENDSPIN_SOURCE": True, "SENDSPIN_SOURCE_PORT": 8940}))
@@ -105,6 +119,46 @@ async def test_start_hands_the_loaded_config_and_its_directory_to_the_manager(mo
     assert len(seen) == 1
     assert seen[0][0]["SENDSPIN_SOURCE_PORT"] == 8940
     assert seen[0][1] == tmp_config.parent
+
+
+async def test_a_host_that_cannot_capture_is_refused_before_the_manager_starts(monkeypatch):
+    started: list[int] = []
+
+    async def cannot_capture():
+        return False
+
+    async def fake_start(config, config_dir):
+        started.append(1)
+        return {"started": True}
+
+    monkeypatch.setattr(source_uc, "_capture_available", cannot_capture)
+    monkeypatch.setattr(manager, "start", fake_start)
+
+    with pytest.raises(UseCaseError) as exc:
+        await source_uc.start()
+
+    assert (exc.value.status, exc.value.code) == (422, "capture_unavailable")
+    assert started == []
+
+
+async def test_the_capture_capability_is_the_inventorys_not_the_phones(monkeypatch):
+    from types import SimpleNamespace
+
+    from sendspin_bridge.services.hardware import inventory
+
+    monkeypatch.setattr(
+        inventory,
+        "read_inventory",
+        lambda: SimpleNamespace(capabilities=SimpleNamespace(capture=SimpleNamespace(available=False))),
+    )
+    assert await source_uc._capture_available() is False
+
+    monkeypatch.setattr(
+        inventory,
+        "read_inventory",
+        lambda: SimpleNamespace(capabilities=SimpleNamespace(capture=SimpleNamespace(available=True))),
+    )
+    assert await source_uc._capture_available() is True
 
 
 async def test_stop_delegates_to_the_manager(monkeypatch):

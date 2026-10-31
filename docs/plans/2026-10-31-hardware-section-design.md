@@ -274,6 +274,7 @@ player-to-sink routing.
 | `hardware_unavailable` | 503 | the whole section cannot be read (no D-Bus and no `bluetoothctl`) |
 | `not_supported_for_backend` | 409 | command on a backend that does not have it |
 | `capture_unavailable` | 422 | asked to start the source without a capture node |
+| `source_sink_missing` | 409 | asked to play the source on a speaker with no audio output |
 | `invalid_audio_name` | 400 | name outside the allowed grammar |
 | `bond_in_use_by_player` | 409 | forgetting a bond that backs a player; carries `remediation` and the player id |
 

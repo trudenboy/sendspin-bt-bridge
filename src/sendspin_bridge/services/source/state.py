@@ -39,18 +39,27 @@ class SourceState:
         return max(0, int(self.pairing_until - current)) if self.pairing_until else 0
 
     def status_dict(self) -> dict[str, Any]:
-        """The bridge-status shape: the same keys ``SendspinSourceStatus`` reads."""
+        """The bridge-status shape: the same keys ``SendspinSourceStatus`` reads.
+
+        ``attached_devices`` is owned by the relay service rather than this
+        snapshot, so it defaults to none here; the bridge status joins the
+        armed relays in.  The key is present either way, which keeps
+        ``SendspinSourceStatus(**status_dict())`` valid on its own.
+
+        ``error`` is the *source's* error.  A pairing failure is a separate
+        field (``pairing_error``) and is reported by the pairing window, not
+        merged in here: a failed window does not stop the source streaming.
+        """
         return {
             "enabled": self.enabled,
             "port": self.port,
             "phone": self.phone,
             "players": self.players,
             "streaming": self.streaming,
-            # A source that failed to start keeps its error even while the
-            # pairing fields are present (pairing errors are the fallback).
-            "error": self.error or self.pairing_error,
+            "error": self.error,
             "pairing_seconds_left": self.pairing_seconds_left(),
             "pairing_adapters": list(self.pairing_adapters),
+            "attached_devices": [],
         }
 
 

@@ -730,7 +730,7 @@ def _assemble(
         dbus=dbus,
         server_name=resolved_name,
         capture=probe_capture(),
-        default_sink=audio_server != "none",
+        default_sink=audio_facts.default_sink is not None,
     )
     entries = list(degraded)
     if audio_server == "none":

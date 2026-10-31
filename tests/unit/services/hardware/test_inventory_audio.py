@@ -458,6 +458,22 @@ def test_build_audio_facts_carries_the_default_sink():
     assert facts.default_sink == hardware_audio.USB_SINK
 
 
+def test_default_sink_capability_needs_a_successful_default_read(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch, hardware_audio.facts())
+
+    read = _read()
+
+    assert read.capabilities.default_sink.available is False
+
+
+def test_default_sink_capability_is_true_after_a_successful_read(installed_bluez, monkeypatch):
+    _use_audio(monkeypatch, replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK))
+
+    read = _read()
+
+    assert read.capabilities.default_sink.available is True
+
+
 def test_the_composition_reads_the_default_sink_once(installed_bluez, monkeypatch):
     from sendspin_bridge.services.audio import pulse, sink_inventory
 

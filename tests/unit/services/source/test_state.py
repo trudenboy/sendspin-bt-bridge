@@ -35,6 +35,7 @@ def test_a_fresh_snapshot_is_off_and_keeps_the_status_keys_unchanged():
         "error": None,
         "pairing_seconds_left": 0,
         "pairing_adapters": [],
+        "attached_devices": [],
     }
 
 
@@ -65,10 +66,34 @@ def test_a_source_error_is_not_lost_because_pairing_has_none():
     assert state.snapshot().status_dict()["error"] == "port_in_use"
 
 
-def test_a_pairing_error_is_reported_when_the_source_has_none():
+def test_a_pairing_error_is_not_the_sources_error():
     state.publish(pairing_error="no_adapter")
 
-    assert state.snapshot().status_dict()["error"] == "no_adapter"
+    assert state.snapshot().status_dict()["error"] is None
+
+
+def test_the_source_accessor_reports_the_sources_own_error():
+    from sendspin_bridge.services.source import bt_source
+
+    state.publish(error="port_in_use", pairing_error="no_adapter")
+
+    assert bt_source.source_status()["error"] == "port_in_use"
+
+
+def test_the_source_accessor_keeps_a_pairing_error_out_of_the_error():
+    from sendspin_bridge.services.source import bt_source
+
+    state.publish(pairing_error="no_adapter")
+
+    assert bt_source.source_status()["error"] is None
+
+
+def test_the_status_dict_constructs_the_bridge_status_model():
+    from sendspin_bridge.application.models.bridge import SendspinSourceStatus
+
+    model = SendspinSourceStatus(**state.snapshot().status_dict())
+
+    assert model.attached_devices == []
 
 
 def test_an_unknown_field_cannot_corrupt_the_snapshot():

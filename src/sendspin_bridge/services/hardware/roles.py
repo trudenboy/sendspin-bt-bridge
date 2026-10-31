@@ -23,7 +23,15 @@ from sendspin_bridge.services.audio.sink_names import address_from_sink_name
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-__all__ = ["DeviceLink", "LinkEndpoint", "RoleEvidence", "SourceLink", "infer_roles"]
+__all__ = [
+    "CAPTURE_NAME_RE",
+    "SOURCE_NAME_RE",
+    "DeviceLink",
+    "LinkEndpoint",
+    "RoleEvidence",
+    "SourceLink",
+    "infer_roles",
+]
 
 Role = Literal["output", "input"]
 
@@ -33,8 +41,8 @@ INPUT: Role = "input"
 #: PipeWire names the A2DP capture of a phone ``bluez_input.<MAC>.<n>``;
 #: PulseAudio exports the same link as ``bluez_source.<MAC>``.  Both spell the
 #: address the audio-server way, and ``DeviceAddress`` folds it.
-_CAPTURE_NAME_RE = re.compile(r"^bluez_input\.(?P<address>[0-9A-Fa-f_]{17})\.\d+$")
-_SOURCE_NAME_RE = re.compile(r"^bluez_source\.(?P<address>[0-9A-Fa-f_]{17})(?:\..*)?$")
+CAPTURE_NAME_RE = re.compile(r"^bluez_input\.(?P<address>[0-9A-Fa-f_]{17})\.\d+$")
+SOURCE_NAME_RE = re.compile(r"^bluez_source\.(?P<address>[0-9A-Fa-f_]{17})(?:\..*)?$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,10 +101,10 @@ def _input_evidence(
     source_evidence: str | None = None
     for endpoint in endpoints:
         if endpoint.kind == "capture":
-            if _address_from_name(endpoint.name, _CAPTURE_NAME_RE) == address:
+            if _address_from_name(endpoint.name, CAPTURE_NAME_RE) == address:
                 return f"capture:{endpoint.name}"
         elif endpoint.kind == "source" and source_evidence is None and endpoint.state != "suspended":
-            if _address_from_name(endpoint.name, _SOURCE_NAME_RE) == address:
+            if _address_from_name(endpoint.name, SOURCE_NAME_RE) == address:
                 source_evidence = f"source:{endpoint.name}"
     if source_evidence is not None:
         return source_evidence

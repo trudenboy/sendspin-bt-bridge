@@ -15,7 +15,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from sendspin_bridge.application.errors import conflict
+from sendspin_bridge.application.errors import UseCaseError, conflict
 from sendspin_bridge.services.source import manager, pairing, relay
 from sendspin_bridge.services.source import state as source_state
 
@@ -42,6 +42,7 @@ class SourceStatus:
     players: int
     streaming: bool
     error: str | None
+    pairing_error: str | None
     pairing_seconds_left: int
     pairing_adapters: tuple[str, ...]
     attached_devices: tuple[str, ...]
@@ -84,18 +85,48 @@ def status(config: dict[str, Any]) -> SourceStatus:
         phone=current.phone,
         players=current.players,
         streaming=current.streaming,
-        error=current.error or current.pairing_error,
+        error=current.error,
+        pairing_error=current.pairing_error,
         pairing_seconds_left=current.pairing_seconds_left(),
         pairing_adapters=tuple(current.pairing_adapters),
         attached_devices=tuple(relay.armed_devices()),
     )
 
 
+async def _capture_available() -> bool:
+    """Whether this host can capture a phone's Bluetooth audio at all.
+
+    The fact comes from the hardware inventory's capture capability (PipeWire's
+    tools are present), never from whether a phone is streaming right now: a
+    paired phone that is silent is a capture-capable host.
+    """
+    from sendspin_bridge.services.hardware import inventory
+
+    try:
+        read = await asyncio.to_thread(inventory.read_inventory)
+    except inventory.HardwareUnavailable:
+        return False
+    return read.capabilities.capture.available
+
+
 async def start() -> dict[str, Any]:
-    """Start the source from the bridge config; a second call is a no-op."""
+    """Start the source from the bridge config; a second call is a no-op.
+
+    A host without the capture capability would answer 200 and then never
+    stream, so it is refused with the documented 422 instead of starting a
+    source that cannot work.
+    """
     from sendspin_bridge.bridge.orchestrator import _resolve_config_dir
     from sendspin_bridge.config import load_config
 
+    if not manager.running():
+        available = await _capture_available()
+        if not available and not manager.running():
+            raise UseCaseError(
+                422,
+                "capture_unavailable",
+                "This host cannot capture Bluetooth audio: PipeWire's wpctl is not available.",
+            )
     config = await asyncio.to_thread(load_config)
     return await manager.start(config, _resolve_config_dir())
 

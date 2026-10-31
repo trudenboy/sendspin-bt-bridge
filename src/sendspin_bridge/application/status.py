@@ -194,15 +194,9 @@ def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
     """The source's state, only for a bridge configured to offer one."""
     if not config.get("SENDSPIN_SOURCE"):
         return None
-    from sendspin_bridge.services.source.bt_source import source_status
+    from sendspin_bridge.application import source as source_uc
 
-    state = source_status()
-    if state.get("port") is None:
-        state["port"] = config.get("SENDSPIN_SOURCE_PORT")
-    from sendspin_bridge.services.source import relay
-
-    state["attached_devices"] = relay.armed_devices()
-    return SendspinSourceStatus(**state)
+    return SendspinSourceStatus(**source_uc.status(config).as_status_dict())
 
 
 def find_client(device_id: str):

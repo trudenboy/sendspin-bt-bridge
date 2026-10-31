@@ -77,8 +77,8 @@ def test_snapshot_lists_controllers_and_devices(installed_bluez):
         "dbus": False,
         "audio_server": "pipewire",
         "capture": True,
-        "default_sink": True,
-        "reasons": {"dbus": "dbus_unavailable"},
+        "default_sink": False,
+        "reasons": {"dbus": "dbus_unavailable", "default_sink": "pulse_unavailable"},
     }
     controller = body["controllers"][0]
     assert controller["id"] == "hci0"
@@ -309,6 +309,17 @@ def test_the_default_sink_is_a_flag_on_the_endpoints(installed_bluez, monkeypatc
 
     assert [sink["name"] for sink in body["audio"]["sinks"] if sink["is_default"]] == [hardware_audio.USB_SINK]
     assert all(source["is_default"] is False for source in body["audio"]["sources"])
+
+
+def test_the_default_sink_capability_follows_a_successful_read(installed_bluez, monkeypatch):
+    async def fake_audio():
+        return replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK)
+
+    monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    assert body["capabilities"]["default_sink"] is True
 
 
 def test_no_source_key_when_the_feature_is_off(installed_bluez):
