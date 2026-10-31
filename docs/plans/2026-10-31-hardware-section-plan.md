@@ -256,6 +256,30 @@ UI word appears in the glossary; the docs page describes the page as shipped.
 
 ---
 
+## E6 — Card profile and port switching (post-v1)
+
+**Scope.** The two writes v1 deliberately left out: choosing a sound card's
+profile and an output's port. Both are audible, so both confirm, and neither is
+offered where the bridge itself owns the choice (a Bluetooth card's profile is
+driven by the connection).
+
+**Backend.** `PUT /audio/cards/{name}/profile` and
+`PUT /audio/sinks/{name}/port`, both returning the updated detail so the page
+needs no second read. Codes: `invalid_profile` / `invalid_port` (400),
+`entity_not_found` (404), `not_supported_for_backend` (409). The port must be one
+the sink's own card lists, resolved through the read model's owner
+classification rather than guessed from the name, and the inventory cache is
+dropped after a successful write.
+
+**Frontend.** The card drawer offers the profile list; an output offers its
+ports. Both behind `ConfirmConsequences` naming what may go silent.
+
+**Exit criteria.** Switching a profile or a port from the page shows the new
+state in the same request (no stale read), and a port the card does not own is
+rejected before anything is touched.
+
+---
+
 ## Acceptance criteria
 
 1. `DEMO_MODE=true` renders the page with 2 controllers, paired devices, ≥2
