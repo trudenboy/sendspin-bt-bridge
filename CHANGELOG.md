@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.26] - 2026-10-31
+
 ### Added
 
 - The Bluetooth source has its own controls in Settings: **Pair a phone** opens the adapters for two minutes (and can be stopped), **Start now** / **Stop** run the source without a bridge restart, and **Play the phone here** plays the phone on one of the bridge's speakers (a direct PipeWire relay) or sends it back with **Back to Music Assistant**.
@@ -6755,7 +6757,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.24...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.25...HEAD
+[3.1.0-beta.25]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.24...v3.1.0-beta.25
 [3.1.0-beta.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.23...v3.1.0-beta.24
 [3.1.0-beta.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.21...v3.1.0-beta.23
 [3.1.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.19...v3.1.0-beta.21

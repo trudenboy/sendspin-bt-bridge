@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.26] - 2026-10-31
+
+### Added
+
+- The Bluetooth source has its own controls in Settings: **Pair a phone** opens the adapters for two minutes (and can be stopped), **Start now** / **Stop** run the source without a bridge restart, and **Play the phone here** plays the phone on one of the bridge's speakers (a direct PipeWire relay) or sends it back with **Back to Music Assistant**.
+- A phone pairs with the bridge by numeric comparison, and the source keeps its own Bluetooth agent while it runs, so a phone that reconnects hours later still gets its audio profile authorised.
+- A speaker set to play the phone keeps doing so: the choice survives a bridge restart and the relay resumes by itself when the phone reconnects.
+
 ## [3.1.0-beta.25] - 2026-10-31
 
 ### Added
