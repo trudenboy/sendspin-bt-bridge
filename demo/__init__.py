@@ -1286,8 +1286,8 @@ def _demo_install_source() -> None:
     # real BlueZ agent.  The demo has no adapter to open, so it publishes the
     # window on the same typed snapshot the status read uses: the strip counts
     # down, the countdown survives a page reload, and "Stop pairing" closes it.
-    from sendspin_bridge.services.source import pairing as _source_pairing
     from demo.fixtures import DEMO_ADAPTERS
+    from sendspin_bridge.services.source import pairing as _source_pairing
 
     async def _demo_open_window(seconds: int = _source_pairing.PAIRING_WINDOW_S) -> dict[str, Any]:
         _source_state.publish(
