@@ -64,7 +64,7 @@ export interface ScanResult {
 /** One envelope for every event on /api/v1/events. */
 export interface EventEnvelope<T = unknown> {
   v: number
-  type: 'status' | 'job' | 'log' | 'sync'
+  type: 'status' | 'job' | 'log' | 'sync' | 'hardware'
   at: string
   data: T
 }
@@ -111,3 +111,11 @@ export interface NowPlaying {
 }
 
 export type AudioSink = Schemas['AudioSinkOut']
+
+export type HardwareSnapshot = Schemas['HardwareSnapshot']
+export type ControllerSummary = Schemas['ControllerSummary']
+export type ControllerDetail = Schemas['ControllerDetail']
+export type BtDeviceSummary = Schemas['BtDeviceSummary']
+export type BtDeviceDetail = Schemas['BtDeviceDetail']
+export type HardwareCapabilities = Schemas['CapabilitySet']
+export type DegradedSection = Schemas['DegradedSection']

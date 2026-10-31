@@ -4,6 +4,9 @@ import type { EventEnvelope } from '@/api/types'
 
 export type EventType = EventEnvelope['type']
 
+/** What a stream subscribes to when the caller asks for nothing in particular. */
+export const DEFAULT_EVENT_TYPES: EventType[] = ['status', 'job']
+
 export interface EventStreamOptions {
   types?: EventType[]
   onEvent: (event: EventEnvelope) => void
@@ -35,7 +38,7 @@ const INGRESS_FAILURES_BEFORE_RELOAD = 5
  */
 export function useEventStream(options: EventStreamOptions) {
   const connected = ref(false)
-  const types = options.types ?? ['status', 'job']
+  const types = options.types ?? DEFAULT_EVENT_TYPES
   let source: EventSource | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let failures = 0

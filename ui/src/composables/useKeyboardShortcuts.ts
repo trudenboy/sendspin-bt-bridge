@@ -7,7 +7,7 @@ import { useBluetoothStore } from '@/stores/bluetooth'
 export const shortcutsOpen = ref(false)
 
 export const SHORTCUTS = [
-  { keys: ['1', '2', '3', '4'], action: 'places' },
+  { keys: ['1', '2', '3', '4', '5'], action: 'places' },
   { keys: ['a'], action: 'add' },
   { keys: ['/'], action: 'search' },
   { keys: ['?'], action: 'help' },

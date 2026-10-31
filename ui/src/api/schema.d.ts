@@ -1424,6 +1424,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hardware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Hardware inventory
+         * @description Every controller, every paired device, and what this host can see at all.
+         */
+        get: operations["get_hardware_api_v1_hardware_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hardware/bluetooth/{mac}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One Bluetooth device
+         * @description A paired or known device: UUIDs, manufacturer and every bond.
+         */
+        get: operations["get_bluetooth_device_api_v1_hardware_bluetooth__mac__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hardware/controllers/{controller_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One Bluetooth controller
+         * @description The adapter by ``hciN`` or by controller MAC, with the bonds it holds.
+         */
+        get: operations["get_controller_api_v1_hardware_controllers__controller_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -2504,6 +2564,27 @@ export interface components {
             name: string | null;
         };
         /**
+         * AddressForms
+         * @description The same address in every spelling its consumers use.
+         */
+        AddressForms: {
+            /**
+             * Bare
+             * @description AABBCCDDEEFF — the sysfs adapter map.
+             */
+            bare: string;
+            /**
+             * Colons
+             * @description AA:BB:CC:DD:EE:FF — BlueZ, bluetoothctl, the config.
+             */
+            colons: string;
+            /**
+             * Underscores
+             * @description AA_BB_CC_DD_EE_FF — audio sink names and D-Bus paths.
+             */
+            underscores: string;
+        };
+        /**
          * AirCalibrationCandidate
          * @description A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).
          *
@@ -2830,6 +2911,16 @@ export interface components {
             rows?: {
                 [key: string]: number;
             } | null;
+        };
+        /**
+         * AreaRef
+         * @description The Home Assistant area an adapter was mapped to (read-only here).
+         */
+        AreaRef: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string | null;
         };
         /** AreasIn */
         AreasIn: {
@@ -3475,6 +3566,118 @@ export interface components {
              */
             level: string;
         };
+        /**
+         * BtDeviceDetail
+         * @description One device with what only a single-device read adds.
+         */
+        BtDeviceDetail: {
+            /** Alias */
+            alias: string;
+            /** Battery Pct */
+            battery_pct: number | null;
+            /** Bonded */
+            bonded: boolean | null;
+            /**
+             * Bonds
+             * @description Every controller MAC holding the bond.
+             */
+            bonds: string[];
+            /**
+             * Connected
+             * @default false
+             */
+            connected: boolean;
+            /**
+             * Controller Macs
+             * @description Every controller holding the bond.
+             */
+            controller_macs: string[];
+            /** Mac */
+            mac: string;
+            /**
+             * Manufacturer
+             * @default
+             */
+            manufacturer: string;
+            /** Modalias */
+            modalias: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Paired
+             * @description null means BlueZ did not answer.
+             */
+            paired: boolean | null;
+            /**
+             * Player Id
+             * @description Config id of the player this bond backs.
+             */
+            player_id: string | null;
+            /** Roles */
+            roles: components["schemas"]["RoleEvidence"][];
+            rssi: components["schemas"]["RssiSummary"] | null;
+            /** Services Resolved */
+            services_resolved: boolean | null;
+            /**
+             * Source Phone
+             * @description The phone currently streaming into the bridge.
+             * @default false
+             */
+            source_phone: boolean;
+            transport: components["schemas"]["TransportSummary"] | null;
+            /** Trusted */
+            trusted: boolean | null;
+            /** Uuids */
+            uuids: string[];
+        };
+        /**
+         * BtDeviceSummary
+         * @description A paired or known Bluetooth device.
+         */
+        BtDeviceSummary: {
+            /** Alias */
+            alias: string;
+            /** Battery Pct */
+            battery_pct: number | null;
+            /** Bonded */
+            bonded: boolean | null;
+            /**
+             * Connected
+             * @default false
+             */
+            connected: boolean;
+            /**
+             * Controller Macs
+             * @description Every controller holding the bond.
+             */
+            controller_macs: string[];
+            /** Mac */
+            mac: string;
+            /** Name */
+            name: string;
+            /**
+             * Paired
+             * @description null means BlueZ did not answer.
+             */
+            paired: boolean | null;
+            /**
+             * Player Id
+             * @description Config id of the player this bond backs.
+             */
+            player_id: string | null;
+            /** Roles */
+            roles: components["schemas"]["RoleEvidence"][];
+            rssi: components["schemas"]["RssiSummary"] | null;
+            /**
+             * Source Phone
+             * @description The phone currently streaming into the bridge.
+             * @default false
+             */
+            source_phone: boolean;
+            transport: components["schemas"]["TransportSummary"] | null;
+            /** Trusted */
+            trusted: boolean | null;
+        };
         /** BugReportIn */
         BugReportIn: {
             /** Description */
@@ -3495,6 +3698,32 @@ export interface components {
             issue_number: number;
             /** Issue Url */
             issue_url: string;
+        };
+        /**
+         * CapabilitySet
+         * @description What this host can show, plus the reason code for every no.
+         */
+        CapabilitySet: {
+            /**
+             * Audio Server
+             * @enum {string}
+             */
+            audio_server: "pipewire" | "pulseaudio" | "none";
+            /** Bluetooth */
+            bluetooth: boolean;
+            /** Capture */
+            capture: boolean;
+            /** Dbus */
+            dbus: boolean;
+            /** Default Sink */
+            default_sink: boolean;
+            /**
+             * Reasons
+             * @description Stable reason code per unavailable capability.
+             */
+            reasons: {
+                [key: string]: string;
+            };
         };
         /** CaptureIn */
         CaptureIn: {
@@ -3608,6 +3837,110 @@ export interface components {
              * @default
              */
             username?: string;
+        };
+        /**
+         * ControllerDetail
+         * @description One adapter with its bonds and address forms.
+         */
+        ControllerDetail: {
+            address_forms: components["schemas"]["AddressForms"];
+            /** Alias */
+            alias: string;
+            area: components["schemas"]["AreaRef"] | null;
+            /**
+             * Class Of Device
+             * @description Raw HCI Class of Device; null without CAP_NET_RAW.
+             */
+            class_of_device: string | null;
+            /**
+             * Device Count
+             * @default 0
+             */
+            device_count: number;
+            /** Devices */
+            devices: components["schemas"]["BtDeviceSummary"][];
+            /**
+             * Id
+             * @description Kernel name, e.g. hci0; synthetic when sysfs is absent.
+             */
+            id: string;
+            /**
+             * Id Synthetic
+             * @default false
+             */
+            id_synthetic: boolean;
+            /** Mac */
+            mac: string;
+            /** Name */
+            name: string;
+            /**
+             * Powered
+             * @default false
+             */
+            powered: boolean;
+            /**
+             * Present
+             * @default true
+             */
+            present: boolean;
+        };
+        /**
+         * ControllerSummary
+         * @description One physical Bluetooth adapter.
+         */
+        ControllerSummary: {
+            /** Alias */
+            alias: string;
+            area: components["schemas"]["AreaRef"] | null;
+            /**
+             * Class Of Device
+             * @description Raw HCI Class of Device; null without CAP_NET_RAW.
+             */
+            class_of_device: string | null;
+            /**
+             * Device Count
+             * @default 0
+             */
+            device_count: number;
+            /**
+             * Id
+             * @description Kernel name, e.g. hci0; synthetic when sysfs is absent.
+             */
+            id: string;
+            /**
+             * Id Synthetic
+             * @default false
+             */
+            id_synthetic: boolean;
+            /** Mac */
+            mac: string;
+            /** Name */
+            name: string;
+            /**
+             * Powered
+             * @default false
+             */
+            powered: boolean;
+            /**
+             * Present
+             * @default true
+             */
+            present: boolean;
+        };
+        /**
+         * DegradedSection
+         * @description A section read in part, or not at all, with a code the UI branches on.
+         */
+        DegradedSection: {
+            /** Code */
+            code: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Section
+             * @description controllers | bluetooth_devices | audio | hardware
+             */
+            section: string;
         };
         /** DelaysIn */
         DelaysIn: {
@@ -4340,6 +4673,34 @@ export interface components {
             ha_token: string;
             /** Ma Url */
             ma_url: string;
+        };
+        /**
+         * HardwareSnapshot
+         * @description The aggregate read: one moment of the physical layer.
+         */
+        HardwareSnapshot: {
+            /**
+             * As Of
+             * @description ISO-8601 UTC when this read was taken.
+             */
+            as_of: string;
+            /** Bluetooth Devices */
+            bluetooth_devices: components["schemas"]["BtDeviceSummary"][];
+            capabilities: components["schemas"]["CapabilitySet"];
+            /** Controllers */
+            controllers: components["schemas"]["ControllerSummary"][];
+            /** Degraded */
+            degraded: components["schemas"]["DegradedSection"][];
+            /**
+             * Stale
+             * @description True when a failed refresh forced the last read to be served.
+             */
+            stale: boolean;
+            /**
+             * Stale After S
+             * @description Seconds after which the cached read is considered old.
+             */
+            stale_after_s: number;
         };
         /** Health */
         Health: {
@@ -5298,6 +5659,35 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RoleEvidence
+         * @description One link role and the fact that proves it.
+         */
+        RoleEvidence: {
+            /**
+             * Evidence
+             * @description transport:active, sink:<name>, capture:<node>, source:<name> or source_feed:<mac>.
+             */
+            evidence: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "output" | "input";
+        };
+        /**
+         * RssiSummary
+         * @description Live signal strength, with the time it was observed.
+         */
+        RssiSummary: {
+            /**
+             * At
+             * @description ISO-8601 UTC observation time.
+             */
+            at: string | null;
+            /** Delta Db */
+            delta_db: number;
+        };
         /** SaveResult */
         SaveResult: {
             /**
@@ -5849,6 +6239,23 @@ export interface components {
              * @description volume: 0-100; mute: bool; seek: absolute position in ms within the current track.
              */
             value?: unknown;
+        };
+        /**
+         * TransportSummary
+         * @description What the A2DP transport is doing, when BlueZ can say.
+         */
+        TransportSummary: {
+            /** Codec */
+            codec: string | null;
+            /** Codec Id */
+            codec_id: number | null;
+            /** Delay Ms */
+            delay_ms: number | null;
+            /**
+             * State
+             * @description active | pending | idle
+             */
+            state: string | null;
         };
         /**
          * UPDATECHANNEL
@@ -9622,6 +10029,130 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_hardware_api_v1_hardware_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HardwareSnapshot"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_bluetooth_device_api_v1_hardware_bluetooth__mac__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mac: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BtDeviceDetail"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_controller_api_v1_hardware_controllers__controller_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControllerDetail"];
                 };
             };
             /** @description Client error */

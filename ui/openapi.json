@@ -255,6 +255,33 @@
         "title": "AdapterRef",
         "type": "object"
       },
+      "AddressForms": {
+        "description": "The same address in every spelling its consumers use.",
+        "properties": {
+          "bare": {
+            "description": "AABBCCDDEEFF — the sysfs adapter map.",
+            "title": "Bare",
+            "type": "string"
+          },
+          "colons": {
+            "description": "AA:BB:CC:DD:EE:FF — BlueZ, bluetoothctl, the config.",
+            "title": "Colons",
+            "type": "string"
+          },
+          "underscores": {
+            "description": "AA_BB_CC_DD_EE_FF — audio sink names and D-Bus paths.",
+            "title": "Underscores",
+            "type": "string"
+          }
+        },
+        "required": [
+          "colons",
+          "underscores",
+          "bare"
+        ],
+        "title": "AddressForms",
+        "type": "object"
+      },
       "AirCalibrationCandidate": {
         "description": "A bridge speaker's air-to-sound latency from the last measured sequence (the air sensor).\n\n``latency_ms = acoustic_lag_ms − host_placement_ms``: the speaker's acoustic lag against the\nsession's reference minus where its audio left over the air against the schedule.",
         "properties": {
@@ -1057,6 +1084,32 @@
           }
         },
         "title": "ApplyIn",
+        "type": "object"
+      },
+      "AreaRef": {
+        "description": "The Home Assistant area an adapter was mapped to (read-only here).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "AreaRef",
         "type": "object"
       },
       "AreasIn": {
@@ -2438,6 +2491,329 @@
         "title": "BridgeVerdict",
         "type": "object"
       },
+      "BtDeviceDetail": {
+        "description": "One device with what only a single-device read adds.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "battery_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Pct"
+          },
+          "bonded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bonded"
+          },
+          "bonds": {
+            "description": "Every controller MAC holding the bond.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Bonds",
+            "type": "array"
+          },
+          "connected": {
+            "default": false,
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "controller_macs": {
+            "description": "Every controller holding the bond.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Controller Macs",
+            "type": "array"
+          },
+          "mac": {
+            "title": "Mac",
+            "type": "string"
+          },
+          "manufacturer": {
+            "default": "",
+            "title": "Manufacturer",
+            "type": "string"
+          },
+          "modalias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modalias"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "paired": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null means BlueZ did not answer.",
+            "title": "Paired"
+          },
+          "player_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Config id of the player this bond backs.",
+            "title": "Player Id"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleEvidence"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "rssi": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RssiSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "services_resolved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Services Resolved"
+          },
+          "source_phone": {
+            "default": false,
+            "description": "The phone currently streaming into the bridge.",
+            "title": "Source Phone",
+            "type": "boolean"
+          },
+          "transport": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trusted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trusted"
+          },
+          "uuids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uuids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mac",
+          "name",
+          "alias",
+          "paired",
+          "bonded",
+          "trusted",
+          "connected",
+          "controller_macs",
+          "battery_pct",
+          "rssi",
+          "transport",
+          "roles",
+          "player_id",
+          "source_phone",
+          "uuids",
+          "services_resolved",
+          "modalias",
+          "manufacturer",
+          "bonds"
+        ],
+        "title": "BtDeviceDetail",
+        "type": "object"
+      },
+      "BtDeviceSummary": {
+        "description": "A paired or known Bluetooth device.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "battery_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Battery Pct"
+          },
+          "bonded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bonded"
+          },
+          "connected": {
+            "default": false,
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "controller_macs": {
+            "description": "Every controller holding the bond.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Controller Macs",
+            "type": "array"
+          },
+          "mac": {
+            "title": "Mac",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "paired": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null means BlueZ did not answer.",
+            "title": "Paired"
+          },
+          "player_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Config id of the player this bond backs.",
+            "title": "Player Id"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleEvidence"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "rssi": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RssiSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_phone": {
+            "default": false,
+            "description": "The phone currently streaming into the bridge.",
+            "title": "Source Phone",
+            "type": "boolean"
+          },
+          "transport": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trusted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trusted"
+          }
+        },
+        "required": [
+          "mac",
+          "name",
+          "alias",
+          "paired",
+          "bonded",
+          "trusted",
+          "connected",
+          "controller_macs",
+          "battery_pct",
+          "rssi",
+          "transport",
+          "roles",
+          "player_id",
+          "source_phone"
+        ],
+        "title": "BtDeviceSummary",
+        "type": "object"
+      },
       "BugReportIn": {
         "properties": {
           "description": {
@@ -2486,6 +2862,54 @@
           "issue_number"
         ],
         "title": "BugReportOut",
+        "type": "object"
+      },
+      "CapabilitySet": {
+        "description": "What this host can show, plus the reason code for every no.",
+        "properties": {
+          "audio_server": {
+            "enum": [
+              "pipewire",
+              "pulseaudio",
+              "none"
+            ],
+            "title": "Audio Server",
+            "type": "string"
+          },
+          "bluetooth": {
+            "title": "Bluetooth",
+            "type": "boolean"
+          },
+          "capture": {
+            "title": "Capture",
+            "type": "boolean"
+          },
+          "dbus": {
+            "title": "Dbus",
+            "type": "boolean"
+          },
+          "default_sink": {
+            "title": "Default Sink",
+            "type": "boolean"
+          },
+          "reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Stable reason code per unavailable capability.",
+            "title": "Reasons",
+            "type": "object"
+          }
+        },
+        "required": [
+          "bluetooth",
+          "dbus",
+          "audio_server",
+          "capture",
+          "default_sink",
+          "reasons"
+        ],
+        "title": "CapabilitySet",
         "type": "object"
       },
       "CaptureIn": {
@@ -2736,6 +3160,199 @@
           "url"
         ],
         "title": "Connection",
+        "type": "object"
+      },
+      "ControllerDetail": {
+        "description": "One adapter with its bonds and address forms.",
+        "properties": {
+          "address_forms": {
+            "$ref": "#/components/schemas/AddressForms"
+          },
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AreaRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "class_of_device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw HCI Class of Device; null without CAP_NET_RAW.",
+            "title": "Class Of Device"
+          },
+          "device_count": {
+            "default": 0,
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/BtDeviceSummary"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
+          "id": {
+            "description": "Kernel name, e.g. hci0; synthetic when sysfs is absent.",
+            "title": "Id",
+            "type": "string"
+          },
+          "id_synthetic": {
+            "default": false,
+            "title": "Id Synthetic",
+            "type": "boolean"
+          },
+          "mac": {
+            "title": "Mac",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "powered": {
+            "default": false,
+            "title": "Powered",
+            "type": "boolean"
+          },
+          "present": {
+            "default": true,
+            "title": "Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "id_synthetic",
+          "mac",
+          "name",
+          "alias",
+          "powered",
+          "present",
+          "class_of_device",
+          "area",
+          "device_count",
+          "devices",
+          "address_forms"
+        ],
+        "title": "ControllerDetail",
+        "type": "object"
+      },
+      "ControllerSummary": {
+        "description": "One physical Bluetooth adapter.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AreaRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "class_of_device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw HCI Class of Device; null without CAP_NET_RAW.",
+            "title": "Class Of Device"
+          },
+          "device_count": {
+            "default": 0,
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "id": {
+            "description": "Kernel name, e.g. hci0; synthetic when sysfs is absent.",
+            "title": "Id",
+            "type": "string"
+          },
+          "id_synthetic": {
+            "default": false,
+            "title": "Id Synthetic",
+            "type": "boolean"
+          },
+          "mac": {
+            "title": "Mac",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "powered": {
+            "default": false,
+            "title": "Powered",
+            "type": "boolean"
+          },
+          "present": {
+            "default": true,
+            "title": "Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "id_synthetic",
+          "mac",
+          "name",
+          "alias",
+          "powered",
+          "present",
+          "class_of_device",
+          "area",
+          "device_count"
+        ],
+        "title": "ControllerSummary",
+        "type": "object"
+      },
+      "DegradedSection": {
+        "description": "A section read in part, or not at all, with a code the UI branches on.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "section": {
+            "description": "controllers | bluetooth_devices | audio | hardware",
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "code",
+          "detail"
+        ],
+        "title": "DegradedSection",
         "type": "object"
       },
       "DelaysIn": {
@@ -4731,6 +5348,61 @@
           "ma_url"
         ],
         "title": "HaSilentIn",
+        "type": "object"
+      },
+      "HardwareSnapshot": {
+        "description": "The aggregate read: one moment of the physical layer.",
+        "properties": {
+          "as_of": {
+            "description": "ISO-8601 UTC when this read was taken.",
+            "title": "As Of",
+            "type": "string"
+          },
+          "bluetooth_devices": {
+            "items": {
+              "$ref": "#/components/schemas/BtDeviceSummary"
+            },
+            "title": "Bluetooth Devices",
+            "type": "array"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/CapabilitySet"
+          },
+          "controllers": {
+            "items": {
+              "$ref": "#/components/schemas/ControllerSummary"
+            },
+            "title": "Controllers",
+            "type": "array"
+          },
+          "degraded": {
+            "items": {
+              "$ref": "#/components/schemas/DegradedSection"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "stale": {
+            "description": "True when a failed refresh forced the last read to be served.",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_after_s": {
+            "description": "Seconds after which the cached read is considered old.",
+            "title": "Stale After S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "stale_after_s",
+          "stale",
+          "capabilities",
+          "controllers",
+          "bluetooth_devices",
+          "degraded"
+        ],
+        "title": "HardwareSnapshot",
         "type": "object"
       },
       "Health": {
@@ -7158,6 +7830,57 @@
         "title": "Rest",
         "type": "object"
       },
+      "RoleEvidence": {
+        "description": "One link role and the fact that proves it.",
+        "properties": {
+          "evidence": {
+            "description": "transport:active, sink:<name>, capture:<node>, source:<name> or source_feed:<mac>.",
+            "title": "Evidence",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "output",
+              "input"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "evidence"
+        ],
+        "title": "RoleEvidence",
+        "type": "object"
+      },
+      "RssiSummary": {
+        "description": "Live signal strength, with the time it was observed.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 UTC observation time.",
+            "title": "At"
+          },
+          "delta_db": {
+            "title": "Delta Db",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delta_db",
+          "at"
+        ],
+        "title": "RssiSummary",
+        "type": "object"
+      },
       "SaveResult": {
         "properties": {
           "reconfig": {
@@ -8554,6 +9277,64 @@
           "command"
         ],
         "title": "TransportIn",
+        "type": "object"
+      },
+      "TransportSummary": {
+        "description": "What the A2DP transport is doing, when BlueZ can say.",
+        "properties": {
+          "codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec"
+          },
+          "codec_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codec Id"
+          },
+          "delay_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Ms"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "active | pending | idle",
+            "title": "State"
+          }
+        },
+        "required": [
+          "codec",
+          "codec_id",
+          "state",
+          "delay_ms"
+        ],
+        "title": "TransportSummary",
         "type": "object"
       },
       "UPDATECHANNEL": {
@@ -13266,6 +14047,160 @@
         "summary": "Address the bridge advertises",
         "tags": [
           "ha-integration"
+        ]
+      }
+    },
+    "/api/v1/hardware": {
+      "get": {
+        "description": "Every controller, every paired device, and what this host can see at all.",
+        "operationId": "get_hardware_api_v1_hardware_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Hardware inventory",
+        "tags": [
+          "hardware"
+        ]
+      }
+    },
+    "/api/v1/hardware/bluetooth/{mac}": {
+      "get": {
+        "description": "A paired or known device: UUIDs, manufacturer and every bond.",
+        "operationId": "get_bluetooth_device_api_v1_hardware_bluetooth__mac__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mac",
+            "required": true,
+            "schema": {
+              "title": "Mac",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BtDeviceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One Bluetooth device",
+        "tags": [
+          "hardware"
+        ]
+      }
+    },
+    "/api/v1/hardware/controllers/{controller_id}": {
+      "get": {
+        "description": "The adapter by ``hciN`` or by controller MAC, with the bonds it holds.",
+        "operationId": "get_controller_api_v1_hardware_controllers__controller_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "controller_id",
+            "required": true,
+            "schema": {
+              "title": "Controller Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControllerDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One Bluetooth controller",
+        "tags": [
+          "hardware"
         ]
       }
     },

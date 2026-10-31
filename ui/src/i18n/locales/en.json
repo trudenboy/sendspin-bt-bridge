@@ -608,6 +608,24 @@
     "rebootFailed": "Failed to reboot adapter",
     "confirmNone": "No speakers are using it right now."
   },
+  "hardware": {
+    "subtitle": "The Bluetooth adapters and the devices bonded to them.",
+    "refresh": "Refresh",
+    "stale": "Data may be out of date",
+    "unavailable": "This host cannot show its hardware.",
+    "controllers": "Bluetooth controllers",
+    "devices": "Bluetooth devices",
+    "noControllers": "No Bluetooth controllers found",
+    "noDevices": "No Bluetooth devices paired",
+    "deviceCount": "Devices: {n}",
+    "powered": "On",
+    "poweredOff": "Off",
+    "connected": "Connected",
+    "roleOutput": "Audio output",
+    "roleInput": "Audio input",
+    "battery": "Battery: {pct}%",
+    "player": "Player"
+  },
   "kit": {
     "closeDialog": "Close dialog",
     "closeDrawer": "Close drawer",
@@ -1395,6 +1413,8 @@
     "settingsShort": "Settings",
     "diagnostics": "Diagnostics",
     "diagnosticsShort": "Health",
+    "hardware": "Hardware",
+    "hardwareShort": "Hardware",
     "sync": "Group sync"
   },
   "home": {
@@ -1452,7 +1472,7 @@
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",
-    "places": "Go to Speakers, Groups, Settings, Diagnostics",
+    "places": "Go to Speakers, Groups, Settings, Diagnostics, Hardware",
     "add": "Add a speaker",
     "search": "Search on this page",
     "help": "Show this list",

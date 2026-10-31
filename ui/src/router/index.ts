@@ -46,6 +46,12 @@ const router = createRouter({
       meta: { title: 'nav.diagnostics' },
       component: () => import('@/views/DiagnosticsView.vue'),
     },
+    {
+      path: '/hardware',
+      name: 'hardware',
+      meta: { title: 'nav.hardware' },
+      component: () => import('@/views/HardwareView.vue'),
+    },
     // Earlier addresses (bookmarks, the HA panel) keep working.
     { path: '/devices', redirect: '/' },
     { path: '/ma', redirect: '/groups' },

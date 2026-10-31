@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import { Speaker, Users, Settings, Activity } from 'lucide-vue-next'
+import { Speaker, Users, Settings, Activity, CircuitBoard } from 'lucide-vue-next'
 
 export interface NavItem {
   to: string
@@ -9,12 +9,13 @@ export interface NavItem {
   icon: Component
 }
 
-/** The four places of the app, shared by the sidebar and the bottom bar. */
+/** The five places of the app, shared by the sidebar and the bottom bar. */
 export const NAV: readonly NavItem[] = [
   { to: '/', label: 'nav.home', short: 'nav.homeShort', icon: Speaker },
   { to: '/groups', label: 'nav.groups', short: 'nav.groupsShort', icon: Users },
   { to: '/config', label: 'nav.settings', short: 'nav.settingsShort', icon: Settings },
   { to: '/diagnostics', label: 'nav.diagnostics', short: 'nav.diagnosticsShort', icon: Activity },
+  { to: '/hardware', label: 'nav.hardware', short: 'nav.hardwareShort', icon: CircuitBoard },
 ]
 
 /** Pages that sit under one of the places (a group's sync page belongs to Groups). */
