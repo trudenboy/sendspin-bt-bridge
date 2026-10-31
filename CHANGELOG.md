@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A **Hardware** page in the web UI: the Bluetooth adapters, the devices paired to them with the role of each link (the bridge plays to the device, or the device sends audio in), and the computer's own audio devices with their outputs and inputs. Each entry opens a detail panel, and the page says why something is unavailable instead of showing an empty list.
+- Local audio outputs can be set from that page: volume, mute, the default output, and suspending an output to free it. Inputs are shown with their kind (microphone, line-in, monitor, or a phone streaming into the bridge).
+
+### Changed
+
+- Paired Bluetooth devices and their details moved out of the add-speaker dialog and the speaker menu into the Hardware page; adding an already-paired speaker and forgetting a bond are still available there.
+
 ## [3.1.0-beta.26] - 2026-10-31
 
 ### Added

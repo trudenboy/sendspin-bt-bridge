@@ -99,6 +99,14 @@ reconnect; axe passes.
 
 ## E2 — Audio: cards, ports, outputs and inputs
 
+**Status (2026-10-31): backend delivered, UI in progress.** The read model now
+covers cards, ports, profiles, sinks and sources; the five safe commands exist;
+demo mode serves a real audio section. Review found that on PipeWire every
+endpoint lost its card (`Owner Module: n/a`, no `Sinks:` lists) — ownership now
+joins the sink's `device.name` to the card's `Name`, with a real PipeWire
+fixture pinning it. A failed `pactl` read is reported as unavailable rather than
+as an empty list, and a timed-out `wpctl` no longer claims the phone is silent.
+
 **Scope.** The audio half of the read model, plus the safe commands.
 
 **Backend**
