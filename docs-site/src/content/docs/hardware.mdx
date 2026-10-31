@@ -65,6 +65,11 @@ The audio server's own view of the host:
 Bluetooth outputs are not repeated here. They belong to their device card;
 listing them twice would make the page lie the moment a sink is renamed.
 
+A card's **profile** and an output's **port** can be switched from their detail
+panel. Both ask first, because the change is audible: the confirmation names the
+outputs that may go silent. A Bluetooth card's profile is not offered — the
+connection decides it, and the panel says so.
+
 ## The phone source
 
 When the Sendspin source is enabled, a strip at the top shows whether a phone is
@@ -94,5 +99,4 @@ marks it as possibly stale rather than blanking the screen.
 ## What the page does not do
 
 - It does not create, remove or rename players. That is the speakers dashboard.
-- It does not switch card profiles or ports; it explains the state instead.
 - It does not change how a player routes its audio.
