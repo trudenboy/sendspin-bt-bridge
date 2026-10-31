@@ -1168,4 +1168,117 @@ def install() -> None:
     _update_checker.check_latest_version = _demo_check_latest_version
     _api_config_mod.check_latest_version = _demo_check_latest_version
 
+    install_inventory()
     logger.info("🎭 Demo mode installed — all hardware interactions are simulated")
+
+
+def install_inventory() -> None:
+    """Point the hardware reader at the demo fixtures.
+
+    The orchestrator installs this *after* the D-Bus resolver, so a later
+    ``set_bluez()`` cannot put the real host back in front of the page.  The
+    reader's refresh is replaced rather than its transport, so no bus and no
+    ``bluetoothctl`` is ever asked — the demo stand is the only answer.
+    """
+    from sendspin_bridge.services.hardware import inventory as _inventory
+
+    _inventory._refresh = _demo_inventory_refresh
+    _inventory.clear_cache()
+
+
+def _demo_inventory_refresh():
+    """Build one :class:`InventoryRead` from the demo fixture stand."""
+    from datetime import UTC, datetime
+
+    from demo.fixtures import (
+        DEMO_ADAPTERS,
+        DEMO_BT_DEVICE_INFO,
+        DEMO_DEVICE_STATUS,
+        DEMO_DEVICES,
+    )
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+    from sendspin_bridge.services.hardware import inventory as _inventory
+    from sendspin_bridge.services.hardware.capabilities import build_capabilities
+    from sendspin_bridge.services.hardware.inventory import (
+        ControllerFacts,
+        DeviceFacts,
+        InventoryRead,
+    )
+    from sendspin_bridge.services.hardware.roles import DeviceLink, infer_roles
+
+    def _yes(value: object) -> bool:
+        return str(value or "").strip().lower() in ("yes", "1", "true")
+
+    adapter_by_id = {str(adapter["id"]): adapter for adapter in DEMO_ADAPTERS}
+    adapter_for_device: dict[str, dict] = {}
+    for device in DEMO_DEVICES:
+        address = DeviceAddress.parse(device.get("mac"))
+        if address is None:
+            continue
+        adapter_for_device[address.colons] = adapter_by_id.get(str(device.get("adapter")), DEMO_ADAPTERS[0])
+
+    devices_by_adapter: dict[str, list[str]] = {}
+    devices: list[DeviceFacts] = []
+    for entry in DEMO_BT_DEVICE_INFO:
+        address = DeviceAddress.parse(entry.get("mac"))
+        if address is None:
+            continue
+        mac = address.colons
+        adapter = adapter_for_device.get(mac, DEMO_ADAPTERS[0])
+        devices_by_adapter.setdefault(str(adapter["id"]), []).append(mac)
+        status = DEMO_DEVICE_STATUS.get(mac, {})
+        connected = _yes(entry.get("connected"))
+        transport_state = "active" if connected and bool(status.get("audio_streaming")) else None
+        battery = status.get("battery_level")
+        rssi = status.get("rssi_dbm")
+        devices.append(
+            DeviceFacts(
+                mac=mac,
+                name=str(entry.get("name") or mac),
+                alias=str(entry.get("name") or mac),
+                paired=_yes(entry.get("paired")),
+                bonded=_yes(entry.get("bonded")),
+                trusted=_yes(entry.get("trusted")),
+                blocked=_yes(entry.get("blocked")),
+                connected=connected,
+                controller_macs=(str(adapter["mac"]).upper(),),
+                uuids=(),
+                modalias=None,
+                services_resolved=None,
+                battery_pct=int(battery) if isinstance(battery, int) else None,
+                rssi_delta_db=int(rssi) if isinstance(rssi, int) else None,
+                rssi_at=None,
+                transport_state=transport_state,
+                roles=tuple(infer_roles(DeviceLink(mac, transport_state=transport_state), (), None)),
+            )
+        )
+
+    controllers = [
+        ControllerFacts(
+            id=str(adapter["id"]),
+            id_synthetic=False,
+            mac=str(adapter["mac"]).upper(),
+            name=str(adapter["name"]),
+            alias=str(adapter["name"]),
+            powered=bool(adapter.get("powered", True)),
+            present=True,
+            class_of_device=None,
+            device_macs=tuple(devices_by_adapter.get(str(adapter["id"]), ())),
+        )
+        for adapter in DEMO_ADAPTERS
+    ]
+    return InventoryRead(
+        as_of=datetime.now(tz=UTC).isoformat(),
+        stale=False,
+        stale_after_s=int(_inventory._TTL_S),
+        capabilities=build_capabilities(
+            bluetooth=True,
+            dbus=True,
+            server_name="pulseaudio (demo)",
+            capture=True,
+            default_sink=True,
+        ),
+        controllers=tuple(controllers),
+        devices=tuple(devices),
+        degraded=(),
+    )

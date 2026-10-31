@@ -51,3 +51,15 @@ def test_get_adapter_name_does_not_reload_empty_cache_on_every_lookup(tmp_path, 
     assert adapter_names.get_adapter_name("AA:BB:CC:DD:EE:FF") is None
     assert adapter_names.get_adapter_name("AA:BB:CC:DD:EE:FF") is None
     assert load_calls == 1
+
+
+def test_names_come_from_the_config_module(monkeypatch):
+    """The cache reads ``load_config()``, not the file: the two used to disagree after a save."""
+    _reset_cache()
+    monkeypatch.setattr(
+        config,
+        "load_config",
+        lambda: {"BLUETOOTH_ADAPTERS": [{"mac": "AA:BB:CC:DD:EE:FF", "name": "From load_config"}]},
+    )
+
+    assert adapter_names.get_adapter_name("AA:BB:CC:DD:EE:FF") == "From load_config"

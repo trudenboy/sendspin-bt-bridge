@@ -6,7 +6,9 @@ Each event is an envelope ``{"v": 1, "type", "at", "data"}``:
   per change for all listeners and sent to new listeners on connect;
 * ``job`` — a ``Job`` whenever one starts, progresses or ends;
 * ``log`` — one log line (only to listeners that ask for ``types=log``);
-* ``sync`` — a group sync-tuning session whenever its state changes.
+* ``sync`` — a group sync-tuning session whenever its state changes;
+* ``hardware`` — the physical layer, coalesced to at most one event a second
+  and never in the default set: only the Hardware page asks for that payload.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import contextlib
 import hmac
 import json
 import logging
+import threading
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -31,9 +34,11 @@ logger = logging.getLogger(__name__)
 
 EVENT_VERSION = 1
 DEFAULT_TYPES = frozenset({"status", "job", "sync"})
-ALL_TYPES = frozenset({"status", "job", "log", "sync"})
+ALL_TYPES = frozenset({"status", "job", "log", "sync", "hardware"})
 _QUEUE_SIZE = 64
 _HEARTBEAT_S = 15.0
+# A hardware snapshot is large; the page needs a live view, not a stream of them.
+_HARDWARE_COALESCE_S = 1.0
 # Short enough that a reconnect (which renews the HA ingress session) happens
 # while the session is still fresh, instead of after it has idled out.
 _MAX_LIFETIME_S = 600.0
@@ -70,6 +75,11 @@ class EventHub:
         self._last_status: dict[str, Any] | None = None
         self._tasks: list[asyncio.Task] = []
         self._log_unsubscribe = None
+        self._hardware_lock = threading.Lock()
+        self._last_hardware_at: float | None = None
+        self._pending_hardware: Any = None
+        self._hardware_flush_handle: asyncio.TimerHandle | None = None
+        self._hardware_task: asyncio.Task | None = None
 
     # -- lifecycle ------------------------------------------------------
 
@@ -89,6 +99,14 @@ class EventHub:
 
         remove_status_listener(self._on_status_changed)
         jobs.remove_listener(self._on_job)
+        if self._hardware_task is not None:
+            self._hardware_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._hardware_task
+            self._hardware_task = None
+        if self._hardware_flush_handle is not None:
+            self._hardware_flush_handle.cancel()
+            self._hardware_flush_handle = None
         for task in self._tasks:
             task.cancel()
         for task in self._tasks:
@@ -122,6 +140,90 @@ class EventHub:
             self._last_status = event
             self._broadcast(event)
 
+    async def _hardware_producer(self) -> None:
+        """Build the snapshot only while a hardware listener is attached.
+
+        The payload is large and nobody but the Hardware page asks for it, so
+        the producer exists exactly as long as a ``types=hardware`` listener
+        does — no listener, no read, no event.
+        """
+        from sendspin_bridge.application.hardware import snapshot
+        from sendspin_bridge.services.hardware.inventory import _TTL_S
+
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                payload = await loop.run_in_executor(None, lambda: asyncio.run(snapshot()))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Hardware snapshot for the event stream failed")
+            else:
+                self.publish_hardware(payload.model_dump(mode="json"))
+            await asyncio.sleep(_TTL_S)
+
+    def _start_hardware_producer(self) -> None:
+        if self._hardware_task is not None and not self._hardware_task.done():
+            return
+        self._hardware_task = asyncio.get_running_loop().create_task(self._hardware_producer(), name="events-hardware")
+
+    async def _stop_hardware_producer_if_idle(self) -> None:
+        if any("hardware" in listener.types for listener in self._listeners):
+            return
+        if self._hardware_task is None:
+            return
+        self._hardware_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._hardware_task
+        self._hardware_task = None
+
+    def publish_hardware(self, data: Any, *, now: float | None = None) -> dict[str, Any] | None:
+        """Publish one ``hardware`` event, at most once per :data:`_HARDWARE_COALESCE_S`.
+
+        Returns the event that went out immediately, or ``None`` when this
+        call was coalesced.  A coalesced payload is not dropped: it is kept as
+        the pending latest state and published when the window expires, so a
+        burst ending at BlueZ's second power change leaves the client on the
+        second change, never the first.
+        """
+        moment = time.monotonic() if now is None else now
+        cancelled: asyncio.TimerHandle | None = None
+        with self._hardware_lock:
+            last = self._last_hardware_at
+            if last is not None and moment - last < _HARDWARE_COALESCE_S:
+                self._pending_hardware = data
+                delay = _HARDWARE_COALESCE_S - (moment - last)
+                if self._loop is not None and self._hardware_flush_handle is None:
+                    self._loop.call_soon_threadsafe(self._schedule_hardware_flush, max(0.0, delay))
+                return None
+            self._last_hardware_at = moment
+            self._pending_hardware = None
+            cancelled = self._hardware_flush_handle
+            self._hardware_flush_handle = None
+        if cancelled is not None:
+            cancelled.cancel()
+        event = envelope("hardware", data)
+        self.publish_threadsafe(event)
+        return event
+
+    def _schedule_hardware_flush(self, delay: float) -> None:
+        if self._loop is None:
+            return
+        with self._hardware_lock:
+            if self._hardware_flush_handle is not None or self._pending_hardware is None:
+                return
+            self._hardware_flush_handle = self._loop.call_later(delay, self._flush_hardware)
+
+    def _flush_hardware(self) -> None:
+        with self._hardware_lock:
+            data = self._pending_hardware
+            self._pending_hardware = None
+            self._hardware_flush_handle = None
+            if data is None:
+                return
+            self._last_hardware_at = time.monotonic()
+        self._broadcast(envelope("hardware", data))
+
     def publish_threadsafe(self, event: dict[str, Any]) -> None:
         if self._loop is None:
             return
@@ -142,12 +244,16 @@ class EventHub:
             listener.offer(self._last_status)
         unsubscribe_log = self._subscribe_logs(listener) if "log" in types else None
         self._listeners.add(listener)
+        if "hardware" in types:
+            self._start_hardware_producer()
         try:
             yield listener
         finally:
             self._listeners.discard(listener)
             if unsubscribe_log is not None:
                 unsubscribe_log()
+            if "hardware" in types:
+                await self._stop_hardware_producer_if_idle()
 
     def _subscribe_logs(self, listener: _Listener):
         """Live log lines from the in-memory ring handler."""

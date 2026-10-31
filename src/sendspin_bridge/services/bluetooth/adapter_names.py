@@ -26,10 +26,7 @@ def load_adapter_name_cache() -> None:
     global _adapter_cache_loaded, _adapter_names_by_mac
     _adapter_names_by_mac = {}
     try:
-        config_file = config.CONFIG_FILE
-        cfg = json.loads(config_file.read_text(encoding="utf-8")) if config_file.exists() else {}
-        adapters = cfg.get("adapters") or cfg.get("BLUETOOTH_ADAPTERS") or []
-        for adapter in adapters:
+        for adapter in _configured_adapters():
             mac = str(adapter.get("mac") or adapter.get("id") or "").upper()
             name = str(adapter.get("name") or "").strip()
             if mac and name:
@@ -38,6 +35,30 @@ def load_adapter_name_cache() -> None:
         logger.debug("Failed to load adapter name cache: %s", exc)
     finally:
         _adapter_cache_loaded = True
+
+
+def _configured_adapters() -> list[dict]:
+    """The adapters as the config module sees them.
+
+    ``load_config()`` is the one view every other reader uses, so the names
+    here stay in step with a save instead of lagging behind it.  A pre-schema
+    file may still carry the legacy top-level ``adapters`` list, which the
+    config module normalises away; that key is read as a last resort, and
+    this branch goes when no host has one.
+    """
+    adapters = config.load_config().get("BLUETOOTH_ADAPTERS") or []
+    if adapters:
+        return adapters
+    return _legacy_adapters()
+
+
+def _legacy_adapters() -> list[dict]:
+    try:
+        payload = json.loads(config.CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    adapters = payload.get("adapters") if isinstance(payload, dict) else None
+    return adapters if isinstance(adapters, list) else []
 
 
 def get_adapter_name(mac_upper: str) -> str | None:

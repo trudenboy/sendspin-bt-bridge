@@ -24,6 +24,7 @@ from sendspin_bridge.api.routers import (
     devices,
     diagnostics,
     ha_integration,
+    hardware,
     music_assistant,
     sync,
 )
@@ -67,6 +68,7 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
     v1.include_router(sync.capture)
     v1.include_router(auth.router)
     v1.include_router(audio.router)
+    v1.include_router(hardware.router)
     v1.include_router(bridge.router)
     v1.include_router(devices.router)
     v1.include_router(bluetooth.router)

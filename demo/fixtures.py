@@ -520,6 +520,64 @@ DEMO_BT_DEVICE_INFO = [
     if str(device["mac"]).startswith("AA:BB:CC:DD:EE:")
 ]
 
+# ---------------------------------------------------------------------------
+# Audio cards, sources and BlueZ transports (the Hardware page's audio half)
+# ---------------------------------------------------------------------------
+DEMO_CARDS = [
+    {
+        "name": f"bluez_card.{str(device['mac']).replace(':', '_')}",
+        "driver": "bluez",
+        "active_profile": "a2dp-sink",
+        "profiles": [
+            {
+                "name": "a2dp-sink",
+                "description": "High Fidelity Playback (A2DP Sink)",
+                "available": True,
+            },
+            {
+                "name": "headset-head-unit",
+                "description": "Headset Head Unit (HSP/HFP)",
+                "available": True,
+            },
+        ],
+        "ports": [
+            {
+                "name": "headset-output",
+                "description": f"{device['player_name']} output",
+                "available": True,
+                "active": True,
+            }
+        ],
+        "endpoints": [
+            {
+                "kind": "sink",
+                "name": f"bluez_output.{str(device['mac']).replace(':', '_')}.1",
+            }
+        ],
+    }
+    for device in DEMO_DEVICES
+]
+
+DEMO_SOURCES = [
+    {
+        "name": f"bluez_source.{str(device['mac']).replace(':', '_')}",
+        "description": f"{device['player_name']} capture",
+        "state": "RUNNING" if DEMO_DEVICE_STATUS.get(str(device["mac"]), {}).get("playing") else "IDLE",
+    }
+    for device in DEMO_DEVICES[:1]
+]
+
+DEMO_BT_TRANSPORTS = [
+    {
+        "mac": str(device["mac"]),
+        "codec": "SBC",
+        "codec_id": 0,
+        "state": "active" if bool(device.get("connected")) else "idle",
+        "delay_ms": 150.0,
+    }
+    for device in DEMO_PAIRED_DEVICES
+]
+
 DEMO_PORTAUDIO_DEVICES = [
     {"index": 0, "name": "Demo Bluetooth Mix", "is_default": True, "output_channels": 2},
     {"index": 1, "name": "Demo Monitor Output", "is_default": False, "output_channels": 2},

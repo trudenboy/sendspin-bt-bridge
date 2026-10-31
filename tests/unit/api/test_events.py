@@ -182,3 +182,80 @@ def test_websocket_without_credentials_is_refused_when_auth_is_on():
 def test_sync_is_a_known_default_event_type():
     assert "sync" in events.ALL_TYPES and "sync" in events.DEFAULT_TYPES
     assert events._parse_types("sync") == frozenset({"sync"})
+
+
+def test_hardware_is_a_known_but_not_default_event_type():
+    """The page probes the aggregate first, then subscribes; nobody else pays for the payload."""
+    assert "hardware" in events.ALL_TYPES
+    assert "hardware" not in events.DEFAULT_TYPES
+    assert events._parse_types("hardware") == frozenset({"hardware"})
+    assert events._parse_types("status,hardware") == frozenset({"status", "hardware"})
+
+
+def test_hardware_events_are_coalesced_to_one_per_second():
+    hub = events.EventHub(auth_enabled=False)
+
+    first = hub.publish_hardware({"controllers": []}, now=10.0)
+    assert first is not None
+    assert first["type"] == "hardware"
+    assert first["data"] == {"controllers": []}
+
+    assert hub.publish_hardware({"controllers": []}, now=10.5) is None
+    assert hub.publish_hardware({"controllers": []}, now=11.0) is not None
+
+
+# -- the hardware producer ---------------------------------------------------------------
+
+
+class _Snapshot:
+    def model_dump(self, *, mode: str = "json") -> dict:
+        return {"controllers": [{"id": "hci0"}], "mode": mode}
+
+
+@pytest.mark.asyncio
+async def test_a_hardware_listener_starts_a_producer_that_publishes_snapshots(monkeypatch):
+    built: list[int] = []
+
+    async def _snapshot():
+        built.append(1)
+        return _Snapshot()
+
+    monkeypatch.setattr("sendspin_bridge.application.hardware.snapshot", _snapshot)
+    hub = events.EventHub(auth_enabled=False)
+    hub.start()
+    try:
+        async with hub.listen(frozenset({"job"})):
+            await asyncio.sleep(0.05)
+            assert built == []
+            assert hub._hardware_task is None
+
+        async with hub.listen(frozenset({"hardware"})) as listener:
+            event = await asyncio.wait_for(listener.queue.get(), timeout=2.0)
+
+        assert hub._hardware_task is None
+        settled = len(built)
+        await asyncio.sleep(0.05)
+        assert len(built) == settled
+    finally:
+        await hub.stop()
+
+    assert event["type"] == "hardware"
+    assert event["data"] == {"controllers": [{"id": "hci0"}], "mode": "json"}
+    assert built
+
+
+@pytest.mark.asyncio
+async def test_the_last_state_of_a_hardware_burst_is_published_on_the_trailing_edge(monkeypatch):
+    monkeypatch.setattr(events, "_HARDWARE_COALESCE_S", 0.05)
+    hub = events.EventHub(auth_enabled=False)
+    monkeypatch.setattr(hub, "_start_hardware_producer", lambda: None)
+    hub.start()
+    try:
+        async with hub.listen(frozenset({"hardware"})) as listener:
+            assert hub.publish_hardware({"state": "A"}) is not None
+            assert hub.publish_hardware({"state": "B"}) is None
+            received = [await asyncio.wait_for(listener.queue.get(), timeout=1.0) for _ in range(2)]
+    finally:
+        await hub.stop()
+
+    assert [event["data"] for event in received] == [{"state": "A"}, {"state": "B"}]

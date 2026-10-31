@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,12 +27,14 @@ from ._lines import BluezLine, LineKind, classify_line, classify_lines, strip_an
 from ._parsers import (
     INFO_FIELDS,
     AdapterInfo,
+    AdapterInventory,
     AdapterRef,
     DeviceEntry,
     DeviceInfo,
     ScanTranscript,
     parse_adapter_list,
     parse_device_info,
+    parse_device_infos,
     parse_devices,
     parse_scan,
     parse_show,
@@ -61,6 +64,7 @@ __all__ = [
     "INFO_FIELDS",
     "Adapter",
     "AdapterInfo",
+    "AdapterInventory",
     "AdapterRef",
     "BluezControl",
     "BluezLine",
@@ -81,6 +85,7 @@ __all__ = [
     "get_bluez",
     "parse_adapter_list",
     "parse_device_info",
+    "parse_device_infos",
     "parse_devices",
     "parse_scan",
     "parse_show",
@@ -98,6 +103,9 @@ _BLUETOOTHCTL = ("bluetoothctl",)
 # controller's state as final, and how often to re-read it meanwhile.
 _POWER_SETTLE_S = 2.0
 _POWER_POLL_S = 0.25
+
+#: How long one inventory session round waits for its commands to answer.
+_INVENTORY_SETTLE_S = 0.5
 
 
 class BluezControl:
@@ -134,6 +142,21 @@ class BluezControl:
     def query_backend(self) -> Any:
         """The bus transport questions go to first, or ``None`` without one."""
         return self._query_backend
+
+    def without_query_backend(self) -> BluezControl:
+        """This transport with the bus questions switched off.
+
+        The fallback is only reached because the bus could not answer; asking
+        it again for every verb would spend the same timeout N times.
+        """
+        return BluezControl(
+            spawner=self._spawner,
+            hci_resolver=self._hci_resolver,
+            sysfs_dir=self._sysfs_dir,
+            time_source=self._time,
+            sleeper=self._sleep,
+            query_backend=None,
+        )
 
     # ------------------------------------------------------------------
     # Clock
@@ -233,6 +256,15 @@ class BluezControl:
         answer = self._ask_backend("list_adapters", timeout=timeout)
         if answer is not None:
             return answer
+        return self.list_adapters_with_outcome(timeout=timeout)[0]
+
+    def list_adapters_with_outcome(self, *, timeout: float | None = None) -> tuple[list[AdapterRef], Outcome]:
+        """``list`` plus the transport's own verdict — can this host answer at all?
+
+        A healthy host with no controllers answers ``([], OK)``; a dead
+        bluetoothd (or a failing command) answers a non-OK outcome even though
+        ``--version`` still prints a line.
+        """
         result = run_bluetoothctl(
             self._spawner,
             ("bluetoothctl", "list"),
@@ -241,8 +273,57 @@ class BluezControl:
             self._time,
         )
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            return [], result.outcome
+        return parse_adapter_list(result.stdout), result.outcome
+
+    def inventory(self, *, timeout: float | None = None) -> list[AdapterInventory] | None:
+        """Every controller, its bonds and their details through one session.
+
+        ``list`` gets its own invocation because it decides which controllers
+        to ask about; everything downstream — ``show``, ``devices`` and
+        ``info`` — is one interactive bluetoothctl process.  A host with ten
+        speakers therefore spawns two processes, not thirteen, and the
+        adapter lease is held for one session rather than one per question.
+
+        ``None`` means the transport could not answer (``list`` failed), which
+        is distinct from a host that truthfully has no controllers.
+        """
+        adapters, outcome = self.list_adapters_with_outcome(timeout=timeout)
+        if outcome is not Outcome.OK:
+            return None
+        if not adapters:
             return []
-        return parse_adapter_list(result.stdout)
+        readings: list[AdapterInventory] = []
+        with self.session() as session:
+            for ref in adapters:
+                start = len(session.transcript())
+                session.send(f"select {ref.mac}", f"show {ref.mac}", "devices Paired")
+                session.wait(_INVENTORY_SETTLE_S, drain=True)
+                text = _transcript_text(session, start)
+                readings.append(
+                    AdapterInventory(
+                        ref=ref,
+                        info=parse_show(text),
+                        devices=tuple(parse_devices(text)),
+                    )
+                )
+            owned = [(reading.ref.mac, entry.mac) for reading in readings for entry in reading.devices]
+            start = len(session.transcript())
+            for adapter_mac, device_mac in owned:
+                session.send(f"select {adapter_mac}", f"info {device_mac}")
+            session.send("quit")
+            # ``drain`` waits for the process to finish all queued ``info``
+            # commands, so ten bonds are ten commands in one session rather
+            # than ten commands interrupted by an arbitrary settle deadline.
+            session.drain(timeout=float(Deadline.MUTATE))
+            infos = parse_device_infos(_transcript_text(session, start)) if owned else {}
+        return [
+            replace(
+                reading,
+                device_infos=tuple(infos[entry.mac] for entry in reading.devices if entry.mac in infos),
+            )
+            for reading in readings
+        ]
 
     def hci_map(self) -> dict[str, str]:
         """``{MAC: hciN}`` for every visible controller (colon-stripped keys).
@@ -435,6 +516,11 @@ class BluezControl:
             time_source=self._time,
             sleeper=self._sleep,
         )
+
+
+def _transcript_text(session: BluezSession, start: int) -> str:
+    """The session output consumed since *start*, as the parsers expect it."""
+    return "\n".join(line.text for line in session.transcript()[start:] if line.text)
 
 
 _default_bluez: BluezControl | None = None

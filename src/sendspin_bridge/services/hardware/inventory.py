@@ -1,0 +1,509 @@
+"""The one hardware reader: controllers, bonds and what the runtime knows.
+
+Every consumer — the aggregate endpoint, the detail endpoints, guidance, the
+future CLI — reads through :func:`read_inventory`.  One process-wide cache with
+a short TTL keeps a page load from meaning a dozen blocking round trips, and one
+lock keeps two callers from making the same trip at the same time.
+
+Two rules decide where the data comes from:
+
+* **D-Bus first, without the adapter lease.**  A read cannot corrupt another
+  operation, so it must not queue behind a pairing.
+* **``bluetoothctl`` only as the fallback, and only under the lease.**  It is a
+  blocking command on the same single adapter agent, so a read that needs it
+  waits for the lease rather than colliding with a scan.
+
+When the last refresh failed, the previous read is still returned — with
+``stale`` set and a degraded entry — instead of an empty page.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import threading
+import time
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+from sendspin_bridge.bluetooth.adapter_map import hci_for
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
+from sendspin_bridge.bluetooth.bluez import Adapter, get_bluez
+from sendspin_bridge.services.bluetooth import build_hci_map
+from sendspin_bridge.services.bluetooth.bt_class_of_device import read_device_class
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.hardware.capabilities import (
+    Capabilities,
+    build_capabilities,
+    classify_audio_server,
+    probe_audio_server,
+    probe_capture,
+)
+from sendspin_bridge.services.hardware.roles import DeviceLink, RoleEvidence, infer_roles
+
+if TYPE_CHECKING:
+    from sendspin_bridge.bluetooth.bluez import DeviceInfo
+
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "ControllerFacts",
+    "Degraded",
+    "DeviceFacts",
+    "HardwareUnavailable",
+    "InventoryRead",
+    "clear_cache",
+    "read_inventory",
+]
+
+_TTL_S = 2.0
+_LEASE_WAIT_S = 5.0
+_READ_LEASE_REASON = "hardware inventory"
+
+_UUID_RE = re.compile(r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})")
+
+#: One reader per process; the lock serialises refreshes and the cache is shared.
+_reader_lock = threading.Lock()
+_cached: InventoryRead | None = None
+_cached_at = 0.0
+
+
+class HardwareUnavailable(RuntimeError):
+    """Neither D-Bus nor bluetoothctl could answer — the section has no truth to show."""
+
+
+class _BusUnavailable(RuntimeError):
+    """The reader could not answer at all — not the same as answering with nothing."""
+
+
+@dataclass(frozen=True, slots=True)
+class Degraded:
+    """One section that could not be read in full, and the stable code that says why."""
+
+    section: str
+    code: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class ControllerFacts:
+    """One physical Bluetooth adapter."""
+
+    id: str
+    id_synthetic: bool
+    mac: str
+    name: str
+    alias: str
+    powered: bool
+    present: bool
+    class_of_device: str | None
+    device_macs: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceFacts:
+    """One paired or known Bluetooth device, merged across the adapters holding the bond."""
+
+    mac: str
+    name: str
+    alias: str
+    paired: bool | None
+    bonded: bool | None
+    trusted: bool | None
+    blocked: bool | None
+    connected: bool
+    controller_macs: tuple[str, ...]
+    uuids: tuple[str, ...]
+    modalias: str | None
+    services_resolved: bool | None
+    battery_pct: int | None
+    rssi_delta_db: int | None
+    rssi_at: str | None
+    transport_state: str | None
+    roles: tuple[RoleEvidence, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryRead:
+    """One answer from the reader, cached for :data:`_TTL_S` seconds."""
+
+    as_of: str
+    stale: bool
+    stale_after_s: int
+    capabilities: Capabilities
+    controllers: tuple[ControllerFacts, ...]
+    devices: tuple[DeviceFacts, ...]
+    degraded: tuple[Degraded, ...]
+
+
+def _monotonic() -> float:
+    return time.monotonic()
+
+
+def _take_read_lease():
+    """The adapter lease a ``bluetoothctl`` read must hold (it waits, never bypasses)."""
+    return AdapterHandle().lease(_READ_LEASE_REASON, timeout=_LEASE_WAIT_S)
+
+
+def _iso(value: float) -> str:
+    return datetime.fromtimestamp(value, tz=UTC).isoformat()
+
+
+def _as_of() -> str:
+    return datetime.now(tz=UTC).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# What the runtime already knows
+# ---------------------------------------------------------------------------
+
+
+def _status_value(status: Any, key: str) -> Any:
+    getter = getattr(status, "get", None)
+    if callable(getter):
+        return getter(key)
+    return getattr(status, key, None)
+
+
+def _runtime_status() -> dict[str, dict[str, Any]]:
+    """Battery, RSSI and streaming state from the running clients, keyed by MAC.
+
+    The status bag is where the RSSI refresh loop and the battery poll already
+    write, so this costs no extra bus round trip.  An absent value stays
+    ``None`` — devices are listed even when the runtime has nothing to add.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    snapshot = get_device_registry_snapshot()
+    for client in snapshot.active_clients:
+        manager = getattr(client, "bt_manager", None)
+        raw_mac = getattr(manager, "mac_address", None)
+        address = _canonical(raw_mac)
+        if not address:
+            continue
+        status = getattr(client, "status", None) or {}
+        battery = _status_value(status, "battery_level")
+        rssi = _status_value(status, "rssi_dbm")
+        rssi_at = _status_value(status, "rssi_at_ts")
+        streaming = bool(_status_value(status, "audio_streaming"))
+        out[address] = {
+            "battery_pct": int(battery) if isinstance(battery, int) else None,
+            "rssi_delta_db": rssi if isinstance(rssi, int) else None,
+            "rssi_at": _iso(float(rssi_at)) if isinstance(rssi_at, int | float) else None,
+            # An active transport is what BlueZ would report while audio flows;
+            # the daemon's own streaming flag is the same moment, read for free.
+            "transport_state": "active" if streaming else None,
+        }
+    return out
+
+
+def _canonical(value: Any) -> str:
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+
+    address = DeviceAddress.parse(value)
+    return address.colons if address is not None else ""
+
+
+# ---------------------------------------------------------------------------
+# Reading through either transport
+# ---------------------------------------------------------------------------
+
+
+def _uuids(info: DeviceInfo | None) -> tuple[str, ...]:
+    if info is None:
+        return ()
+    found: list[str] = []
+    for line in info.raw:
+        if not line.startswith("UUID:"):
+            continue
+        match = _UUID_RE.search(line)
+        if match and match.group(1).lower() not in found:
+            found.append(match.group(1).lower())
+    return tuple(found)
+
+
+def _modalias(info: DeviceInfo | None) -> str | None:
+    if info is None:
+        return None
+    for line in info.raw:
+        if line.startswith("Modalias:"):
+            value = line.split(":", 1)[1].strip()
+            return value or None
+    return None
+
+
+def _controller_facts(ref: Any, info: Any, hci_by_mac: dict[str, str]) -> ControllerFacts | None:
+    """One controller's facts, before its bonds are attached and its id is settled."""
+    mac = _canonical(ref.mac)
+    if not mac:
+        return None
+    hci = hci_for(hci_by_mac, mac) or ""
+    name = (getattr(info, "name", "") or ref.name or hci or mac) if info is not None else (ref.name or mac)
+    alias = (getattr(info, "alias", "") or name) if info is not None else name
+    powered = bool(getattr(info, "powered", False)) if info is not None else False
+    present = bool(getattr(info, "present", False)) if info is not None else True
+    class_of_device = None
+    if hci.startswith("hci") and hci[3:].isdigit():
+        raw_class = read_device_class(int(hci[3:]))
+        if raw_class is not None:
+            class_of_device = f"0x{raw_class:06x}"
+    return ControllerFacts(
+        id=hci,
+        id_synthetic=not hci,
+        mac=mac,
+        name=name,
+        alias=alias,
+        powered=powered,
+        present=present,
+        class_of_device=class_of_device,
+        device_macs=(),
+    )
+
+
+def _with_unique_ids(controllers: list[ControllerFacts]) -> list[ControllerFacts]:
+    """Give every controller an id no other controller holds.
+
+    A controller the sysfs map does not know has no ``hciN`` of its own.  The
+    synthetic one is the first free kernel name, never an index — with a partial
+    sysfs map an index would mint a name a real adapter already owns, and
+    ``/hardware/controllers/hciN`` would then resolve the wrong adapter.
+    """
+    used = {facts.id for facts in controllers if facts.id}
+    next_free = 0
+    settled: list[ControllerFacts] = []
+    for facts in controllers:
+        if facts.id:
+            settled.append(facts)
+            continue
+        while f"hci{next_free}" in used:
+            next_free += 1
+        identifier = f"hci{next_free}"
+        used.add(identifier)
+        next_free += 1
+        settled.append(replace(facts, id=identifier, id_synthetic=True))
+    return settled
+
+
+def _device_facts(
+    mac: str, record: dict[str, Any], info: DeviceInfo | None, runtime: dict[str, dict[str, Any]]
+) -> DeviceFacts:
+    """One bond, merged across the controllers that hold it."""
+    entry = record["entry"]
+    name = (getattr(info, "name", "") or getattr(entry, "name", "") or mac) if info else (entry.name or mac)
+    alias = (getattr(info, "alias", "") or name) if info else name
+    status = runtime.get(mac, {})
+    transport_state = status.get("transport_state")
+    roles = infer_roles(DeviceLink(mac, transport_state=transport_state), (), None)
+    return DeviceFacts(
+        mac=mac,
+        name=name,
+        alias=alias,
+        paired=getattr(info, "paired", None),
+        bonded=getattr(info, "bonded", None),
+        trusted=getattr(info, "trusted", None),
+        blocked=getattr(info, "blocked", None),
+        connected=bool(getattr(info, "connected", False)),
+        controller_macs=tuple(record["controller_macs"]),
+        uuids=_uuids(info),
+        modalias=_modalias(info),
+        services_resolved=None,
+        battery_pct=status.get("battery_pct"),
+        rssi_delta_db=status.get("rssi_delta_db"),
+        rssi_at=status.get("rssi_at"),
+        transport_state=transport_state,
+        roles=tuple(roles),
+    )
+
+
+def _read_from(reader: Any, hci_by_mac: dict[str, str]) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
+    """One full read through *reader* (a D-Bus backend or the bluetoothctl transport).
+
+    A batched ``inventory()`` answer is consumed in one go; duck-typed readers
+    that only answer the individual questions still work.  ``inventory()``
+    returning ``None`` — or a question answering ``None`` — raises
+    :class:`_BusUnavailable`; an empty list is a truthful "no controllers".
+    """
+    batched = getattr(reader, "inventory", None)
+    if batched is not None:
+        readings = batched()
+        if readings is None:
+            raise _BusUnavailable("the reader could not answer")
+        return _from_readings(readings, hci_by_mac)
+    return _from_questions(reader, hci_by_mac)
+
+
+def _from_readings(readings: list[Any], hci_by_mac: dict[str, str]) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
+    runtime = _runtime_status()
+    controllers: list[ControllerFacts] = []
+    merged: dict[str, dict[str, Any]] = {}
+    for reading in readings:
+        facts = _controller_facts(reading.ref, reading.info, hci_by_mac)
+        if facts is None:
+            continue
+        device_macs: list[str] = []
+        for entry in reading.devices:
+            device_mac = _canonical(entry.mac)
+            if not device_mac:
+                continue
+            device_macs.append(device_mac)
+            record = merged.setdefault(device_mac, {"entry": entry, "controller_macs": [], "info": None})
+            if facts.mac not in record["controller_macs"]:
+                record["controller_macs"].append(facts.mac)
+        for info in reading.device_infos:
+            device_mac = _canonical(info.mac)
+            target = merged.get(device_mac)
+            if target is not None and target["info"] is None:
+                target["info"] = info
+        controllers.append(replace(facts, device_macs=tuple(device_macs)))
+    devices = [_device_facts(mac, record, record.get("info"), runtime) for mac, record in merged.items()]
+    return _with_unique_ids(controllers), devices
+
+
+def _from_questions(reader: Any, hci_by_mac: dict[str, str]) -> tuple[list[ControllerFacts], list[DeviceFacts]]:
+    """The legacy per-question read, for a reader without a batched answer."""
+    adapters = reader.list_adapters()
+    if adapters is None:
+        raise _BusUnavailable("the bus could not answer")
+    runtime = _runtime_status()
+    controllers: list[ControllerFacts] = []
+    merged: dict[str, dict[str, Any]] = {}
+    for ref in adapters:
+        info = reader.show(Adapter.addressed(ref.mac))
+        facts = _controller_facts(ref, info, hci_by_mac)
+        if facts is None:
+            continue
+        device_macs: list[str] = []
+        for entry in reader.list_devices(Adapter.select(facts.mac), filter="Paired") or []:
+            device_mac = _canonical(entry.mac)
+            if not device_mac:
+                continue
+            device_macs.append(device_mac)
+            record = merged.setdefault(device_mac, {"entry": entry, "controller_macs": [], "info": None})
+            if facts.mac not in record["controller_macs"]:
+                record["controller_macs"].append(facts.mac)
+        controllers.append(replace(facts, device_macs=tuple(device_macs)))
+    for mac, record in merged.items():
+        owner = record["controller_macs"][0]
+        record["info"] = reader.device_info(mac, Adapter.select(owner))
+    devices = [_device_facts(mac, record, record.get("info"), runtime) for mac, record in merged.items()]
+    return _with_unique_ids(controllers), devices
+
+
+# ---------------------------------------------------------------------------
+# Assembly
+# ---------------------------------------------------------------------------
+
+
+def _assemble(
+    controllers: list[ControllerFacts],
+    devices: list[DeviceFacts],
+    *,
+    dbus: bool,
+    bluetooth: bool,
+    degraded: list[Degraded],
+) -> InventoryRead:
+    server_name = probe_audio_server()
+    audio_server = classify_audio_server(server_name)
+    capabilities = build_capabilities(
+        bluetooth=bluetooth,
+        dbus=dbus,
+        server_name=server_name,
+        capture=probe_capture(),
+        default_sink=audio_server != "none",
+    )
+    entries = list(degraded)
+    if audio_server == "none":
+        entries.append(
+            Degraded(
+                "audio",
+                "pulse_unavailable",
+                "No PulseAudio-compatible server answered; cards, sinks and sources cannot be read.",
+            )
+        )
+    return InventoryRead(
+        as_of=_as_of(),
+        stale=False,
+        stale_after_s=int(_TTL_S),
+        capabilities=capabilities,
+        controllers=tuple(controllers),
+        devices=tuple(devices),
+        degraded=tuple(entries),
+    )
+
+
+def _refresh() -> InventoryRead:
+    bluez = get_bluez()
+    hci_by_mac = build_hci_map()
+    backend = getattr(bluez, "query_backend", None)
+    if backend is not None:
+        try:
+            controllers, devices = _read_from(backend, hci_by_mac)
+        except _BusUnavailable as exc:
+            logger.debug("Hardware inventory: D-Bus could not answer (%s); asking bluetoothctl", exc)
+        except Exception as exc:  # the bus could not be asked — the transport decides
+            logger.debug("Hardware inventory: D-Bus read failed (%s); asking bluetoothctl", exc)
+        else:
+            return _assemble(controllers, devices, dbus=True, bluetooth=True, degraded=[])
+
+    # The bus already said no — ask bluetoothctl without letting every verb
+    # spend the same bus timeout before it answers.
+    reader = bluez.without_query_backend() if backend is not None else bluez
+    with _take_read_lease():
+        try:
+            controllers, devices = _read_from(reader, hci_by_mac)
+        except _BusUnavailable as exc:
+            raise HardwareUnavailable(f"Neither D-Bus nor bluetoothctl could answer: {exc}") from exc
+    return _assemble(
+        controllers,
+        devices,
+        dbus=False,
+        bluetooth=True,
+        degraded=[
+            Degraded(
+                "controllers",
+                "dbus_unavailable",
+                "D-Bus did not answer; the inventory was read through bluetoothctl under the adapter lease.",
+            )
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# The cache
+# ---------------------------------------------------------------------------
+
+
+def read_inventory() -> InventoryRead:
+    """The current hardware inventory, read at most once per :data:`_TTL_S` seconds."""
+    global _cached, _cached_at
+    with _reader_lock:
+        now = _monotonic()
+        if _cached is not None and now - _cached_at < _TTL_S:
+            return _cached
+        try:
+            fresh = _refresh()
+        except Exception as exc:
+            if _cached is None:
+                if isinstance(exc, HardwareUnavailable):
+                    raise
+                raise HardwareUnavailable(str(exc)) from exc
+            logger.warning("Hardware inventory refresh failed; serving the last read: %s", exc)
+            return replace(
+                _cached,
+                stale=True,
+                degraded=(
+                    *_cached.degraded,
+                    Degraded("hardware", "refresh_failed", f"The last hardware refresh failed: {exc}"),
+                ),
+            )
+        _cached = fresh
+        _cached_at = _monotonic()
+        return fresh
+
+
+def clear_cache() -> None:
+    """Forget the cached read (a manual refresh, and every test that needs a clean slate)."""
+    global _cached, _cached_at
+    with _reader_lock:
+        _cached = None
+        _cached_at = 0.0

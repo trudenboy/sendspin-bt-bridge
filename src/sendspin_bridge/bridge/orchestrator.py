@@ -409,10 +409,6 @@ class BridgeOrchestrator:
         if collision:
             logger.warning(collision)
         self.lifecycle_state.begin_startup(demo_mode=demo_mode)
-        if demo_mode:
-            from demo import install
-
-            install()
 
         # The bluetoothctl transport is stdlib-only and cannot ask BlueZ
         # over D-Bus which controller ``hciN`` is; hand it that lookup
@@ -422,6 +418,13 @@ class BridgeOrchestrator:
         from sendspin_bridge.bluetooth.manager import install_dbus_hci_resolver
 
         install_dbus_hci_resolver()
+        if demo_mode:
+            # Install the demo layer after the resolver: it replaces the
+            # hardware reader itself, so the transport the resolver just
+            # built cannot put the real host back in front of the page.
+            from demo import install
+
+            install()
 
         config = load_config()
         server_host = config.get("SENDSPIN_SERVER", "auto")

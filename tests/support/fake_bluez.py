@@ -185,11 +185,41 @@ class _FakeProcess:
         self.stdin = _FakeStdin(fake, self)
         self.stdout = _FakeStdout(self)
         self.returncode: int | None = None
+        self._corpus_mode = False
+        self._selected = ""
 
     def fire_triggers(self, written_line: str) -> None:
+        command = written_line.strip()
+        if command.startswith("select "):
+            self._selected = command.split(maxsplit=1)[1].strip().upper()
+        matched = False
         for trigger, emitted in self._triggers:
             if trigger in written_line:
                 self.buffer.extend(line + "\n" for line in emitted)
+                matched = True
+        # An inventory session starts with ``show``; from then on unscripted
+        # questions answer from the registered handlers or the corpus, as the
+        # real transport does.  Pair and scan sessions never send ``show``, so
+        # their transcripts stay exactly what the test scripted.
+        if command.startswith("show "):
+            self._corpus_mode = True
+        if self._corpus_mode and not matched:
+            answer = self._handler_output(command)
+            if answer is None:
+                self.buffer.extend(self._fake.session_corpus(written_line))
+            else:
+                self.buffer.extend(line + "\n" for line in answer.splitlines())
+
+    def _handler_output(self, command: str) -> str | None:
+        """The scripted answer to one session command, honouring adapter scope."""
+        for handler in reversed(self._fake._handlers):
+            if handler.adapter is not None and handler.adapter != self._selected:
+                continue
+            if handler.exc is not None or handler.timeout_seconds is not None:
+                continue
+            if self._fake._matches(handler, (), command):
+                return handler.stdout
+        return None
 
     def poll(self) -> int | None:
         return self.returncode
@@ -308,6 +338,15 @@ class FakeBluez:
         """Advance the fake clock past the deadline, then time out."""
         self._handlers.append(_Handler(match=match, adapter=None, timeout_seconds=seconds))
 
+    def session_corpus(self, written_line: str) -> list[str]:
+        """The corpus answer to one interactive command, as output lines."""
+        corpus = _CORPORA[self.bluez_version]
+        stripped = written_line.strip()
+        if not stripped or stripped.lower().startswith("select "):
+            return []
+        chunk = self._chunk_for(stripped, corpus)
+        return [line + "\n" for line in chunk.splitlines()]
+
     def session_script(self, pairs: list[tuple[str, list[str]]]) -> None:
         """Script an interactive session: ``(trigger, [emitted lines])``.
 
@@ -424,6 +463,8 @@ class FakeBluez:
         arg = arg.strip()
         if verb == "select" or not verb:
             return ""
+        if verb == "list":
+            return corpus["list"]
         if verb == "show":
             return corpus["show"]
         if verb == "devices":

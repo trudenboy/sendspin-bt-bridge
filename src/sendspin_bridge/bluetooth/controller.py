@@ -31,6 +31,7 @@ from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.bluez import (
     Adapter,
     AdapterInfo,
+    AdapterInventory,
     AdapterRef,
     Deadline,
     DeviceEntry,
@@ -162,6 +163,19 @@ class DbusController:
     def list_adapters(self, *, timeout: float | None = None) -> list[AdapterRef] | None:
         """Every controller, in kernel order; the first is BlueZ's default."""
         return self._ask(self._with_objects(adapters_from_objects), timeout)
+
+    def inventory(self, *, timeout: float | None = None) -> list[AdapterInventory] | None:
+        """Every controller, its bonds and their details from one object-tree read.
+
+        This is the whole hardware reader's D-Bus question: one
+        ``GetManagedObjects`` per read, not one per controller, device or
+        property.  ``None`` means the bus could not be asked.
+        """
+        return self._ask(self._inventory(), timeout)
+
+    async def _inventory(self) -> list[AdapterInventory] | None:
+        objects = await self._objects()
+        return None if objects is None else inventory_from_objects(objects)
 
     def show(self, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> AdapterInfo | None:
         """One controller's address, names and power state."""
@@ -690,6 +704,47 @@ def _display_name(device: dict[str, Any]) -> str:
     """The name bluetoothctl prints for a device: alias, then name; never an address."""
     name = str(_unwrap(device.get("Alias")) or _unwrap(device.get("Name")) or "")
     return "" if DeviceAddress.parse(name.replace("-", ":")) is not None else name
+
+
+def inventory_from_objects(objects: dict[str, Any]) -> list[AdapterInventory]:
+    """The complete hardware read from one ``GetManagedObjects`` answer."""
+    paths = sorted(path for path, interfaces in objects.items() if ADAPTER_INTERFACE in interfaces)
+    readings: list[AdapterInventory] = []
+    for index, path in enumerate(paths):
+        props = objects[path][ADAPTER_INTERFACE]
+        mac = str(_unwrap(props.get("Address")) or "").upper()
+        name = str(_unwrap(props.get("Name")) or "")
+        alias = str(_unwrap(props.get("Alias")) or name)
+        ref = AdapterRef(mac=mac, name=alias or name, is_default=index == 0)
+        info = AdapterInfo(
+            mac=mac,
+            name=name,
+            alias=alias,
+            powered=bool(_unwrap(props.get("Powered"))),
+            present=True,
+        )
+        devices: list[DeviceEntry] = []
+        device_infos: list[DeviceInfo] = []
+        for device_path in sorted(objects):
+            device = objects[device_path].get(DEVICE_INTERFACE)
+            if not device or not device_path.startswith(f"{path}/"):
+                continue
+            if not _unwrap(device.get("Paired")):
+                continue
+            address = DeviceAddress.parse(_unwrap(device.get("Address")))
+            if address is None:
+                continue
+            devices.append(DeviceEntry(mac=address.colons, name=_display_name(device)))
+            device_infos.append(device_info_from_properties(address.colons, device))
+        readings.append(
+            AdapterInventory(
+                ref=ref,
+                info=info,
+                devices=tuple(devices),
+                device_infos=tuple(device_infos),
+            )
+        )
+    return readings
 
 
 def adapters_from_objects(objects: dict[str, Any]) -> list[AdapterRef]:

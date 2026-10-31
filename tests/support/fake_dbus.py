@@ -33,6 +33,9 @@ class FakeBlueZ:
         self.calls: list[tuple[str, str, tuple]] = []
         self.connected = True
         self.fail: dict[str, Exception] = {}
+        #: How many GetManagedObjects round trips a caller made — the cost the
+        #: hardware reader's batching rule is stated in.
+        self.managed_object_reads = 0
         self._subscribers: dict[str, list] = {}
         #: Devices that only show up once a controller starts discovery:
         #: {adapter path: [(device path, address, properties)]}.
@@ -165,6 +168,7 @@ class FakeObjectManager:
         self._bluez = bluez
 
     async def call_get_managed_objects(self) -> dict:
+        self._bluez.managed_object_reads += 1
         if "GetManagedObjects" in self._bluez.fail:
             raise self._bluez.fail["GetManagedObjects"]
         return {

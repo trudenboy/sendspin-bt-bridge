@@ -19,12 +19,14 @@ from ._process import Outcome, RemoveResult, VerbResult
 __all__ = [
     "INFO_FIELDS",
     "AdapterInfo",
+    "AdapterInventory",
     "AdapterRef",
     "DeviceEntry",
     "DeviceInfo",
     "ScanTranscript",
     "parse_adapter_list",
     "parse_device_info",
+    "parse_device_infos",
     "parse_devices",
     "parse_scan",
     "parse_show",
@@ -195,6 +197,21 @@ class DeviceEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class AdapterInventory:
+    """One controller's complete inventory from a single transport read.
+
+    The controller, its ``show`` facts, the bonds it holds and each bond's
+    ``info`` facts travel together: a host with ten speakers is one answer,
+    never ten round trips.
+    """
+
+    ref: AdapterRef
+    info: AdapterInfo
+    devices: tuple[DeviceEntry, ...] = ()
+    device_infos: tuple[DeviceInfo, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ScanTranscript:
     """Structured result of a scan composite: classified lines + attribution."""
 
@@ -292,6 +309,24 @@ def parse_device_info(stdout: str, mac: str, *, outcome: Outcome = Outcome.OK) -
                 )
             present = True
     return DeviceInfo(mac=mac, present=present, fields=fields, raw=raw_lines, outcome=outcome)
+
+
+def parse_device_infos(stdout: str) -> dict[str, DeviceInfo]:
+    """Every ``info <MAC>`` block in one combined output, keyed by upper-case MAC."""
+    blocks: dict[str, list[str]] = {}
+    order: list[str] = []
+    current = ""
+    for raw in stdout.splitlines():
+        line = strip_ansi(raw).strip()
+        header = _INFO_HEADER_RE.match(line)
+        if header:
+            current = header.group(1).upper()
+            if current not in blocks:
+                blocks[current] = []
+                order.append(current)
+        if current:
+            blocks[current].append(raw)
+    return {mac: parse_device_info("\n".join(blocks[mac]), mac) for mac in order}
 
 
 def parse_devices(stdout: str) -> list[DeviceEntry]:
