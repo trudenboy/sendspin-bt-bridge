@@ -39,6 +39,7 @@ __all__ = [
     "areload_bluez5_discover_module",
     "aset_card_profile",
     "aset_default_sink",
+    "aset_sink_port",
     "asuspend_sink",
     "cycle_card_profile",
     "ensure_null_sink",
@@ -55,6 +56,7 @@ __all__ = [
     "set_card_profile",
     "set_default_sink",
     "set_sink_mute",
+    "set_sink_port",
     "set_sink_volume",
     "suspend_sink",
 ]
@@ -283,6 +285,30 @@ async def asuspend_sink(sink_name: str, suspend: bool) -> bool:
         return _fallback_suspend_sink(sink_name, suspend)
 
 
+async def aset_sink_port(sink_name: str, port: str) -> bool:
+    """Switch *sink_name* to *port* (e.g. ``analog-output-headphones``).  True on success.
+
+    An explicit port, like an explicit profile, is set directly: cycling the
+    card through ``off`` first is a recovery dance for a lost sink, and doing
+    that here would drop audio nobody asked to interrupt.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return await _run_blocking(_fallback_set_sink_port, sink_name, port)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                sink = await _aget_sink(pulse, sink_name)
+                if sink is None:
+                    logger.warning("aset_sink_port: sink %s not found", sink_name)
+                    return False
+                await pulse.sink_port_set(sink.index, port)
+                logger.info("Set sink port: %s → %s", sink_name, port)
+                return True
+    except Exception as exc:
+        logger.debug("aset_sink_port(%s, %s) error: %s — falling back", sink_name, port, exc)
+        return await _run_blocking(_fallback_set_sink_port, sink_name, port)
+
+
 async def alist_sink_input_ids() -> set[int]:
     """Return set of current PA sink-input indices."""
     if not _PULSECTL_AVAILABLE:
@@ -432,10 +458,10 @@ async def alist_cards() -> list[dict]:
 async def aset_card_profile(card_name: str, profile: str) -> bool:
     """Set *card_name* to *profile* (e.g. ``a2dp_sink``). Returns True on success.
 
-    Used when a Bluetooth device is connected but its card is stuck on a
-    non-audio-sink profile such as ``headset_head_unit``.  Switching to
-    ``a2dp_sink`` causes PulseAudio to publish a ``bluez_sink.*`` sink
-    suitable for A2DP playback.
+    This is the explicit-choice setter: it applies *profile* directly and never
+    cycles through ``off`` (that is :func:`acycle_card_profile`, a recovery
+    dance).  Used both by the Bluetooth auto-switch and by the operator's
+    profile command, where a silent ``off`` transition would drop audio.
     """
     if not _PULSECTL_AVAILABLE:
         return await _run_blocking(_fallback_set_card_profile, card_name, profile)
@@ -791,6 +817,10 @@ def suspend_sink(sink_name: str, suspend: bool) -> bool:
     return _run(asuspend_sink(sink_name, suspend))
 
 
+def set_sink_port(sink_name: str, port: str) -> bool:
+    return _run(aset_sink_port(sink_name, port))
+
+
 def get_server_name() -> str:
     return _run(aget_server_name())
 
@@ -958,6 +988,24 @@ def _fallback_suspend_sink(sink_name: str, suspend: bool) -> bool:
         logger.warning("pactl suspend-sink failed: %s", r.stderr.strip())
     except Exception as exc:
         logger.debug("suspend-sink fallback failed: %s", exc)
+    return False
+
+
+def _fallback_set_sink_port(sink_name: str, port: str) -> bool:
+    """Set *sink_name*'s active port via `pactl set-sink-port`. Returns True on success."""
+    try:
+        r = subprocess.run(
+            ["pactl", "set-sink-port", sink_name, port],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            logger.info("Set sink port: %s → %s", sink_name, port)
+            return True
+        logger.warning("pactl set-sink-port %s %s failed: %s", sink_name, port, r.stderr.strip())
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("_fallback_set_sink_port error: %s", exc)
     return False
 
 

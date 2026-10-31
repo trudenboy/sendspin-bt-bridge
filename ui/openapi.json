@@ -7690,6 +7690,20 @@
         "title": "PlayoutTiming",
         "type": "object"
       },
+      "PortIn": {
+        "properties": {
+          "port": {
+            "description": "One of the sink's card's port names; anything else is a 400 invalid_port.",
+            "title": "Port",
+            "type": "string"
+          }
+        },
+        "required": [
+          "port"
+        ],
+        "title": "PortIn",
+        "type": "object"
+      },
       "PowerIn": {
         "properties": {
           "on": {
@@ -7858,6 +7872,20 @@
           "delays"
         ],
         "title": "ProfileCreate",
+        "type": "object"
+      },
+      "ProfileIn": {
+        "properties": {
+          "profile": {
+            "description": "One of the card's own profile names; anything else is a 400 invalid_profile.",
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "ProfileIn",
         "type": "object"
       },
       "ProfileOut": {
@@ -10525,6 +10553,71 @@
         ]
       }
     },
+    "/api/v1/audio/cards/{name}/profile": {
+      "put": {
+        "description": "Apply an explicit profile (no ``off`` cycle) and return the updated card.",
+        "operationId": "set_card_profile_api_v1_audio_cards__name__profile_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Switch a card's profile",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
     "/api/v1/audio/default-sink": {
       "put": {
         "description": "Make the named sink the audio server's default.",
@@ -10687,6 +10780,71 @@
           }
         },
         "summary": "Mute or unmute an output",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/api/v1/audio/sinks/{name}/port": {
+      "put": {
+        "description": "Switch the sink to one of its card's ports and return the updated endpoint.",
+        "operationId": "set_sink_port_api_v1_audio_sinks__name__port_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Switch an output's port",
         "tags": [
           "audio"
         ]

@@ -6,14 +6,23 @@ import asyncio
 import logging
 import threading
 import time
+from dataclasses import replace
+from typing import Any
 
+from sendspin_bridge.application import hardware as hardware_uc
 from sendspin_bridge.application.errors import UseCaseError, require_audio_name
 from sendspin_bridge.application.models.audio import AudioSinkOut, SinkStateOut
+from sendspin_bridge.application.models.hardware import CardDetail, EndpointDetail
 from sendspin_bridge.application.runtime import run_on_loop
 from sendspin_bridge.config import load_config
 from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_sinks
 from sendspin_bridge.services.hardware import capabilities
-from sendspin_bridge.services.hardware.inventory import HardwareUnavailable, clear_cache, read_inventory
+from sendspin_bridge.services.hardware.inventory import (
+    HardwareUnavailable,
+    InventoryRead,
+    clear_cache,
+    read_inventory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,11 +125,11 @@ def _after_write() -> None:
     clear_cache()
 
 
-async def _require_sink(wanted: str) -> LocalSink:
-    """The named sink from the current inventory, after the backend check.
+async def _inventory_or_unsupported() -> InventoryRead:
+    """The current read, after the backend check the command contract starts with.
 
-    The order is the contract: 409 when nothing answers, 404 when a server
-    answers but the sink is not there.  The reader is blocking, so it runs in a
+    The order is deliberate: 409 when nothing answers, then 404 when a server
+    answers but the thing is not there.  The reader is blocking, so it runs in a
     worker thread; every hardware consumer reads through the same one.
     """
     try:
@@ -134,6 +143,12 @@ async def _require_sink(wanted: str) -> LocalSink:
         raise UseCaseError(503, "hardware_unavailable", str(exc)) from exc
     if read.capabilities.audio_server == "none":
         raise UseCaseError(409, "not_supported_for_backend", _NO_SERVER)
+    return read
+
+
+async def _require_sink(wanted: str) -> LocalSink:
+    """The named sink from the current inventory."""
+    read = await _inventory_or_unsupported()
     sink = next((item for item in read.audio.sinks if item.name == wanted), None)
     if sink is None:
         raise UseCaseError(404, "entity_not_found", f"Unknown audio sink: {wanted}")
@@ -208,3 +223,83 @@ async def suspend_sink(name: str) -> SinkStateOut:
 async def resume_sink(name: str) -> SinkStateOut:
     """Resume one suspended sink."""
     return await _set_suspended(name, False)
+
+
+async def _read_after_write(fallback: InventoryRead) -> tuple[InventoryRead, dict[str, Any]]:
+    """The state after a command, plus the config the detail joins.
+
+    The cache was just dropped, so this is a fresh read (and the first one to see
+    what the command changed).  When the refresh cannot answer at all the
+    pre-write read is used instead: the command already succeeded, and a failed
+    follow-up read must not turn an audible action into an error.
+    """
+    try:
+        read = await asyncio.to_thread(read_inventory)
+    except HardwareUnavailable:
+        read = fallback
+    config = await asyncio.to_thread(load_config)
+    return read, config
+
+
+async def set_card_profile(card_name: str, profile: str) -> CardDetail:
+    """Switch one card to an explicit profile, without cycling through ``off``.
+
+    ``profile`` must be one the card itself lists: an operator picking from the
+    hardware page can only choose one of those, and anything else is a bad
+    request rather than something the server should be asked to reject.
+    """
+    wanted = require_audio_name(card_name, field="card name")
+    read = await _inventory_or_unsupported()
+    card = next((item for item in read.audio.cards if item.name == wanted), None)
+    if card is None:
+        raise UseCaseError(404, "entity_not_found", f"Unknown audio card: {card_name}")
+    if profile not in {item.name for item in card.profiles}:
+        raise UseCaseError(
+            400,
+            "invalid_profile",
+            f"The card {wanted} does not offer the profile {profile!r}.",
+        )
+    from sendspin_bridge.services.audio import pulse
+
+    if not await asyncio.to_thread(pulse.set_card_profile, wanted, profile):
+        raise _refused("a profile change", wanted)
+    _after_write()
+    fresh, config = await _read_after_write(read)
+    current = next((item for item in fresh.audio.cards if item.name == wanted), card)
+    return hardware_uc.build_card_detail(replace(current, active_profile=profile), fresh.audio, config)
+
+
+async def set_sink_port(sink_name: str, port: str) -> EndpointDetail:
+    """Switch one sink to one of its card's ports.
+
+    The card is resolved through the read model's owner classification
+    (``application.hardware.endpoint_card``), never by parsing the sink name:
+    a Bluetooth sink is *owned* by the speaker link but its ports still belong
+    to the ``bluez_card`` that lists it.
+    """
+    wanted = require_audio_name(sink_name, field="sink name")
+    read = await _inventory_or_unsupported()
+    facts = next((item for item in read.audio.sinks if item.name == wanted), None)
+    if facts is None:
+        raise UseCaseError(404, "entity_not_found", f"Unknown audio sink: {sink_name}")
+    card = hardware_uc.endpoint_card(facts, read.audio.cards)
+    chosen = next((item for item in card.ports if item.name == port), None) if card is not None else None
+    if chosen is None:
+        raise UseCaseError(
+            400,
+            "invalid_port",
+            f"The sink {wanted} has no port {port!r} on its card.",
+        )
+    from sendspin_bridge.services.audio import pulse
+
+    if not await asyncio.to_thread(pulse.set_sink_port, wanted, port):
+        raise _refused("a port change", wanted)
+    _after_write()
+    fresh, config = await _read_after_write(read)
+    current = next((item for item in fresh.audio.sinks if item.name == wanted), facts)
+    availability = {True: "available", False: "not available", None: "availability unknown"}[chosen.available]
+    return hardware_uc.build_endpoint_detail(
+        replace(current, active_port=port, active_port_available=availability),
+        fresh.audio,
+        config,
+    )

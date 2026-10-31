@@ -750,3 +750,87 @@ async def test_the_default_sink_falls_back_to_pactl():
 def test_pactl_saying_nothing_means_none():
     with patch.object(_pulse_mod.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="")):
         assert _pulse_mod._fallback_default_sink_name() is None
+
+
+# ---------------------------------------------------------------------------
+# set_sink_port — explicit port switch, via pulsectl or `pactl set-sink-port`
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_set_sink_port_runs_pactl():
+    from sendspin_bridge.services.audio.pulse import _fallback_set_sink_port
+
+    with patch.object(_pulse_mod, "subprocess") as mock_sub:
+        mock_sub.run.return_value = MagicMock(returncode=0)
+        assert _fallback_set_sink_port("alsa_output.usb-dac.analog-stereo", "analog-output-headphones") is True
+        assert mock_sub.run.call_args[0][0] == [
+            "pactl",
+            "set-sink-port",
+            "alsa_output.usb-dac.analog-stereo",
+            "analog-output-headphones",
+        ]
+
+
+def test_fallback_set_sink_port_reports_a_refusal():
+    from sendspin_bridge.services.audio.pulse import _fallback_set_sink_port
+
+    with patch.object(_pulse_mod, "subprocess") as mock_sub:
+        mock_sub.run.return_value = MagicMock(returncode=1, stderr="Failure: No such entity")
+        assert _fallback_set_sink_port("alsa_output.usb-dac.analog-stereo", "hdmi-output-0") is False
+
+
+def test_fallback_set_sink_port_survives_a_missing_pactl():
+    from sendspin_bridge.services.audio.pulse import _fallback_set_sink_port
+
+    with patch.object(_pulse_mod, "subprocess") as mock_sub:
+        mock_sub.SubprocessError = __import__("subprocess").SubprocessError
+        mock_sub.run.side_effect = OSError("pactl missing")
+        assert _fallback_set_sink_port("any", "any") is False
+
+
+@pytest.mark.asyncio
+async def test_aset_sink_port_switches_the_sink_to_the_named_port():
+    sink = SimpleNamespace(index=72, name="alsa_output.usb-dac.analog-stereo")
+    pulse = MagicMock()
+    pulse.sink_list = AsyncMock(return_value=[sink])
+    pulse.sink_port_set = AsyncMock()
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        assert await _pulse_mod.aset_sink_port(sink.name, "analog-output-headphones") is True
+
+    pulse.sink_port_set.assert_awaited_once_with(sink.index, "analog-output-headphones")
+
+
+@pytest.mark.asyncio
+async def test_aset_sink_port_reports_a_sink_that_is_not_there():
+    pulse = MagicMock()
+    pulse.sink_list = AsyncMock(return_value=[])
+    pulse.sink_port_set = AsyncMock()
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        assert await _pulse_mod.aset_sink_port("gone", "analog-output") is False
+
+    pulse.sink_port_set.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_aset_card_profile_sets_the_choice_without_cycling_through_off():
+    """The explicit-choice setter must not pass through ``off``: that would drop audio."""
+    card = SimpleNamespace(name="bluez_card.FC_58_FA_EB_08_6C")
+    pulse = MagicMock()
+    pulse.card_list = AsyncMock(return_value=[card])
+    pulse.card_profile_set = AsyncMock()
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        assert await _pulse_mod.aset_card_profile(card.name, "headset_head_unit") is True
+
+    assert [call.args for call in pulse.card_profile_set.await_args_list] == [(card, "headset_head_unit")]

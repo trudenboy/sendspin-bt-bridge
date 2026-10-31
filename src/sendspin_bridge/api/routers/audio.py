@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field
 from sendspin_bridge.api.auth import require_principal
 from sendspin_bridge.api.errors import PROBLEM_RESPONSES
 from sendspin_bridge.application import audio as audio_uc
+from sendspin_bridge.application.errors import require_audio_name
 from sendspin_bridge.application.models.audio import AudioSinkOut, SinkStateOut
+from sendspin_bridge.application.models.hardware import CardDetail, EndpointDetail
 
 router = APIRouter(
     prefix="/audio", tags=["audio"], dependencies=[Depends(require_principal)], responses=PROBLEM_RESPONSES
@@ -25,6 +27,14 @@ class MuteIn(BaseModel):
 
 class DefaultSinkIn(BaseModel):
     name: str = Field(description="The sink that becomes the audio server's default.")
+
+
+class ProfileIn(BaseModel):
+    profile: str = Field(description="One of the card's own profile names; anything else is a 400 invalid_profile.")
+
+
+class PortIn(BaseModel):
+    port: str = Field(description="One of the sink's card's port names; anything else is a 400 invalid_port.")
 
 
 @router.get("/sinks", response_model=list[AudioSinkOut], summary="Local audio outputs")
@@ -61,3 +71,15 @@ async def suspend_sink(name: str) -> SinkStateOut:
 async def resume_sink(name: str) -> SinkStateOut:
     """Resume a suspended sink."""
     return await audio_uc.resume_sink(name)
+
+
+@router.put("/cards/{name}/profile", response_model=CardDetail, summary="Switch a card's profile")
+async def set_card_profile(name: str, body: ProfileIn) -> CardDetail:
+    """Apply an explicit profile (no ``off`` cycle) and return the updated card."""
+    return await audio_uc.set_card_profile(require_audio_name(name, field="card name"), body.profile)
+
+
+@router.put("/sinks/{name}/port", response_model=EndpointDetail, summary="Switch an output's port")
+async def set_sink_port(name: str, body: PortIn) -> EndpointDetail:
+    """Switch the sink to one of its card's ports and return the updated endpoint."""
+    return await audio_uc.set_sink_port(require_audio_name(name, field="sink name"), body.port)

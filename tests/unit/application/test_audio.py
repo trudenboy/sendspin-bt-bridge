@@ -6,7 +6,7 @@ import pytest
 
 from sendspin_bridge.application import audio as audio_uc
 from sendspin_bridge.application.errors import UseCaseError
-from sendspin_bridge.services.audio.sink_inventory import LocalSink
+from sendspin_bridge.services.audio.sink_inventory import CardPort, CardProfile, LocalCard, LocalSink
 from sendspin_bridge.services.hardware.capabilities import build_capabilities
 from sendspin_bridge.services.hardware.inventory import (
     CaptureFacts,
@@ -26,9 +26,56 @@ SINK = LocalSink(
     identifiers={"serial": "DAC-1"},
 )
 
+CARD = LocalCard(
+    name="alsa_card.pci-0000_00_1f.3",
+    driver="module-alsa-card.c",
+    active_profile="output:analog-stereo+input:analog-stereo",
+    profiles=(
+        CardProfile("output:analog-stereo", "Analog Stereo Output", True),
+        CardProfile("output:analog-stereo+input:analog-stereo", "Analog Stereo Duplex", True),
+        CardProfile("input:analog-stereo", "Analog Stereo Input", True),
+        CardProfile("off", "Off", True),
+    ),
+    ports=(
+        CardPort("analog-output", "Analog Output", True, True, ("output:analog-stereo",)),
+        CardPort("analog-output-headphones", "Headphones", False, False, ("output:analog-stereo",)),
+    ),
+    sink_names=(SINK.name,),
+)
+
+BLUEZ_SINK = LocalSink(
+    name="bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink",
+    description="ENEBY20",
+    state="idle",
+    sample_spec="s16le 2ch 44100Hz",
+    muted=False,
+    volume=80,
+    active_port="headset-output",
+    active_port_available="available",
+)
+
+BLUEZ_CARD = LocalCard(
+    name="bluez_card.FC_58_FA_EB_08_6C",
+    driver="module-bluez5-device.c",
+    active_profile="a2dp_sink",
+    profiles=(
+        CardProfile("a2dp_sink", "High Fidelity Playback (A2DP Sink)", True),
+        CardProfile("headset_head_unit", "Headset Head Unit (HSP/HFP)", True),
+        CardProfile("off", "Off", True),
+    ),
+    ports=(
+        CardPort("headset-output", "ENEBY20", True, True, ("a2dp_sink", "headset_head_unit")),
+        CardPort("headset-input", "ENEBY20", None, False, ("headset_head_unit",)),
+    ),
+    sink_names=(BLUEZ_SINK.name,),
+)
+
 
 def _read(
-    *, audio_server: str = "PulseAudio (on PipeWire 1.0.5)", sinks: tuple[LocalSink, ...] = (SINK,)
+    *,
+    audio_server: str = "PulseAudio (on PipeWire 1.0.5)",
+    sinks: tuple[LocalSink, ...] = (SINK,),
+    cards: tuple[LocalCard, ...] = (CARD,),
 ) -> InventoryRead:
     return InventoryRead(
         as_of="2026-10-31T00:00:00+00:00",
@@ -44,7 +91,7 @@ def _read(
         controllers=(),
         devices=(),
         degraded=(),
-        audio=build_audio_facts([], list(sinks), [], CaptureFacts()),
+        audio=build_audio_facts(list(cards), list(sinks), [], CaptureFacts()),
     )
 
 
@@ -74,6 +121,8 @@ def host(monkeypatch):
     monkeypatch.setattr(pulse, "set_sink_mute", _record("mute"))
     monkeypatch.setattr(pulse, "set_default_sink", _record("default"))
     monkeypatch.setattr(pulse, "suspend_sink", _record("suspend"))
+    monkeypatch.setattr(pulse, "set_card_profile", _record("profile"))
+    monkeypatch.setattr(pulse, "set_sink_port", _record("port"))
     return calls
 
 
@@ -284,3 +333,160 @@ async def test_every_write_drops_the_inventory_cache(host, monkeypatch):
     await audio_uc.resume_sink(SINK.name)
 
     assert len(dropped) == 5
+
+
+# -- set_card_profile ---------------------------------------------------------
+
+
+async def test_set_card_profile_switches_and_returns_the_card_detail(host):
+    detail = await audio_uc.set_card_profile(CARD.name, "output:analog-stereo")
+
+    assert host == [("profile", CARD.name, ("output:analog-stereo",))]
+    assert detail.name == CARD.name
+    assert detail.active_profile == "output:analog-stereo"
+    assert [profile.name for profile in detail.profiles] == [profile.name for profile in CARD.profiles]
+    assert {endpoint.name for endpoint in detail.endpoints} == {SINK.name}
+    assert {port.name for port in detail.ports} == {"analog-output", "analog-output-headphones"}
+
+
+async def test_set_card_profile_an_unknown_card_is_entity_not_found(host):
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_card_profile("no.such.card", "off")
+
+    assert exc.value.status == 404
+    assert exc.value.code == "entity_not_found"
+    assert host == []
+
+
+async def test_set_card_profile_a_profile_the_card_does_not_offer_is_invalid_profile(host):
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_card_profile(CARD.name, "a2dp_sink")
+
+    assert exc.value.status == 400
+    assert exc.value.code == "invalid_profile"
+    assert host == []
+
+
+async def test_set_card_profile_a_server_that_refuses_is_a_409(monkeypatch):
+    monkeypatch.setattr(audio_uc, "read_inventory", lambda: _read())
+    monkeypatch.setattr(_pulse(), "set_card_profile", lambda _name, _profile: False)
+
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_card_profile(CARD.name, "off")
+
+    assert exc.value.status == 409
+    assert exc.value.code == "not_supported_for_backend"
+
+
+async def test_set_card_profile_without_a_server_is_not_supported_for_backend(monkeypatch):
+    _no_server(monkeypatch)
+
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_card_profile(CARD.name, "off")
+
+    assert exc.value.status == 409
+    assert exc.value.code == "not_supported_for_backend"
+
+
+async def test_set_card_profile_a_name_outside_the_grammar_is_invalid_audio_name(host):
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_card_profile("not a name", "off")
+
+    assert exc.value.status == 400
+    assert exc.value.code == "invalid_audio_name"
+    assert host == []
+
+
+# -- set_sink_port ------------------------------------------------------------
+
+
+async def test_set_sink_port_switches_and_returns_the_endpoint_detail(host):
+    detail = await audio_uc.set_sink_port(SINK.name, "analog-output-headphones")
+
+    assert host == [("port", SINK.name, ("analog-output-headphones",))]
+    assert detail.kind == "sink"
+    assert detail.name == SINK.name
+    assert detail.active_port == "analog-output-headphones"
+    assert detail.owner is not None and detail.owner.card == CARD.name
+    assert {port.name for port in detail.ports} == {"analog-output", "analog-output-headphones"}
+
+
+async def test_set_sink_port_an_unknown_sink_is_entity_not_found(host):
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_sink_port("no.such.sink", "analog-output-headphones")
+
+    assert exc.value.status == 404
+    assert exc.value.code == "entity_not_found"
+    assert host == []
+
+
+async def test_set_sink_port_a_port_not_on_the_sinks_card_is_invalid_port(host):
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_sink_port(SINK.name, "hdmi-output-0")
+
+    assert exc.value.status == 400
+    assert exc.value.code == "invalid_port"
+    assert host == []
+
+
+async def test_set_sink_port_a_sink_with_no_card_has_no_valid_port(host, monkeypatch):
+    monkeypatch.setattr(audio_uc, "read_inventory", lambda: _read(cards=()))
+
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_sink_port(SINK.name, "analog-output-headphones")
+
+    assert exc.value.status == 400
+    assert exc.value.code == "invalid_port"
+    assert host == []
+
+
+async def test_set_sink_port_resolves_the_card_through_the_read_models_owner_classification(host, monkeypatch):
+    """A Bluetooth sink's owner is the speaker link; its ports still belong to the bluez_card."""
+    monkeypatch.setattr(audio_uc, "read_inventory", lambda: _read(sinks=(BLUEZ_SINK,), cards=(BLUEZ_CARD,)))
+
+    detail = await audio_uc.set_sink_port(BLUEZ_SINK.name, "headset-input")
+
+    assert host == [("port", BLUEZ_SINK.name, ("headset-input",))]
+    assert detail.owner is not None and detail.owner.bluetooth == "FC:58:FA:EB:08:6C"
+    assert {port.name for port in detail.ports} == {"headset-output", "headset-input"}
+
+
+async def test_set_sink_port_a_server_that_refuses_is_a_409(monkeypatch):
+    monkeypatch.setattr(audio_uc, "read_inventory", lambda: _read())
+    monkeypatch.setattr(_pulse(), "set_sink_port", lambda _name, _port: False)
+
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_sink_port(SINK.name, "analog-output-headphones")
+
+    assert exc.value.status == 409
+    assert exc.value.code == "not_supported_for_backend"
+
+
+async def test_set_sink_port_without_a_server_is_not_supported_for_backend(monkeypatch):
+    _no_server(monkeypatch)
+
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_sink_port(SINK.name, "analog-output-headphones")
+
+    assert exc.value.status == 409
+    assert exc.value.code == "not_supported_for_backend"
+
+
+async def test_set_sink_port_a_name_outside_the_grammar_is_invalid_audio_name(host):
+    with pytest.raises(UseCaseError) as exc:
+        await audio_uc.set_sink_port("not a name", "analog-output")
+
+    assert exc.value.status == 400
+    assert exc.value.code == "invalid_audio_name"
+    assert host == []
+
+
+async def test_card_profile_and_sink_port_writes_drop_the_inventory_cache(host, monkeypatch):
+    """A read right after either write must not answer from before it."""
+    dropped: list[int] = []
+    monkeypatch.setattr(audio_uc, "clear_cache", lambda: dropped.append(1))
+
+    await audio_uc.set_card_profile(CARD.name, "off")
+    await audio_uc.set_sink_port(SINK.name, "analog-output-headphones")
+
+    assert len(dropped) == 2

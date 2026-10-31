@@ -367,8 +367,14 @@ def _audio_section(audio: AudioFacts, sink_players: dict[str, str]) -> AudioSect
     )
 
 
-def _endpoint_card(facts: EndpointFacts, cards: tuple[LocalCard, ...]) -> LocalCard | None:
-    """The card whose ports describe this endpoint, even when its owner is a link."""
+def endpoint_card(facts: EndpointFacts, cards: tuple[LocalCard, ...]) -> LocalCard | None:
+    """The card whose ports describe this endpoint, even when its owner is a link.
+
+    This is the read model's owner classification: ``owner.card`` first, then
+    the card's own endpoint list.  A Bluetooth sink is owned by the speaker
+    link but still appears in its ``bluez_card``'s ``Sinks:`` list, and that
+    card is what carries the ports an operator can switch.
+    """
     if facts.owner is not None and facts.owner.kind == "card":
         owned = next((card for card in cards if card.name == facts.owner.card), None)
         if owned is not None:
@@ -378,6 +384,38 @@ def _endpoint_card(facts: EndpointFacts, cards: tuple[LocalCard, ...]) -> LocalC
         if facts.name in names:
             return card
     return None
+
+
+def build_card_detail(card: LocalCard, audio: AudioFacts, config: dict[str, Any]) -> CardDetail:
+    """A card's detail from one read, joined with the config (pure).
+
+    Shared by the read route and by the profile command, so a command's
+    response is the same shape a second read would have produced.
+    """
+    _players, _areas, sink_players = _config_view(config)
+    endpoints = _audio_endpoints(audio)
+    return CardDetail(
+        **_card_summary(card, endpoints).model_dump(),
+        profiles=[_card_profile(profile) for profile in card.profiles],
+        ports=[_card_port(port) for port in card.ports],
+        # The same membership the summary uses: a bluez_card lists its Bluetooth
+        # sink and source even though their *owner* is the speaker link.
+        endpoints=[
+            _endpoint_summary(facts, sink_players, audio.default_sink) for facts in _card_endpoints(card, endpoints)
+        ],
+    )
+
+
+def build_endpoint_detail(facts: EndpointFacts, audio: AudioFacts, config: dict[str, Any]) -> EndpointDetail:
+    """A sink's or source's detail from one read, joined with the config (pure)."""
+    _players, _areas, sink_players = _config_view(config)
+    card = endpoint_card(facts, audio.cards)
+    return EndpointDetail(
+        **_endpoint_summary(facts, sink_players, audio.default_sink).model_dump(),
+        identifiers=dict(facts.identifiers),
+        ports=[_card_port(port) for port in card.ports] if card is not None else [],
+        monitor_of=facts.monitor_of,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -453,39 +491,20 @@ async def audio_card(name: str) -> CardDetail:
     """One card with every profile, every port and its endpoints."""
     wanted = require_audio_name(name, field="card name")
     read, config = await _read()
-    _players, _areas, sink_players = _config_view(config)
     card = next((item for item in read.audio.cards if item.name == wanted), None)
     if card is None:
         raise not_found(f"Unknown audio card: {name}", code="entity_not_found")
-    endpoints = _audio_endpoints(read.audio)
-    return CardDetail(
-        **_card_summary(card, endpoints).model_dump(),
-        profiles=[_card_profile(profile) for profile in card.profiles],
-        ports=[_card_port(port) for port in card.ports],
-        # The same membership the summary uses: a bluez_card lists its Bluetooth
-        # sink and source even though their *owner* is the speaker link.
-        endpoints=[
-            _endpoint_summary(facts, sink_players, read.audio.default_sink)
-            for facts in _card_endpoints(card, endpoints)
-        ],
-    )
+    return build_card_detail(card, read.audio, config)
 
 
 async def _audio_endpoint(kind: Literal["sink", "source"], name: str) -> EndpointDetail:
     wanted = require_audio_name(name, field=f"{kind} name")
     read, config = await _read()
-    _players, _areas, sink_players = _config_view(config)
     pool = read.audio.sinks if kind == "sink" else read.audio.sources
     facts = next((item for item in pool if item.name == wanted), None)
     if facts is None:
         raise not_found(f"Unknown audio {kind}: {name}", code="entity_not_found")
-    card = _endpoint_card(facts, read.audio.cards)
-    return EndpointDetail(
-        **_endpoint_summary(facts, sink_players, read.audio.default_sink).model_dump(),
-        identifiers=dict(facts.identifiers),
-        ports=[_card_port(port) for port in card.ports] if card is not None else [],
-        monitor_of=facts.monitor_of,
-    )
+    return build_endpoint_detail(facts, read.audio, config)
 
 
 async def audio_sink(name: str) -> EndpointDetail:
