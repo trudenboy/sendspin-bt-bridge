@@ -20,19 +20,27 @@ const props = withDefaults(
     /** What the page already knows, so the drawer title is right before the read lands. */
     audioLabel?: string | null
     busy?: boolean
+    connecting?: boolean
+    disconnecting?: boolean
   }>(),
-  { controller: null, device: null, audioName: null, audioLabel: null, busy: false },
+  { controller: null, device: null, audioName: null, audioLabel: null, busy: false, connecting: false, disconnecting: false },
 )
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   togglePower: [controller: ControllerSummary]
+  connect: [device: BtDeviceSummary]
+  disconnect: [device: BtDeviceSummary]
 }>()
 
 const { t } = useI18n()
 
 const controller = computed(() => (props.kind === 'controller' ? props.controller : null))
 const device = computed(() => (props.kind === 'device' ? props.device : null))
+/** Same rule as the card: a bond that is down can be brought up; a live link can be dropped. */
+const canConnect = computed(
+  () => device.value !== null && !device.value.connected && (device.value.paired === true || device.value.bonded === true),
+)
 const audioKind = computed<'audio-card' | 'audio-sink' | 'audio-source' | null>(() =>
   props.kind === 'audio-card' || props.kind === 'audio-sink' || props.kind === 'audio-source' ? props.kind : null,
 )
@@ -171,6 +179,30 @@ const rssi = computed(() => {
       >
         <template #icon-left><Power class="h-3.5 w-3.5" aria-hidden="true" /></template>
         {{ controller.powered ? t('adapter.turnOff') : t('adapter.turnOn') }}
+      </SbButton>
+    </template>
+
+    <!-- A bond is a link, not a player: the drawer offers the same two commands as the card. -->
+    <template v-else-if="device" #footer>
+      <SbButton
+        v-if="canConnect"
+        variant="outline"
+        size="sm"
+        data-drawer-connect
+        :loading="connecting"
+        @click="emit('connect', device)"
+      >
+        {{ t('hardware.connect') }}
+      </SbButton>
+      <SbButton
+        v-if="device.connected"
+        variant="outline"
+        size="sm"
+        data-drawer-disconnect
+        :loading="disconnecting"
+        @click="emit('disconnect', device)"
+      >
+        {{ t('hardware.disconnect') }}
       </SbButton>
     </template>
   </SbDrawer>

@@ -99,6 +99,13 @@ describe('AddSpeakerDialog', () => {
     expect(w.text()).toContain('Kitchen Boom is on the bridge.')
   })
 
+  it('reports the new bond so the page that opened it can re-read its inventory', async () => {
+    const w = mountDialog()
+    await button(w, 'Add').trigger('click')
+    await flushPromises()
+    expect(w.emitted('paired')).toEqual([['AA:BB']])
+  })
+
   it('offers the test sound once the speaker has audio', async () => {
     const w = mountDialog()
     await button(w, 'Add').trigger('click')

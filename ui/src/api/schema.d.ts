@@ -291,8 +291,31 @@ export interface paths {
         get: operations["device_info_api_v1_bluetooth_devices__mac__get"];
         put?: never;
         post?: never;
-        /** Forget a device (remove the bond) */
+        /**
+         * Forget a device (remove the bond)
+         * @description Drop the bond; a bond a configured player depends on is refused with 409.
+         */
         delete: operations["remove_api_v1_bluetooth_devices__mac__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bluetooth/devices/{mac}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect a known device
+         * @description Bring up the link on the controller that holds the bond; the device must already be known.
+         */
+        post: operations["connect_api_v1_bluetooth_devices__mac__connect_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7656,6 +7679,48 @@ export interface operations {
         };
     };
     remove_api_v1_bluetooth_devices__mac__delete: {
+        parameters: {
+            query?: {
+                adapter_mac?: string;
+            };
+            header?: never;
+            path: {
+                mac: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    connect_api_v1_bluetooth_devices__mac__connect_post: {
         parameters: {
             query?: {
                 adapter_mac?: string;

@@ -17,7 +17,7 @@ import type { ScanDevice } from '@/api/types'
  * adapter choice stay out of the way until needed.
  */
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ 'update:open': [value: boolean] }>()
+const emit = defineEmits<{ 'update:open': [value: boolean]; paired: [mac: string] }>()
 
 const { t } = useI18n()
 const bt = useBluetoothStore()
@@ -96,6 +96,8 @@ async function pick(result: ScanDevice) {
     return
   }
   name.value = result.name && result.name !== result.mac ? result.name : ''
+  // The bond exists now, whether or not the operator also makes it a player.
+  emit('paired', result.mac)
   step.value = 'name'
 }
 

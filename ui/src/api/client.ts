@@ -13,6 +13,10 @@ export interface Problem {
   code: string
   detail?: string | null
   errors?: { loc?: (string | number)[]; msg?: string; field?: string; message?: string }[] | null
+  /** ``bond_in_use_by_player``: the player whose backend is this bond. */
+  player_id?: string | null
+  /** A sentence naming the player and the next step, written by the server. */
+  remediation?: string | null
   [key: string]: unknown
 }
 

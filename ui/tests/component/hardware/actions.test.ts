@@ -77,13 +77,15 @@ describe('Hardware page: device actions', () => {
     expect(toast(en.hardware.forgotBond.replace('{name}', 'ENEBY20'))).toBe(true)
   })
 
-  it('surfaces the server code and message when the bond backs a player', async () => {
+  it('shows the server remediation and a link to the player a bond backs', async () => {
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
     vi.mocked(forgetBtDevice).mockRejectedValue(
       new ApiError({
         status: 409,
         code: 'bond_in_use_by_player',
-        detail: 'The bond backs a player; remove the player first.',
+        detail: 'The bond for FC:58:FA:EB:08:6C backs the player ENEBY20.',
+        player_id: 'eneby20',
+        remediation: 'Remove the player ENEBY20 in Settings → Players, then forget this bond.',
       }),
     )
 
@@ -93,9 +95,15 @@ describe('Hardware page: device actions', () => {
     await wrapper.get('[data-forget-bond]').trigger('click')
     await flushPromises()
 
-    const errors = useNotificationStore().toasts.filter((entry) => entry.type === 'error')
-    expect(errors).toHaveLength(1)
-    expect(errors[0]!.message).toContain('bond_in_use_by_player')
-    expect(errors[0]!.message).toContain('The bond backs a player; remove the player first.')
+    const refusal = wrapper.get('[data-bond-refusal]')
+    expect(refusal.attributes('role')).toBe('alert')
+    expect(refusal.text()).toContain('Remove the player ENEBY20 in Settings → Players, then forget this bond.')
+    expect(refusal.text()).toContain(en.hardware.bondInUseTitle)
+    const link = refusal.get('[data-bond-player-link]')
+    expect(link.text()).toBe(en.hardware.openPlayer.replace('{player}', 'eneby20'))
+    expect(link.attributes('href')).toBe('/?player=eneby20')
+    // No generic failure toast: the server's sentence replaced it.
+    expect(useNotificationStore().toasts.filter((entry) => entry.type === 'error')).toEqual([])
+    expect(getHardware).toHaveBeenCalledTimes(1)
   })
 })

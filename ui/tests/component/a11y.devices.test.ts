@@ -4,6 +4,8 @@ import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
+import BtDeviceCard from '@/components/hardware/BtDeviceCard.vue'
+import { btDevice } from './hardware/support'
 import en from '@/i18n/locales/en.json'
 import ru from '@/i18n/locales/ru.json'
 import { makeDevice } from '../fixtures/device'
@@ -75,6 +77,27 @@ describe('accessibility: speaker card and drawer', () => {
         await flushPromises()
         expect(await seriousViolations(), `tab ${tab.attributes('data-tab-id')}`).toEqual([])
       }
+    })
+
+    it(`a refused forget on a Bluetooth card has no serious violations (${locale})`, async () => {
+      mounted = mount(BtDeviceCard, {
+        props: {
+          device: btDevice({ connected: false }) as never,
+          refusal: {
+            playerId: 'eneby20',
+            remediation: 'Remove the player ENEBY20 in Settings → Players, then forget this bond.',
+            detail: null,
+          },
+        },
+        global: {
+          plugins: [plugin(locale)],
+          stubs: { RouterLink: { template: '<a href="/?player=eneby20"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(document.body.querySelector('[data-bond-refusal]')).not.toBeNull()
+      expect(await seriousViolations()).toEqual([])
     })
   }
 })

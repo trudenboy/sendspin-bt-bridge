@@ -21,6 +21,14 @@ export function getBtDeviceInfo(mac: string, adapter = '') {
   )
 }
 
+export function connectBtDevice(mac: string, adapterMac = '') {
+  return unwrap(
+    api().POST('/api/v1/bluetooth/devices/{mac}/connect', {
+      params: { path: { mac }, query: { adapter_mac: adapterMac } },
+    }),
+  )
+}
+
 export function disconnectBtDevice(mac: string) {
   return unwrap(api().POST('/api/v1/bluetooth/devices/{mac}/disconnect', { params: { path: { mac } } }))
 }

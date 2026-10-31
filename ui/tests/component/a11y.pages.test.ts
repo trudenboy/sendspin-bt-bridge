@@ -11,7 +11,7 @@ import { getConfig } from '@/api/config'
 import { getHardware } from '@/api/hardware'
 import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { seriousViolations } from '../helpers/axe'
-import { snapshot, capabilities, sourceFeed } from './hardware/support'
+import { snapshot, capabilities, sourceFeed, btDevice } from './hardware/support'
 
 // Regression guard (UX stage 8): no serious or critical axe violation on the
 // Settings and Diagnostics pages, in both languages, with technical details on
@@ -155,6 +155,23 @@ describe('accessibility: pages', () => {
         attachTo: document.body,
       })
       await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware with a bond down has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({ bluetooth_devices: [btDevice({ connected: false })] }) as never,
+      )
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(document.body.querySelector('[data-connect-device]')).not.toBeNull()
+      expect(document.body.querySelector('[data-pair-device]')).not.toBeNull()
       expect(await seriousViolations()).toEqual([])
     })
 

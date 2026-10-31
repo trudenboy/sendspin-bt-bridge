@@ -11,12 +11,13 @@ import EndpointRow from '@/components/hardware/EndpointRow.vue'
 import SourceFeedPanel from '@/components/hardware/SourceFeedPanel.vue'
 import CapabilityBanner from '@/components/hardware/CapabilityBanner.vue'
 import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
+import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import { useHardwareStore } from '@/stores/hardware'
 import { useBridgeStore } from '@/stores/bridge'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useNotificationStore } from '@/stores/notifications'
 import { confirmAction, undoable } from '@/composables/useActionPolicy'
-import { forgetBtDevice, setAdapterPower } from '@/api/bluetooth'
+import { connectBtDevice, disconnectBtDevice, forgetBtDevice, setAdapterPower } from '@/api/bluetooth'
 import { ApiError } from '@/api/client'
 import { speakerName } from '@/utils/speakerName'
 import type {
@@ -366,6 +367,18 @@ const selectedAudio = computed(() => {
 
 const deviceBusy = ref<string | null>(null)
 
+/** A refused forget, kept per MAC: the server's sentence and the player it names. */
+interface BondRefusal {
+  playerId: string | null
+  remediation: string | null
+  detail: string | null
+}
+const bondRefusals = ref<Record<string, BondRefusal>>({})
+
+function refusalFor(mac: string) {
+  return bondRefusals.value[mac] ?? null
+}
+
 function deviceName(device: BtDeviceSummary) {
   return device.alias || device.name || device.mac
 }
@@ -398,6 +411,85 @@ async function addSpeaker(device: BtDeviceSummary) {
   }
 }
 
+/** The server's stable code, with the two refusals BlueZ words for people. */
+function btReason(e: unknown) {
+  if (!(e instanceof ApiError)) return e instanceof Error ? e.message : t('common.error')
+  if (e.code === 'connect_refused' || e.code === 'disconnect_refused') {
+    return t('hardware.btRefused', { code: e.code })
+  }
+  if (e.code === 'bluetooth_unavailable' || e.code === 'disconnect_failed') {
+    return t('hardware.btUnavailable', { code: e.code })
+  }
+  return `${e.code}: ${e.message}`
+}
+
+/**
+ * A link command, then a fresh read; the undo is the opposite command. Neither
+ * side is destructive, so the policy runs them at once.
+ */
+async function runLinkCommand(
+  id: 'bluetooth.connect' | 'bluetooth.disconnect',
+  device: BtDeviceSummary,
+  forward: () => Promise<unknown>,
+  backward: () => Promise<unknown>,
+  doneKey: string,
+  failureKey: string,
+) {
+  const name = deviceName(device)
+  deviceBusy.value = `${id}:${device.mac}`
+  try {
+    await undoable(id, forward, backward, {
+      doneKey,
+      name,
+      failure: (e) => t(failureKey, { name, reason: btReason(e) }),
+    })
+  } finally {
+    deviceBusy.value = null
+  }
+}
+
+function connectDevice(device: BtDeviceSummary) {
+  void runLinkCommand(
+    'bluetooth.connect',
+    device,
+    async () => {
+      // The server picks the controller holding the bond; no client-side guess.
+      await connectBtDevice(device.mac)
+      await store.refresh()
+    },
+    async () => {
+      await disconnectBtDevice(device.mac)
+      await store.refresh()
+    },
+    'undo.btConnected',
+    'hardware.connectFailed',
+  )
+}
+
+function disconnectDevice(device: BtDeviceSummary) {
+  void runLinkCommand(
+    'bluetooth.disconnect',
+    device,
+    async () => {
+      await disconnectBtDevice(device.mac)
+      await store.refresh()
+    },
+    async () => {
+      await connectBtDevice(device.mac)
+      await store.refresh()
+    },
+    'undo.btDisconnected',
+    'hardware.disconnectFailed',
+  )
+}
+
+/** The voice of the pairing flow is the dialog's; the page only refreshes its inventory. */
+const pairOpen = ref(false)
+
+function onPaired() {
+  void store.refresh()
+}
+
 /** The bond can back a player; its id is a fact from the read, not a client-side guess. */
 function forgetConsequences(device: BtDeviceSummary) {
   const lines = [t('device.actions.forgetConfirm')]
@@ -414,12 +506,28 @@ async function forgetBond(device: BtDeviceSummary) {
   })
   if (!ok) return
   deviceBusy.value = `forget:${device.mac}`
+  // A retry starts clean: the previous refusal is about the state before this attempt.
+  const rest = { ...bondRefusals.value }
+  delete rest[device.mac]
+  bondRefusals.value = rest
   try {
     await forgetBtDevice(device.mac)
     await store.refresh()
     notifications.success(t('hardware.forgotBond', { name }))
   } catch (e) {
-    // A 409 carries the server's own code and message (e.g. bond_in_use_by_player).
+    if (e instanceof ApiError && e.code === 'bond_in_use_by_player') {
+      // The server names the player and the next step; the page repeats both
+      // instead of guessing which player owns the bond.
+      bondRefusals.value = {
+        ...bondRefusals.value,
+        [device.mac]: {
+          playerId: typeof e.problem.player_id === 'string' ? e.problem.player_id : null,
+          remediation: typeof e.problem.remediation === 'string' ? e.problem.remediation : null,
+          detail: e.problem.detail ?? null,
+        },
+      }
+      return
+    }
     const reason = e instanceof ApiError ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e)
     notifications.error(t('hardware.forgetFailed', { reason }))
   } finally {
@@ -539,7 +647,12 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
       </section>
 
       <section class="mb-8" data-devices-section>
-        <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.devices') }}</h2>
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-lg font-semibold text-text-primary">{{ t('hardware.devices') }}</h2>
+          <SbButton size="sm" variant="outline" data-pair-device @click="pairOpen = true">
+            {{ t('hardware.pairDevice') }}
+          </SbButton>
+        </div>
         <ul
           v-if="devices.length"
           class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4"
@@ -549,9 +662,14 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
               :device="device"
               :adding="deviceBusy === `add:${device.mac}`"
               :forgetting="deviceBusy === `forget:${device.mac}`"
+              :connecting="deviceBusy === `bluetooth.connect:${device.mac}`"
+              :disconnecting="deviceBusy === `bluetooth.disconnect:${device.mac}`"
+              :refusal="refusalFor(device.mac)"
               @open="openDevice"
               @add="addSpeaker"
               @forget="forgetBond"
+              @connect="connectDevice"
+              @disconnect="disconnectDevice"
             />
           </li>
         </ul>
@@ -678,7 +796,14 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
       :audio-name="selectedAudio?.name ?? null"
       :audio-label="selectedAudio?.label ?? null"
       :busy="busy === selectedController?.id"
+      :connecting="selectedDevice !== null && deviceBusy === `bluetooth.connect:${selectedDevice.mac}`"
+      :disconnecting="selectedDevice !== null && deviceBusy === `bluetooth.disconnect:${selectedDevice.mac}`"
       @toggle-power="togglePower"
+      @connect="connectDevice"
+      @disconnect="disconnectDevice"
     />
+
+    <!-- The same dialog Home opens, so scanning and pairing exist in one place only. -->
+    <AddSpeakerDialog :open="pairOpen" @update:open="pairOpen = $event" @paired="onPaired" />
   </div>
 </template>

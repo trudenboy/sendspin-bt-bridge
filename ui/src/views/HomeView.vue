@@ -194,6 +194,31 @@ function openDetail(id: string) {
   selectedId.value = id
   drawerOpen.value = true
 }
+
+/* A hardware refusal links here with ?player=<id>: open that player, not just the list. */
+function linkedPlayer(): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get('player')
+  } catch {
+    return null
+  }
+}
+const pendingPlayer = ref<string | null>(linkedPlayer())
+/* The link can arrive before the first status event; wait for the player to exist. */
+watch(
+  () => [bridge.devices.length, deviceStore.disabledPlayers.length] as const,
+  () => {
+    const id = pendingPlayer.value
+    if (!id) return
+    const known =
+      bridge.devices.some((device) => device.id === id) ||
+      deviceStore.disabledPlayers.some((player) => player.id === id)
+    if (!known) return
+    openDetail(id)
+    pendingPlayer.value = null
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

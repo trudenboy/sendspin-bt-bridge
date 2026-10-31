@@ -132,6 +132,21 @@ describe('accessibility: dialogs', () => {
         attachTo: document.body,
       })
       await flushPromises()
+      expect(document.body.querySelector('[data-drawer-disconnect]')).not.toBeNull()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`the hardware device drawer with the link down has no serious violations (${locale})`, async () => {
+      mounted = mount(EntityDrawer, {
+        props: { open: true, kind: 'device', device: btDevice({ connected: false }) as never },
+        global: {
+          ...global(locale),
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(document.body.querySelector('[data-drawer-connect]')).not.toBeNull()
       expect(await seriousViolations()).toEqual([])
     })
   }

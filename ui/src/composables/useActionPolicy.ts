@@ -57,6 +57,10 @@ export const ACTION_POLICY = {
   'source.pairing': 'undo',
   'source.pairingStop': 'undo',
   'source.relay': 'undo',
+  // Hardware → Bluetooth link: bringing the link up or down is reversible (the
+  // undo is the opposite command) and destroys nothing, so it runs at once.
+  'bluetooth.connect': 'undo',
+  'bluetooth.disconnect': 'undo',
 } as const
 
 export type ActionId = keyof typeof ACTION_POLICY

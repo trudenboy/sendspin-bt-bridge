@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
@@ -36,16 +36,21 @@ const output = (id: string, name: string) =>
     audio: { has_sink: true, sink_missing: false },
   } as never)
 
-function mountHome(devices: Device[], view: 'grid' | 'list' = 'grid') {
+function mountHome(devices: Device[], view: 'grid' | 'list' = 'grid', stubOverrides: Record<string, unknown> = {}) {
   localStorage.setItem('sb-view-mode', view)
   const bridge = useBridgeStore()
   bridge.snapshot = makeStatus(devices)
   bridge.loading = false
   return mount(HomeView, {
     attachTo: document.body,
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })], stubs },
+    global: {
+      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+      stubs: { ...stubs, ...stubOverrides },
+    },
   })
 }
+
+afterEach(() => window.history.replaceState({}, '', '/'))
 
 /* Toolbar menus are SbDropdowns: open the trigger, pick the item (the menu sits on <body>). */
 async function pick(w: ReturnType<typeof mountHome>, trigger: string, item: string) {
@@ -297,5 +302,39 @@ describe('HomeView empty filter results', () => {
     await nextTick()
     expect(useDeviceStore().filter.search).toBe('')
     expect(useDeviceStore().filter.status).toEqual([])
+  })
+})
+
+describe('HomeView hardware links', () => {
+  const drawerStub = {
+    props: ['deviceId', 'open'],
+    template: '<div data-home-drawer :data-open="String(open)" :data-device="deviceId" />',
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('opens the player a hardware refusal names', async () => {
+    window.history.replaceState({}, '', '/?player=alpha')
+    const w = mountHome([idle('alpha', 'Alpha'), idle('zulu', 'Zulu')], 'grid', {
+      DeviceDetailDrawer: drawerStub,
+    })
+    await flushPromises()
+    await nextTick()
+
+    const drawer = w.get('[data-home-drawer]')
+    expect(drawer.attributes('data-device')).toBe('alpha')
+    expect(drawer.attributes('data-open')).toBe('true')
+  })
+
+  it('ignores a player id that is not on this bridge', async () => {
+    window.history.replaceState({}, '', '/?player=ghost')
+    const w = mountHome([idle('alpha', 'Alpha')], 'grid', { DeviceDetailDrawer: drawerStub })
+    await flushPromises()
+    await nextTick()
+
+    expect(w.get('[data-home-drawer]').attributes('data-open')).toBe('false')
   })
 })
