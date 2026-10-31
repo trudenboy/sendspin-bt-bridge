@@ -136,3 +136,14 @@ These surfaces track the current UI screenshot queue, mixing already captured as
 **Used in:** `web-ui.md`, `configuration.md`, `devices.md`
 
 **State:** Bluetooth tab showing adapter inventory. Future retakes should try to include enough surrounding context to make it obvious that paired-device tools live in the same tab.
+
+## Hardware page (new, 2026-10-31)
+
+The Hardware page has no screenshots yet. Demo mode now serves two adapters, paired devices, nine local outputs, one input and a phone source, so it is the right stand:
+
+- `screenshot-hardware-overview.png` — the whole page at 1366 px, light theme: source strip, controllers, paired devices, audio.
+- `screenshot-hardware-audio.png` — the audio group: a card with its ports, an output carrying the **Default** badge, and an input with its kind.
+- `screenshot-hardware-unavailable.png` — the unavailable banner with its reason (stop the audio server in the demo container to produce it).
+- `screenshot-hardware-source.png` — the source strip while a phone streams.
+
+**Used in:** `hardware.mdx` and `ru/hardware.mdx`, once captured.
