@@ -32,3 +32,19 @@ export function suspendSink(name: string) {
 export function resumeSink(name: string) {
   return unwrap(api().POST('/api/v1/audio/sinks/{name}/resume', path(name)))
 }
+
+/**
+ * Switch one card to one of its own profiles; the answer is the updated card
+ * detail, so the page shows the new active profile without a second read.
+ */
+export function setCardProfile(name: string, profile: string) {
+  return unwrap(api().PUT('/api/v1/audio/cards/{name}/profile', { ...path(name), body: { profile } }))
+}
+
+/**
+ * Switch one output to one of its card's ports; the answer is the updated
+ * endpoint detail, so the drawer needs no follow-up read.
+ */
+export function setSinkPort(name: string, port: string) {
+  return unwrap(api().PUT('/api/v1/audio/sinks/{name}/port', { ...path(name), body: { port } }))
+}

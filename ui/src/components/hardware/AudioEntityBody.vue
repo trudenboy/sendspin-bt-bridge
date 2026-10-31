@@ -1,19 +1,39 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge, SbSpinner } from '@/kit'
 import AudioCardPanel from './AudioCardPanel.vue'
 import PortList from './PortList.vue'
 import { technicalDetails } from '@/composables/useTechnicalDetails'
+import { confirmAction } from '@/composables/useActionPolicy'
+import { useHardwareStore } from '@/stores/hardware'
+import { useNotificationStore } from '@/stores/notifications'
 import { ApiError } from '@/api/client'
 import { getHardwareAudioCard, getHardwareAudioSink, getHardwareAudioSource } from '@/api/hardware'
-import { activePortAvailability, availabilityTone, endpointStateTone } from '@/utils/audioEndpoint'
-import type { AudioCardDetail, AudioEndpointDetail, AudioEndpointOwner } from '@/api/types'
+import {
+  activePortAvailability,
+  availabilityTone,
+  endpointStateTone,
+  portAvailability,
+  type PortAvailability,
+} from '@/utils/audioEndpoint'
+import type {
+  AudioCardDetail,
+  AudioCardPort,
+  AudioCardProfile,
+  AudioEndpointDetail,
+  AudioEndpointOwner,
+} from '@/api/types'
 
 /**
  * The drawer body for one audio entity. The aggregate carries counts; this is
  * the one place that reads the detail route (profiles, ports, identifiers), so
  * opening a drawer never costs the page a fan-out.
+ *
+ * The two writes live here because the detail they need is here: a profile is
+ * only known from the card read, and the sink's card ports only from the
+ * endpoint read. Each write answers with the updated detail, so the drawer
+ * shows the new state without asking again.
  */
 const props = defineProps<{
   kind: 'audio-card' | 'audio-sink' | 'audio-source'
@@ -21,14 +41,31 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const store = useHardwareStore()
+const notifications = useNotificationStore()
 
 const card = ref<AudioCardDetail | null>(null)
 const endpoint = ref<AudioEndpointDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
+/** A refused write; the server's stable code stays in the text. */
+const actionError = ref('')
+const actionBusy = ref(false)
+const profileSelectId = useId()
+const portSelectId = useId()
 let request = 0
 
 const isCard = computed(() => props.kind === 'audio-card')
+
+/** A Bluetooth card's profile follows the connection, not the operator. */
+const bluetoothManaged = computed(
+  () => (card.value?.endpoints ?? []).some((entry) => entry.owner?.bluetooth),
+)
+
+/** Ports belong to an output; an input has no port choice to offer. */
+const portSwitchable = computed(
+  () => endpoint.value?.kind === 'sink' && endpoint.value.ports.length > 0 && !endpoint.value.owner?.bluetooth,
+)
 
 const stateLabel = computed(() => {
   const keys: Record<string, string> = {
@@ -50,6 +87,10 @@ const availabilityLabel = computed(() => {
   return availability.value ? t(keys[availability.value]) : ''
 })
 
+function failure(e: unknown) {
+  return e instanceof ApiError ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e)
+}
+
 function ownerLabel(owner: AudioEndpointOwner | null | undefined) {
   if (!owner) return t('hardware.audio.ownerUnknown')
   if (owner.card) return t('hardware.audio.ownerCard', { card: owner.card })
@@ -69,10 +110,91 @@ const identifiers = computed(() => {
   return known.filter(([key]) => raw[key]).map(([key, label]) => ({ key, label, value: raw[key] }))
 })
 
+const portLabels: Record<PortAvailability, string> = {
+  available: 'hardware.audio.portAvailable',
+  unavailable: 'hardware.audio.portUnavailable',
+  unknown: 'hardware.audio.portUnknown',
+}
+
+/** An option says what the profile is, whether it is in use, and why it cannot be picked. */
+function profileOption(profile: AudioCardProfile) {
+  const description = profile.description && profile.description !== profile.name ? profile.description : ''
+  const parts = [description ? `${description} (${profile.name})` : profile.name]
+  if (profile.name === card.value?.active_profile) parts.push(t('hardware.audio.profileActive'))
+  if (portAvailability(profile.available) === 'unavailable') parts.push(t('hardware.audio.profileUnavailable'))
+  return parts.join(' · ')
+}
+
+/** A port option always carries its availability: an unknown port is not an unavailable one. */
+function portOption(port: AudioCardPort) {
+  const description = port.description && port.description !== port.name ? port.description : ''
+  const parts = [description ? `${description} (${port.name})` : port.name]
+  if (port.active) parts.push(t('hardware.audio.portActive'))
+  parts.push(t(portLabels[portAvailability(port.available)]))
+  return parts.join(' · ')
+}
+
+async function onProfileChange(event: Event) {
+  const select = event.target as HTMLSelectElement
+  const profile = select.value
+  const current = card.value
+  if (!current || !profile || profile === current.active_profile) return
+  // The dialog decides. Until it does, the control keeps showing what runs now.
+  select.value = current.active_profile ?? ''
+  actionError.value = ''
+  const ok = await confirmAction('audio.cardProfile', {
+    title: t('hardware.audio.profileConfirmTitle', { card: current.name, profile }),
+    consequences: [t('hardware.audio.profileConsequence', { card: current.name })],
+    confirmLabel: t('hardware.audio.profileConfirm'),
+  })
+  if (!ok) return
+  actionBusy.value = true
+  try {
+    const detail = await store.chooseCardProfile(current, profile)
+    if (detail) card.value = detail
+    notifications.success(t('hardware.audio.profileSwitched', { card: current.name, profile }))
+  } catch (e) {
+    actionError.value = failure(e)
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function onPortChange(event: Event) {
+  const select = event.target as HTMLSelectElement
+  const port = select.value
+  const current = endpoint.value
+  if (!current || !port || port === current.active_port) return
+  select.value = current.active_port ?? ''
+  actionError.value = ''
+  const name = current.description || current.name
+  const consequence = current.in_use_by
+    ? t('hardware.audio.portConsequenceInUse', { name, player: current.in_use_by })
+    : t('hardware.audio.portConsequence', { name })
+  const picked = current.ports.find((entry) => entry.name === port)
+  const ok = await confirmAction('audio.sinkPort', {
+    title: t('hardware.audio.portConfirmTitle', { name, port: picked?.description || port }),
+    consequences: [consequence],
+    confirmLabel: t('hardware.audio.portConfirm'),
+  })
+  if (!ok) return
+  actionBusy.value = true
+  try {
+    const detail = await store.chooseSinkPort(current, port)
+    if (detail) endpoint.value = detail
+    notifications.success(t('hardware.audio.portSwitched', { name, port }))
+  } catch (e) {
+    actionError.value = failure(e)
+  } finally {
+    actionBusy.value = false
+  }
+}
+
 async function load() {
   const token = ++request
   loading.value = true
   error.value = ''
+  actionError.value = ''
   card.value = null
   endpoint.value = null
   try {
@@ -113,6 +235,39 @@ watch([() => props.kind, () => props.name], load, { immediate: true })
     </div>
 
     <template v-else-if="isCard && card">
+      <!-- A profile is a card-wide decision: picking one can silence every output on it. -->
+      <section v-if="card.profiles.length && !bluetoothManaged" data-profile-switch class="space-y-2">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+          {{ t('hardware.audio.profileSwitch') }}
+        </h3>
+        <label :for="profileSelectId" class="block text-sm text-text-secondary">
+          {{ t('hardware.audio.profileSelectLabel') }}
+        </label>
+        <select
+          :id="profileSelectId"
+          data-profile-select
+          class="block w-full max-w-md rounded-(--radius-input) border border-border-strong bg-surface-card px-2 py-1.5 text-sm text-text-primary disabled:opacity-60"
+          :value="card.active_profile ?? ''"
+          :disabled="actionBusy"
+          @change="onProfileChange"
+        >
+          <option
+            v-for="profile in card.profiles"
+            :key="profile.name"
+            :value="profile.name"
+            :disabled="profile.available === false"
+          >
+            {{ profileOption(profile) }}
+          </option>
+        </select>
+        <p v-if="actionError" data-action-error role="alert" class="text-sm text-error">
+          {{ actionError }}
+        </p>
+      </section>
+      <p v-else-if="bluetoothManaged" data-profile-managed class="text-sm text-text-secondary">
+        {{ t('hardware.audio.profileManagedByConnection') }}
+      </p>
+
       <AudioCardPanel :card="card" :interactive="false" />
       <section v-if="technicalDetails" data-drawer-technical class="border-t border-border pt-4">
         <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
@@ -177,6 +332,36 @@ watch([() => props.kind, () => props.name], load, { immediate: true })
           <dt class="text-text-secondary">{{ t('hardware.audio.owner') }}</dt>
           <dd class="text-text-primary">{{ ownerLabel(endpoint.owner) }}</dd>
         </dl>
+      </section>
+
+      <!-- An output can choose its card's port; the choice is audible, so it asks. -->
+      <section v-if="portSwitchable" data-port-switch class="border-t border-border pt-4">
+        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+          {{ t('hardware.audio.portSwitch') }}
+        </h3>
+        <label :for="portSelectId" class="mb-1 block text-sm text-text-secondary">
+          {{ t('hardware.audio.portSelectLabel') }}
+        </label>
+        <select
+          :id="portSelectId"
+          data-port-select
+          class="block w-full max-w-md rounded-(--radius-input) border border-border-strong bg-surface-card px-2 py-1.5 text-sm text-text-primary disabled:opacity-60"
+          :value="endpoint.active_port ?? ''"
+          :disabled="actionBusy"
+          @change="onPortChange"
+        >
+          <option
+            v-for="port in endpoint.ports"
+            :key="port.name"
+            :value="port.name"
+            :disabled="port.available === false"
+          >
+            {{ portOption(port) }}
+          </option>
+        </select>
+        <p v-if="actionError" data-action-error role="alert" class="mt-1 text-sm text-error">
+          {{ actionError }}
+        </p>
       </section>
 
       <section v-if="endpoint.ports.length" data-endpoint-ports class="border-t border-border pt-4">

@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audio/cards/{name}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch a card's profile
+         * @description Apply an explicit profile (no ``off`` cycle) and return the updated card.
+         */
+        put: operations["set_card_profile_api_v1_audio_cards__name__profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audio/default-sink": {
         parameters: {
             query?: never;
@@ -91,6 +111,26 @@ export interface paths {
          * @description Mute (``true``) or unmute (``false``) the sink.
          */
         put: operations["set_sink_mute_api_v1_audio_sinks__name__mute_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audio/sinks/{name}/port": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch an output's port
+         * @description Switch the sink to one of its card's ports and return the updated endpoint.
+         */
+        put: operations["set_sink_port_api_v1_audio_sinks__name__port_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5816,6 +5856,14 @@ export interface components {
             /** Warmup S */
             warmup_s: number | null;
         };
+        /** PortIn */
+        PortIn: {
+            /**
+             * Port
+             * @description One of the sink's card's port names; anything else is a 400 invalid_port.
+             */
+            port: string;
+        };
         /** PowerIn */
         PowerIn: {
             /** On */
@@ -5902,6 +5950,14 @@ export interface components {
              * @default
              */
             notes?: string;
+        };
+        /** ProfileIn */
+        ProfileIn: {
+            /**
+             * Profile
+             * @description One of the card's own profile names; anything else is a 400 invalid_profile.
+             */
+            profile: string;
         };
         /** ProfileOut */
         ProfileOut: {
@@ -7001,6 +7057,52 @@ export interface operations {
             };
         };
     };
+    set_card_profile_api_v1_audio_cards__name__profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     set_default_sink_api_v1_audio_default_sink_put: {
         parameters: {
             query?: never;
@@ -7107,6 +7209,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SinkStateOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_sink_port_api_v1_audio_sinks__name__port_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndpointDetail"];
                 };
             };
             /** @description Client error */

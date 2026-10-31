@@ -50,6 +50,10 @@ export const ACTION_POLICY = {
   'audio.resume': 'undo',
   'audio.suspend': 'confirm',
   'audio.defaultSink': 'choice',
+  // A profile or port switch is audible: the card can go silent while it
+  // reconfigures, and an output can lose whatever was playing on it. Both ask.
+  'audio.cardProfile': 'confirm',
+  'audio.sinkPort': 'confirm',
   // Hardware → Source: starting, pairing and relaying are reversible (the undo
   // is the opposite command); stopping interrupts every relay, so it asks.
   'source.start': 'undo',

@@ -2,7 +2,15 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { ApiError } from '@/api/client'
 import { getHardware } from '@/api/hardware'
-import { resumeSink, setDefaultSink, setSinkMute, setSinkVolume, suspendSink } from '@/api/audio'
+import {
+  resumeSink,
+  setCardProfile,
+  setDefaultSink,
+  setSinkMute,
+  setSinkPort,
+  setSinkVolume,
+  suspendSink,
+} from '@/api/audio'
 import {
   closeSourcePairing,
   openSourcePairing,
@@ -13,7 +21,10 @@ import {
 } from '@/api/source'
 import { DEFAULT_EVENT_TYPES, useEventStream, type EventType } from '@/composables/useEventStream'
 import type {
+  AudioCardDetail,
+  AudioCardSummary,
   AudioSection,
+  AudioEndpointDetail,
   AudioEndpointSummary,
   HardwareSnapshot,
   SinkState,
@@ -289,6 +300,78 @@ export const useHardwareStore = defineStore('hardware', () => {
     return { state: state.state }
   }
 
+  /** Replace one card in the snapshot with the write's own answer, keeping everything else. */
+  function replaceCard(name: string, detail: AudioCardDetail) {
+    const current = snapshot.value
+    if (!current) return
+    const section = current.audio ?? EMPTY_AUDIO
+    // The aggregate carries summaries. The detail's extra lists belong to the
+    // drawer that asked for the write, not to a page card that never read them.
+    const summary: AudioCardSummary = {
+      name: detail.name,
+      driver: detail.driver,
+      active_profile: detail.active_profile,
+      profile_count: detail.profile_count,
+      port_count: detail.port_count,
+      endpoint_refs: detail.endpoint_refs,
+    }
+    snapshot.value = {
+      ...current,
+      audio: {
+        ...section,
+        cards: section.cards.map((entry) => (entry.name === name ? summary : entry)),
+      },
+    }
+  }
+
+  /** Replace one endpoint in the snapshot; the detail is a superset of the row's summary. */
+  function replaceEndpoint(name: string, detail: AudioEndpointDetail) {
+    const current = snapshot.value
+    if (!current) return
+    const section = current.audio ?? EMPTY_AUDIO
+    const summary: AudioEndpointSummary = detail
+    snapshot.value = {
+      ...current,
+      audio: {
+        ...section,
+        sinks: section.sinks.map((entry) => (entry.name === name ? summary : entry)),
+      },
+    }
+  }
+
+  /**
+   * A profile switch answers with the updated card, so the page replaces the
+   * card it already holds instead of paying for a second read. A refusal is an
+   * ``ApiError`` that keeps the server's stable code for the caller to show.
+   */
+  async function chooseCardProfile(
+    card: AudioCardSummary | AudioCardDetail,
+    profile: string,
+  ): Promise<AudioCardDetail | null> {
+    const detail = await setCardProfile(card.name, profile)
+    if (!detail) {
+      // No detail means no answer to apply: fall back to the aggregate read.
+      await refresh()
+      return null
+    }
+    replaceCard(card.name, detail)
+    return detail
+  }
+
+  /** The port counterpart of a profile switch: replace the sink with the detail the write returned. */
+  async function chooseSinkPort(
+    sink: AudioEndpointSummary | AudioEndpointDetail,
+    port: string,
+  ): Promise<AudioEndpointDetail | null> {
+    const detail = await setSinkPort(sink.name, port)
+    if (!detail) {
+      await refresh()
+      return null
+    }
+    replaceEndpoint(sink.name, detail)
+    return detail
+  }
+
   // -------------------------------------------------------------------------
   // Source commands
   // -------------------------------------------------------------------------
@@ -481,6 +564,8 @@ export const useHardwareStore = defineStore('hardware', () => {
     setDefault,
     suspend,
     resume,
+    chooseCardProfile,
+    chooseSinkPort,
     startSource,
     stopSource,
     setSourcePlayer,
