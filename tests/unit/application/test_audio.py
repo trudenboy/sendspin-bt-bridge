@@ -251,7 +251,6 @@ async def test_an_unreadable_inventory_still_reports_a_missing_server_as_409(mon
 
     with pytest.raises(UseCaseError) as exc:
         await audio_uc.set_sink_volume(SINK.name, 20)
-
     assert exc.value.status == 409
     assert exc.value.code == "not_supported_for_backend"
 
@@ -271,3 +270,17 @@ async def test_an_unreadable_inventory_with_a_live_server_is_a_503(monkeypatch):
 
     assert exc.value.status == 503
     assert exc.value.code == "hardware_unavailable"
+
+
+async def test_every_write_drops_the_inventory_cache(host, monkeypatch):
+    """A read right after a write must not answer from before it."""
+    dropped: list[int] = []
+    monkeypatch.setattr(audio_uc, "clear_cache", lambda: dropped.append(1))
+
+    await audio_uc.set_sink_volume(SINK.name, 50)
+    await audio_uc.set_sink_mute(SINK.name, True)
+    await audio_uc.set_default_sink(SINK.name)
+    await audio_uc.suspend_sink(SINK.name)
+    await audio_uc.resume_sink(SINK.name)
+
+    assert len(dropped) == 5

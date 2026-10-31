@@ -13,7 +13,7 @@ from sendspin_bridge.application.runtime import run_on_loop
 from sendspin_bridge.config import load_config
 from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_sinks
 from sendspin_bridge.services.hardware import capabilities
-from sendspin_bridge.services.hardware.inventory import HardwareUnavailable, read_inventory
+from sendspin_bridge.services.hardware.inventory import HardwareUnavailable, clear_cache, read_inventory
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,16 @@ def _refused(action: str, name: str) -> UseCaseError:
     )
 
 
+def _after_write() -> None:
+    """Drop the inventory cache so the next read shows what the write changed.
+
+    Without this the page refreshes within the two-second TTL and gets the state
+    from before the command: the Default badge stays on the old sink right after
+    the toast says it moved.
+    """
+    clear_cache()
+
+
 async def _require_sink(wanted: str) -> LocalSink:
     """The named sink from the current inventory, after the backend check.
 
@@ -150,6 +160,7 @@ async def set_sink_volume(name: str, volume: int) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.set_sink_volume, wanted, volume):
         raise _refused("a volume change", wanted)
+    _after_write()
     return SinkStateOut(name=wanted, volume=volume, muted=sink.muted, state=sink.state)
 
 
@@ -161,6 +172,7 @@ async def set_sink_mute(name: str, muted: bool) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.set_sink_mute, wanted, muted):
         raise _refused("a mute change", wanted)
+    _after_write()
     return SinkStateOut(name=wanted, volume=sink.volume, muted=muted, state=sink.state)
 
 
@@ -172,6 +184,7 @@ async def set_default_sink(name: str) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.set_default_sink, wanted):
         raise _refused("a default-sink change", wanted)
+    _after_write()
     return SinkStateOut(name=wanted, volume=sink.volume, muted=sink.muted, state=sink.state)
 
 
@@ -182,6 +195,7 @@ async def _set_suspended(name: str, suspend: bool) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.suspend_sink, wanted, suspend):
         raise _refused("a suspend change", wanted)
+    _after_write()
     state = "suspended" if suspend else sink.state
     return SinkStateOut(name=wanted, volume=sink.volume, muted=sink.muted, state=state)
 
