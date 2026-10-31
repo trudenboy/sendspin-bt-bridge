@@ -12,25 +12,33 @@ export const HARDWARE_POLL_MS = 5000
  * The physical layer: one aggregate read, the 5 s poll behind it, and the
  * ``hardware`` event type probed per bridge.
  *
- * Events are opt-in on the server (an unknown type is a 400), so the stream
- * starts on the types every bridge knows. Only after the aggregate reads does
- * the store reconnect asking for ``hardware`` too; a bridge that answers
- * 404/405/5xx is never asked again and the page stays on the poll.
+ * Events are opt-in on the server (an unknown type is a 400), so the store
+ * starts on the types every bridge knows and asks for ``hardware`` on a second
+ * stream. Only when that stream opens does it retire the status/job probe; a
+ * refusal closes the typed stream alone, leaves the probe in place, and the
+ * page stays on the poll. A bridge that answers 404/405/5xx to the aggregate is
+ * never asked for the type at all.
  */
 export const useHardwareStore = defineStore('hardware', () => {
   const snapshot = ref<HardwareSnapshot | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const sseConnected = ref(false)
+  /** A manual Refresh is in flight; the poll must not toggle this, or the button flickers. */
+  const refreshing = ref(false)
   const degraded = computed(() => snapshot.value?.degraded ?? [])
 
   /** The API has no `/hardware` route: the page shows its unsupported screen. */
   const unsupported = ref(false)
   /** A 404/405/5xx probe means the event type will never be accepted. */
   let eventsUnsupported = false
-  /** The current stream already carries hardware events: nothing left to probe. */
+  /** A typed stream is already open (or opening): nothing left to probe. */
   let streaming = false
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  /** The page was left: a read that resolves later must not start a stream or listeners. */
+  let disposed = false
+  let manualInFlight = 0
+
+  let hardwareStream: ReturnType<typeof useEventStream> | null = null
 
   function makeStream(withHardware: boolean) {
     const types: EventType[] = [...DEFAULT_EVENT_TYPES, 'hardware']
@@ -39,12 +47,22 @@ export const useHardwareStore = defineStore('hardware', () => {
       onEvent(event) {
         if (event.type === 'hardware') apply(event.data as HardwareSnapshot)
       },
-      onConnect() {
-        sseConnected.value = true
-      },
-      onDisconnect() {
-        sseConnected.value = false
-      },
+      ...(withHardware
+        ? {
+            onConnect() {
+              // Proven to open: the typed stream now replaces the status/job probe.
+              stream.disconnect()
+            },
+            onRejected() {
+              // An old bridge refuses the type. The status/job stream was never
+              // touched; close the refused one and keep polling hardware.
+              eventsUnsupported = true
+              streaming = false
+              hardwareStream?.disconnect()
+              hardwareStream = null
+            },
+          }
+        : {}),
     })
   }
 
@@ -54,6 +72,8 @@ export const useHardwareStore = defineStore('hardware', () => {
     snapshot.value = next
     error.value = null
     loading.value = false
+    // A route that answers now is supported again.
+    unsupported.value = false
   }
 
   /** True when the answer means this bridge will never accept the type. */
@@ -68,25 +88,38 @@ export const useHardwareStore = defineStore('hardware', () => {
     return e.status === 404 || e.status === 405
   }
 
-  /** Swap the default stream for one that also carries hardware events. */
+  /** Open the typed stream in addition to the status/job one, never instead of it. */
   function enableEvents() {
-    if (eventsUnsupported || streaming) return
+    if (disposed || eventsUnsupported || streaming) return
     streaming = true
-    stream.disconnect()
-    stream = makeStream(true)
-    stream.connect()
+    hardwareStream = makeStream(true)
+    hardwareStream.connect()
   }
 
-  async function refresh() {
+  async function refresh(options: { manual?: boolean } = {}) {
+    if (disposed) return
+    const manual = options.manual === true
+    if (manual) {
+      manualInFlight += 1
+      refreshing.value = true
+    }
     if (!snapshot.value) loading.value = true
     try {
-      apply(await getHardware())
+      const next = await getHardware()
+      if (disposed) return
+      apply(next)
       enableEvents()
     } catch (e) {
+      if (disposed) return
       error.value = e instanceof Error ? e.message : String(e)
       loading.value = false
       if (givesUp(e)) eventsUnsupported = true
       if (missingRoute(e)) unsupported.value = true
+    } finally {
+      if (manual) {
+        manualInFlight -= 1
+        if (manualInFlight === 0) refreshing.value = false
+      }
     }
   }
 
@@ -101,16 +134,22 @@ export const useHardwareStore = defineStore('hardware', () => {
   }
 
   function connect() {
+    disposed = false
     stream.connect()
     startPolling()
     void refresh()
   }
 
   function disconnect() {
+    disposed = true
     stopPolling()
     stream.disconnect()
-    sseConnected.value = false
+    hardwareStream?.disconnect()
+    hardwareStream = null
+    streaming = false
+    refreshing.value = false
+    manualInFlight = 0
   }
 
-  return { snapshot, loading, error, degraded, sseConnected, unsupported, connect, disconnect, refresh }
+  return { snapshot, loading, refreshing, error, degraded, unsupported, connect, disconnect, refresh }
 })

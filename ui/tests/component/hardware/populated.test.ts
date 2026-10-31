@@ -15,15 +15,15 @@ vi.mock('@/composables/useEventStream', () => ({
   useEventStream: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
 }))
 vi.mock('@/api/hardware', () => ({ getHardware: vi.fn() }))
-vi.mock('@/api/bluetooth', () => ({ setAdapterPower: vi.fn() }))
+vi.mock('@/api/bluetooth', () => ({ setAdapterPower: vi.fn(), forgetBtDevice: vi.fn() }))
 
 let wrapper: ReturnType<typeof mountView> | null = null
 
 /** The Home players, so the power confirmation can name the speakers it disconnects. */
-function bridgeWithSpeaker() {
+function bridgeWithSpeaker(adapter = { hci: 'hci0', mac: 'C0:FB:F9:62:D6:9D' }) {
   const bridge = useBridgeStore()
   bridge.snapshot = {
-    devices: [{ id: 'eneby20', name: 'ENEBY20', bluetooth: { adapter: { hci: 'hci0' } } }],
+    devices: [{ id: 'eneby20', name: 'ENEBY20', bluetooth: { adapter } }],
     groups: [],
     bridge: {},
   } as never
@@ -94,9 +94,40 @@ describe('Hardware page: controllers and devices', () => {
 
     expect(confirm.confirmDialog).toHaveBeenCalledOnce()
     expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('ENEBY20')
-    expect(setAdapterPower).toHaveBeenCalledWith('hci0', false)
+    expect(setAdapterPower).toHaveBeenCalledWith('C0:FB:F9:62:D6:9D', false)
     expect(getHardware).toHaveBeenCalledTimes(2)
     expect(useNotificationStore().toasts.some((toast) => toast.message === en.adapter.powerToggled)).toBe(true)
+  })
+
+  it('matches speakers by MAC, so a synthetic controller id still names them', async () => {
+    const mac = 'C0:FB:F9:62:D6:9D'
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ controllers: [controller({ id: 'hci9', id_synthetic: true, mac })] }) as never,
+    )
+    bridgeWithSpeaker({ hci: 'hci9', mac })
+
+    wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-controller-power]').trigger('click')
+    await flushPromises()
+
+    expect(confirm.confirmDialog.mock.calls[0]![0].consequences.join(' ')).toContain('ENEBY20')
+    expect(setAdapterPower).toHaveBeenCalledWith(mac, false)
+  })
+
+  it('refreshes the bridge adapters after a successful toggle', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+    const bridge = bridgeWithSpeaker()
+    const refresh = vi.spyOn(bridge, 'refreshAdapters').mockResolvedValue(undefined)
+
+    wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-controller-power]').trigger('click')
+    await flushPromises()
+
+    expect(refresh).toHaveBeenCalledOnce()
   })
 
   it('does nothing when the power confirmation is declined', async () => {
@@ -122,7 +153,7 @@ describe('Hardware page: controllers and devices', () => {
     await flushPromises()
 
     expect(confirm.confirmDialog).not.toHaveBeenCalled()
-    expect(setAdapterPower).toHaveBeenCalledWith('hci0', true)
+    expect(setAdapterPower).toHaveBeenCalledWith('C0:FB:F9:62:D6:9D', true)
   })
 
   it('opens a controller in a drawer with its technical details', async () => {
@@ -141,5 +172,19 @@ describe('Hardware page: controllers and devices', () => {
     expect(drawer!.textContent).toContain(en.hardware.drawer.classOfDevice)
     expect(drawer!.textContent).toContain('0x00010c')
     expect(drawer!.textContent).toContain('hci0')
+  })
+
+  it('shows the signal unit in the language of the page', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+
+    wrapper = mountView('ru')
+    await flushPromises()
+
+    await wrapper.get('[data-device-details]').trigger('click')
+    await flushPromises()
+
+    const drawer = document.querySelector('[role="dialog"]')
+    expect(drawer!.textContent).toContain('-4 дБ')
+    expect(drawer!.textContent).not.toContain('-4 dB')
   })
 })

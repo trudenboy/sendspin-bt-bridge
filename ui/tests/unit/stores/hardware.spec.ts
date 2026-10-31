@@ -9,6 +9,7 @@ const streams = vi.hoisted(() => ({
     onEvent: (event: { type: string; data: unknown }) => void
     onConnect?: () => void
     onDisconnect?: () => void
+    onRejected?: () => void
   }>,
 }))
 
@@ -152,6 +153,41 @@ describe('useHardwareStore', () => {
     expect(streams.options).toHaveLength(2)
   })
 
+  it('clears unsupported when a later read succeeds', async () => {
+    vi.mocked(getHardware).mockRejectedValue(problem(404, 'not_found'))
+    const store = useHardwareStore()
+    store.connect()
+    await flushPromises()
+    expect(store.unsupported).toBe(true)
+
+    vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+    await store.refresh()
+    expect(store.unsupported).toBe(false)
+    expect(store.snapshot).not.toBeNull()
+  })
+
+  it('shows a busy flag for a manual refresh while the poll stays quiet', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
+    const store = useHardwareStore()
+    store.connect()
+    await flushPromises()
+
+    let resolve!: (value: unknown) => void
+    vi.mocked(getHardware).mockReturnValue(new Promise((r) => (resolve = r)) as never)
+    const pending = store.refresh({ manual: true })
+    expect(store.refreshing).toBe(true)
+    expect(store.loading).toBe(false)
+
+    resolve(snapshot() as never)
+    await pending
+    expect(store.refreshing).toBe(false)
+
+    // The 5 s poll is not a manual refresh: no button flicker.
+    const poll = store.refresh()
+    expect(store.refreshing).toBe(false)
+    await poll
+  })
+
   it('polls every five seconds until disconnected', async () => {
     vi.useFakeTimers()
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
@@ -193,16 +229,5 @@ describe('useHardwareStore', () => {
     await store.refresh()
     expect(store.error).toBeTruthy()
     expect(store.snapshot).not.toBeNull()
-  })
-
-  it('marks the stream connected only while it is up', async () => {
-    vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
-    const store = useHardwareStore()
-    store.connect()
-    await flushPromises()
-    streams.options[1]!.onConnect!()
-    expect(store.sseConnected).toBe(true)
-    streams.options[1]!.onDisconnect!()
-    expect(store.sseConnected).toBe(false)
   })
 })

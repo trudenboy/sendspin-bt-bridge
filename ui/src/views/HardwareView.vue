@@ -9,15 +9,18 @@ import CapabilityBanner from '@/components/hardware/CapabilityBanner.vue'
 import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
 import { useHardwareStore } from '@/stores/hardware'
 import { useBridgeStore } from '@/stores/bridge'
+import { useBluetoothStore } from '@/stores/bluetooth'
 import { useNotificationStore } from '@/stores/notifications'
 import { confirmAction } from '@/composables/useActionPolicy'
-import { setAdapterPower } from '@/api/bluetooth'
+import { forgetBtDevice, setAdapterPower } from '@/api/bluetooth'
+import { ApiError } from '@/api/client'
 import { speakerName } from '@/utils/speakerName'
-import type { ControllerSummary } from '@/api/types'
+import type { BtDeviceSummary, ControllerSummary } from '@/api/types'
 
 const { t } = useI18n()
 const store = useHardwareStore()
 const bridge = useBridgeStore()
+const bt = useBluetoothStore()
 const notifications = useNotificationStore()
 
 onMounted(() => store.connect())
@@ -73,7 +76,7 @@ const busy = ref<string | null>(null)
 /** Every speaker on this adapter loses its link when the adapter is powered off. */
 function consequences(controller: ControllerSummary) {
   const names = bridge.devices
-    .filter((device) => device.bluetooth?.adapter.hci === controller.id)
+    .filter((device) => device.bluetooth?.adapter.mac === controller.mac)
     .map((device) => speakerName(device.name))
     .join(', ')
   return names ? [t('consequence.adapterDisconnects', { names })] : [t('adapter.confirmNone')]
@@ -91,8 +94,9 @@ async function togglePower(controller: ControllerSummary) {
   }
   busy.value = controller.id
   try {
-    await setAdapterPower(controller.id, !controller.powered)
-    await store.refresh()
+    // Commands take the MAC: hciN can be synthetic (design, "Controller").
+    await setAdapterPower(controller.mac, !controller.powered)
+    await Promise.all([store.refresh(), bridge.refreshAdapters()])
     notifications.success(t('adapter.powerToggled'))
   } catch {
     notifications.error(t('adapter.powerFailed'))
@@ -113,6 +117,69 @@ const selectedDevice = computed(() =>
     ? devices.value.find((device) => device.mac === selected.value!.id) ?? null
     : null,
 )
+
+const deviceBusy = ref<string | null>(null)
+
+function deviceName(device: BtDeviceSummary) {
+  return device.alias || device.name || device.mac
+}
+
+/** The config names an adapter by hciN; the snapshot knows the MACs holding the bond. */
+function controllerIdFor(device: BtDeviceSummary) {
+  for (const mac of device.controller_macs) {
+    const controller = controllers.value.find((entry) => entry.mac.toUpperCase() === mac.toUpperCase())
+    if (controller) return controller.id
+  }
+  return ''
+}
+
+/** Make an already-paired device a player: the config grows and the bridge starts it. */
+async function addSpeaker(device: BtDeviceSummary) {
+  const name = deviceName(device)
+  deviceBusy.value = `add:${device.mac}`
+  try {
+    const added = await bt.addToBridge(device.mac, name, controllerIdFor(device))
+    if (!added) {
+      notifications.error(t('hardware.addSpeakerFailed', { name }))
+      return
+    }
+    await store.refresh()
+    notifications.success(t('addSpeaker.addedTitle', { name }))
+  } catch {
+    notifications.error(t('hardware.addSpeakerFailed', { name }))
+  } finally {
+    deviceBusy.value = null
+  }
+}
+
+/** The bond can back a player; its id is a fact from the read, not a client-side guess. */
+function forgetConsequences(device: BtDeviceSummary) {
+  const lines = [t('device.actions.forgetConfirm')]
+  if (device.player_id) lines.push(t('hardware.forgetPlayer', { player: device.player_id }))
+  return lines
+}
+
+async function forgetBond(device: BtDeviceSummary) {
+  const name = deviceName(device)
+  const ok = await confirmAction('bluetooth.forgetBond', {
+    title: t('device.actions.forgetTitle', { name }),
+    consequences: forgetConsequences(device),
+    confirmLabel: t('device.actions.forget'),
+  })
+  if (!ok) return
+  deviceBusy.value = `forget:${device.mac}`
+  try {
+    await forgetBtDevice(device.mac)
+    await store.refresh()
+    notifications.success(t('hardware.forgotBond', { name }))
+  } catch (e) {
+    // A 409 carries the server's own code and message (e.g. bond_in_use_by_player).
+    const reason = e instanceof ApiError ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e)
+    notifications.error(t('hardware.forgetFailed', { reason }))
+  } finally {
+    deviceBusy.value = null
+  }
+}
 
 function openController(id: string) {
   selected.value = { kind: 'controller', id }
@@ -141,7 +208,7 @@ watch([selectedController, selectedDevice], ([controller, device]) => {
         <SbBadge v-if="snapshot?.stale" data-hardware-stale tone="warning" size="sm">
           {{ t('hardware.stale') }}
         </SbBadge>
-        <SbButton size="sm" variant="outline" :loading="store.loading" @click="store.refresh()">
+        <SbButton size="sm" variant="outline" :loading="store.refreshing" data-hardware-refresh @click="store.refresh({ manual: true })">
           <template #icon-left>
             <RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
           </template>
@@ -202,7 +269,14 @@ watch([selectedController, selectedDevice], ([controller, device]) => {
           class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4"
         >
           <li v-for="device in devices" :key="device.mac" class="min-w-0">
-            <BtDeviceCard :device="device" @open="openDevice" />
+            <BtDeviceCard
+              :device="device"
+              :adding="deviceBusy === `add:${device.mac}`"
+              :forgetting="deviceBusy === `forget:${device.mac}`"
+              @open="openDevice"
+              @add="addSpeaker"
+              @forget="forgetBond"
+            />
           </li>
         </ul>
         <SbEmptyState v-else :title="t('hardware.noDevices')" />

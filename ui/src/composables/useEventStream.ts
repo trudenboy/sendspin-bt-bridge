@@ -12,6 +12,13 @@ export interface EventStreamOptions {
   onEvent: (event: EventEnvelope) => void
   onConnect?: () => void
   onDisconnect?: () => void
+  /**
+   * The server refused this stream's ``types`` (a non-200 answer before the
+   * source ever opened). Without it a refused URL would be retried forever;
+   * with it the caller can fall back and keep a stream on the types every
+   * bridge knows.
+   */
+  onRejected?: () => void
   /** Called while the stream is down, so the caller can poll instead. */
   onPoll?: () => void
   pollInterval?: number
@@ -47,6 +54,8 @@ export function useEventStream(options: EventStreamOptions) {
   let attempts = 0
   let probeFailures = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  /** A typed stream the server refused; reconnecting the same URL is futile. */
+  let rejected = false
 
   function handle(raw: MessageEvent) {
     try {
@@ -111,7 +120,7 @@ export function useEventStream(options: EventStreamOptions) {
   }
 
   async function reconnectNow(resetBackoff: boolean) {
-    if (!active || connected.value) return
+    if (!active || connected.value || rejected) return
     clearReconnect()
     if (resetBackoff) attempts = 0
     const state = await probe()
@@ -130,8 +139,12 @@ export function useEventStream(options: EventStreamOptions) {
 
   function open() {
     close()
-    source = new EventSource(apiUrl(`/api/v1/events?types=${types.join(',')}`), { withCredentials: true })
-    source.onopen = () => {
+    const current = new EventSource(apiUrl(`/api/v1/events?types=${types.join(',')}`), { withCredentials: true })
+    source = current
+    /** This connection reached the server; a refusal before it is a typed-stream rejection. */
+    let opened = false
+    current.onopen = () => {
+      opened = true
       failures = 0
       attempts = 0
       probeFailures = 0
@@ -142,21 +155,33 @@ export function useEventStream(options: EventStreamOptions) {
       if (wasDown) options.onPoll?.() // refresh once after the gap
       wasDown = false
     }
-    source.onerror = () => {
+    current.onerror = () => {
       if (connected.value) options.onDisconnect?.()
       connected.value = false
       wasDown = true
       failures += 1
-      if (source?.readyState === EventSource.CLOSED) {
-        // Non-200 answer: the browser will not retry. Poll now, reconnect ourselves.
+      if (current.readyState === EventSource.CLOSED) {
+        // Non-200 answer: the browser will not retry.
         close()
+        if (!opened && options.onRejected) {
+          // The types were refused (an old bridge): stop asking for them and let
+          // the caller keep a stream on the types every bridge knows.
+          rejected = true
+          active = false
+          stopPolling()
+          clearReconnect()
+          document.removeEventListener('visibilitychange', onWake)
+          window.removeEventListener('online', onWake)
+          options.onRejected()
+          return
+        }
         startPolling()
         scheduleReconnect()
       } else if (failures >= 3) {
         startPolling()
       }
     }
-    for (const type of types) source.addEventListener(type, handle as EventListener)
+    for (const type of types) current.addEventListener(type, handle as EventListener)
   }
 
   function onWake() {
@@ -165,6 +190,7 @@ export function useEventStream(options: EventStreamOptions) {
   }
 
   function connect() {
+    if (rejected) return
     if (!active) {
       active = true
       document.addEventListener('visibilitychange', onWake)

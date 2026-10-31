@@ -9,13 +9,19 @@ import en from '@/i18n/locales/en.json'
 const route = { query: {} as Record<string, string>, hash: '' }
 vi.mock('vue-router', () => ({ useRoute: () => route }))
 
+/** The section links to Hardware; the real router is not mounted in this test. */
+const RouterLink = { props: ['to'], template: '<a :href="to"><slot /></a>' }
+
 function mountSection() {
   useBridgeStore().adapters = [
     { id: 'hci0', mac: 'C0:00:00:00:00:01', name: 'one', powered: true },
     { id: 'hci1', mac: 'C0:00:00:00:00:02', name: 'two', powered: true },
   ]
   return mount(AdaptersSection, {
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
+    global: {
+      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+      stubs: { RouterLink },
+    },
   })
 }
 
@@ -51,7 +57,10 @@ describe('AdaptersSection deep link', () => {
     bridge.adapters = []
     mount(AdaptersSection, {
       attachTo: document.body,
-      global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
+      global: {
+        plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+        stubs: { RouterLink },
+      },
     })
     expect(scroll).not.toHaveBeenCalled()
     bridge.adapters = [{ id: 'hci1', mac: 'C0:00:00:00:00:02', name: 'two', powered: true }]

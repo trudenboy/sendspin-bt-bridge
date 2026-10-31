@@ -11,7 +11,7 @@ import { getConfig } from '@/api/config'
 import { getHardware } from '@/api/hardware'
 import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { seriousViolations } from '../helpers/axe'
-import { snapshot } from './hardware/support'
+import { snapshot, capabilities } from './hardware/support'
 
 // Regression guard (UX stage 8): no serious or critical axe violation on the
 // Settings and Diagnostics pages, in both languages, with technical details on
@@ -134,6 +134,66 @@ describe('accessibility: pages', () => {
         attachTo: document.body,
       })
       await flushPromises()
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware unavailable has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({
+          controllers: [],
+          bluetooth_devices: [],
+          capabilities: capabilities({
+            bluetooth: false,
+            dbus: false,
+            reasons: { bluetooth: 'bluetooth_unavailable', dbus: 'dbus_unavailable' },
+          }),
+          degraded: [{ section: 'controllers', code: 'dbus_unavailable', detail: 'D-Bus did not answer.' }],
+        }) as never,
+      )
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(mounted.get('[data-capability-banner]').exists()).toBe(true)
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware empty has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({ controllers: [], bluetooth_devices: [] }) as never,
+      )
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(mounted.get('[data-state]').attributes('data-state')).toBe('empty')
+      expect(await seriousViolations()).toEqual([])
+    })
+
+    it(`Hardware degraded has no serious violations (${locale})`, async () => {
+      vi.mocked(getHardware).mockResolvedValue(
+        snapshot({
+          capabilities: capabilities({ dbus: false, reasons: { dbus: 'dbus_unavailable' } }),
+          degraded: [{ section: 'controllers', code: 'dbus_unavailable', detail: 'D-Bus did not answer.' }],
+        }) as never,
+      )
+      mounted = mount(HardwareView, {
+        global: {
+          plugins: [plugin(locale)],
+          components: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+        },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(mounted.get('[data-capability-banner]').exists()).toBe(true)
       expect(await seriousViolations()).toEqual([])
     })
   }

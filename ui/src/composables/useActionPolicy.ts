@@ -29,6 +29,7 @@ export const ACTION_POLICY = {
   'devices.releaseMany': 'confirm',
   'adapter.powerOff': 'confirm',
   'adapter.reboot': 'confirm',
+  'bluetooth.forgetBond': 'confirm',
   'config.import': 'confirm',
   'config.restart': 'confirm',
   'config.leaveUnsaved': 'confirm',

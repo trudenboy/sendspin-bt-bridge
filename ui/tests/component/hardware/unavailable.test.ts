@@ -52,6 +52,8 @@ describe('Hardware page: the host cannot read its Bluetooth', () => {
     const banner = wrapper.get('[data-capability-banner]')
     expect(banner.text()).toContain(en.hardware.unavailable.dbusTitle)
     expect(banner.text()).toContain(en.hardware.unavailable.dbusBody)
+    expect(banner.text()).toContain('dbus_unavailable')
+    expect(banner.text()).toContain(en.hardware.unavailable.nextStep)
     expect(wrapper.text()).not.toContain(en.hardware.noDevices)
     expect(wrapper.find('[data-device-card]').exists()).toBe(false)
   })

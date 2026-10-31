@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SbBadge } from '@/kit'
+import { SbBadge, SbButton } from '@/kit'
 import type { BtDeviceSummary } from '@/api/types'
 
-const props = defineProps<{
-  device: BtDeviceSummary
-}>()
+const props = withDefaults(
+  defineProps<{
+    device: BtDeviceSummary
+    adding?: boolean
+    forgetting?: boolean
+  }>(),
+  { adding: false, forgetting: false },
+)
 
 const emit = defineEmits<{
   open: [mac: string]
+  add: [device: BtDeviceSummary]
+  forget: [device: BtDeviceSummary]
 }>()
 
 const { t } = useI18n()
@@ -47,7 +54,7 @@ const rssi = computed(() => {
       <SbBadge v-if="device.battery_pct !== null" size="sm">
         {{ t('hardware.battery', { pct: device.battery_pct }) }}
       </SbBadge>
-      <SbBadge v-if="rssi" size="sm">{{ t('hardware.rssi', { db: rssi }) }}</SbBadge>
+      <SbBadge v-if="rssi" size="sm">{{ t('hardware.signal', { db: rssi }) }}</SbBadge>
     </div>
 
     <div v-if="device.roles.length" class="flex flex-wrap items-center gap-1.5">
@@ -70,5 +77,21 @@ const rssi = computed(() => {
         {{ device.player_id }}
       </RouterLink>
     </p>
+
+    <div class="relative z-10 mt-auto flex flex-wrap items-center gap-2">
+      <SbButton
+        v-if="!device.player_id"
+        size="sm"
+        variant="outline"
+        data-add-speaker
+        :loading="adding"
+        @click="emit('add', device)"
+      >
+        {{ t('hardware.addAsSpeaker') }}
+      </SbButton>
+      <SbButton size="sm" variant="outline" data-forget-bond :loading="forgetting" @click="emit('forget', device)">
+        {{ t('device.actions.forget') }}
+      </SbButton>
+    </div>
   </article>
 </template>

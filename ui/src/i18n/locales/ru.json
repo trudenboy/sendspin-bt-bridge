@@ -620,7 +620,13 @@
     "roleInput": "Принимает звук",
     "roleEvidence": "Основание: {evidence}",
     "battery": "Батарея: {pct}%",
-    "rssi": "Сигнал: {db} дБ",
+    "rssi": "{db} дБ",
+    "signal": "Сигнал: {db} дБ",
+    "addAsSpeaker": "Добавить как колонку",
+    "addSpeakerFailed": "Не удалось добавить {name} как колонку.",
+    "forgotBond": "Bluetooth-связь с {name} забыта.",
+    "forgetFailed": "Не удалось забыть связь: {reason}",
+    "forgetPlayer": "Эта связь обслуживает плеер {player}.",
     "player": "Плеер",
     "controllerId": "Контроллер",
     "classOfDevice": "Класс устройства",
@@ -1451,7 +1457,7 @@
     "diagnostics": "Диагностика",
     "diagnosticsShort": "Состояние",
     "hardware": "Оборудование",
-    "hardwareShort": "Оборудование",
+    "hardwareShort": "Железо",
     "sync": "Синхронизация группы"
   },
   "home": {

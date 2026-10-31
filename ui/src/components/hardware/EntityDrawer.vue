@@ -94,7 +94,7 @@ const rssi = computed(() => {
           </template>
           <template v-if="rssi">
             <dt class="text-text-secondary">{{ t('hardware.drawer.rssi') }}</dt>
-            <dd class="text-text-primary">{{ rssi }} dB</dd>
+            <dd class="text-text-primary">{{ t('hardware.rssi', { db: rssi }) }}</dd>
           </template>
           <template v-if="device.player_id">
             <dt class="text-text-secondary">{{ t('hardware.drawer.player') }}</dt>

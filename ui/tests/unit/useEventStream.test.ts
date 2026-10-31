@@ -134,4 +134,15 @@ describe('useEventStream reconnect', () => {
     await vi.advanceTimersByTimeAsync(60000)
     expect(FakeEventSource.instances.length).toBe(n)
   })
+
+  it('gives up on a stream the server refuses before it opens', async () => {
+    const onRejected = vi.fn()
+    setup({ types: ['status', 'job', 'hardware'], onRejected })
+
+    last().failClosed() // a non-200 answer: EventSource reports CLOSED, never onopen
+    await vi.advanceTimersByTimeAsync(60000)
+
+    expect(onRejected).toHaveBeenCalledOnce()
+    expect(FakeEventSource.instances).toHaveLength(1) // the refused URL is not retried
+  })
 })
