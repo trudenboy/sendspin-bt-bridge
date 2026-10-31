@@ -93,8 +93,17 @@ const kindLabel = computed(() => {
 
 /** An input that hears nothing says why: an unavailable state, or an unplugged active port. */
 const inputReason = computed(() => {
+  if (isSink.value) return null
   if (state.value === 'unavailable') return t('hardware.audio.inputUnavailable')
   if (availability.value === 'unavailable') return t('hardware.audio.portUnavailableReason')
+  return null
+})
+
+/** An output gets its own sentence: "hears nothing" would be a lie on a sink. */
+const outputReason = computed(() => {
+  if (!isSink.value) return null
+  if (state.value === 'unavailable') return t('hardware.audio.outputUnavailable')
+  if (availability.value === 'unavailable') return t('hardware.audio.outputPortUnavailableReason')
   return null
 })
 </script>
@@ -153,6 +162,9 @@ const inputReason = computed(() => {
       </RouterLink>
     </p>
 
+    <p v-if="outputReason" data-output-reason class="mt-1.5 text-sm text-warning-text">
+      {{ outputReason }}
+    </p>
     <p v-if="inputReason" data-input-reason class="mt-1.5 text-sm text-warning-text">
       {{ inputReason }}
     </p>

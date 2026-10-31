@@ -56,8 +56,12 @@ const device = (mac: string) => ({
   source_phone: false,
 })
 
+/** Every read is taken a second later: the store drops reads that are not newer. */
+let asOfTick = 0
+const nextAsOf = () => new Date(Date.UTC(2026, 9, 31, 11, 2, 12 + ++asOfTick)).toISOString()
+
 const snapshot = (overrides: Record<string, unknown> = {}) => ({
-  as_of: '2026-10-31T11:02:13Z',
+  as_of: nextAsOf(),
   stale_after_s: 2,
   stale: false,
   capabilities: { bluetooth: true, dbus: true, audio_server: 'pulseaudio', capture: false, default_sink: true, reasons: {} },
@@ -74,6 +78,7 @@ describe('useHardwareStore', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     streams.options.length = 0
+    asOfTick = 0
   })
 
   afterEach(() => {
@@ -214,6 +219,41 @@ describe('useHardwareStore', () => {
     streams.options[1]!.onEvent({ type: 'hardware', data: next })
     expect(store.snapshot?.as_of).toBe('2026-10-31T11:03:00Z')
     expect(store.snapshot?.stale).toBe(true)
+  })
+
+  it('drops a stream snapshot that is not newer than the current read', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ stale: false }) as never)
+    const store = useHardwareStore()
+    store.connect()
+    await flushPromises()
+    const current = store.snapshot!.as_of
+
+    // An SSE read started before a write lands after it; it must not revert the page.
+    const older = snapshot({
+      as_of: new Date(Date.parse(current) - 1000).toISOString(),
+      stale: true,
+    })
+    streams.options[1]!.onEvent({ type: 'hardware', data: older })
+
+    expect(store.snapshot?.as_of).toBe(current)
+    expect(store.snapshot?.stale).toBe(false)
+  })
+
+  it('drops a manual refresh whose read is not newer than the current one', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ stale: false }) as never)
+    const store = useHardwareStore()
+    store.connect()
+    await flushPromises()
+    const current = store.snapshot!
+
+    // The cached read served after a failed refresh carries its old timestamp.
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ as_of: current.as_of, stale: true }) as never,
+    )
+    await store.refresh({ manual: true })
+
+    expect(store.snapshot).toBe(current)
+    expect(store.refreshing).toBe(false)
   })
 
   it('exposes the degraded sections and keeps the last snapshot on a failed poll', async () => {

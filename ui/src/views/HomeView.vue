@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore, SORT_OPTIONS, type BackendFilter } from '@/stores/devices'
@@ -26,6 +27,8 @@ type ViewMode = 'grid' | 'list'
 const STORAGE_KEY = 'sb-view-mode'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
 
@@ -197,27 +200,44 @@ function openDetail(id: string) {
 
 /* A hardware refusal links here with ?player=<id>: open that player, not just the list. */
 function linkedPlayer(): string | null {
-  try {
-    return new URLSearchParams(window.location.search).get('player')
-  } catch {
-    return null
-  }
+  const value = route.query.player
+  return typeof value === 'string' && value ? value : null
 }
 const pendingPlayer = ref<string | null>(linkedPlayer())
-/* The link can arrive before the first status event; wait for the player to exist. */
+
+/** Opening the player consumes the query, so a reload does not reopen the drawer. */
+function clearPlayerQuery() {
+  if (route.query.player === undefined) return
+  const query = Object.fromEntries(Object.entries(route.query).filter(([key]) => key !== 'player'))
+  void router.replace({ path: route.path, query })
+}
+
+/** The link can arrive before the first status event; wait for the player to exist. */
+function openPendingPlayer() {
+  const id = pendingPlayer.value
+  if (!id) return
+  const known =
+    bridge.devices.some((device) => device.id === id) ||
+    deviceStore.disabledPlayers.some((player) => player.id === id)
+  if (!known) return
+  openDetail(id)
+  pendingPlayer.value = null
+  clearPlayerQuery()
+}
+
 watch(
   () => [bridge.devices.length, deviceStore.disabledPlayers.length] as const,
-  () => {
-    const id = pendingPlayer.value
-    if (!id) return
-    const known =
-      bridge.devices.some((device) => device.id === id) ||
-      deviceStore.disabledPlayers.some((player) => player.id === id)
-    if (!known) return
-    openDetail(id)
-    pendingPlayer.value = null
-  },
+  openPendingPlayer,
   { immediate: true },
+)
+/* A query change on the same route is a new link, not the one this page already consumed. */
+watch(
+  () => route.query.player,
+  (value) => {
+    if (typeof value !== 'string' || !value) return
+    pendingPlayer.value = value
+    openPendingPlayer()
+  },
 )
 </script>
 

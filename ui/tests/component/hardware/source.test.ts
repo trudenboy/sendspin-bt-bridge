@@ -6,6 +6,7 @@ import { getHardware } from '@/api/hardware'
 import { closeSourcePairing, openSourcePairing, setSourceEnabled, setSourcePlayer } from '@/api/source'
 import { ApiError } from '@/api/client'
 import { useBridgeStore } from '@/stores/bridge'
+import { useHardwareStore } from '@/stores/hardware'
 import { useNotificationStore } from '@/stores/notifications'
 import SourceFeedPanel from '@/components/hardware/SourceFeedPanel.vue'
 import en from '@/i18n/locales/en.json'
@@ -70,6 +71,7 @@ describe('Hardware page: source strip', () => {
     wrapper?.unmount()
     wrapper = null
     document.body.innerHTML = ''
+    vi.useRealTimers()
   })
 
   it('says the source is off in Settings when the bridge reports none, with no controls', async () => {
@@ -160,6 +162,80 @@ describe('Hardware page: source strip', () => {
 
     expect(closeSourcePairing).toHaveBeenCalledOnce()
     expect(panel.find('[data-source-pairing]').exists()).toBe(false)
+  })
+
+  it('treats a refused pairing window as a failure: inline reason, no toast and no Undo', async () => {
+    vi.mocked(openSourcePairing).mockResolvedValue({
+      pairing_seconds_left: 0,
+      pairing_adapters: [],
+      error: 'no_adapter',
+    } as never)
+
+    wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-source-pair]').trigger('click')
+    await flushPromises()
+
+    const panel = wrapper.get('[data-source-panel]')
+    expect(panel.find('[data-source-pairing]').exists()).toBe(false)
+    expect(panel.get('[data-source-failure]').text()).toContain('no_adapter')
+    expect(panel.get('[data-source-failure]').text()).toContain(en.hardware.source.failureNextStep)
+
+    const toasts = useNotificationStore().toasts
+    expect(toasts.some((toast) => toast.type === 'success')).toBe(false)
+    expect(toasts.some((toast) => toast.type === 'error')).toBe(false)
+    expect(toasts.some((toast) => toast.action != null)).toBe(false)
+  })
+
+  it('clears a running countdown on unmount, so returning can pair again', async () => {
+    wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-source-pair]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-source-pairing]').text()).toContain(
+      en.hardware.source.pairing.replace('{time}', '2:00'),
+    )
+
+    const store = useHardwareStore()
+    expect(store.pairingSecondsLeft).toBeGreaterThan(0)
+
+    wrapper.unmount()
+    wrapper = null
+
+    // Two seconds after leaving, the old countdown must not survive the visit.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 2000)
+    expect(store.pairingSecondsLeft).toBe(0)
+    now.mockRestore()
+
+    wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-source-pairing]').exists()).toBe(false)
+    expect(wrapper.find('[data-source-pair]').exists()).toBe(true)
+  })
+
+  it('tells an absent source apart from one that is configured but off', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ source: null }) as never)
+
+    wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-source-panel]').attributes('data-source-presence')).toBe('absent')
+    expect(wrapper.get('[data-source-panel]').attributes('data-source-state')).toBe('off')
+
+    wrapper.unmount()
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ source: sourceFeed({ enabled: false, state: 'off' }) }) as never,
+    )
+
+    wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-source-panel]').attributes('data-source-presence')).toBe('configured')
+    expect(wrapper.get('[data-source-panel]').attributes('data-source-state')).toBe('off')
+    expect(wrapper.find('[data-source-start]').exists()).toBe(true)
   })
 
   it('starts a configured but stopped source', async () => {

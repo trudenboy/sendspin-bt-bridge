@@ -46,8 +46,12 @@ const audio = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+/** Every read is taken a second later: the store drops reads that are not newer. */
+let asOfTick = 0
+const nextAsOf = () => new Date(Date.UTC(2026, 9, 31, 11, 2, 12 + ++asOfTick)).toISOString()
+
 const snapshot = (overrides: Record<string, unknown> = {}) => ({
-  as_of: '2026-10-31T11:02:13Z',
+  as_of: nextAsOf(),
   stale_after_s: 2,
   stale: false,
   capabilities: {
@@ -75,12 +79,20 @@ const state = (overrides: Record<string, unknown> = {}) => ({
 
 const problem = (status: number, code: string, detail = 'Nope') => new ApiError({ status, code, detail })
 
+/** A write whose answer is released by the test, so two commands can overlap. */
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => (resolve = done))
+  return { promise, resolve }
+}
+
 let store: ReturnType<typeof useHardwareStore>
 
 describe('useHardwareStore: audio', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    asOfTick = 0
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
     vi.mocked(setSinkVolume).mockResolvedValue(state() as never)
     vi.mocked(setSinkMute).mockResolvedValue(state({ muted: true }) as never)
@@ -150,6 +162,40 @@ describe('useHardwareStore: audio', () => {
     // The resume command's own state was read before the write; the aggregate is the truth.
     expect(getHardware).toHaveBeenCalledOnce()
     expect(resumeSink).toHaveBeenCalledWith(SINK)
+  })
+
+  it('keeps the newest volume answer when the responses arrive out of order', async () => {
+    const first = deferred<unknown>()
+    const second = deferred<unknown>()
+    vi.mocked(setSinkVolume)
+      .mockReturnValueOnce(first.promise as never)
+      .mockReturnValueOnce(second.promise as never)
+
+    const older = store.setVolume(SINK, 20)
+    const newer = store.setVolume(SINK, 80)
+
+    second.resolve(state({ volume: 80 }))
+    await newer
+    // The older request's answer lands after the newer one: it must not win.
+    first.resolve(state({ volume: 20 }))
+    await older
+
+    expect(store.audio.sinks[0]!.volume).toBe(80)
+  })
+
+  it('does not let a volume answer re-mute a sink the user just muted', async () => {
+    const volumeAnswer = deferred<unknown>()
+    vi.mocked(setSinkVolume).mockReturnValueOnce(volumeAnswer.promise as never)
+    vi.mocked(setSinkMute).mockResolvedValue(state({ muted: true, volume: 60 }) as never)
+
+    // The volume read started before the mute; its answer is older than the mute.
+    const volume = store.setVolume(SINK, 70)
+    await store.setMute(SINK, true)
+    volumeAnswer.resolve(state({ volume: 70, muted: false }))
+    await volume
+
+    expect(store.audio.sinks[0]!.muted).toBe(true)
+    expect(store.audio.sinks[0]!.volume).toBe(70)
   })
 
   it('refreshes after a default write so the read model carries the badge', async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
 import HomeView from '@/views/HomeView.vue'
 import { useBridgeStore } from '@/stores/bridge'
@@ -36,18 +37,38 @@ const output = (id: string, name: string) =>
     audio: { has_sink: true, sink_missing: false },
   } as never)
 
-function mountHome(devices: Device[], view: 'grid' | 'list' = 'grid', stubOverrides: Record<string, unknown> = {}) {
+let activeRouter: Router | null = null
+
+function newRouter() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: { template: '<div />' } }],
+  })
+  activeRouter = router
+  return router
+}
+
+function mountHome(
+  devices: Device[],
+  view: 'grid' | 'list' = 'grid',
+  stubOverrides: Record<string, unknown> = {},
+  query: Record<string, string> = {},
+) {
   localStorage.setItem('sb-view-mode', view)
   const bridge = useBridgeStore()
   bridge.snapshot = makeStatus(devices)
   bridge.loading = false
-  return mount(HomeView, {
+  const router = newRouter()
+  const wrapper = mount(HomeView, {
     attachTo: document.body,
     global: {
-      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router],
       stubs: { ...stubs, ...stubOverrides },
     },
   })
+  // After install: a push before mount is overwritten by the router's first navigation.
+  void router.push({ path: '/', query })
+  return wrapper
 }
 
 afterEach(() => window.history.replaceState({}, '', '/'))
@@ -153,10 +174,13 @@ function mountWithDisabled(devices: Device[], disabled: ReturnType<typeof offDev
   status.bridge.disabled_devices = disabled as never
   bridge.snapshot = status
   bridge.loading = false
-  return mount(HomeView, {
+  const router = newRouter()
+  const wrapper = mount(HomeView, {
     attachTo: document.body,
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })], stubs },
+    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router], stubs },
   })
+  void router.push({ path: '/' })
+  return wrapper
 }
 
 describe('HomeView view toggle', () => {
@@ -316,25 +340,52 @@ describe('HomeView hardware links', () => {
     localStorage.clear()
   })
 
-  it('opens the player a hardware refusal names', async () => {
-    window.history.replaceState({}, '', '/?player=alpha')
-    const w = mountHome([idle('alpha', 'Alpha'), idle('zulu', 'Zulu')], 'grid', {
-      DeviceDetailDrawer: drawerStub,
-    })
+  it('opens the player a hardware refusal names and consumes the query', async () => {
+    const w = mountHome(
+      [idle('alpha', 'Alpha'), idle('zulu', 'Zulu')],
+      'grid',
+      { DeviceDetailDrawer: drawerStub },
+      { player: 'alpha' },
+    )
     await flushPromises()
     await nextTick()
 
     const drawer = w.get('[data-home-drawer]')
     expect(drawer.attributes('data-device')).toBe('alpha')
     expect(drawer.attributes('data-open')).toBe('true')
+    // A reload must not reopen the drawer for a link already consumed.
+    expect(activeRouter!.currentRoute.value.query.player).toBeUndefined()
+  })
+
+  it('opens a player when the query changes on the same route', async () => {
+    const w = mountHome([idle('alpha', 'Alpha'), idle('zulu', 'Zulu')], 'grid', {
+      DeviceDetailDrawer: drawerStub,
+    })
+    await flushPromises()
+    expect(w.get('[data-home-drawer]').attributes('data-open')).toBe('false')
+
+    await activeRouter!.push({ path: '/', query: { player: 'zulu' } })
+    await flushPromises()
+    await nextTick()
+
+    const drawer = w.get('[data-home-drawer]')
+    expect(drawer.attributes('data-device')).toBe('zulu')
+    expect(drawer.attributes('data-open')).toBe('true')
+    expect(activeRouter!.currentRoute.value.query.player).toBeUndefined()
   })
 
   it('ignores a player id that is not on this bridge', async () => {
-    window.history.replaceState({}, '', '/?player=ghost')
-    const w = mountHome([idle('alpha', 'Alpha')], 'grid', { DeviceDetailDrawer: drawerStub })
+    const w = mountHome(
+      [idle('alpha', 'Alpha')],
+      'grid',
+      { DeviceDetailDrawer: drawerStub },
+      { player: 'ghost' },
+    )
     await flushPromises()
     await nextTick()
 
     expect(w.get('[data-home-drawer]').attributes('data-open')).toBe('false')
+    // It was not consumed, so a later status event can still open it.
+    expect(activeRouter!.currentRoute.value.query.player).toBe('ghost')
   })
 })

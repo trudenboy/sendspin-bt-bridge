@@ -31,8 +31,12 @@ const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+/** Every read is taken a second later: the store drops reads that are not newer. */
+let asOfTick = 0
+const nextAsOf = () => new Date(Date.UTC(2026, 9, 31, 11, 2, 12 + ++asOfTick)).toISOString()
+
 const snapshot = (overrides: Record<string, unknown> = {}) => ({
-  as_of: '2026-10-31T11:02:13Z',
+  as_of: nextAsOf(),
   stale_after_s: 2,
   stale: false,
   capabilities: { bluetooth: true, dbus: true, audio_server: 'pipewire', capture: true, default_sink: true, reasons: {} },
@@ -58,6 +62,7 @@ describe('useHardwareStore: source', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    asOfTick = 0
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
     vi.mocked(setSourceEnabled).mockResolvedValue({} as never)
     vi.mocked(setSourcePlayer).mockResolvedValue({ device_id: 'eneby20', playing_source: true } as never)
@@ -120,13 +125,57 @@ describe('useHardwareStore: source', () => {
     expect(store.pairingSecondsLeft).toBe(0)
   })
 
-  it('surfaces a window the server could not open', async () => {
-    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 0, error: 'no_adapter' }) as never)
+  it('seeds the countdown from the server answer, not from the 120 s default', async () => {
+    vi.useFakeTimers()
+    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 47 }) as never)
 
     await store.startPairingWindow()
 
+    expect(openSourcePairing).toHaveBeenCalledWith(120)
+    expect(store.pairingSecondsLeft).toBe(47)
+  })
+
+  it('surfaces a window the server could not open', async () => {
+    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 0, error: 'no_adapter' }) as never)
+
+    const answer = await store.startPairingWindow()
+
+    expect(answer).toMatchObject({ error: 'no_adapter' })
     expect(store.pairingSecondsLeft).toBe(0)
     expect(store.sourceError).toMatchObject({ code: 'no_adapter' })
+  })
+
+  it('clears a refusal once a read shows the source healthy again', async () => {
+    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 0, error: 'no_agent' }) as never)
+    await store.startPairingWindow()
+    expect(store.sourceError).toMatchObject({ code: 'no_agent' })
+
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed({ state: 'streaming' }) }) as never)
+    await store.refresh()
+
+    expect(store.sourceError).toBeNull()
+  })
+
+  it('clears the countdown when the page is left, so a return can pair again', async () => {
+    vi.useFakeTimers()
+    await store.startPairingWindow()
+    expect(store.pairingSecondsLeft).toBeGreaterThan(0)
+
+    store.disconnect()
+
+    expect(store.pairingSecondsLeft).toBe(0)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(store.pairingSecondsLeft).toBe(0)
+  })
+
+  it('clears a refusal when the page is left', async () => {
+    vi.mocked(setSourcePlayer).mockRejectedValue(problem(409, 'source_sink_missing', 'No output'))
+    await expect(store.setSourcePlayer('eneby20', true)).rejects.toMatchObject({ code: 'source_sink_missing' })
+    expect(store.sourceError).not.toBeNull()
+
+    store.disconnect()
+
+    expect(store.sourceError).toBeNull()
   })
 
   it('arms and disarms a relay through the players route', async () => {

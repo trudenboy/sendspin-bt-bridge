@@ -40,6 +40,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const state = computed(() => props.source?.state ?? 'off')
+/** An absent feature and a configured-but-off source share "off"; this tells them apart. */
+const presence = computed(() => (props.source ? 'configured' : 'absent'))
 const stateLabel = computed(() => {
   const keys = {
     off: 'hardware.source.stateOff',
@@ -139,6 +141,7 @@ const failureNextStep = computed(() =>
   <section
     data-source-panel
     :data-source-state="state"
+    :data-source-presence="presence"
     aria-labelledby="hardware-source-title"
     class="mb-8 rounded-(--radius-card) border border-border bg-surface-card p-4"
   >

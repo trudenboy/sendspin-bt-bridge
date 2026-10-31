@@ -148,8 +148,12 @@ export const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+/** Each read is taken a second after the previous one, as a real bridge's clock would. */
+let asOfMs = Date.UTC(2026, 9, 31, 11, 2, 13)
+const nextAsOf = () => new Date((asOfMs += 1000)).toISOString()
+
 export const snapshot = (overrides: Record<string, unknown> = {}) => ({
-  as_of: '2026-10-31T11:02:13Z',
+  as_of: nextAsOf(),
   stale_after_s: 2,
   stale: false,
   capabilities: capabilities(),

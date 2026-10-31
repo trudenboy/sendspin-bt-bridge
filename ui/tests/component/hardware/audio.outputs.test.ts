@@ -202,6 +202,23 @@ describe('Hardware page: local outputs', () => {
     expect(wrapper.findAll('[data-default-marker]')).toHaveLength(1)
   })
 
+  it('explains an output whose active port is unavailable without claiming it hears nothing', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({
+        audio: audio({ sinks: [audioSink({ active_port_available: 'not available' })] }),
+      }) as never,
+    )
+
+    wrapper = mountView()
+    await flushPromises()
+
+    const row = wrapper.get('[data-audio-outputs] [data-endpoint-row]')
+    expect(row.text()).toContain(en.hardware.audio.portUnavailable)
+    expect(row.get('[data-output-reason]').text()).toBe(en.hardware.audio.outputPortUnavailableReason)
+    expect(row.find('[data-input-reason]').exists()).toBe(false)
+    expect(row.text()).not.toContain(en.hardware.audio.portUnavailableReason)
+  })
+
   it('surfaces the server code when a command is refused', async () => {
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
     vi.mocked(suspendSink).mockRejectedValue(

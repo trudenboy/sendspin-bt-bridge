@@ -95,15 +95,25 @@ function onSourcePair() {
     doneKey: 'undo.sourcePairingOpen',
     name: '',
     failure: sourceCommandFailure,
+    // A refused window answers 200 with its reason in the body; the strip shows
+    // it inline, so there is no success toast and no Undo for a window that never opened.
+    offerUndo: (result) => !(result as { error?: string | null } | null)?.error,
   })
 }
 
 function onSourceStopPairing() {
-  void undoable('source.pairingStop', () => store.stopPairingWindow(), () => store.startPairingWindow(), {
-    doneKey: 'undo.sourcePairingClosed',
-    name: '',
-    failure: sourceCommandFailure,
-  })
+  // Undo restores the time that was left, not a brand-new 120 s window.
+  const remaining = store.pairingSecondsLeft
+  void undoable(
+    'source.pairingStop',
+    () => store.stopPairingWindow(),
+    () => store.startPairingWindow(Math.max(1, Math.ceil(remaining))),
+    {
+      doneKey: 'undo.sourcePairingClosed',
+      name: '',
+      failure: sourceCommandFailure,
+    },
+  )
 }
 
 function onSourceRelay(playerId: string, enabled: boolean) {
@@ -365,7 +375,22 @@ const selectedAudio = computed(() => {
   return { kind: entry.kind, name: entry.id, label: entry.label }
 })
 
-const deviceBusy = ref<string | null>(null)
+/** Link work is per MAC: one device connecting must not steal another's spinner or block it. */
+const deviceBusy = ref<Record<string, string>>({})
+
+function busyFor(mac: string) {
+  return deviceBusy.value[mac] ?? null
+}
+
+function setDeviceBusy(mac: string, action: string) {
+  deviceBusy.value = { ...deviceBusy.value, [mac]: action }
+}
+
+function clearDeviceBusy(mac: string) {
+  const rest = { ...deviceBusy.value }
+  delete rest[mac]
+  deviceBusy.value = rest
+}
 
 /** A refused forget, kept per MAC: the server's sentence and the player it names. */
 interface BondRefusal {
@@ -394,8 +419,9 @@ function controllerIdFor(device: BtDeviceSummary) {
 
 /** Make an already-paired device a player: the config grows and the bridge starts it. */
 async function addSpeaker(device: BtDeviceSummary) {
+  if (busyFor(device.mac)) return
   const name = deviceName(device)
-  deviceBusy.value = `add:${device.mac}`
+  setDeviceBusy(device.mac, 'add')
   try {
     const added = await bt.addToBridge(device.mac, name, controllerIdFor(device))
     if (!added) {
@@ -407,7 +433,7 @@ async function addSpeaker(device: BtDeviceSummary) {
   } catch {
     notifications.error(t('hardware.addSpeakerFailed', { name }))
   } finally {
-    deviceBusy.value = null
+    clearDeviceBusy(device.mac)
   }
 }
 
@@ -436,7 +462,8 @@ async function runLinkCommand(
   failureKey: string,
 ) {
   const name = deviceName(device)
-  deviceBusy.value = `${id}:${device.mac}`
+  if (busyFor(device.mac)) return
+  setDeviceBusy(device.mac, id === 'bluetooth.connect' ? 'connect' : 'disconnect')
   try {
     await undoable(id, forward, backward, {
       doneKey,
@@ -444,7 +471,7 @@ async function runLinkCommand(
       failure: (e) => t(failureKey, { name, reason: btReason(e) }),
     })
   } finally {
-    deviceBusy.value = null
+    clearDeviceBusy(device.mac)
   }
 }
 
@@ -498,6 +525,7 @@ function forgetConsequences(device: BtDeviceSummary) {
 }
 
 async function forgetBond(device: BtDeviceSummary) {
+  if (busyFor(device.mac)) return
   const name = deviceName(device)
   const ok = await confirmAction('bluetooth.forgetBond', {
     title: t('device.actions.forgetTitle', { name }),
@@ -505,7 +533,7 @@ async function forgetBond(device: BtDeviceSummary) {
     confirmLabel: t('device.actions.forget'),
   })
   if (!ok) return
-  deviceBusy.value = `forget:${device.mac}`
+  setDeviceBusy(device.mac, 'forget')
   // A retry starts clean: the previous refusal is about the state before this attempt.
   const rest = { ...bondRefusals.value }
   delete rest[device.mac]
@@ -531,7 +559,7 @@ async function forgetBond(device: BtDeviceSummary) {
     const reason = e instanceof ApiError ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e)
     notifications.error(t('hardware.forgetFailed', { reason }))
   } finally {
-    deviceBusy.value = null
+    clearDeviceBusy(device.mac)
   }
 }
 
@@ -660,10 +688,10 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
           <li v-for="device in devices" :key="device.mac" class="min-w-0">
             <BtDeviceCard
               :device="device"
-              :adding="deviceBusy === `add:${device.mac}`"
-              :forgetting="deviceBusy === `forget:${device.mac}`"
-              :connecting="deviceBusy === `bluetooth.connect:${device.mac}`"
-              :disconnecting="deviceBusy === `bluetooth.disconnect:${device.mac}`"
+              :adding="busyFor(device.mac) === 'add'"
+              :forgetting="busyFor(device.mac) === 'forget'"
+              :connecting="busyFor(device.mac) === 'connect'"
+              :disconnecting="busyFor(device.mac) === 'disconnect'"
               :refusal="refusalFor(device.mac)"
               @open="openDevice"
               @add="addSpeaker"
@@ -796,8 +824,8 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
       :audio-name="selectedAudio?.name ?? null"
       :audio-label="selectedAudio?.label ?? null"
       :busy="busy === selectedController?.id"
-      :connecting="selectedDevice !== null && deviceBusy === `bluetooth.connect:${selectedDevice.mac}`"
-      :disconnecting="selectedDevice !== null && deviceBusy === `bluetooth.disconnect:${selectedDevice.mac}`"
+      :connecting="selectedDevice !== null && busyFor(selectedDevice.mac) === 'connect'"
+      :disconnecting="selectedDevice !== null && busyFor(selectedDevice.mac) === 'disconnect'"
       @toggle-power="togglePower"
       @connect="connectDevice"
       @disconnect="disconnectDevice"

@@ -77,6 +77,12 @@ export interface UndoableOptions {
   doneKey: string
   name: string
   failure: (e: unknown) => string
+  /**
+   * Some commands answer 200 with a refusal in the body instead of throwing.
+   * When this returns false the failure is already shown inline: no toast and
+   * no Undo for work that did not happen.
+   */
+  offerUndo?: (result: unknown) => boolean
 }
 
 /**
@@ -87,7 +93,7 @@ export async function undoable(
   id: ActionId,
   forward: () => Promise<unknown>,
   backward: () => Promise<unknown>,
-  { doneKey, name, failure }: UndoableOptions,
+  { doneKey, name, failure, offerUndo }: UndoableOptions,
 ): Promise<unknown> {
   if (ACTION_POLICY[id] !== 'undo') throw new Error(`${id} is not reversible: use confirmAction()`)
   const t = i18n.global.t
@@ -99,6 +105,7 @@ export async function undoable(
     notifications.error(failure(e))
     return undefined
   }
+  if (offerUndo && !offerUndo(result)) return result
   notifications.undo(t(doneKey, { name }), t('undo.label'), async () => {
     try {
       await backward()

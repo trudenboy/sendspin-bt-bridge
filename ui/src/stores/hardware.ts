@@ -128,13 +128,31 @@ export const useHardwareStore = defineStore('hardware', () => {
     return Object.prototype.hasOwnProperty.call(next, 'audio') && next.audio != null
   }
 
+  /** ISO-8601 read times; a read taken before the current one must never overwrite it. */
+  function isNewerRead(next: HardwareSnapshot, current: HardwareSnapshot) {
+    const nextAt = Date.parse(next.as_of)
+    const currentAt = Date.parse(current.as_of)
+    if (!Number.isFinite(nextAt)) return false
+    if (!Number.isFinite(currentAt)) return true
+    return nextAt > currentAt
+  }
+
+  /** A feed that answered without an error: a command refusal about it no longer applies. */
+  function sourceHealthy(next: HardwareSnapshot) {
+    if (!next.source) return false
+    return next.source.state !== 'error' && !next.source.error
+  }
+
   function apply(next: HardwareSnapshot) {
+    // SSE, the poll and a manual refresh race: the read's own timestamp decides.
+    if (snapshot.value && !isNewerRead(next, snapshot.value)) return
     audioReported.value = reportsAudio(next)
     snapshot.value = next
     error.value = null
     loading.value = false
     // A route that answers now is supported again.
     unsupported.value = false
+    if (sourceHealthy(next)) sourceError.value = null
   }
 
   /** True when the answer means this bridge will never accept the type. */
@@ -218,7 +236,8 @@ export const useHardwareStore = defineStore('hardware', () => {
     patchSink(name, { volume })
     try {
       const state = await setSinkVolume(name, volume)
-      if (volumeSeq.get(name) === seq) patchSink(name, statePatch(state))
+      // A volume response was read before the write: it owns the level, not the mute flag.
+      if (volumeSeq.get(name) === seq) patchSink(name, { volume: state.volume })
       return state
     } catch (e) {
       if (volumeSeq.get(name) === seq) patchSink(name, { volume: before?.volume ?? volume })
@@ -234,7 +253,8 @@ export const useHardwareStore = defineStore('hardware', () => {
     patchSink(name, { muted })
     try {
       const state = await setSinkMute(name, muted)
-      if (muteSeq.get(name) === seq) patchSink(name, statePatch(state))
+      // The mute response carries the level from before a concurrent slider move.
+      if (muteSeq.get(name) === seq) patchSink(name, { muted: state.muted })
       return state
     } catch (e) {
       if (muteSeq.get(name) === seq) patchSink(name, { muted: before?.muted ?? !muted })
@@ -264,8 +284,9 @@ export const useHardwareStore = defineStore('hardware', () => {
     return state
   }
 
+  /** Suspend/resume own the endpoint's state; the level and mute flag come from other commands. */
   function statePatch(state: SinkState): Partial<AudioEndpointSummary> {
-    return { volume: state.volume, muted: state.muted, state: state.state }
+    return { state: state.state }
   }
 
   // -------------------------------------------------------------------------
@@ -359,15 +380,21 @@ export const useHardwareStore = defineStore('hardware', () => {
   }
 
   async function startPairingWindow(seconds = SOURCE_PAIRING_WINDOW_S) {
+    // A new attempt replaces any leftover countdown, however the previous one ended.
+    clearPairingWindow()
     return command(async () => {
       try {
         const window: SourcePairingWindow = await openSourcePairing(seconds)
         const left = Number(window?.pairing_seconds_left)
         setPairingWindow(Number.isFinite(left) ? left : seconds)
+        // Read after the window is set: a healthy feed clears the previous refusal,
+        // then this window's own answer lands (and stays until the next read).
+        await refresh()
         if (window?.error) {
+          // A 200 that names the refusal is a failed command, not an open window:
+          // the caller must not offer Undo for a window that never existed.
           sourceError.value = { code: window.error, detail: '', player: null }
         }
-        await refresh()
         return window
       } catch (e) {
         sourceError.value = failure(e)
@@ -413,7 +440,9 @@ export const useHardwareStore = defineStore('hardware', () => {
   function disconnect() {
     disposed = true
     stopPolling()
-    stopPairingTicker()
+    // A countdown belongs to the page visit: a returned page must be able to pair again.
+    clearPairingWindow()
+    clearSourceError()
     stream.disconnect()
     hardwareStream?.disconnect()
     hardwareStream = null
