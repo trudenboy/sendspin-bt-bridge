@@ -5,6 +5,8 @@ description: Playing to a local audio output (USB DAC, sound card, HDMI) as a Mu
 
 Besides Bluetooth speakers, the bridge can play to an **audio output of the machine it runs on** — a USB DAC, a sound card or an HDMI output. Each output becomes its own player in Music Assistant, with its own volume, delay and room.
 
+To inspect the outputs themselves — their state, volume, ports and which one is the host's default — open the [Hardware](/hardware/) page.
+
 ## Adding an output
 
 1. Open **Speakers → Add speaker** and switch to the **Audio output** tab.

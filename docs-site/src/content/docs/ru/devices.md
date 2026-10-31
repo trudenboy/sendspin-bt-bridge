@@ -3,6 +3,8 @@ title: Устройства и адаптеры
 description: Добавление колонок, привязка адаптеров и актуальные device-management flows в Sendspin Bluetooth Bridge
 ---
 
+Адаптеры, спаренные устройства и аудиоустройства компьютера с их входами и выходами — на странице [Оборудование](/ru/hardware/). Эта страница про колонки, которые вы создаёте из них.
+
 ## Empty state и первый запуск
 
 ![Пустое состояние dashboard с кнопкой Scan for devices](/sendspin-bt-bridge/screenshots/screenshot-empty-no-devices.png)

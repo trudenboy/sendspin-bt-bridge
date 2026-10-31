@@ -1,35 +1,30 @@
 ---
 title: Hardware
-description: Controllers, paired Bluetooth devices, and local audio inputs and outputs in one place
-draft: true
+description: Controllers, paired Bluetooth devices, and the computer's audio devices with their inputs and outputs
 ---
 
-:::caution[Draft]
-This page describes the Hardware section planned for the v3 line. It is not
-published until the section ships.
-:::
+The **Hardware** page shows the physical layer the bridge drives, whether or not a
+player uses it: Bluetooth controllers, the devices paired to them, and the audio
+devices of the host with their outputs and inputs.
 
-The **Hardware** page shows the physical layer the bridge drives, whether or not
-a player uses it: Bluetooth controllers, paired devices, and the audio devices of
-the host with their inputs and outputs.
-
-It is deliberately separate from the speakers dashboard. A speaker is a player;
-a controller, a paired phone or a sound card is hardware. A device that no
-player points at — a phone that is not streaming, a second adapter with nothing
-on it — is still listed here.
+It is deliberately separate from the speakers dashboard. A speaker is a player; a
+controller, a paired phone or a sound card is hardware. A device that no player
+points at — a phone that is not streaming, a second adapter with nothing on it —
+is still listed here.
 
 ## Controllers
 
 One card per Bluetooth adapter:
 
-- power state, and the power control;
+- power state, with the control to turn it off or on. Turning an adapter off
+  disconnects every speaker that uses it, and the confirmation names them;
 - the friendly name you gave it in the configuration;
 - the class of device the kernel reports (empty when the container has no
   `CAP_NET_RAW`);
-- the paired devices that use this adapter;
+- the number of paired devices that use this adapter;
 - the Home Assistant area, when area mapping is configured.
 
-A device can be bonded to more than one adapter; it then appears under each of
+A device can be bonded to more than one adapter. It then appears under each of
 them, and its own card lists every adapter that holds the bond.
 
 ## Bluetooth devices
@@ -38,16 +33,20 @@ Paired and known devices, with what the bridge knows about each:
 
 - connected, paired, bonded, trusted;
 - battery level, when the device reports it over `org.bluez.Battery1`;
-- signal strength, when the kernel reports it (a delta inside the BR/EDR golden
-  receive range, not dBm);
-- the codec and delay of the active transport;
-- the **role** of the link — *Plays audio* when the bridge sends sound to it,
-  *Receives audio* when it sends sound to the bridge. A device can show both.
-- the player it backs, with a link to that player's card.
+- signal strength, when the kernel reports it — a delta inside the BR/EDR golden
+  receive range, not dBm;
+- the **role** of the link: **Plays audio** when the bridge sends sound to the
+  device, **Receives audio** when the device sends sound to the bridge. A device
+  can show both at once.
+- the player it backs, with a link to that player.
 
-Actions: connect, disconnect, and forget the bond. Forgetting a bond that a
-player uses asks first and names that player; the bridge does not silently leave
-a player without a device.
+Actions: **Connect**, **Disconnect**, **Add as speaker** (for a device that is
+not yet a player), **Pair a device** (the same scanning flow the speakers
+dashboard uses), and **Forget bond**.
+
+Forgetting a bond that a player depends on is refused: the card says which player
+it is and links to it, because removing the player is the action that makes
+sense. The bridge never silently leaves a player without a device.
 
 ## Audio
 
@@ -55,22 +54,45 @@ The audio server's own view of the host:
 
 - **Cards** with their profiles and ports. When an output is silent because its
   active port is not available or its profile is `off`, this is where you see it.
-- **Outputs** with state, volume, mute, and the player that uses each one.
+  Port availability is three-valued: available, not available (unplugged), and
+  unknown.
+- **Outputs** with state, volume, mute, the player that uses each one, and a
+  **Default** badge on the host's default output. Volume, mute and the default
+  output can be set from here, and an output can be paused to free it.
 - **Inputs** with their kind: a microphone or line-in from the sound card, a
   monitor source, or the phone streaming into the bridge.
 
-Bluetooth outputs are not repeated here. They belong to their device card, and
+Bluetooth outputs are not repeated here. They belong to their device card;
 listing them twice would make the page lie the moment a sink is renamed.
 
-## Source
+## The phone source
 
 When the Sendspin source is enabled, a strip at the top shows whether a phone is
-connected, what it is sending, and which players are armed to play it. Pairing a
-phone and starting or stopping the source are available here.
+connected, what it is sending, and which players are armed to play it. It has
+four states — off, waiting for a phone, streaming, and error — and an error names
+the cause (for example a port already in use) with a next step.
+
+Pairing a phone opens a two-minute window; the strip counts it down and can stop
+it early. When the source is off entirely, the strip says where it is enabled
+(Settings → Music Assistant) instead of showing controls that cannot work.
+
+## When a section is empty
+
+Empty and unavailable are different things, and the page never shows one as the
+other:
+
+- **No devices** means the bridge looked and found none.
+- **A banner with a reason** means the bridge could not look: no D-Bus, no audio
+  server, or the phone capture needs PipeWire nodes. The banner names the reason
+  and the next step.
+- **A “this bridge does not report audio” note** appears when an older bridge
+  serves the page and the audio section is simply absent.
+
+If a read fails while an earlier one succeeded, the page keeps the last data and
+marks it as possibly stale rather than blanking the screen.
 
 ## What the page does not do
 
 - It does not create, remove or rename players. That is the speakers dashboard.
-- It does not switch card profiles or ports yet; it explains the state instead.
-- On a host without a readable Bluetooth stack or audio server it shows the
-  reason instead of an empty list.
+- It does not switch card profiles or ports; it explains the state instead.
+- It does not change how a player routes its audio.

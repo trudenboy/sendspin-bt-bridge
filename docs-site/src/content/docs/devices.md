@@ -3,6 +3,8 @@ title: Devices & Adapters
 description: Adding speakers, importing paired devices, and understanding release, reclaim, disable, and repair workflows in the current UI
 ---
 
+To see the adapters, the devices paired to them and the computer's audio devices with their inputs and outputs, open the [Hardware](/hardware/) page. This page is about the speakers you create from them.
+
 ## First-run guidance and empty states
 
 ![Empty dashboard state with Scan for devices action](/sendspin-bt-bridge/screenshots/screenshot-empty-no-devices.png)

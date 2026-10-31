@@ -3,6 +3,8 @@ title: Bluetooth Adapters
 description: Recommended USB Bluetooth adapters for multi-speaker audio streaming with Sendspin BT Bridge on HAOS, Docker, and LXC
 ---
 
+The [Hardware](/hardware/) page shows each adapter's power state, its class of device and the devices paired to it.
+
 ## Why the adapter matters
 
 The bridge streams A2DP audio to every configured speaker simultaneously.

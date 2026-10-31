@@ -38,6 +38,7 @@ export default defineConfig({
         { label: 'Configuration', translations: { ru: 'Настройка' }, slug: 'configuration' },
         { label: 'Web UI', translations: { ru: 'Веб-интерфейс' }, slug: 'web-ui' },
         { label: 'Group sync tuning', translations: { ru: 'Синхронизация группы' }, slug: 'group-sync-tuning' },
+        { label: 'Hardware', translations: { ru: 'Оборудование' }, slug: 'hardware' },
         { label: 'Devices', translations: { ru: 'Устройства' }, slug: 'devices' },
         { label: 'Audio Outputs', translations: { ru: 'Аудиовыходы' }, slug: 'audio-outputs' },
         { label: 'Bluetooth Adapters', translations: { ru: 'Bluetooth-адаптеры' }, slug: 'bluetooth-adapters' },
