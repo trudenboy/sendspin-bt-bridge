@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -117,23 +116,14 @@ async def set_source_player(body: SourcePlayerIn) -> dict[str, Any]:
 
     client = find_client(body.device_id)
     if not body.enabled:
-        await relay.stop(body.device_id)
+        relay.disarm(body.device_id)
         return {"device_id": body.device_id, "playing_source": False}
-    # The speaker the bridge drives itself: relay the phone's capture straight to its sink.
-    from sendspin_bridge.services.source.bt_source import find_bluez_input_on_host
-
-    node = None
-    for _ in range(15):  # the capture node appears a moment after the phone connects
-        node = await find_bluez_input_on_host()
-        if node:
-            break
-        await asyncio.sleep(0.2)
+    # The speaker the bridge drives itself: relay the phone's capture straight to its sink. The
+    # device stays armed, so a phone that reconnects (or a bridge restart) resumes it.
     sink = getattr(client, "bluetooth_sink_name", None) or getattr(client, "sink_name", None)
-    if not node:
-        raise ApiError(409, "source_phone_missing", "No phone is streaming into the bridge yet")
     if not sink:
         raise ApiError(409, "source_sink_missing", "That speaker has no audio output")
-    await relay.start(body.device_id, node, str(sink))
+    relay.arm(body.device_id, str(sink))
     return {"device_id": body.device_id, "playing_source": True}
 
 

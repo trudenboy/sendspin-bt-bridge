@@ -32,8 +32,13 @@ async def start(config: dict[str, Any], config_dir: Any) -> dict[str, Any]:
         identity_path=config_dir / "source_identity.key",
         pairing_path=config_dir / "source_pairing.json",
     )
+    from sendspin_bridge.services.source import relay
+
+    relay.configure(config_dir / "source_relays.json")
+    relay.load()
     await source.start()
     _source = source
+    relay.start_watcher()
     from sendspin_bridge.services.source.pairing import ensure_agent
 
     await ensure_agent()
@@ -49,6 +54,7 @@ async def stop() -> dict[str, Any]:
     from sendspin_bridge.services.source import relay
     from sendspin_bridge.services.source.pairing import close_agent
 
+    await relay.stop_watcher()
     await relay.stop_all()
 
     await close_agent()

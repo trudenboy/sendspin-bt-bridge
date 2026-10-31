@@ -201,7 +201,7 @@ def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
         state["port"] = config.get("SENDSPIN_SOURCE_PORT")
     from sendspin_bridge.services.source import relay
 
-    state["attached_devices"] = relay.active_devices()
+    state["attached_devices"] = relay.armed_devices()
     return SendspinSourceStatus(**state)
 
 
