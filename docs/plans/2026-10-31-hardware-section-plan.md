@@ -187,6 +187,13 @@ without PipeWire the capture row says why instead of disappearing.
 
 ## E4 — Bluetooth writes
 
+**Status (2026-10-31): delivered.** Connect, disconnect, add-as-speaker, forget
+bond and pairing are on the page. Forgetting a bond a player depends on is
+refused with `bond_in_use_by_player` (player id + remediation, no `force`).
+Review caught a lease-ownership defect: the lease was released from the event
+loop, so a cancelled request could free it while `bluetoothctl connect` was still
+driving the controller; the verb now runs and releases in `bt_executor()`.
+
 **Scope.** Pair, unpair, connect, disconnect from the page.
 
 **Backend**
@@ -214,6 +221,14 @@ action runs without a named consequence.
 ---
 
 ## E5 — Documentation
+
+**Status (2026-10-31): delivered.** The docs-site page is published in both
+languages with a sidebar entry, the glossary carries Hardware/Оборудование and
+Audio input/Аудиовход, `CONTEXT.md` carries Card, Audio endpoint, Link role and
+Source feed, ADR-0002 is accepted, and the changelog has the user-visible entry.
+Screenshots are listed in `SCREENSHOTS_TO_RETAKE.md` but not yet captured: they
+need a running demo instance and a browser, which this environment does not
+have.
 
 * `docs/adr/0002-hardware-inventory.md` (accepted).
 * `CONTEXT.md` — **Card**, **Audio endpoint**, **Link role**, **Source feed**.
