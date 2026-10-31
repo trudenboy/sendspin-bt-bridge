@@ -314,6 +314,7 @@ export const useHardwareStore = defineStore('hardware', () => {
       profile_count: detail.profile_count,
       port_count: detail.port_count,
       endpoint_refs: detail.endpoint_refs,
+      managed_by: detail.managed_by,
     }
     snapshot.value = {
       ...current,
@@ -340,9 +341,27 @@ export const useHardwareStore = defineStore('hardware', () => {
   }
 
   /**
-   * A profile switch answers with the updated card, so the page replaces the
-   * card it already holds instead of paying for a second read. A refusal is an
-   * ``ApiError`` that keeps the server's stable code for the caller to show.
+   * A write's detail is a read newer than the aggregate it lands in. Move the
+   * snapshot's clock with it, or a poll started before the write can still
+   * satisfy ``isNewerRead`` and flip the row back to the old port. A stale
+   * detail is a pre-write read and must never move the clock; a read taken
+   * after the write is already newer and wins on its own.
+   */
+  function adoptReadTime(detail: { as_of?: string; stale?: boolean }) {
+    const current = snapshot.value
+    if (!current || detail.stale) return
+    const at = Date.parse(detail.as_of ?? '')
+    if (!Number.isFinite(at)) return
+    const currentAt = Date.parse(current.as_of)
+    if (Number.isFinite(currentAt) && at <= currentAt) return
+    snapshot.value = { ...current, as_of: detail.as_of as string }
+  }
+
+  /**
+   * A profile switch answers with the updated card, so the drawer shows the new
+   * profile at once. A profile can also add or remove outputs, and the in-place
+   * replace touches the card list only, so the aggregate is read again after
+   * the write; the refreshed rows then carry the same read as the detail.
    */
   async function chooseCardProfile(
     card: AudioCardSummary | AudioCardDetail,
@@ -355,10 +374,16 @@ export const useHardwareStore = defineStore('hardware', () => {
       return null
     }
     replaceCard(card.name, detail)
+    await refresh()
+    adoptReadTime(detail)
     return detail
   }
 
-  /** The port counterpart of a profile switch: replace the sink with the detail the write returned. */
+  /**
+   * The port counterpart of a profile switch: replace the sink with the detail
+   * the write returned. Ports belong to the sink's existing card, so the audio
+   * section cannot gain or lose rows here.
+   */
   async function chooseSinkPort(
     sink: AudioEndpointSummary | AudioEndpointDetail,
     port: string,
@@ -369,6 +394,7 @@ export const useHardwareStore = defineStore('hardware', () => {
       return null
     }
     replaceEndpoint(sink.name, detail)
+    adoptReadTime(detail)
     return detail
   }
 

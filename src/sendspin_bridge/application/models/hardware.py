@@ -169,6 +169,10 @@ class EndpointDetail(EndpointSummary):
     identifiers: dict[str, str] = Field(default_factory=dict)
     ports: list[CardPort] = Field(default_factory=list, description="All ports of the owning card.")
     monitor_of: str | None = Field(default=None, description="The sink a source monitors, if any.")
+    as_of: str = Field(description="ISO-8601 UTC when the read behind this detail was taken.")
+    stale: bool = Field(
+        description="True when a failed refresh made this detail show an earlier read than the request."
+    )
 
 
 class CardSummary(ResponseModel):
@@ -180,6 +184,10 @@ class CardSummary(ResponseModel):
     profile_count: int = 0
     port_count: int = 0
     endpoint_refs: list[EndpointRef] = Field(default_factory=list)
+    managed_by: Literal["bridge"] | None = Field(
+        default=None,
+        description="bridge when the bridge itself chooses this card's profile (a Bluetooth card); null otherwise.",
+    )
 
 
 class CardDetail(CardSummary):
@@ -188,6 +196,10 @@ class CardDetail(CardSummary):
     profiles: list[CardProfile] = Field(default_factory=list)
     ports: list[CardPort] = Field(default_factory=list)
     endpoints: list[EndpointSummary] = Field(default_factory=list)
+    as_of: str = Field(description="ISO-8601 UTC when the read behind this detail was taken.")
+    stale: bool = Field(
+        description="True when a failed refresh made this detail show an earlier read than the request."
+    )
 
 
 class AudioSection(ResponseModel):

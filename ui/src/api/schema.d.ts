@@ -4061,6 +4061,11 @@ export interface components {
             /** Active Profile */
             active_profile: string | null;
             /**
+             * As Of
+             * @description ISO-8601 UTC when the read behind this detail was taken.
+             */
+            as_of: string;
+            /**
              * Driver
              * @default
              */
@@ -4069,6 +4074,11 @@ export interface components {
             endpoint_refs: components["schemas"]["EndpointRef"][];
             /** Endpoints */
             endpoints: components["schemas"]["EndpointSummary"][];
+            /**
+             * Managed By
+             * @description bridge when the bridge itself chooses this card's profile (a Bluetooth card); null otherwise.
+             */
+            managed_by: "bridge" | null;
             /** Name */
             name: string;
             /**
@@ -4085,6 +4095,11 @@ export interface components {
             profile_count: number;
             /** Profiles */
             profiles: components["schemas"]["CardProfile"][];
+            /**
+             * Stale
+             * @description True when a failed refresh made this detail show an earlier read than the request.
+             */
+            stale: boolean;
         };
         /**
          * CardPort
@@ -4140,6 +4155,11 @@ export interface components {
             driver: string;
             /** Endpoint Refs */
             endpoint_refs: components["schemas"]["EndpointRef"][];
+            /**
+             * Managed By
+             * @description bridge when the bridge itself chooses this card's profile (a Bluetooth card); null otherwise.
+             */
+            managed_by: "bridge" | null;
             /** Name */
             name: string;
             /**
@@ -4889,6 +4909,11 @@ export interface components {
              */
             active_port_available: string | null;
             /**
+             * As Of
+             * @description ISO-8601 UTC when the read behind this detail was taken.
+             */
+            as_of: string;
+            /**
              * Description
              * @default
              */
@@ -4937,6 +4962,11 @@ export interface components {
              * @default
              */
             sample_spec: string;
+            /**
+             * Stale
+             * @description True when a failed refresh made this detail show an earlier read than the request.
+             */
+            stale: boolean;
             /**
              * State
              * @description running | idle | suspended | unknown

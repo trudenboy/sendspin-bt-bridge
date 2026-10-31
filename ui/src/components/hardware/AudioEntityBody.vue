@@ -57,14 +57,31 @@ let request = 0
 
 const isCard = computed(() => props.kind === 'audio-card')
 
-/** A Bluetooth card's profile follows the connection, not the operator. */
-const bluetoothManaged = computed(
-  () => (card.value?.endpoints ?? []).some((entry) => entry.owner?.bluetooth),
-)
+/**
+ * The bridge's Bluetooth link chooses this card's profile. The flag is the
+ * card's own fact: a PipeWire ``bluez_card`` has no endpoints to read it from.
+ */
+const managedByBridge = computed(() => card.value?.managed_by === 'bridge')
 
-/** Ports belong to an output; an input has no port choice to offer. */
-const portSwitchable = computed(
-  () => endpoint.value?.kind === 'sink' && endpoint.value.ports.length > 0 && !endpoint.value.owner?.bluetooth,
+/**
+ * Ports belong to an output; an input has no port choice to offer. A
+ * Bluetooth-owned sink still offers its ports: only the profile is the
+ * bridge's (plan E6), and the backend resolves the sink's card through the
+ * read model's owner classification, so the switch is supported there.
+ */
+const portSwitchable = computed(() => endpoint.value?.kind === 'sink' && endpoint.value.ports.length > 0)
+
+/** The players a profile switch may silence, named from the detail's endpoints. */
+const playersInUse = computed(() => {
+  const ids = (card.value?.endpoints ?? [])
+    .map((entry) => entry.in_use_by)
+    .filter((id): id is string => Boolean(id))
+  return [...new Set(ids)]
+})
+
+/** A detail read before the last refresh: the change it follows is not in it. */
+const detailStale = computed(() =>
+  isCard.value ? card.value?.stale === true : endpoint.value?.stale === true,
 )
 
 const stateLabel = computed(() => {
@@ -142,9 +159,13 @@ async function onProfileChange(event: Event) {
   // The dialog decides. Until it does, the control keeps showing what runs now.
   select.value = current.active_profile ?? ''
   actionError.value = ''
+  const players = playersInUse.value
+  const consequence = players.length
+    ? t('hardware.audio.profileConsequenceInUse', { card: current.name, players: players.join(', ') })
+    : t('hardware.audio.profileConsequence', { card: current.name })
   const ok = await confirmAction('audio.cardProfile', {
     title: t('hardware.audio.profileConfirmTitle', { card: current.name, profile }),
-    consequences: [t('hardware.audio.profileConsequence', { card: current.name })],
+    consequences: [consequence],
     confirmLabel: t('hardware.audio.profileConfirm'),
   })
   if (!ok) return
@@ -172,8 +193,11 @@ async function onPortChange(event: Event) {
     ? t('hardware.audio.portConsequenceInUse', { name, player: current.in_use_by })
     : t('hardware.audio.portConsequence', { name })
   const picked = current.ports.find((entry) => entry.name === port)
+  // The confirm and the toast name the port the same way: its description when
+  // the server has one, its id only as a fallback.
+  const portLabel = picked?.description || port
   const ok = await confirmAction('audio.sinkPort', {
-    title: t('hardware.audio.portConfirmTitle', { name, port: picked?.description || port }),
+    title: t('hardware.audio.portConfirmTitle', { name, port: portLabel }),
     consequences: [consequence],
     confirmLabel: t('hardware.audio.portConfirm'),
   })
@@ -182,7 +206,7 @@ async function onPortChange(event: Event) {
   try {
     const detail = await store.chooseSinkPort(current, port)
     if (detail) endpoint.value = detail
-    notifications.success(t('hardware.audio.portSwitched', { name, port }))
+    notifications.success(t('hardware.audio.portSwitched', { name, port: portLabel }))
   } catch (e) {
     actionError.value = failure(e)
   } finally {
@@ -220,6 +244,15 @@ watch([() => props.kind, () => props.name], load, { immediate: true })
 
 <template>
   <div data-audio-detail :data-detail-kind="kind" class="space-y-6 py-2">
+    <!-- The server said the read behind this detail is older than the request. -->
+    <p
+      v-if="!loading && !error && detailStale"
+      data-stale-detail
+      class="rounded-(--radius-card) border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text-primary"
+    >
+      {{ t('hardware.audio.detailStale') }}
+    </p>
+
     <div v-if="loading" class="flex items-center gap-2 text-sm text-text-secondary" aria-busy="true">
       <SbSpinner :label="t('common.loading')" />
       {{ t('common.loading') }}
@@ -236,7 +269,7 @@ watch([() => props.kind, () => props.name], load, { immediate: true })
 
     <template v-else-if="isCard && card">
       <!-- A profile is a card-wide decision: picking one can silence every output on it. -->
-      <section v-if="card.profiles.length && !bluetoothManaged" data-profile-switch class="space-y-2">
+      <section v-if="card.profiles.length && !managedByBridge" data-profile-switch class="space-y-2">
         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-secondary">
           {{ t('hardware.audio.profileSwitch') }}
         </h3>
@@ -264,7 +297,7 @@ watch([() => props.kind, () => props.name], load, { immediate: true })
           {{ actionError }}
         </p>
       </section>
-      <p v-else-if="bluetoothManaged" data-profile-managed class="text-sm text-text-secondary">
+      <p v-else-if="managedByBridge" data-profile-managed class="text-sm text-text-secondary">
         {{ t('hardware.audio.profileManagedByConnection') }}
       </p>
 

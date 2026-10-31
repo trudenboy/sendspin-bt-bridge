@@ -33,6 +33,7 @@ const card = (overrides: Record<string, unknown> = {}) => ({
   profile_count: 2,
   port_count: 1,
   endpoint_refs: [{ kind: 'sink', name: SINK }],
+  managed_by: null,
   ...overrides,
 })
 
@@ -90,6 +91,8 @@ const cardDetail = (overrides: Record<string, unknown> = {}) => ({
   ],
   ports: [{ name: 'analog-output-speaker', description: 'Speakers', available: true, active: true, profiles: [] }],
   endpoints: [sink()],
+  as_of: '2026-10-31T11:02:14Z',
+  stale: false,
   ...overrides,
 })
 
@@ -98,6 +101,8 @@ const endpointDetail = (overrides: Record<string, unknown> = {}) => ({
   identifiers: {},
   ports: [{ name: 'analog-output-speaker', description: 'Speakers', available: true, active: true, profiles: [] }],
   monitor_of: null,
+  as_of: '2026-10-31T11:02:14Z',
+  stale: false,
   ...overrides,
 })
 
@@ -121,17 +126,27 @@ describe('useHardwareStore: card profiles and output ports', () => {
     store.disconnect()
   })
 
-  it('replaces the card with the write answer instead of reading the aggregate again', async () => {
+  it('applies the write answer and refreshes the audio section so an added output shows up', async () => {
     vi.mocked(setCardProfile).mockResolvedValue(cardDetail({ active_profile: 'off' }) as never)
+    const added = 'alsa_output.pci-0000_00_1f.3.hdmi-stereo'
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({
+        as_of: '2026-10-31T11:02:20.000Z',
+        audio: audio({ cards: [card({ active_profile: 'off' })], sinks: [sink(), sink({ name: added })] }),
+      }) as never,
+    )
 
     const detail = await store.chooseCardProfile(store.audio.cards[0]!, 'off')
 
     expect(setCardProfile).toHaveBeenCalledWith(CARD, 'off')
     expect(detail?.active_profile).toBe('off')
     expect(store.audio.cards[0]!.active_profile).toBe('off')
+    // A profile can add or remove outputs: the whole section is read after the
+    // write, so the output list cannot stay on the pre-write shape.
+    expect(store.audio.sinks.map((entry) => entry.name)).toContain(added)
     // The page card stays a summary: the detail's extra lists belong to the drawer.
     expect('profiles' in store.audio.cards[0]!).toBe(false)
-    expect(getHardware).not.toHaveBeenCalled()
+    expect(getHardware).toHaveBeenCalledOnce()
   })
 
   it('replaces the sink with the write answer, including the new port state', async () => {
@@ -145,7 +160,29 @@ describe('useHardwareStore: card profiles and output ports', () => {
     expect(detail?.active_port).toBe('hdmi-output-0')
     expect(store.audio.sinks[0]!.active_port).toBe('hdmi-output-0')
     expect(store.audio.sinks[0]!.active_port_available).toBe('not available')
+    // A port belongs to the sink's existing card: no section-wide read is needed.
     expect(getHardware).not.toHaveBeenCalled()
+  })
+
+  it('does not let an in-flight read from before the write flip the port row back', async () => {
+    vi.mocked(setSinkPort).mockResolvedValue(
+      endpointDetail({
+        active_port: 'hdmi-output-0',
+        as_of: '2026-10-31T11:10:00.000Z',
+        stale: false,
+      }) as never,
+    )
+
+    await store.chooseSinkPort(store.audio.sinks[0]!, 'hdmi-output-0')
+    // The poll was sent before the write and answers with the old port; its
+    // timestamp is newer than the aggregate the page held, but older than the
+    // write's own read.
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ as_of: '2026-10-31T11:05:00.000Z', audio: audio({ sinks: [sink()] }) }) as never,
+    )
+    await store.refresh()
+
+    expect(store.audio.sinks[0]!.active_port).toBe('hdmi-output-0')
   })
 
   it('keeps the server code on a refusal and leaves the last read as it was', async () => {

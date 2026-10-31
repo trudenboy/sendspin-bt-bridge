@@ -5,13 +5,20 @@ from __future__ import annotations
 import pytest
 
 from sendspin_bridge.application import audio as audio_uc
-from sendspin_bridge.services.audio.sink_inventory import CardPort, CardProfile, LocalCard, LocalSink
+from sendspin_bridge.services.audio.sink_inventory import (
+    CardPort,
+    CardProfile,
+    LocalCard,
+    LocalSink,
+    parse_pactl_cards,
+)
 from sendspin_bridge.services.hardware.capabilities import build_capabilities
 from sendspin_bridge.services.hardware.inventory import (
     CaptureFacts,
     InventoryRead,
     build_audio_facts,
 )
+from tests.support import hardware_audio
 
 SINK = LocalSink(
     name="alsa_output.usb-dac.analog-stereo",
@@ -40,8 +47,19 @@ CARD = LocalCard(
     sink_names=(SINK.name,),
 )
 
+#: The PipeWire shape from the real fixture: no ``Sinks:`` list, so the card has
+#: no endpoints; the sink's owner is the speaker link.  The card itself is still
+#: bridge-managed.
+MANAGED_CARD = parse_pactl_cards((hardware_audio.FIXTURES / "pipewire_bluez_card.txt").read_text())[0]
 
-def _read(*, audio_server: str = "PulseAudio", cards: tuple[LocalCard, ...] = (CARD,)) -> InventoryRead:
+
+def _read(
+    *,
+    audio_server: str = "PulseAudio",
+    cards: tuple[LocalCard, ...] = (CARD,),
+    sinks: tuple[LocalSink, ...] = (SINK,),
+    unavailable: tuple[str, ...] = (),
+) -> InventoryRead:
     return InventoryRead(
         as_of="2026-10-31T00:00:00+00:00",
         stale=False,
@@ -56,7 +74,7 @@ def _read(*, audio_server: str = "PulseAudio", cards: tuple[LocalCard, ...] = (C
         controllers=(),
         devices=(),
         degraded=(),
-        audio=build_audio_facts(list(cards), [SINK], [], CaptureFacts()),
+        audio=build_audio_facts(list(cards), list(sinks), [], CaptureFacts(), unavailable=unavailable),
     )
 
 
@@ -156,6 +174,33 @@ def test_set_card_profile_returns_the_updated_card_detail(api_client):
     assert body["active_profile"] == "output:analog-stereo+input:analog-stereo"
     assert [profile["name"] for profile in body["profiles"]] == [profile.name for profile in CARD.profiles]
     assert [endpoint["name"] for endpoint in body["endpoints"]] == [SINK.name]
+    assert body["as_of"] == "2026-10-31T00:00:00+00:00"
+    assert body["stale"] is False
+
+
+def test_set_card_profile_on_a_bridge_managed_card_is_409(api_client, monkeypatch):
+    """A bluez_card with no endpoints (PipeWire) is still the bridge's to switch."""
+    monkeypatch.setattr(audio_uc, "read_inventory", lambda: _read(cards=(MANAGED_CARD,), sinks=()))
+
+    response = api_client.put(f"/api/v1/audio/cards/{MANAGED_CARD.name}/profile", json={"profile": "off"})
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "not_supported_for_backend"
+    assert "bridge manages this card's profile" in body["detail"]
+
+
+def test_set_card_profile_is_503_when_the_card_list_could_not_be_read(api_client, monkeypatch):
+    monkeypatch.setattr(
+        audio_uc,
+        "read_inventory",
+        lambda: _read(cards=(), unavailable=("cards: pactl exited 1",)),
+    )
+
+    response = api_client.put(f"/api/v1/audio/cards/{CARD.name}/profile", json={"profile": "off"})
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "hardware_unavailable"
 
 
 def test_set_card_profile_a_profile_the_card_does_not_offer_is_400_invalid_profile(api_client):
@@ -206,6 +251,27 @@ def test_set_sink_port_returns_the_updated_endpoint_detail(api_client):
     assert body["name"] == SINK.name
     assert body["active_port"] == "analog-output-headphones"
     assert {port["name"] for port in body["ports"]} == {"analog-output", "analog-output-headphones"}
+    # The read behind the answer still marks the old port active; the response
+    # must mark only the chosen one, or the drawer shows two active ports.
+    assert {port["name"]: port["active"] for port in body["ports"]} == {
+        "analog-output": False,
+        "analog-output-headphones": True,
+    }
+    assert body["as_of"] == "2026-10-31T00:00:00+00:00"
+    assert body["stale"] is False
+
+
+def test_set_sink_port_is_503_when_the_sink_list_could_not_be_read(api_client, monkeypatch):
+    monkeypatch.setattr(
+        audio_uc,
+        "read_inventory",
+        lambda: _read(sinks=(), unavailable=("sinks: pactl exited 1",)),
+    )
+
+    response = api_client.put(f"/api/v1/audio/sinks/{SINK.name}/port", json={"port": "analog-output"})
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "hardware_unavailable"
 
 
 def test_set_sink_port_a_port_not_on_the_sinks_card_is_400_invalid_port(api_client):

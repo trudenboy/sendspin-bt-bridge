@@ -1,0 +1,20 @@
+Card #52
+	Name: bluez_card.FC_58_FA_EB_08_6C
+	Driver: PipeWire
+	Owner Module: n/a
+	Properties:
+		device.api = "bluez5"
+		device.bus = "bluetooth"
+		device.description = "ENEBY20"
+		device.string = "FC:58:FA:EB:08:6C"
+	Profiles:
+		a2dp-sink: High Fidelity Playback (A2DP Sink) (sinks: 1, sources: 0, priority: 0, available: yes)
+		headset-head-unit: Headset Head Unit (HSP/HFP) (sinks: 1, sources: 1, priority: 0, available: yes)
+		off: Off (sinks: 0, sources: 0, priority: 0, available: yes)
+	Active Profile: a2dp-sink
+	Ports:
+		headset-output: ENEBY20 (type: Speaker, priority: 0, latency offset: 0 usec, available)
+			Part of profile(s): a2dp-sink, headset-head-unit
+		headset-input: ENEBY20 (type: Headset, priority: 0, latency offset: 0 usec, availability unknown)
+			Part of profile(s): headset-head-unit
+	Active Port: headset-output

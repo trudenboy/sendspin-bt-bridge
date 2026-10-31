@@ -59,6 +59,7 @@ export const audioCard = (overrides: Record<string, unknown> = {}) => ({
     { kind: 'sink', name: 'alsa_output.pci-0000_00_1f.3.analog-stereo' },
     { kind: 'source', name: 'alsa_input.pci-0000_00_1f.3.analog-stereo' },
   ],
+  managed_by: null,
   ...overrides,
 })
 
@@ -118,6 +119,8 @@ export const audioCardDetail = (overrides: Record<string, unknown> = {}) => ({
     { name: 'analog-input-internal-mic', description: 'Internal microphone', available: null, active: false, profiles: [] },
   ],
   endpoints: [audioSink(), audioSource()],
+  as_of: '2026-10-31T11:02:13Z',
+  stale: false,
   ...overrides,
 })
 
@@ -133,6 +136,8 @@ export const audioEndpointDetail = (overrides: Record<string, unknown> = {}) => 
   },
   ports: [{ name: 'analog-output-speaker', description: 'Speakers', available: true, active: true, profiles: [] }],
   monitor_of: null,
+  as_of: '2026-10-31T11:02:13Z',
+  stale: false,
   ...overrides,
 })
 

@@ -5,6 +5,7 @@ import { getHardware, getHardwareAudioCard, getHardwareAudioSink, getHardwareAud
 import { setCardProfile, setSinkPort } from '@/api/audio'
 import { ApiError } from '@/api/client'
 import en from '@/i18n/locales/en.json'
+import { useNotificationStore } from '@/stores/notifications'
 import { seriousViolations } from '../../helpers/axe'
 import { audioCard, audioCardDetail, audioEndpointDetail, audioSink, mountView, snapshot } from './support'
 
@@ -89,7 +90,7 @@ describe('Hardware page: card profiles', () => {
     document.body.innerHTML = ''
   })
 
-  it('switches a profile after naming the card and shows the returned detail without a second read', async () => {
+  it('switches a profile after naming the card and shows the returned detail', async () => {
     await openCard()
 
     const select = node<HTMLSelectElement>('[data-profile-select]')
@@ -120,7 +121,33 @@ describe('Hardware page: card profiles', () => {
     )
     expect(offRow?.querySelector('[data-profile-active]')).not.toBeNull()
     expect(getHardwareAudioCard).toHaveBeenCalledOnce()
-    expect(getHardware).toHaveBeenCalledOnce()
+    // A profile can add or remove outputs, so the audio section is read once more.
+    expect(getHardware).toHaveBeenCalledTimes(2)
+  })
+
+  it('names the players a profile switch may silence', async () => {
+    vi.mocked(getHardwareAudioCard).mockResolvedValue(
+      audioCardDetail({ endpoints: [audioSink({ in_use_by: 'dac' })] }) as never,
+    )
+
+    await openCard()
+    pick('[data-profile-select]', 'off')
+    await flushPromises()
+
+    const dialog = confirm.confirmDialog.mock.calls[0]![0]
+    expect(dialog.consequences.join(' ')).toContain('dac')
+    expect(dialog.consequences.join(' ')).not.toContain('speaker')
+  })
+
+  it('hides the profile choice on a bridge-managed card that has no endpoints', async () => {
+    vi.mocked(getHardwareAudioCard).mockResolvedValue(
+      audioCardDetail({ managed_by: 'bridge', endpoints: [] }) as never,
+    )
+
+    await openCard()
+
+    expect(node('[data-profile-select]')).toBeNull()
+    expect(node('[data-profile-managed]')?.textContent).toContain(en.hardware.audio.profileManagedByConnection)
   })
 
   it('disables an unavailable profile and says why', async () => {
@@ -220,8 +247,28 @@ describe('Hardware page: output ports', () => {
     await flushPromises()
 
     expect(node<HTMLSelectElement>('[data-port-select]')!.value).toBe('hdmi-output-0')
+    // The toast names the port the way the confirm did: its description.
+    const toasts = useNotificationStore().toasts.map((entry) => entry.message)
+    expect(
+      toasts.some((message) =>
+        message.includes(en.hardware.audio.portSwitched.replace('{name}', audioSink().description).replace('{port}', 'HDMI output')),
+      ),
+    ).toBe(true)
     expect(getHardwareAudioSink).toHaveBeenCalledOnce()
     expect(getHardware).toHaveBeenCalledOnce()
+  })
+
+  it('shows the pre-write port and says the read is stale when the refresh failed', async () => {
+    vi.mocked(setSinkPort).mockResolvedValue(
+      audioEndpointDetail({ stale: true, as_of: '2026-10-31T11:02:00Z' }) as never,
+    )
+
+    await openSink()
+    pick('[data-port-select]', 'hdmi-output-0')
+    await flushPromises()
+
+    expect(node('[data-stale-detail]')).not.toBeNull()
+    expect(node<HTMLSelectElement>('[data-port-select]')!.value).toBe(PORTS[0]!.name)
   })
 
   it('shows an invalid_port refusal with the server code', async () => {

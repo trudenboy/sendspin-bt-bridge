@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from dataclasses import replace
-from typing import Any
+from typing import Any, Literal
 
 from sendspin_bridge.application import hardware as hardware_uc
 from sendspin_bridge.application.errors import UseCaseError, require_audio_name
@@ -115,14 +115,31 @@ def _refused(action: str, name: str) -> UseCaseError:
     )
 
 
-def _after_write() -> None:
+async def _after_write() -> None:
     """Drop the inventory cache so the next read shows what the write changed.
 
     Without this the page refreshes within the two-second TTL and gets the state
     from before the command: the Default badge stays on the old sink right after
-    the toast says it moved.
+    the toast says it moved.  ``clear_cache`` takes the reader lock, so it runs
+    in a worker thread: a request handler must never wait on it on the loop.
     """
-    clear_cache()
+    await asyncio.to_thread(clear_cache)
+
+
+def _unread_list(read: InventoryRead, kind: Literal["cards", "sinks"]) -> UseCaseError | None:
+    """The 503 for a list that could not be read, instead of a 404 that invents absence.
+
+    An empty list says the server has nothing; a failed list says the server
+    could not answer.  Only the first one makes a name unknown.
+    """
+    reason = hardware_uc.audio_list_failure(read.audio, kind)
+    if reason is None:
+        return None
+    return UseCaseError(
+        503,
+        "hardware_unavailable",
+        f"The audio server answered, but its {kind} list could not be read: {reason}.",
+    )
 
 
 async def _inventory_or_unsupported() -> InventoryRead:
@@ -151,6 +168,9 @@ async def _require_sink(wanted: str) -> LocalSink:
     read = await _inventory_or_unsupported()
     sink = next((item for item in read.audio.sinks if item.name == wanted), None)
     if sink is None:
+        failed = _unread_list(read, "sinks")
+        if failed is not None:
+            raise failed
         raise UseCaseError(404, "entity_not_found", f"Unknown audio sink: {wanted}")
     return LocalSink(
         name=sink.name,
@@ -175,7 +195,7 @@ async def set_sink_volume(name: str, volume: int) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.set_sink_volume, wanted, volume):
         raise _refused("a volume change", wanted)
-    _after_write()
+    await _after_write()
     return SinkStateOut(name=wanted, volume=volume, muted=sink.muted, state=sink.state)
 
 
@@ -187,7 +207,7 @@ async def set_sink_mute(name: str, muted: bool) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.set_sink_mute, wanted, muted):
         raise _refused("a mute change", wanted)
-    _after_write()
+    await _after_write()
     return SinkStateOut(name=wanted, volume=sink.volume, muted=muted, state=sink.state)
 
 
@@ -199,7 +219,7 @@ async def set_default_sink(name: str) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.set_default_sink, wanted):
         raise _refused("a default-sink change", wanted)
-    _after_write()
+    await _after_write()
     return SinkStateOut(name=wanted, volume=sink.volume, muted=sink.muted, state=sink.state)
 
 
@@ -210,7 +230,7 @@ async def _set_suspended(name: str, suspend: bool) -> SinkStateOut:
 
     if not await asyncio.to_thread(pulse.suspend_sink, wanted, suspend):
         raise _refused("a suspend change", wanted)
-    _after_write()
+    await _after_write()
     state = "suspended" if suspend else sink.state
     return SinkStateOut(name=wanted, volume=sink.volume, muted=sink.muted, state=state)
 
@@ -225,20 +245,24 @@ async def resume_sink(name: str) -> SinkStateOut:
     return await _set_suspended(name, False)
 
 
-async def _read_after_write(fallback: InventoryRead) -> tuple[InventoryRead, dict[str, Any]]:
-    """The state after a command, plus the config the detail joins.
+async def _read_after_write(fallback: InventoryRead) -> tuple[InventoryRead, dict[str, Any], bool]:
+    """The state after a command, the config the detail joins, and whether it refreshed.
 
     The cache was just dropped, so this is a fresh read (and the first one to see
     what the command changed).  When the refresh cannot answer at all the
     pre-write read is used instead: the command already succeeded, and a failed
-    follow-up read must not turn an audible action into an error.
+    follow-up read must not turn an audible action into an error.  ``refreshed``
+    is False exactly then, so the caller can say the detail is stale and must
+    not claim the new state from a read taken before the write.
     """
     try:
         read = await asyncio.to_thread(read_inventory)
     except HardwareUnavailable:
-        read = fallback
+        read, refreshed = fallback, False
+    else:
+        refreshed = True
     config = await asyncio.to_thread(load_config)
-    return read, config
+    return read, config, refreshed
 
 
 async def set_card_profile(card_name: str, profile: str) -> CardDetail:
@@ -246,13 +270,25 @@ async def set_card_profile(card_name: str, profile: str) -> CardDetail:
 
     ``profile`` must be one the card itself lists: an operator picking from the
     hardware page can only choose one of those, and anything else is a bad
-    request rather than something the server should be asked to reject.
+    request rather than something the server should be asked to reject.  A card
+    the bridge's Bluetooth link manages is refused: its profile follows the
+    connection, and a second writer would only fight it (``off`` silences the
+    speaker until the next connect).
     """
     wanted = require_audio_name(card_name, field="card name")
     read = await _inventory_or_unsupported()
     card = next((item for item in read.audio.cards if item.name == wanted), None)
     if card is None:
+        failed = _unread_list(read, "cards")
+        if failed is not None:
+            raise failed
         raise UseCaseError(404, "entity_not_found", f"Unknown audio card: {card_name}")
+    if hardware_uc.managed_by(card) == "bridge":
+        raise UseCaseError(
+            409,
+            "not_supported_for_backend",
+            f"The bridge manages this card's profile ({wanted}); the Bluetooth connection chooses it.",
+        )
     if profile not in {item.name for item in card.profiles}:
         raise UseCaseError(
             400,
@@ -263,10 +299,18 @@ async def set_card_profile(card_name: str, profile: str) -> CardDetail:
 
     if not await asyncio.to_thread(pulse.set_card_profile, wanted, profile):
         raise _refused("a profile change", wanted)
-    _after_write()
-    fresh, config = await _read_after_write(read)
-    current = next((item for item in fresh.audio.cards if item.name == wanted), card)
-    return hardware_uc.build_card_detail(replace(current, active_profile=profile), fresh.audio, config)
+    await _after_write()
+    fresh, config, refreshed = await _read_after_write(read)
+    current = next((item for item in fresh.audio.cards if item.name == wanted), None)
+    confirmed = refreshed and current is not None
+    return hardware_uc.build_card_detail(
+        current if current is not None else card,
+        fresh.audio,
+        config,
+        as_of=fresh.as_of,
+        stale=fresh.stale or not confirmed,
+        active_profile=profile if confirmed else None,
+    )
 
 
 async def set_sink_port(sink_name: str, port: str) -> EndpointDetail:
@@ -281,6 +325,9 @@ async def set_sink_port(sink_name: str, port: str) -> EndpointDetail:
     read = await _inventory_or_unsupported()
     facts = next((item for item in read.audio.sinks if item.name == wanted), None)
     if facts is None:
+        failed = _unread_list(read, "sinks")
+        if failed is not None:
+            raise failed
         raise UseCaseError(404, "entity_not_found", f"Unknown audio sink: {sink_name}")
     card = hardware_uc.endpoint_card(facts, read.audio.cards)
     chosen = next((item for item in card.ports if item.name == port), None) if card is not None else None
@@ -294,12 +341,17 @@ async def set_sink_port(sink_name: str, port: str) -> EndpointDetail:
 
     if not await asyncio.to_thread(pulse.set_sink_port, wanted, port):
         raise _refused("a port change", wanted)
-    _after_write()
-    fresh, config = await _read_after_write(read)
-    current = next((item for item in fresh.audio.sinks if item.name == wanted), facts)
+    await _after_write()
+    fresh, config, refreshed = await _read_after_write(read)
+    current = next((item for item in fresh.audio.sinks if item.name == wanted), None)
+    confirmed = refreshed and current is not None
+    shown = current if current is not None else facts
     availability = {True: "available", False: "not available", None: "availability unknown"}[chosen.available]
     return hardware_uc.build_endpoint_detail(
-        replace(current, active_port=port, active_port_available=availability),
+        replace(shown, active_port=port, active_port_available=availability) if confirmed else shown,
         fresh.audio,
         config,
+        as_of=fresh.as_of,
+        stale=fresh.stale or not confirmed,
+        active_port=port if confirmed else None,
     )

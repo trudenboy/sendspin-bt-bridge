@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Collection
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal
 
 from sendspin_bridge.application import source as source_uc
@@ -341,7 +342,46 @@ def _card_summary(card: LocalCard, endpoints: list[EndpointFacts]) -> CardSummar
         profile_count=len(card.profiles),
         port_count=len(card.ports),
         endpoint_refs=[EndpointRef(kind=facts.kind, name=facts.name) for facts in _card_endpoints(card, endpoints)],
+        managed_by=managed_by(card),
     )
+
+
+def managed_by(card: LocalCard) -> Literal["bridge"] | None:
+    """Who chooses this card's profile: the bridge's Bluetooth link, or the operator.
+
+    This is a fact about the card itself, never about its endpoints: PipeWire
+    does not print a card's ``Sinks:``/``Sources:`` lists, so a ``bluez_card``
+    there has no endpoints to classify and the sink's owner is the speaker
+    link.  BlueZ names its cards ``bluez_card.<MAC>`` on both servers; its
+    classic PulseAudio driver (``module-bluez5-device.c``) is the second tell.
+    """
+    if card.name.startswith("bluez_card."):
+        return "bridge"
+    if "bluez" in (card.driver or "").lower():
+        return "bridge"
+    return None
+
+
+_AUDIO_LIST_KINDS = frozenset({"cards", "sinks", "sources"})
+
+
+def audio_list_failure(audio: AudioFacts, kind: Literal["cards", "sinks", "sources"]) -> str | None:
+    """Why *kind*'s list is unknown, or ``None`` when it was read (even if empty).
+
+    The reader reports a list it could not read in ``AudioFacts.unavailable``;
+    an empty list with no entry there is a truthful "nothing is there".  A 404
+    for a name that was never read would invent an answer the server did not
+    give.  An entry that names no list at all (the whole audio read failed) is
+    evidence against every list.
+    """
+    prefix = f"{kind}:"
+    reasons: list[str] = []
+    for entry in audio.unavailable:
+        if entry.startswith(prefix):
+            reasons.append(entry[len(prefix) :].strip())
+        elif entry.split(":", 1)[0] not in _AUDIO_LIST_KINDS:
+            reasons.append(entry.strip())
+    return "; ".join(reason for reason in reasons if reason) or None
 
 
 def _card_profile(profile: Any) -> CardProfile:
@@ -386,12 +426,24 @@ def endpoint_card(facts: EndpointFacts, cards: tuple[LocalCard, ...]) -> LocalCa
     return None
 
 
-def build_card_detail(card: LocalCard, audio: AudioFacts, config: dict[str, Any]) -> CardDetail:
+def build_card_detail(
+    card: LocalCard,
+    audio: AudioFacts,
+    config: dict[str, Any],
+    *,
+    as_of: str,
+    stale: bool,
+    active_profile: str | None = None,
+) -> CardDetail:
     """A card's detail from one read, joined with the config (pure).
 
     Shared by the read route and by the profile command, so a command's
-    response is the same shape a second read would have produced.
+    response is the same shape a second read would have produced.  The command
+    passes the profile it just set; the read passes nothing, so the card's own
+    ``active_profile`` stands.
     """
+    if active_profile is not None:
+        card = replace(card, active_profile=active_profile)
     _players, _areas, sink_players = _config_view(config)
     endpoints = _audio_endpoints(audio)
     return CardDetail(
@@ -403,18 +455,38 @@ def build_card_detail(card: LocalCard, audio: AudioFacts, config: dict[str, Any]
         endpoints=[
             _endpoint_summary(facts, sink_players, audio.default_sink) for facts in _card_endpoints(card, endpoints)
         ],
+        as_of=as_of,
+        stale=stale,
     )
 
 
-def build_endpoint_detail(facts: EndpointFacts, audio: AudioFacts, config: dict[str, Any]) -> EndpointDetail:
-    """A sink's or source's detail from one read, joined with the config (pure)."""
+def build_endpoint_detail(
+    facts: EndpointFacts,
+    audio: AudioFacts,
+    config: dict[str, Any],
+    *,
+    as_of: str,
+    stale: bool,
+    active_port: str | None = None,
+) -> EndpointDetail:
+    """A sink's or source's detail from one read, joined with the config (pure).
+
+    A port command passes the port it just set: the read behind the answer can
+    still mark the old port active (or be the read from before the write), so
+    the marker is rebuilt from the choice rather than copied from that read.
+    """
     _players, _areas, sink_players = _config_view(config)
     card = endpoint_card(facts, audio.cards)
+    ports = card.ports if card is not None else ()
+    if active_port is not None:
+        ports = tuple(replace(port, active=port.name == active_port) for port in ports)
     return EndpointDetail(
         **_endpoint_summary(facts, sink_players, audio.default_sink).model_dump(),
         identifiers=dict(facts.identifiers),
-        ports=[_card_port(port) for port in card.ports] if card is not None else [],
+        ports=[_card_port(port) for port in ports],
         monitor_of=facts.monitor_of,
+        as_of=as_of,
+        stale=stale,
     )
 
 
@@ -493,8 +565,11 @@ async def audio_card(name: str) -> CardDetail:
     read, config = await _read()
     card = next((item for item in read.audio.cards if item.name == wanted), None)
     if card is None:
+        reason = audio_list_failure(read.audio, "cards")
+        if reason is not None:
+            raise unavailable(f"The card list could not be read: {reason}", code="hardware_unavailable")
         raise not_found(f"Unknown audio card: {name}", code="entity_not_found")
-    return build_card_detail(card, read.audio, config)
+    return build_card_detail(card, read.audio, config, as_of=read.as_of, stale=read.stale)
 
 
 async def _audio_endpoint(kind: Literal["sink", "source"], name: str) -> EndpointDetail:
@@ -503,8 +578,12 @@ async def _audio_endpoint(kind: Literal["sink", "source"], name: str) -> Endpoin
     pool = read.audio.sinks if kind == "sink" else read.audio.sources
     facts = next((item for item in pool if item.name == wanted), None)
     if facts is None:
+        list_kind: Literal["sinks", "sources"] = "sinks" if kind == "sink" else "sources"
+        reason = audio_list_failure(read.audio, list_kind)
+        if reason is not None:
+            raise unavailable(f"The {kind} list could not be read: {reason}", code="hardware_unavailable")
         raise not_found(f"Unknown audio {kind}: {name}", code="entity_not_found")
-    return build_endpoint_detail(facts, read.audio, config)
+    return build_endpoint_detail(facts, read.audio, config, as_of=read.as_of, stale=read.stale)
 
 
 async def audio_sink(name: str) -> EndpointDetail:
