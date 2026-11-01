@@ -179,6 +179,16 @@ def test_capture_falls_back_to_a_pactl_bluez_source():
     assert capture.node == hardware_audio.BLUEZ_SOURCE
 
 
+def test_a_quiet_pulseaudio_host_blames_the_phone_not_wpctl():
+    sources = [source for source in hardware_audio.sources() if not source.name.startswith("bluez_source")]
+
+    quiet = inventory.classify_capture(None, sources, wpctl_available=False, audio_server="pulseaudio")
+
+    assert quiet.kind == "unavailable"
+    assert quiet.reason and "bluez_source" in quiet.reason and "not streaming" in quiet.reason
+    assert "wpctl" not in quiet.reason
+
+
 def test_capture_absence_is_unavailable_with_a_reason():
     sources = [source for source in hardware_audio.sources() if not source.name.startswith("bluez_source")]
 
@@ -216,9 +226,9 @@ def test_capture_facts_carries_a_wpctl_timeout_distinctly(monkeypatch):
 
     monkeypatch.setattr(inventory, "_wpctl_available", lambda: True)
     monkeypatch.setattr(inventory, "_wpctl_status", timed_out)
-    timeout = asyncio.run(inventory._capture_facts(sources, "PulseAudio"))
+    timeout = asyncio.run(inventory._capture_facts(sources, "PipeWire"))
     monkeypatch.setattr(inventory, "_wpctl_status", ran_with_no_node)
-    no_node = asyncio.run(inventory._capture_facts(sources, "PulseAudio"))
+    no_node = asyncio.run(inventory._capture_facts(sources, "PipeWire"))
 
     assert timeout.kind == "unavailable" and timeout.reason
     assert "wpctl" in timeout.reason and "not streaming" not in timeout.reason
@@ -397,7 +407,23 @@ def test_the_read_model_carries_the_audio_facts(installed_bluez, monkeypatch):
     ]
 
 
-def test_capture_absence_is_a_degraded_audio_section(installed_bluez, monkeypatch):
+def test_a_quiet_host_with_capture_tools_is_not_degraded(installed_bluez, monkeypatch):
+    facts = hardware_audio.facts()
+    audio = inventory.AudioFacts(
+        cards=facts.cards,
+        sinks=facts.sinks,
+        sources=facts.sources,
+        capture=inventory.CaptureFacts(kind="unavailable", reason="No bluez_source is present; the phone is not streaming."),
+    )
+    _use_audio(monkeypatch, audio)
+
+    read = _read()
+
+    codes = {section.code for section in read.degraded}
+    assert "capture_unavailable" not in codes
+
+
+def test_a_host_that_cannot_capture_degrades_the_audio_section(installed_bluez, monkeypatch):
     facts = hardware_audio.facts()
     audio = inventory.AudioFacts(
         cards=facts.cards,
@@ -406,6 +432,7 @@ def test_capture_absence_is_a_degraded_audio_section(installed_bluez, monkeypatc
         capture=inventory.CaptureFacts(kind="unavailable", reason="No bluez_input node is present."),
     )
     _use_audio(monkeypatch, audio)
+    monkeypatch.setattr(inventory, "probe_capture", lambda _name=None: False)
 
     read = _read()
 

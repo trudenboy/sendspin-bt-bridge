@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.3] - 2026-11-01
+
+### Fixed
+
+- The Hardware page no longer reports the phone input as unavailable on a host that can capture: a phone that is not streaming is a waiting source, not a broken capture. Only a host without the recording tools shows the unavailable banner.
+- On Home Assistant OS the capture reason names the missing Bluetooth source instead of blaming PipeWire's `wpctl`, which that host does not use.
+
 ## [3.2.0-beta.2] - 2026-11-01
 
 ### Added

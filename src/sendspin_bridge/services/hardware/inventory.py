@@ -314,11 +314,14 @@ def classify_capture(
     sources: Iterable[LocalSource],
     *,
     wpctl_available: bool,
+    audio_server: str = "pipewire",
 ) -> CaptureFacts:
     """Find the phone's capture node, preferring the PipeWire node over a PA source.
 
     Neither existing is a truthful "unavailable" with a reason, not an error:
-    a phone that is not streaming is not a fault.
+    a phone that is not streaming is not a fault.  The reason names the backend the
+    host actually runs — a PulseAudio host has no ``wpctl`` by design, so blaming that
+    would describe every quiet HAOS host as broken.
     """
     from sendspin_bridge.services.source.capture.pipewire import find_bluez_input
 
@@ -328,7 +331,9 @@ def classify_capture(
     for source in sources:
         if _BLUEZ_SOURCE_RE.match(source.name):
             return CaptureFacts(kind="pulse_source", node=source.name)
-    if not wpctl_available:
+    if audio_server == "pulseaudio":
+        reason = "No bluez_source is present; the phone is not streaming into the bridge yet."
+    elif not wpctl_available:
         reason = "wpctl is not installed, so no bluez_input node can be read; no bluez_source is present either."
     elif wpctl_status is None:
         reason = (
@@ -656,7 +661,12 @@ async def _capture_facts(sources: Collection[LocalSource], server_name: str) -> 
     # about the PipeWire node even on a PulseAudio host.
     wpctl_available = _wpctl_available()
     status = await _wpctl_status() if wpctl_available else None
-    return classify_capture(status, sources, wpctl_available=wpctl_available)
+    return classify_capture(
+        status,
+        sources,
+        wpctl_available=wpctl_available,
+        audio_server=classify_audio_server(server_name),
+    )
 
 
 async def _read_audio_async(server_name: str) -> AudioFacts:
@@ -760,7 +770,9 @@ def _assemble(
                 + "; ".join(audio_facts.unavailable),
             )
         )
-    elif audio_facts.capture.kind == "unavailable":
+    elif audio_facts.capture.kind == "unavailable" and not capabilities.capture.available:
+        # A phone that is not streaming is a quiet host, not a broken one: the source strip
+        # says "waiting for the phone".  Only a host that cannot capture at all degrades.
         entries.append(
             Degraded(
                 "audio",
