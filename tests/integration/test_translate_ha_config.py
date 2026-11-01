@@ -184,6 +184,27 @@ def test_pulse_sink_reset_on_start_survives_addon_restart(tmp_path):
     assert cfg["PULSE_SINK_RESET_ON_START"] is True
 
 
+def test_sendspin_source_choice_survives_addon_restart(tmp_path):
+    """The source is switched from the Hardware page; options.json has no key for it."""
+    _write_json(tmp_path / "config.json", {"SENDSPIN_SOURCE": True})
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    assert _read_json(tmp_path / "config.json")["SENDSPIN_SOURCE"] is True
+
+
+def test_sendspin_source_option_overrides_the_saved_choice(tmp_path):
+    _write_json(tmp_path / "config.json", {"SENDSPIN_SOURCE": True})
+    _write_json(tmp_path / "options.json", _minimal_options(sendspin_source=False))
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    assert _read_json(tmp_path / "config.json")["SENDSPIN_SOURCE"] is False
+
+
 def test_sendspin_pairing_defaults_false_without_persisted_web_config(tmp_path):
     _write_json(tmp_path / "options.json", _minimal_options())
 

@@ -216,6 +216,13 @@ def main() -> None:
     except Exception as exc:
         logger.warning("Skipping preservation of existing config settings: %s", exc)
 
+    # The phone source is switched from the Hardware page, and add-on options do
+    # not carry that choice: a restart must not quietly switch it back off.
+    if "sendspin_source" in opts:
+        config["SENDSPIN_SOURCE"] = bool(opts["sendspin_source"])
+    elif isinstance(existing.get("SENDSPIN_SOURCE"), bool):
+        config["SENDSPIN_SOURCE"] = existing["SENDSPIN_SOURCE"]
+
     # Speakers: once config.json holds v6 ``players`` it is the only source of
     # truth and the add-on's ``bluetooth_devices`` option is ignored.  Otherwise
     # (first start after upgrade / fresh install) hand the legacy list to the
