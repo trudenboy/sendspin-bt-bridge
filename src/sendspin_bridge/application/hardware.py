@@ -38,6 +38,7 @@ from sendspin_bridge.application.models.hardware import (
     RssiSummary,
     SourceCapture,
     SourceFeed,
+    SourceMa,
 )
 from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
@@ -235,14 +236,9 @@ def _phone_mac(node: str | None, known_macs: Collection[str]) -> str | None:
     return None
 
 
-def _source_state(view: source_uc.SourceStatus) -> Literal["off", "waiting", "streaming", "error"]:
-    if view.error:
-        return "error"
-    if view.streaming:
-        return "streaming"
-    if view.enabled:
-        return "waiting"
-    return "off"
+def _source_state(view: source_uc.SourceStatus) -> Literal["off", "pairing", "waiting", "streaming", "error"]:
+    """The source's own state name; the model keeps the same literals."""
+    return view.state  # type: ignore[return-value]
 
 
 def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collection[str]) -> SourceFeed | None:
@@ -258,11 +254,18 @@ def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collecti
     view = source_uc.status(config)
     return SourceFeed(
         enabled=view.enabled,
-        port=view.port,
         state=_source_state(view),
         phone_mac=_phone_mac(view.phone, known_macs),
         capture=SourceCapture(kind=audio.capture.kind, node=audio.capture.node),
-        relays=list(view.attached_devices),
+        ma=SourceMa(
+            server=view.server,
+            connected=view.ma_connected,
+            paired=view.ma_paired,
+            pairing_required=view.ma_pairing_required,
+            pairing_code=view.ma_pairing_code,
+            pairing_seconds_left=view.ma_pairing_seconds_left,
+            error=view.ma_error,
+        ),
         error=view.error,
     )
 

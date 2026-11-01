@@ -72,9 +72,15 @@ to the device, `input` when the device sends audio to the bridge. One device can
 hold both at once. The role is derived from evidence — an active transport, a
 capture node, a source — never from the spelling of a sink name.
 
-**Source feed** — the phone→bridge Sendspin source: one phone, one capture node,
-and the players it is armed to feed. It is not a Player and not a Device; it has
-no playback of its own.
+**Source feed** — the phone→bridge→Music Assistant Sendspin source: one phone,
+one capture node, and the source-client link to Music Assistant. The bridge
+captures and forwards; Music Assistant owns playback and routing. It is not a
+Player and not a Device; it has no playback of its own.
+
+**Music Assistant pairing code** — the eight digits shown on Hardware and typed
+into Music Assistant to pair the bridge's source client. Separate from the
+phone's Bluetooth pairing: the phone pairs with the bridge, the bridge pairs
+with Music Assistant.
 
 **Daemon** — the per-speaker subprocess that runs the Sendspin client.
 One speaker, one daemon, one Player.

@@ -378,11 +378,7 @@ class BridgeConfig(BaseModel):
     """
     SENDSPIN_SOURCE: bool | None = False
     """
-    Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source other players can play (#563). Needs PipeWire for the capture. Off by default.
-    """
-    SENDSPIN_SOURCE_PORT: int | None = Field(8940, ge=1, le=65535)
-    """
-    The port the source's Sendspin server listens on. It must differ from the players' own listen ports (they start at 8928).
+    Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default.
     """
     EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE: bool | None = True
     """

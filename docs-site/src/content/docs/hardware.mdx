@@ -76,16 +76,30 @@ connection decides it, and the panel says so.
 
 ## The phone source
 
-When the Sendspin source is enabled, a strip at the top shows whether a phone is
-connected, what it is sending, and which players are armed to play it. It has
-four states — off, waiting for a phone, streaming, and error — and an error names
-the cause (for example a port already in use) with a next step.
+The source makes the bridge a **Sendspin source client** of Music Assistant: a phone
+streams into the bridge over Bluetooth, the bridge captures that audio, and Music
+Assistant receives it as a source it can play on any player — including the speakers
+this bridge drives. The bridge does not play the phone on a speaker itself; that is
+Music Assistant's routing.
 
-Pairing a phone opens a two-minute window; the strip counts it down and can stop
-it early. When the source is off entirely, the strip says where it is enabled
-(Settings → Music Assistant) instead of showing controls that cannot work.
+There are two pairings, and the strip names both. First, pair the phone over Bluetooth
+with the two-minute window below the Music Assistant block. Second, pair the bridge with
+Music Assistant: enabling the source shows an eight-digit code, and the same code is
+entered when the source is added in Music Assistant. The code and the pairing survive a
+restart, so it is asked once; "Forget pairing" drops it and opens a fresh window.
 
-![The phone source strip waiting for a phone, with the pairing action and the capture node](/sendspin-bt-bridge/screenshots/screenshot-hardware-source.png)
+The source has five states — off, waiting for the code, waiting for the phone,
+streaming, and error — and every error names its cause and next step (`ma_unreachable`,
+`ma_pairing_required`, `ma_source_unsupported`, `capture_unavailable`). The strip also
+shows which audio server captures the phone: PipeWire (`bluez_input.*`, Docker and LXC
+hosts) or PulseAudio (`bluez_source.*`, Home Assistant OS), and the capture node under
+the technical details.
+
+Capturing needs the host's recording tools: `wpctl` on PipeWire, or `pactl` and
+`parecord` on PulseAudio. A host without them refuses to enable the source instead of
+showing a stream that never starts.
+
+![The phone source strip: the Music Assistant source-client link and the phone's Bluetooth pairing window](/sendspin-bt-bridge/screenshots/screenshot-hardware-source.png)
 
 ## When a section is empty
 
@@ -94,7 +108,7 @@ other:
 
 - **No devices** means the bridge looked and found none.
 - **A banner with a reason** means the bridge could not look: no D-Bus, no audio
-  server, or the phone capture needs PipeWire nodes. The banner names the reason
+  server, or the phone capture needs the host's recording tools. The banner names the reason
   and the next step.
 - **A “this bridge does not report audio” note** appears when an older bridge
   serves the page and the audio section is simply absent.

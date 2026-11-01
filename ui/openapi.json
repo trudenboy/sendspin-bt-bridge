@@ -2322,23 +2322,8 @@
               }
             ],
             "default": false,
-            "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source other players can play (#563). Needs PipeWire for the capture. Off by default.",
+            "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default.",
             "title": "Sendspin Source"
-          },
-          "SENDSPIN_SOURCE_PORT": {
-            "anyOf": [
-              {
-                "maximum": 65535.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": 8940,
-            "description": "The port the source's Sendspin server listens on. It must differ from the players' own listen ports (they start at 8928).",
-            "title": "Sendspin Source Port"
           },
           "SESSION_TIMEOUT_HOURS": {
             "anyOf": [
@@ -8603,19 +8588,11 @@
         "type": "object"
       },
       "SendspinSourceStatus": {
-        "description": "A phone streaming into the bridge, offered to Sendspin players as a live source.",
+        "description": "The phone-to-Music-Assistant source: capture, pairing and connection state.",
         "properties": {
-          "attached_devices": {
-            "description": "Speakers playing the source instead of Music Assistant.",
-            "items": {
-              "type": "string"
-            },
-            "title": "Attached Devices",
-            "type": "array"
-          },
           "enabled": {
             "default": false,
-            "description": "The source server is running.",
+            "description": "The source client is enabled by the operator.",
             "title": "Enabled",
             "type": "boolean"
           },
@@ -8628,8 +8605,56 @@
                 "type": "null"
               }
             ],
-            "description": "Why the source is off: port_in_use.",
+            "description": "A terminal source error (capture_unavailable, …).",
             "title": "Error"
+          },
+          "ma_connected": {
+            "default": false,
+            "description": "The source client is admitted by Music Assistant.",
+            "title": "Ma Connected",
+            "type": "boolean"
+          },
+          "ma_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable code: ma_unreachable, ma_pairing_rejected, …",
+            "title": "Ma Error"
+          },
+          "ma_paired": {
+            "default": false,
+            "description": "A long-term pairing PSK is stored.",
+            "title": "Ma Paired",
+            "type": "boolean"
+          },
+          "ma_pairing_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The code, while the pairing window is open.",
+            "title": "Ma Pairing Code"
+          },
+          "ma_pairing_required": {
+            "default": false,
+            "description": "A code must be entered in Music Assistant.",
+            "title": "Ma Pairing Required",
+            "type": "boolean"
+          },
+          "ma_pairing_seconds_left": {
+            "default": 0,
+            "description": "Seconds the MA pairing window stays open.",
+            "title": "Ma Pairing Seconds Left",
+            "type": "integer"
           },
           "pairing_adapters": {
             "description": "Adapters the pairing window opened.",
@@ -8641,7 +8666,7 @@
           },
           "pairing_seconds_left": {
             "default": 0,
-            "description": "Seconds the phone-pairing window stays open (0: closed).",
+            "description": "Seconds the phone-pairing window stays open.",
             "title": "Pairing Seconds Left",
             "type": "integer"
           },
@@ -8657,41 +8682,66 @@
             "description": "The capture node of the phone that is playing, if any.",
             "title": "Phone"
           },
-          "players": {
-            "default": 0,
-            "description": "Sendspin players connected to the source.",
-            "title": "Players",
-            "type": "integer"
-          },
-          "port": {
+          "phone_mac": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The port players connect to (ws://<bridge>:port/sendspin).",
-            "title": "Port"
+            "description": "That phone's address, when the node names it.",
+            "title": "Phone Mac"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Sendspin server URL the source dials.",
+            "title": "Server"
+          },
+          "state": {
+            "default": "off",
+            "description": "off | pairing | waiting | streaming | error.",
+            "enum": [
+              "off",
+              "pairing",
+              "waiting",
+              "streaming",
+              "error"
+            ],
+            "title": "State",
+            "type": "string"
           },
           "streaming": {
             "default": false,
-            "description": "A player is connected and the phone's audio is being pushed.",
+            "description": "The phone's audio is reaching Music Assistant.",
             "title": "Streaming",
             "type": "boolean"
           }
         },
         "required": [
           "enabled",
-          "port",
+          "state",
           "phone",
-          "players",
+          "phone_mac",
           "streaming",
-          "error",
+          "server",
+          "ma_connected",
+          "ma_paired",
+          "ma_pairing_required",
+          "ma_pairing_code",
+          "ma_pairing_seconds_left",
+          "ma_error",
           "pairing_seconds_left",
           "pairing_adapters",
-          "attached_devices"
+          "error"
         ],
         "title": "SendspinSourceStatus",
         "type": "object"
@@ -9281,7 +9331,7 @@
         "type": "object"
       },
       "SourceFeed": {
-        "description": "The single Sendspin source (phone → bridge): one phone, one capture node, its relays.",
+        "description": "The single Sendspin source: one phone, its capture, and the link to Music Assistant.",
         "properties": {
           "capture": {
             "$ref": "#/components/schemas/SourceCapture",
@@ -9289,7 +9339,7 @@
           },
           "enabled": {
             "default": false,
-            "description": "The source server is running.",
+            "description": "The source client is enabled by the operator.",
             "title": "Enabled",
             "type": "boolean"
           },
@@ -9304,6 +9354,10 @@
             ],
             "title": "Error"
           },
+          "ma": {
+            "$ref": "#/components/schemas/SourceMa",
+            "description": "The link to the Music Assistant server."
+          },
           "phone_mac": {
             "anyOf": [
               {
@@ -9313,33 +9367,15 @@
                 "type": "null"
               }
             ],
-            "description": "The paired peer currently streaming, if any.",
+            "description": "The paired phone currently streaming, if any.",
             "title": "Phone Mac"
           },
-          "port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The port players connect to.",
-            "title": "Port"
-          },
-          "relays": {
-            "description": "Player ids armed to play the phone.",
-            "items": {
-              "type": "string"
-            },
-            "title": "Relays",
-            "type": "array"
-          },
           "state": {
-            "description": "off: not running; waiting: running without a phone; streaming: audio is flowing; error: it failed.",
+            "default": "off",
+            "description": "off: disabled; pairing: a code must be entered in MA; waiting: connected without a phone; streaming: the phone's audio is reaching MA; error: it failed.",
             "enum": [
               "off",
+              "pairing",
               "waiting",
               "streaming",
               "error"
@@ -9350,14 +9386,89 @@
         },
         "required": [
           "enabled",
-          "port",
           "state",
           "phone_mac",
           "capture",
-          "relays",
+          "ma",
           "error"
         ],
         "title": "SourceFeed",
+        "type": "object"
+      },
+      "SourceMa": {
+        "description": "The bridge's Sendspin source-client link to the Music Assistant server.",
+        "properties": {
+          "connected": {
+            "default": false,
+            "description": "The source client is admitted by the server.",
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable code: ma_unreachable, ma_pairing_rejected, …",
+            "title": "Error"
+          },
+          "paired": {
+            "default": false,
+            "description": "A long-term pairing PSK is stored.",
+            "title": "Paired",
+            "type": "boolean"
+          },
+          "pairing_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The 8-digit code, while a pairing window is open.",
+            "title": "Pairing Code"
+          },
+          "pairing_required": {
+            "default": false,
+            "description": "No PSK: the operator must enter a code in MA.",
+            "title": "Pairing Required",
+            "type": "boolean"
+          },
+          "pairing_seconds_left": {
+            "default": 0,
+            "description": "Seconds the MA pairing window stays open.",
+            "title": "Pairing Seconds Left",
+            "type": "integer"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Sendspin server URL the source dials.",
+            "title": "Server"
+          }
+        },
+        "required": [
+          "server",
+          "connected",
+          "paired",
+          "pairing_required",
+          "pairing_code",
+          "pairing_seconds_left",
+          "error"
+        ],
+        "title": "SourceMa",
         "type": "object"
       },
       "SourcePairingIn": {
@@ -9369,24 +9480,6 @@
           }
         },
         "title": "SourcePairingIn",
-        "type": "object"
-      },
-      "SourcePlayerIn": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "device_id",
-          "enabled"
-        ],
-        "title": "SourcePlayerIn",
         "type": "object"
       },
       "StartupProgress": {
@@ -12150,6 +12243,87 @@
         ]
       }
     },
+    "/api/v1/bridge/source/ma-pairing": {
+      "delete": {
+        "description": "Drop the stored PSK and open a fresh pairing window.",
+        "operationId": "cancel_ma_pairing_api_v1_bridge_source_ma_pairing_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Forget the Music Assistant pairing",
+        "tags": [
+          "bridge"
+        ]
+      },
+      "post": {
+        "description": "Return the 8-digit code the operator enters in Music Assistant.",
+        "operationId": "open_ma_pairing_api_v1_bridge_source_ma_pairing_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Open Ma Pairing Api V1 Bridge Source Ma Pairing Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Open the Music Assistant pairing window",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
     "/api/v1/bridge/source/pairing": {
       "delete": {
         "operationId": "close_source_pairing_api_v1_bridge_source_pairing_delete",
@@ -12242,62 +12416,6 @@
           }
         },
         "summary": "Open a Bluetooth pairing window for a phone",
-        "tags": [
-          "bridge"
-        ]
-      }
-    },
-    "/api/v1/bridge/source/players": {
-      "post": {
-        "description": "Point a speaker's player at the source, or send it back to Music Assistant (#563).",
-        "operationId": "set_source_player_api_v1_bridge_source_players_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SourcePlayerIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Set Source Player Api V1 Bridge Source Players Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {}
-            },
-            "description": "Client error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {}
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Play the Bluetooth source on a speaker, or stop",
         "tags": [
           "bridge"
         ]

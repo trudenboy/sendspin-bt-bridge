@@ -27,11 +27,6 @@ class SourceEnabledIn(BaseModel):
     enabled: bool
 
 
-class SourcePlayerIn(BaseModel):
-    device_id: str
-    enabled: bool
-
-
 class Health(BaseModel):
     ok: bool = True
 
@@ -103,10 +98,17 @@ async def set_source_enabled(body: SourceEnabledIn) -> dict[str, Any]:
     return await (source.start() if body.enabled else source.stop())
 
 
-@router.post("/bridge/source/players", summary="Play the Bluetooth source on a speaker, or stop")
-async def set_source_player(body: SourcePlayerIn) -> dict[str, Any]:
-    """Point a speaker's player at the source, or send it back to Music Assistant (#563)."""
-    return await source.set_players(body.device_id, body.enabled)
+@router.post("/bridge/source/ma-pairing", summary="Open the Music Assistant pairing window")
+async def open_ma_pairing() -> dict[str, Any]:
+    """Return the 8-digit code the operator enters in Music Assistant."""
+    return await source.open_ma_pairing()
+
+
+@router.delete("/bridge/source/ma-pairing", status_code=204, summary="Forget the Music Assistant pairing")
+async def cancel_ma_pairing() -> Response:
+    """Drop the stored PSK and open a fresh pairing window."""
+    await source.cancel_ma_pairing(forget=True)
+    return Response(status_code=204)
 
 
 @router.post("/bridge/source/pairing", summary="Open a Bluetooth pairing window for a phone")

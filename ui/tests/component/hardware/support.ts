@@ -144,11 +144,18 @@ export const audioEndpointDetail = (overrides: Record<string, unknown> = {}) => 
 /** The source feed, as the aggregate returns it; pass ``source: null`` for the off story. */
 export const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
-  port: 8940,
   state: 'waiting',
   phone_mac: null,
   capture: { kind: 'pipewire_node', node: 'bluez_input.FC_58_FA_EB_08_6C.0' },
-  relays: [],
+  ma: {
+    server: 'ws://ma.local:8927/sendspin',
+    connected: true,
+    paired: true,
+    pairing_required: false,
+    pairing_code: null,
+    pairing_seconds_left: 0,
+    error: null,
+  },
   error: null,
   ...overrides,
 })

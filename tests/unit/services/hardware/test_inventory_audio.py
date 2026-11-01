@@ -26,7 +26,7 @@ PIPEWIRE_SINK = "alsa_output.pci-0000_00_1b.0.analog-stereo"
 def _fresh_reader(monkeypatch):
     inventory.clear_cache()
     monkeypatch.setattr(inventory, "probe_audio_server", lambda: "PulseAudio")
-    monkeypatch.setattr(inventory, "probe_capture", lambda: True)
+    monkeypatch.setattr(inventory, "probe_capture", lambda _name=None: True)
     yield
     inventory.clear_cache()
 
@@ -41,7 +41,8 @@ def clock(monkeypatch):
 def _use_audio(monkeypatch, audio: inventory.AudioFacts) -> list[int]:
     calls: list[int] = []
 
-    async def fake_audio() -> inventory.AudioFacts:
+    async def fake_audio(server_name: str | None = None) -> inventory.AudioFacts:
+        del server_name
         calls.append(1)
         return audio
 
@@ -214,9 +215,9 @@ def test_capture_facts_carries_a_wpctl_timeout_distinctly(monkeypatch):
         return "Audio\n"
 
     monkeypatch.setattr(inventory, "_wpctl_status", timed_out)
-    timeout = asyncio.run(inventory._capture_facts(sources))
+    timeout = asyncio.run(inventory._capture_facts(sources, "PulseAudio"))
     monkeypatch.setattr(inventory, "_wpctl_status", ran_with_no_node)
-    no_node = asyncio.run(inventory._capture_facts(sources))
+    no_node = asyncio.run(inventory._capture_facts(sources, "PulseAudio"))
 
     assert timeout.kind == "unavailable" and timeout.reason
     assert "wpctl" in timeout.reason and "not streaming" not in timeout.reason
@@ -352,7 +353,7 @@ def test_the_audio_composition_reads_sinks_sources_and_cards(installed_bluez, mo
     monkeypatch.setattr(sink_inventory, "_pactl_list_cards_text", cards_text)
     monkeypatch.setattr(inventory, "_wpctl_status", no_wpctl)
 
-    facts = asyncio.run(_REAL_READ_AUDIO_ASYNC())
+    facts = asyncio.run(_REAL_READ_AUDIO_ASYNC("PulseAudio"))
 
     assert [card.name for card in facts.cards] == [PIPEWIRE_CARD]
     assert {sink.name for sink in facts.sinks} == {
@@ -424,7 +425,8 @@ def test_no_audio_server_reads_no_audio(monkeypatch):
 def test_a_server_that_answers_is_read_through_one_event_loop(monkeypatch):
     expected = hardware_audio.facts()
 
-    async def fake_audio() -> inventory.AudioFacts:
+    async def fake_audio(server_name: str | None = None) -> inventory.AudioFacts:
+        del server_name
         return expected
 
     monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
@@ -501,7 +503,7 @@ def test_the_composition_reads_the_default_sink_once(installed_bluez, monkeypatc
     monkeypatch.setattr(inventory, "_wpctl_status", no_wpctl)
     monkeypatch.setattr(pulse, "aget_default_sink_name", default_sink)
 
-    facts = asyncio.run(_REAL_READ_AUDIO_ASYNC())
+    facts = asyncio.run(_REAL_READ_AUDIO_ASYNC("PulseAudio"))
 
     assert facts.default_sink == hardware_audio.USB_SINK
     assert calls == [1]

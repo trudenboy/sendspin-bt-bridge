@@ -38,7 +38,7 @@ def _fresh_inventory(monkeypatch):
             "set_default_sink",
         )
     }
-    source_originals = {name: getattr(source_manager, name) for name in ("start", "stop", "running")}
+    source_originals = {name: getattr(source_manager, name) for name in ("start", "stop", "running", "client")}
     pairing_originals = {name: getattr(source_pairing, name) for name in ("open_window", "close_window")}
     original_source_state = source_state.snapshot()
     original_refresh = inventory._refresh
@@ -85,7 +85,9 @@ def test_demo_mode_serves_audio_and_the_phone_source():
     source = body["source"]
     assert source is not None
     assert source["enabled"] is True
-    assert source["state"] == "waiting"
+    assert source["state"] == "streaming"
+    assert source["ma"]["connected"] is True
+    assert source["ma"]["paired"] is True
     assert source["capture"]["kind"] == "pulse_source"
     assert source["capture"]["node"] == body["audio"]["sources"][0]["name"]
     assert source["phone_mac"] == DEMO_BT_DEVICE_INFO[0]["mac"]

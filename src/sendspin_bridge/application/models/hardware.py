@@ -7,6 +7,9 @@ from typing import Literal
 from pydantic import Field
 
 from sendspin_bridge.application.models.base import ResponseModel
+from sendspin_bridge.application.models.source import SourceCapture as SourceCapture
+from sendspin_bridge.application.models.source import SourceFeed
+from sendspin_bridge.application.models.source import SourceMa as SourceMa
 
 
 class RoleEvidence(ResponseModel):
@@ -208,27 +211,6 @@ class AudioSection(ResponseModel):
     cards: list[CardSummary] = Field(default_factory=list)
     sinks: list[EndpointSummary] = Field(default_factory=list)
     sources: list[EndpointSummary] = Field(default_factory=list)
-
-
-class SourceCapture(ResponseModel):
-    """How the phone's audio is captured, or why it cannot be."""
-
-    kind: Literal["pipewire_node", "pulse_source", "unavailable"]
-    node: str | None = None
-
-
-class SourceFeed(ResponseModel):
-    """The single Sendspin source (phone → bridge): one phone, one capture node, its relays."""
-
-    enabled: bool = Field(default=False, description="The source server is running.")
-    port: int | None = Field(default=None, description="The port players connect to.")
-    state: Literal["off", "waiting", "streaming", "error"] = Field(
-        description="off: not running; waiting: running without a phone; streaming: audio is flowing; error: it failed."
-    )
-    phone_mac: str | None = Field(default=None, description="The paired peer currently streaming, if any.")
-    capture: SourceCapture = Field(description="The phone's capture node, or the reason there is none.")
-    relays: list[str] = Field(default_factory=list, description="Player ids armed to play the phone.")
-    error: str | None = None
 
 
 class CapabilitySet(ResponseModel):

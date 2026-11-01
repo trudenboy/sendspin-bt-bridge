@@ -543,6 +543,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bridge/source/ma-pairing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open the Music Assistant pairing window
+         * @description Return the 8-digit code the operator enters in Music Assistant.
+         */
+        post: operations["open_ma_pairing_api_v1_bridge_source_ma_pairing_post"];
+        /**
+         * Forget the Music Assistant pairing
+         * @description Drop the stored PSK and open a fresh pairing window.
+         */
+        delete: operations["cancel_ma_pairing_api_v1_bridge_source_ma_pairing_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bridge/source/pairing": {
         parameters: {
             query?: never;
@@ -559,26 +583,6 @@ export interface paths {
         post: operations["open_source_pairing_api_v1_bridge_source_pairing_post"];
         /** Close the phone pairing window */
         delete: operations["close_source_pairing_api_v1_bridge_source_pairing_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/bridge/source/players": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Play the Bluetooth source on a speaker, or stop
-         * @description Point a speaker's player at the source, or send it back to Music Assistant (#563).
-         */
-        post: operations["set_source_player_api_v1_bridge_source_players_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3703,16 +3707,10 @@ export interface components {
             SENDSPIN_SERVER?: string | null;
             /**
              * Sendspin Source
-             * @description Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source other players can play (#563). Needs PipeWire for the capture. Off by default.
+             * @description Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default.
              * @default false
              */
             SENDSPIN_SOURCE?: boolean | null;
-            /**
-             * Sendspin Source Port
-             * @description The port the source's Sendspin server listens on. It must differ from the players' own listen ports (they start at 8928).
-             * @default 8940
-             */
-            SENDSPIN_SOURCE_PORT?: number | null;
             /**
              * Session Timeout Hours
              * @description Authenticated session lifetime in hours.
@@ -6268,25 +6266,54 @@ export interface components {
         };
         /**
          * SendspinSourceStatus
-         * @description A phone streaming into the bridge, offered to Sendspin players as a live source.
+         * @description The phone-to-Music-Assistant source: capture, pairing and connection state.
          */
         SendspinSourceStatus: {
             /**
-             * Attached Devices
-             * @description Speakers playing the source instead of Music Assistant.
-             */
-            attached_devices: string[];
-            /**
              * Enabled
-             * @description The source server is running.
+             * @description The source client is enabled by the operator.
              * @default false
              */
             enabled: boolean;
             /**
              * Error
-             * @description Why the source is off: port_in_use.
+             * @description A terminal source error (capture_unavailable, …).
              */
             error: string | null;
+            /**
+             * Ma Connected
+             * @description The source client is admitted by Music Assistant.
+             * @default false
+             */
+            ma_connected: boolean;
+            /**
+             * Ma Error
+             * @description Stable code: ma_unreachable, ma_pairing_rejected, …
+             */
+            ma_error: string | null;
+            /**
+             * Ma Paired
+             * @description A long-term pairing PSK is stored.
+             * @default false
+             */
+            ma_paired: boolean;
+            /**
+             * Ma Pairing Code
+             * @description The code, while the pairing window is open.
+             */
+            ma_pairing_code: string | null;
+            /**
+             * Ma Pairing Required
+             * @description A code must be entered in Music Assistant.
+             * @default false
+             */
+            ma_pairing_required: boolean;
+            /**
+             * Ma Pairing Seconds Left
+             * @description Seconds the MA pairing window stays open.
+             * @default 0
+             */
+            ma_pairing_seconds_left: number;
             /**
              * Pairing Adapters
              * @description Adapters the pairing window opened.
@@ -6294,7 +6321,7 @@ export interface components {
             pairing_adapters: string[];
             /**
              * Pairing Seconds Left
-             * @description Seconds the phone-pairing window stays open (0: closed).
+             * @description Seconds the phone-pairing window stays open.
              * @default 0
              */
             pairing_seconds_left: number;
@@ -6304,19 +6331,25 @@ export interface components {
              */
             phone: string | null;
             /**
-             * Players
-             * @description Sendspin players connected to the source.
-             * @default 0
+             * Phone Mac
+             * @description That phone's address, when the node names it.
              */
-            players: number;
+            phone_mac: string | null;
             /**
-             * Port
-             * @description The port players connect to (ws://<bridge>:port/sendspin).
+             * Server
+             * @description The Sendspin server URL the source dials.
              */
-            port: number | null;
+            server: string | null;
+            /**
+             * State
+             * @description off | pairing | waiting | streaming | error.
+             * @default off
+             * @enum {string}
+             */
+            state: "off" | "pairing" | "waiting" | "streaming" | "error";
             /**
              * Streaming
-             * @description A player is connected and the phone's audio is being pushed.
+             * @description The phone's audio is reaching Music Assistant.
              * @default false
              */
             streaming: boolean;
@@ -6558,40 +6591,78 @@ export interface components {
         };
         /**
          * SourceFeed
-         * @description The single Sendspin source (phone → bridge): one phone, one capture node, its relays.
+         * @description The single Sendspin source: one phone, its capture, and the link to Music Assistant.
          */
         SourceFeed: {
             /** @description The phone's capture node, or the reason there is none. */
             capture: components["schemas"]["SourceCapture"];
             /**
              * Enabled
-             * @description The source server is running.
+             * @description The source client is enabled by the operator.
              * @default false
              */
             enabled: boolean;
             /** Error */
             error: string | null;
+            /** @description The link to the Music Assistant server. */
+            ma: components["schemas"]["SourceMa"];
             /**
              * Phone Mac
-             * @description The paired peer currently streaming, if any.
+             * @description The paired phone currently streaming, if any.
              */
             phone_mac: string | null;
             /**
-             * Port
-             * @description The port players connect to.
-             */
-            port: number | null;
-            /**
-             * Relays
-             * @description Player ids armed to play the phone.
-             */
-            relays: string[];
-            /**
              * State
-             * @description off: not running; waiting: running without a phone; streaming: audio is flowing; error: it failed.
+             * @description off: disabled; pairing: a code must be entered in MA; waiting: connected without a phone; streaming: the phone's audio is reaching MA; error: it failed.
+             * @default off
              * @enum {string}
              */
-            state: "off" | "waiting" | "streaming" | "error";
+            state: "off" | "pairing" | "waiting" | "streaming" | "error";
+        };
+        /**
+         * SourceMa
+         * @description The bridge's Sendspin source-client link to the Music Assistant server.
+         */
+        SourceMa: {
+            /**
+             * Connected
+             * @description The source client is admitted by the server.
+             * @default false
+             */
+            connected: boolean;
+            /**
+             * Error
+             * @description Stable code: ma_unreachable, ma_pairing_rejected, …
+             */
+            error: string | null;
+            /**
+             * Paired
+             * @description A long-term pairing PSK is stored.
+             * @default false
+             */
+            paired: boolean;
+            /**
+             * Pairing Code
+             * @description The 8-digit code, while a pairing window is open.
+             */
+            pairing_code: string | null;
+            /**
+             * Pairing Required
+             * @description No PSK: the operator must enter a code in MA.
+             * @default false
+             */
+            pairing_required: boolean;
+            /**
+             * Pairing Seconds Left
+             * @description Seconds the MA pairing window stays open.
+             * @default 0
+             */
+            pairing_seconds_left: number;
+            /**
+             * Server
+             * @description The Sendspin server URL the source dials.
+             */
+            server: string | null;
         };
         /** SourcePairingIn */
         SourcePairingIn: {
@@ -6600,13 +6671,6 @@ export interface components {
              * @default 120
              */
             seconds?: number;
-        };
-        /** SourcePlayerIn */
-        SourcePlayerIn: {
-            /** Device Id */
-            device_id: string;
-            /** Enabled */
-            enabled: boolean;
         };
         /** StartupProgress */
         StartupProgress: {
@@ -8346,6 +8410,86 @@ export interface operations {
             };
         };
     };
+    open_ma_pairing_api_v1_bridge_source_ma_pairing_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    cancel_ma_pairing_api_v1_bridge_source_ma_pairing_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     open_source_pairing_api_v1_bridge_source_pairing_post: {
         parameters: {
             query?: never;
@@ -8407,52 +8551,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Client error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": unknown;
-                };
-            };
-            /** @description Server error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": unknown;
-                };
-            };
-        };
-    };
-    set_source_player_api_v1_bridge_source_players_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SourcePlayerIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
             };
             /** @description Client error */
             "4XX": {

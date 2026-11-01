@@ -19,38 +19,38 @@ def _clean():
 def test_a_fresh_snapshot_is_off_and_keeps_the_status_keys_unchanged():
     snapshot = state.snapshot()
 
-    assert (snapshot.enabled, snapshot.port, snapshot.phone, snapshot.players, snapshot.streaming) == (
-        False,
-        None,
-        None,
-        0,
-        False,
-    )
+    assert (snapshot.enabled, snapshot.state, snapshot.phone, snapshot.streaming) == (False, "off", None, False)
     assert snapshot.status_dict() == {
         "enabled": False,
-        "port": None,
+        "state": "off",
         "phone": None,
-        "players": 0,
+        "phone_mac": None,
         "streaming": False,
-        "error": None,
+        "server": None,
+        "ma_connected": False,
+        "ma_paired": False,
+        "ma_pairing_required": False,
+        "ma_pairing_code": None,
+        "ma_pairing_seconds_left": 0,
+        "ma_error": None,
         "pairing_seconds_left": 0,
         "pairing_adapters": [],
-        "attached_devices": [],
+        "error": None,
     }
 
 
 def test_publishing_replaces_the_snapshot_instead_of_mutating_it():
     before = state.snapshot()
-    state.publish(enabled=True, port=8940, phone="bluez_input.34_C7_E9_25_A3_A3.2")
+    state.publish(enabled=True, phone="bluez_input.34_C7_E9_25_A3_A3.2", server="ws://ma:8927/sendspin")
 
     after = state.snapshot()
 
     assert dataclasses.is_dataclass(after)
-    assert before.enabled is False and before.port is None
-    assert (after.enabled, after.port, after.phone) == (True, 8940, "bluez_input.34_C7_E9_25_A3_A3.2")
+    assert before.enabled is False and before.phone is None
+    assert (after.enabled, after.phone) == (True, "bluez_input.34_C7_E9_25_A3_A3.2")
 
 
-def test_the_pairing_window_belongs_to_the_same_snapshot():
+def test_the_phone_pairing_window_belongs_to_the_same_snapshot():
     state.publish(pairing_until=4_000_000_000.0, pairing_adapters=("AA:BB:CC:DD:EE:FF",))
 
     snapshot = state.snapshot()
@@ -60,10 +60,18 @@ def test_the_pairing_window_belongs_to_the_same_snapshot():
     assert snapshot.pairing_seconds_left() > 0
 
 
-def test_a_source_error_is_not_lost_because_pairing_has_none():
-    state.publish(error="port_in_use")
+def test_the_music_assistant_pairing_code_has_its_own_countdown():
+    state.publish(ma_pairing_code="12345678", ma_pairing_until=4_000_000_000.0)
 
-    assert state.snapshot().status_dict()["error"] == "port_in_use"
+    model = state.SourceState(**dataclasses.asdict(state.snapshot()))
+    assert model.ma_pairing_seconds_left() > 0
+    assert state.snapshot().status_dict()["ma_pairing_code"] == "12345678"
+
+
+def test_a_source_error_is_not_lost_because_pairing_has_none():
+    state.publish(error="capture_unavailable")
+
+    assert state.snapshot().status_dict()["error"] == "capture_unavailable"
 
 
 def test_a_pairing_error_is_not_the_sources_error():
@@ -72,28 +80,13 @@ def test_a_pairing_error_is_not_the_sources_error():
     assert state.snapshot().status_dict()["error"] is None
 
 
-def test_the_source_accessor_reports_the_sources_own_error():
-    from sendspin_bridge.services.source import bt_source
-
-    state.publish(error="port_in_use", pairing_error="no_adapter")
-
-    assert bt_source.source_status()["error"] == "port_in_use"
-
-
-def test_the_source_accessor_keeps_a_pairing_error_out_of_the_error():
-    from sendspin_bridge.services.source import bt_source
-
-    state.publish(pairing_error="no_adapter")
-
-    assert bt_source.source_status()["error"] is None
-
-
 def test_the_status_dict_constructs_the_bridge_status_model():
     from sendspin_bridge.application.models.bridge import SendspinSourceStatus
 
     model = SendspinSourceStatus(**state.snapshot().status_dict())
 
-    assert model.attached_devices == []
+    assert model.state == "off"
+    assert model.ma_pairing_required is False
 
 
 def test_an_unknown_field_cannot_corrupt_the_snapshot():

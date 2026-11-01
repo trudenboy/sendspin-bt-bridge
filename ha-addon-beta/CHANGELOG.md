@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.2] - 2026-11-01
+
+### Added
+
+- The phone source now works on Home Assistant OS: the bridge records the phone's Bluetooth audio through the host's PulseAudio capture source, not only through PipeWire.
+- Pairing the bridge with Music Assistant from the Hardware page: an eight-digit code, its countdown, and a way to forget the pairing.
+
+### Changed
+
+- The phone source is a Sendspin source client of Music Assistant instead of its own Sendspin server. Music Assistant owns playback and routing: the phone appears there as a source and can be played on any player, including this bridge's speakers.
+- The source strip shows the Music Assistant connection and pairing state; the local "play on this speaker" control is gone because routing happens in Music Assistant.
+
+### Removed
+
+- The bridge's own source server and its listening port, the per-speaker relay, and the source "play on this speaker" action. Use Music Assistant's source playback instead.
+
+### Fixed
+
+- A capture process that ignores termination is killed instead of left running.
+- Pairing a phone no longer trusts a hard-coded speaker address.
+- The source identity is written atomically with owner-only permissions.
+
 ## [3.2.0-beta.1] - 2026-11-01
 
 ### Added

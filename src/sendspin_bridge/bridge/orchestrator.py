@@ -566,19 +566,19 @@ class BridgeOrchestrator:
         await _stop_air_sensor_service(started)
 
     async def start_bt_source(self, config: dict[str, Any]) -> None:
-        """Start the Sendspin source (#563) when ``SENDSPIN_SOURCE`` is on.
+        """Start the Sendspin source client (#563) when ``SENDSPIN_SOURCE`` is on.
 
-        Off by default: it opens a second Sendspin server on the bridge, which an operator opts
-        into once a phone is paired to the adapter as an audio source.
+        Off by default: it opens a source-role connection to Music Assistant, which an operator
+        opts into once a phone is paired to the adapter as an audio source.
         """
         env = os.environ.get("SENDSPIN_SOURCE", "").strip().lower()
         enabled = env in ("1", "true", "yes") if env else bool(config.get("SENDSPIN_SOURCE", False))
         if not enabled:
             return
-        from sendspin_bridge.services.source import manager as source_manager
+        from sendspin_bridge.application import source as source_uc
 
         try:
-            await source_manager.start(config, _resolve_config_dir())
+            await source_uc.start(config=config, persist=False)
         except Exception:
             logger.exception("The Sendspin source could not start")
 

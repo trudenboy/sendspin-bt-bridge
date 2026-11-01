@@ -12,10 +12,11 @@ import {
   suspendSink,
 } from '@/api/audio'
 import {
+  cancelMaPairing,
   closeSourcePairing,
+  openMaPairing,
   openSourcePairing,
   setSourceEnabled,
-  setSourcePlayer as setSourcePlayerRequest,
   SOURCE_PAIRING_WINDOW_S,
   type SourcePairingWindow,
 } from '@/api/source'
@@ -84,12 +85,19 @@ export const useHardwareStore = defineStore('hardware', () => {
 
   /** A phone pairing window, counted down from the server's own answer. */
   const pairingEndsAt = ref<number | null>(null)
+  /** The Music Assistant pairing window, counted down from the server's own answer. */
+  const maPairingEndsAt = ref<number | null>(null)
   const pairingNow = ref(Date.now())
   const pairingSecondsLeft = computed(() => {
     // ``pairingNow`` is the tick: Date.now() alone would not make this reactive.
     pairingNow.value
     if (pairingEndsAt.value === null) return 0
     return Math.max(0, Math.ceil((pairingEndsAt.value - Date.now()) / 1000))
+  })
+  const maPairingSecondsLeft = computed(() => {
+    pairingNow.value
+    if (maPairingEndsAt.value === null) return 0
+    return Math.max(0, Math.ceil((maPairingEndsAt.value - Date.now()) / 1000))
   })
   let pairingTimer: ReturnType<typeof setInterval> | null = null
 
@@ -423,29 +431,52 @@ export const useHardwareStore = defineStore('hardware', () => {
     pairingTimer = null
   }
 
+  function tickPairingWindows() {
+    pairingNow.value = Date.now()
+    if (pairingSecondsLeft.value <= 0) pairingEndsAt.value = null
+    if (maPairingSecondsLeft.value <= 0) maPairingEndsAt.value = null
+    if (pairingEndsAt.value === null && maPairingEndsAt.value === null) stopPairingTicker()
+  }
+
+  function ensurePairingTicker() {
+    pairingNow.value = Date.now()
+    if (pairingTimer) return
+    // Four ticks a second: the shown second never lags by a whole second.
+    pairingTimer = setInterval(tickPairingWindows, 250)
+  }
+
   function setPairingWindow(seconds: number) {
     pairingNow.value = Date.now()
     if (seconds <= 0) {
       pairingEndsAt.value = null
-      stopPairingTicker()
+      if (maPairingEndsAt.value === null) stopPairingTicker()
       return
     }
     pairingEndsAt.value = Date.now() + seconds * 1000
-    stopPairingTicker()
-    // Four ticks a second: the shown second never lags by a whole second.
-    pairingTimer = setInterval(() => {
-      pairingNow.value = Date.now()
-      if (pairingSecondsLeft.value <= 0) {
-        pairingEndsAt.value = null
-        stopPairingTicker()
-      }
-    }, 250)
+    ensurePairingTicker()
+  }
+
+  function setMaPairingWindow(seconds: number) {
+    pairingNow.value = Date.now()
+    if (seconds <= 0) {
+      maPairingEndsAt.value = null
+      if (pairingEndsAt.value === null) stopPairingTicker()
+      return
+    }
+    maPairingEndsAt.value = Date.now() + seconds * 1000
+    ensurePairingTicker()
   }
 
   function clearPairingWindow() {
     pairingEndsAt.value = null
     pairingNow.value = Date.now()
-    stopPairingTicker()
+    if (maPairingEndsAt.value === null) stopPairingTicker()
+  }
+
+  function clearMaPairingWindow() {
+    maPairingEndsAt.value = null
+    pairingNow.value = Date.now()
+    if (pairingEndsAt.value === null) stopPairingTicker()
   }
 
   // The status stream already carries the window's remaining seconds. The view
@@ -455,6 +486,11 @@ export const useHardwareStore = defineStore('hardware', () => {
   // window a command has just opened.
   function adoptPairingWindow(seconds: number) {
     if (seconds > pairingSecondsLeft.value) setPairingWindow(seconds)
+  }
+
+  /** The MA window comes from the status stream; never let a lagging event shorten it. */
+  function adoptMaPairingWindow(seconds: number) {
+    if (seconds > maPairingSecondsLeft.value) setMaPairingWindow(seconds)
   }
 
   async function startSource() {
@@ -473,8 +509,9 @@ export const useHardwareStore = defineStore('hardware', () => {
     return command(async () => {
       try {
         await setSourceEnabled(false)
-        // The source stops its pairing agent too; a local countdown would lie.
+        // The source stops both pairing windows too; a local countdown would lie.
         clearPairingWindow()
+        clearMaPairingWindow()
         await refresh()
       } catch (e) {
         sourceError.value = failure(e)
@@ -483,15 +520,29 @@ export const useHardwareStore = defineStore('hardware', () => {
     })
   }
 
-  async function setSourcePlayer(playerId: string, enabled: boolean) {
+  async function openMaPairingWindow() {
+    clearMaPairingWindow()
     return command(async () => {
       try {
-        const answer = await setSourcePlayerRequest(playerId, enabled)
+        const window = await openMaPairing()
+        setMaPairingWindow(Number(window?.seconds_left) || 0)
         await refresh()
-        return answer
+        return window
       } catch (e) {
-        // ``source_sink_missing`` is about one speaker: keep it in the refusal.
-        sourceError.value = failure(e, playerId)
+        sourceError.value = failure(e)
+        throw e
+      }
+    })
+  }
+
+  async function forgetMaPairing() {
+    return command(async () => {
+      try {
+        await cancelMaPairing()
+        clearMaPairingWindow()
+        await refresh()
+      } catch (e) {
+        sourceError.value = failure(e)
         throw e
       }
     })
@@ -560,6 +611,7 @@ export const useHardwareStore = defineStore('hardware', () => {
     stopPolling()
     // A countdown belongs to the page visit: a returned page must be able to pair again.
     clearPairingWindow()
+    clearMaPairingWindow()
     clearSourceError()
     stream.disconnect()
     hardwareStream?.disconnect()
@@ -582,6 +634,7 @@ export const useHardwareStore = defineStore('hardware', () => {
     sourceError,
     sourceBusy,
     pairingSecondsLeft,
+    maPairingSecondsLeft,
     connect,
     disconnect,
     refresh,
@@ -594,9 +647,11 @@ export const useHardwareStore = defineStore('hardware', () => {
     chooseSinkPort,
     startSource,
     stopSource,
-    setSourcePlayer,
+    openMaPairingWindow,
+    forgetMaPairing,
     startPairingWindow,
     adoptPairingWindow,
+    adoptMaPairingWindow,
     stopPairingWindow,
     clearSourceError,
   }

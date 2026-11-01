@@ -320,7 +320,7 @@ def classify_capture(
     Neither existing is a truthful "unavailable" with a reason, not an error:
     a phone that is not streaming is not a fault.
     """
-    from sendspin_bridge.services.source.bt_source import find_bluez_input
+    from sendspin_bridge.services.source.capture.pipewire import find_bluez_input
 
     node = find_bluez_input(wpctl_status or "")
     if node:
@@ -643,13 +643,18 @@ async def _wpctl_status() -> str | None:
     return out.decode(errors="replace")
 
 
-async def _capture_facts(sources: Collection[LocalSource]) -> CaptureFacts:
-    wpctl_available = probe_capture()
+async def _capture_facts(sources: Collection[LocalSource], server_name: str) -> CaptureFacts:
+    # ``wpctl`` presence is a PipeWire fact; ``probe_capture`` is the host's overall answer
+    # (PulseAudio needs pactl/parecord instead).  Keep them apart: the classifier reasons
+    # about the PipeWire node even on a PulseAudio host.
+    import shutil
+
+    wpctl_available = shutil.which("wpctl") is not None
     status = await _wpctl_status() if wpctl_available else None
     return classify_capture(status, sources, wpctl_available=wpctl_available)
 
 
-async def _read_audio_async() -> AudioFacts:
+async def _read_audio_async(server_name: str) -> AudioFacts:
     """One read of each audio list, then one assembly (pure).
 
     Each list is read strictly so a failed ``pactl list`` is remembered as
@@ -675,7 +680,7 @@ async def _read_audio_async() -> AudioFacts:
         cards = await sink_inventory.list_local_cards(sinks=sinks, sources=sources, strict=True)
     except SinkInventoryUnavailable as exc:
         unavailable.append(f"cards: {exc}")
-    capture = await _capture_facts(sources)
+    capture = await _capture_facts(sources, server_name)
     default_sink = await pulse.aget_default_sink_name()
     return build_audio_facts(cards, sinks, sources, capture, default_sink=default_sink, unavailable=tuple(unavailable))
 
@@ -692,7 +697,7 @@ def _read_audio(server_name: str) -> AudioFacts:
     if classify_audio_server(server_name) == "none":
         return AudioFacts()
     try:
-        return asyncio.run(_read_audio_async())
+        return asyncio.run(_read_audio_async(server_name))
     except Exception as exc:
         logger.debug("Hardware inventory: audio read failed (%s)", exc)
         return AudioFacts(unavailable=(f"the audio read failed: {exc}",))
@@ -729,7 +734,7 @@ def _assemble(
         bluetooth=bluetooth,
         dbus=dbus,
         server_name=resolved_name,
-        capture=probe_capture(),
+        capture=probe_capture(resolved_name),
         default_sink=audio_facts.default_sink is not None,
     )
     entries = list(degraded)

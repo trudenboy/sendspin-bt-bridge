@@ -1,32 +1,32 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bluetooth, Play, Square } from 'lucide-vue-next'
+import { Bluetooth, Play, Radio, Square, Unlink } from 'lucide-vue-next'
 import { SbBadge, SbButton } from '@/kit'
 import { technicalDetails } from '@/composables/useTechnicalDetails'
 import type { SourceFailure } from '@/stores/hardware'
 import type { SourceCaptureKind, SourceFeed } from '@/api/types'
 
 /**
- * The source strip at the top of the Hardware page: the one phone the bridge
- * accepts, how its audio is captured, which speakers relay it, and the pairing
- * window. A bridge that does not report a source gets the sentence that says
- * where the feature is enabled — never a fake set of controls.
+ * The source strip at the top of the Hardware page. Two pairings, two blocks:
+ * the bridge pairs with Music Assistant with an eight-digit code, and the phone
+ * pairs with the bridge over Bluetooth. Music Assistant owns playback and
+ * routing, so the strip never offers to play the phone on a speaker itself.
  */
 const props = withDefaults(
   defineProps<{
     source: SourceFeed | null
-    /** Seconds left in the pairing window; 0 while it is closed. */
+    /** Seconds left in the phone pairing window; 0 while it is closed. */
     pairingSecondsLeft?: number
-    /** Every player on the bridge, so relays read as speakers and not as ids. */
-    players?: { id: string; name: string }[]
+    /** Seconds left in the Music Assistant pairing window; 0 while it is closed. */
+    maPairingSecondsLeft?: number
     /** The streaming phone's friendly name, when a paired device names it. */
     phoneName?: string | null
     /** The last command's refusal, with the server's stable code. */
     failure?: SourceFailure | null
     busy?: boolean
   }>(),
-  { pairingSecondsLeft: 0, players: () => [], phoneName: null, failure: null, busy: false },
+  { pairingSecondsLeft: 0, maPairingSecondsLeft: 0, phoneName: null, failure: null, busy: false },
 )
 
 const emit = defineEmits<{
@@ -34,17 +34,18 @@ const emit = defineEmits<{
   stop: []
   pair: []
   stopPairing: []
-  relay: [playerId: string, enabled: boolean]
+  maPair: []
+  forgetMa: []
 }>()
 
 const { t } = useI18n()
 
 const state = computed(() => props.source?.state ?? 'off')
-/** An absent feature and a configured-but-off source share "off"; this tells them apart. */
 const presence = computed(() => (props.source ? 'configured' : 'absent'))
 const stateLabel = computed(() => {
   const keys = {
     off: 'hardware.source.stateOff',
+    pairing: 'hardware.source.statePairing',
     waiting: 'hardware.source.stateWaiting',
     streaming: 'hardware.source.stateStreaming',
     error: 'hardware.source.stateError',
@@ -53,18 +54,30 @@ const stateLabel = computed(() => {
 })
 const tone = computed(() => {
   if (state.value === 'streaming') return 'success'
-  if (state.value === 'waiting') return 'warning'
+  if (state.value === 'pairing' || state.value === 'waiting') return 'warning'
   if (state.value === 'error') return 'error'
   return 'neutral'
 })
 
-const stateBody = computed(() => {
-  const feed = props.source
-  if (!feed) return ''
-  if (!feed.enabled) return t('hardware.source.configuredOff')
-  if (feed.state === 'streaming') return t('hardware.source.streamingBody', { port: feed.port ?? '—' })
-  if (feed.state === 'waiting') return t('hardware.source.waitingBody', { port: feed.port ?? '—' })
-  return ''
+const ma = computed(() => props.source?.ma ?? null)
+const maCode = computed(() => ma.value?.pairing_code ?? '')
+const maStatus = computed(() => {
+  if (!props.source?.enabled) return t('hardware.source.maOff')
+  if (ma.value?.error) return t('hardware.source.maError')
+  if (ma.value?.paired && ma.value?.connected) return t('hardware.source.maConnected')
+  if (ma.value?.paired) return t('hardware.source.maReconnecting')
+  return t('hardware.source.maNotPaired')
+})
+/** The Music Assistant web UI lives on the same host; the Sendspin port is not it. */
+const maLink = computed(() => {
+  const server = ma.value?.server
+  if (!server) return null
+  try {
+    const host = new URL(server.replace(/^ws/, 'http')).hostname
+    return host ? `http://${host}:8095` : null
+  } catch {
+    return null
+  }
 })
 
 const captureKind = computed<SourceCaptureKind>(() => props.source?.capture.kind ?? 'unavailable')
@@ -78,63 +91,35 @@ const captureKindLabel = computed(() => {
 })
 
 const phoneLabel = computed(() => props.phoneName || '')
-
-const chosen = ref('')
-const relays = computed(() => props.source?.relays ?? [])
-const chosenRelayed = computed(() => relays.value.includes(chosen.value))
-
-/* A player list that arrives after the first render, or a relay that left, picks a usable default. */
-watch(
-  [() => props.players, relays],
-  () => {
-    if (!props.players.length) {
-      chosen.value = ''
-      return
-    }
-    if (props.players.some((player) => player.id === chosen.value)) return
-    const free = props.players.find((player) => !relays.value.includes(player.id))
-    chosen.value = free?.id ?? props.players[0]!.id
-  },
-  { immediate: true, deep: true },
-)
-
-function playerName(id: string | null) {
-  if (!id) return ''
-  return props.players.find((player) => player.id === id)?.name ?? id
-}
-
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
-function toggleRelay() {
-  if (!chosen.value || props.busy) return
-  emit('relay', chosen.value, !chosenRelayed.value)
-}
-
-/** An error the bridge reports in the feed: our words for the codes we know, its own text otherwise. */
+/** A failure the bridge reports in the feed: our words for the codes we know. */
 const errorText = computed(() => {
-  const code = props.source?.error
+  const code = props.source?.error || ma.value?.error
   if (!code) return ''
-  const port = props.source?.port ?? '—'
-  if (code === 'port_in_use') return t('hardware.source.errorPortInUse', { port })
-  if (code === 'capture_unavailable') return t('hardware.source.errorCapture')
-  if (code === 'no_adapter') return t('hardware.source.errorNoAdapter')
-  if (code === 'no_agent') return t('hardware.source.errorNoAgent')
-  return code
+  const known: Record<string, string> = {
+    capture_unavailable: t('hardware.source.errorCapture'),
+    no_adapter: t('hardware.source.errorNoAdapter'),
+    no_agent: t('hardware.source.errorNoAgent'),
+    ma_unreachable: t('hardware.source.maUnreachable'),
+    ma_pairing_required: t('hardware.source.maPairingRequired'),
+    ma_pairing_rejected: t('hardware.source.maRejected'),
+    ma_source_unsupported: t('hardware.source.maUnsupported'),
+  }
+  return known[code] ?? code
 })
 
 const errorNextStep = computed(() => {
-  const code = props.source?.error
-  if (code === 'port_in_use') return t('hardware.source.errorPortInUseNext')
+  const code = props.source?.error || ma.value?.error
   if (code === 'capture_unavailable') return t('hardware.source.errorCaptureNext')
   if (code === 'no_adapter' || code === 'no_agent') return t('hardware.source.errorBluetoothNext')
+  if (code === 'ma_unreachable') return t('hardware.source.maUnreachableNext')
+  if (code === 'ma_pairing_required' || code === 'ma_pairing_rejected') return t('hardware.source.maPairingNext')
+  if (code === 'ma_source_unsupported') return t('hardware.source.maUnsupportedNext')
   return t('hardware.source.errorNextStep')
 })
 
-const failureNextStep = computed(() =>
-  props.failure?.code === 'source_sink_missing'
-    ? t('hardware.source.sinkMissingNext')
-    : t('hardware.source.failureNextStep'),
-)
+const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
 </script>
 
 <template>
@@ -150,7 +135,7 @@ const failureNextStep = computed(() =>
         <h2 id="hardware-source-title" class="text-lg font-semibold text-text-primary">
           {{ t('hardware.source.title') }}
         </h2>
-        <p v-if="stateBody" class="mt-1 text-sm text-text-secondary">{{ stateBody }}</p>
+        <p class="mt-1 text-sm text-text-secondary">{{ t('hardware.source.subtitle') }}</p>
       </div>
       <SbBadge data-source-state-badge :tone="tone" size="sm" dot>{{ stateLabel }}</SbBadge>
     </header>
@@ -161,92 +146,112 @@ const failureNextStep = computed(() =>
     </p>
 
     <template v-else>
-      <p v-if="source.phone_mac" data-source-phone class="mt-3 flex flex-wrap items-baseline gap-x-2 text-sm">
-        <span class="text-text-secondary">{{ t('hardware.source.phone') }}</span>
-        <span v-if="phoneLabel" class="font-medium text-text-primary">{{ phoneLabel }}</span>
-        <span class="font-mono text-xs text-text-secondary">{{ source.phone_mac }}</span>
-      </p>
+      <div class="mt-4 grid gap-4 lg:grid-cols-2">
+        <!-- Music Assistant: the bridge is a source client of its Sendspin server. -->
+        <div data-source-ma class="rounded-(--radius-card) border border-border bg-surface p-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <Radio class="h-4 w-4 text-text-secondary" aria-hidden="true" />
+            <h3 class="text-sm font-semibold text-text-primary">{{ t('hardware.source.maTitle') }}</h3>
+            <SbBadge :tone="ma?.connected ? 'success' : ma?.paired ? 'warning' : 'neutral'" size="sm">
+              {{ ma?.connected ? t('hardware.source.maConnectedShort') : ma?.paired ? t('hardware.source.maPairedShort') : t('hardware.source.maUnpairedShort') }}
+            </SbBadge>
+          </div>
+          <p class="mt-1 text-sm text-text-secondary">{{ maStatus }}</p>
+          <p v-if="ma?.server" class="mt-1 break-all font-mono text-xs text-text-secondary" data-source-ma-server>
+            {{ ma.server }}
+          </p>
 
-      <div v-if="source.enabled" data-source-relays class="mt-3">
-        <p class="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-          {{ t('hardware.source.relays') }}
-        </p>
-        <ul v-if="relays.length" class="mt-1.5 flex flex-wrap gap-1.5">
-          <li v-for="relay in relays" :key="relay">
-            <RouterLink :to="'/'" class="text-sm text-primary-text underline-offset-2 hover:underline">
-              {{ playerName(relay) }}
-            </RouterLink>
-          </li>
-        </ul>
-        <p v-else data-source-no-relays class="mt-1 text-sm text-text-secondary">
-          {{ t('hardware.source.noRelays') }}
-        </p>
+          <div v-if="maCode" data-source-ma-code class="mt-3 rounded-(--radius-card) border border-info/40 bg-info/10 px-3 py-2">
+            <p class="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+              {{ t('hardware.source.maCodeLabel') }}
+            </p>
+            <p class="mt-1 font-mono text-2xl font-semibold tracking-[0.2em] text-text-primary">{{ maCode }}</p>
+            <p class="mt-1 text-xs text-text-secondary">
+              {{ t('hardware.source.maCodeHint', { time: clock(maPairingSecondsLeft || ma?.pairing_seconds_left || 0) }) }}
+            </p>
+          </div>
 
-        <div v-if="players.length" class="mt-2 flex flex-wrap items-center gap-2">
-          <select
-            v-model="chosen"
-            data-source-player
-            :aria-label="t('hardware.source.relayPlayer')"
-            class="h-8 rounded-(--radius-input) border border-border bg-surface px-2 text-sm text-text-primary"
-            :disabled="busy"
-          >
-            <option v-for="player in players" :key="player.id" :value="player.id">{{ player.name }}</option>
-          </select>
-          <SbButton
-            variant="outline"
-            size="sm"
-            data-source-relay
-            :disabled="busy || !chosen"
-            @click="toggleRelay"
-          >
-            <template #icon-left><Bluetooth class="h-3.5 w-3.5" aria-hidden="true" /></template>
-            {{ chosenRelayed ? t('hardware.source.detach') : t('hardware.source.attach') }}
-          </SbButton>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <SbButton v-if="!source.enabled" size="sm" data-source-start :loading="busy" @click="emit('start')">
+              <template #icon-left><Play class="h-3.5 w-3.5" aria-hidden="true" /></template>
+              {{ t('hardware.source.start') }}
+            </SbButton>
+            <template v-else>
+              <SbButton
+                v-if="!ma?.paired"
+                size="sm"
+                data-source-ma-pair
+                :disabled="busy"
+                :loading="busy"
+                @click="emit('maPair')"
+              >
+                {{ t('hardware.source.maPair') }}
+              </SbButton>
+              <SbButton
+                v-else
+                variant="outline"
+                size="sm"
+                data-source-ma-forget
+                :disabled="busy"
+                @click="emit('forgetMa')"
+              >
+                <template #icon-left><Unlink class="h-3.5 w-3.5" aria-hidden="true" /></template>
+                {{ t('hardware.source.maForget') }}
+              </SbButton>
+              <SbButton variant="ghost" size="sm" data-source-stop :disabled="busy" @click="emit('stop')">
+                <template #icon-left><Square class="h-3.5 w-3.5" aria-hidden="true" /></template>
+                {{ t('hardware.source.stop') }}
+              </SbButton>
+            </template>
+          </div>
+          <p class="mt-2 text-xs text-text-secondary">
+            {{ t('hardware.source.maRouting') }}
+            <a v-if="maLink" :href="maLink" target="_blank" rel="noopener noreferrer" class="text-primary-text underline-offset-2 hover:underline">
+              {{ t('hardware.source.maOpen') }}
+            </a>
+          </p>
         </div>
-      </div>
 
-      <!-- The window is open: the countdown is the server's remaining time, not a copy of the default. -->
-      <div
-        v-if="source.enabled && pairingSecondsLeft > 0"
-        data-source-pairing
-        class="mt-3 rounded-(--radius-card) border border-info/40 bg-info/10 px-3 py-2"
-      >
-        <div class="flex flex-wrap items-center gap-2">
-          <p class="text-sm text-text-primary">{{ t('hardware.source.pairing', { time: clock(pairingSecondsLeft) }) }}</p>
-          <SbButton variant="outline" size="sm" data-source-pairing-stop :disabled="busy" @click="emit('stopPairing')">
-            {{ t('hardware.source.stopPairing') }}
-          </SbButton>
+        <!-- Phone: the Bluetooth side, which only pairs the phone with this bridge. -->
+        <div data-source-phone-block class="rounded-(--radius-card) border border-border bg-surface p-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <Bluetooth class="h-4 w-4 text-text-secondary" aria-hidden="true" />
+            <h3 class="text-sm font-semibold text-text-primary">{{ t('hardware.source.phoneTitle') }}</h3>
+            <SbBadge :tone="source.state === 'streaming' ? 'success' : 'neutral'" size="sm">
+              {{ source.state === 'streaming' ? t('hardware.source.stateStreaming') : t('hardware.source.phoneIdle') }}
+            </SbBadge>
+          </div>
+
+          <p v-if="source.phone_mac" data-source-phone class="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm">
+            <span class="text-text-secondary">{{ t('hardware.source.phone') }}</span>
+            <span v-if="phoneLabel" class="font-medium text-text-primary">{{ phoneLabel }}</span>
+            <span class="font-mono text-xs text-text-secondary">{{ source.phone_mac }}</span>
+          </p>
+          <p v-else class="mt-2 text-sm text-text-secondary">{{ t('hardware.source.phoneNoPhone') }}</p>
+
+          <div v-if="pairingSecondsLeft > 0" data-source-pairing class="mt-3 rounded-(--radius-card) border border-info/40 bg-info/10 px-3 py-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-sm text-text-primary">{{ t('hardware.source.pairing', { time: clock(pairingSecondsLeft) }) }}</p>
+              <SbButton variant="outline" size="sm" data-source-pairing-stop :disabled="busy" @click="emit('stopPairing')">
+                {{ t('hardware.source.stopPairing') }}
+              </SbButton>
+            </div>
+            <p class="mt-1 text-xs text-text-secondary">{{ t('hardware.source.pairingHint') }}</p>
+          </div>
+
+          <div v-else-if="source.enabled" class="mt-3 flex flex-wrap items-center gap-2">
+            <SbButton variant="outline" size="sm" data-source-pair :disabled="busy" @click="emit('pair')">
+              <template #icon-left><Bluetooth class="h-3.5 w-3.5" aria-hidden="true" /></template>
+              {{ t('hardware.source.pair') }}
+            </SbButton>
+          </div>
+          <p class="mt-2 text-xs text-text-secondary">{{ t('hardware.source.phoneHint') }}</p>
         </div>
-        <p class="mt-1 text-xs text-text-secondary">{{ t('hardware.source.pairingHint') }}</p>
-      </div>
-
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        <SbButton v-if="!source.enabled" size="sm" data-source-start :loading="busy" @click="emit('start')">
-          <template #icon-left><Play class="h-3.5 w-3.5" aria-hidden="true" /></template>
-          {{ t('hardware.source.start') }}
-        </SbButton>
-        <template v-else>
-          <SbButton
-            v-if="pairingSecondsLeft <= 0"
-            variant="outline"
-            size="sm"
-            data-source-pair
-            :disabled="busy"
-            @click="emit('pair')"
-          >
-            <template #icon-left><Bluetooth class="h-3.5 w-3.5" aria-hidden="true" /></template>
-            {{ t('hardware.source.pair') }}
-          </SbButton>
-          <SbButton variant="ghost" size="sm" data-source-stop :disabled="busy" @click="emit('stop')">
-            <template #icon-left><Square class="h-3.5 w-3.5" aria-hidden="true" /></template>
-            {{ t('hardware.source.stop') }}
-          </SbButton>
-        </template>
       </div>
 
       <!-- The source itself failed: the server's reason and a next step, never a bare red badge. -->
       <div
-        v-if="source.state === 'error'"
+        v-if="errorText"
         data-source-error
         role="alert"
         class="mt-3 rounded-(--radius-card) border border-error/50 bg-error/10 px-3 py-2"
@@ -254,10 +259,12 @@ const failureNextStep = computed(() =>
         <p class="text-sm font-medium text-text-primary">{{ t('hardware.source.errorTitle') }}</p>
         <p class="mt-1 text-sm text-text-secondary">{{ errorText }}</p>
         <p class="mt-1 text-sm text-text-secondary">{{ errorNextStep }}</p>
-        <p v-if="source.error" class="mt-1 font-mono text-xs text-text-secondary">{{ source.error }}</p>
+        <p v-if="source.error || ma?.error" class="mt-1 font-mono text-xs text-text-secondary">
+          {{ source.error || ma?.error }}
+        </p>
       </div>
 
-      <!-- The last command was refused: keep the code and, for the sink refusal, the speaker. -->
+      <!-- The last command was refused: keep the stable code. -->
       <div
         v-if="failure"
         data-source-failure
@@ -267,9 +274,6 @@ const failureNextStep = computed(() =>
         <p class="text-sm font-medium text-text-primary">{{ t('hardware.source.failureTitle') }}</p>
         <p class="mt-1 font-mono text-xs text-text-secondary">
           {{ failure.code }}<template v-if="failure.detail">: {{ failure.detail }}</template>
-        </p>
-        <p v-if="failure.code === 'source_sink_missing'" class="mt-1 text-sm text-text-secondary">
-          {{ t('hardware.source.sinkMissing', { player: playerName(failure.player) }) }}
         </p>
         <p class="mt-1 text-sm text-text-secondary">{{ failureNextStep }}</p>
       </div>

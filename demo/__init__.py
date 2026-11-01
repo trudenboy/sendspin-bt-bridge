@@ -312,7 +312,6 @@ def build_demo_config() -> dict[str, Any]:
         # strip must be present, and the orchestrator's start call is served
         # by the demo manager below.
         "SENDSPIN_SOURCE": True,
-        "SENDSPIN_SOURCE_PORT": 8940,
     }
     return migrate_config_payload(base).normalized_config
 
@@ -326,15 +325,23 @@ def _demo_source_node() -> str | None:
 
 def _demo_publish_source(enabled: bool = True) -> None:
     """Publish the demo phone source's runtime snapshot."""
+    from demo.fixtures import DEMO_BT_DEVICE_INFO
     from sendspin_bridge.services.source import state as _source_state
 
     node = _demo_source_node()
+    phone_mac = str(DEMO_BT_DEVICE_INFO[0]["mac"]) if DEMO_BT_DEVICE_INFO else None
     _source_state.publish(
         enabled=enabled,
-        port=8940 if enabled else None,
+        state="streaming" if enabled else "off",
         phone=node if enabled else None,
-        players=0,
-        streaming=False,
+        phone_mac=phone_mac if enabled else None,
+        streaming=enabled,
+        server="ws://demo-ma.local:8927/sendspin" if enabled else None,
+        ma_connected=enabled,
+        ma_paired=enabled,
+        ma_pairing_code=None,
+        ma_pairing_until=0.0,
+        ma_error=None,
         error=None,
     )
 
@@ -1283,18 +1290,28 @@ def _demo_install_source() -> None:
 
     _demo_publish_source(True)
 
-    async def _demo_source_start(config: dict[str, Any], config_dir: Any) -> dict[str, Any]:
-        del config, config_dir
+    async def _demo_source_start(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
         _demo_publish_source(True)
-        return {"started": True, "port": 8940}
+        return {"started": True, "server": "ws://demo-ma.local:8927/sendspin"}
 
     async def _demo_source_stop() -> dict[str, Any]:
         _demo_publish_source(False)
         return {"started": False}
 
+    class _DemoSourceClient:
+        """The pairing surface the source panel uses, served by the stand."""
+
+        async def open_ma_pairing(self) -> dict[str, Any]:
+            return {"code": "12345678", "seconds_left": 300, "client_id": "demo"}
+
+        async def cancel_ma_pairing(self, *, forget: bool = False) -> None:
+            del forget
+            _demo_publish_source(True)
+
     _source_manager.start = _demo_source_start  # type: ignore[assignment]
     _source_manager.stop = _demo_source_stop  # type: ignore[assignment]
     _source_manager.running = lambda: _source_state.snapshot().enabled  # type: ignore[assignment]
+    _source_manager.client = lambda: _DemoSourceClient()  # type: ignore[assignment]
 
     # The pairing window normally opens discoverable/pairable mode through the
     # real BlueZ agent.  The demo has no adapter to open, so it publishes the

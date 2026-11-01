@@ -1,165 +1,226 @@
-"""Use cases for the Sendspin source: the phone→bridge feed as one entity.
+"""Use cases for the Sendspin source: the phone→Music Assistant feed as one entity.
 
-The routers used to inline this orchestration (start/stop, arming a speaker's
-relay, the phone pairing window) and reach into ``services`` themselves.  The
-routes are now adapters over these functions, and the source's runtime state is
-read through the typed snapshot in :mod:`sendspin_bridge.services.source.state`.
-
-Nothing here touches HTTP: a failure is a :class:`UseCaseError`, mapped by the
-API adapter.
+The routes are adapters over these functions; the source's runtime state is read through
+the typed snapshot in :mod:`sendspin_bridge.services.source.state`.  Nothing here touches
+HTTP: a failure is a :class:`UseCaseError`, mapped by the API adapter.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
-from sendspin_bridge.application.errors import UseCaseError, conflict
-from sendspin_bridge.services.source import manager, pairing, relay
+from sendspin_bridge.application.errors import UseCaseError
+from sendspin_bridge.services.source import manager, pairing
 from sendspin_bridge.services.source import state as source_state
 
 __all__ = [
     "SourceStatus",
+    "cancel_ma_pairing",
     "close_pairing_window",
+    "open_ma_pairing",
     "open_pairing_window",
-    "set_players",
+    "resolve_server_url",
     "start",
     "status",
     "stop",
 ]
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_PAIRING_WINDOW_S = 120
+DEFAULT_SENDSPIN_PORT = 8927
 
 
 @dataclass(frozen=True, slots=True)
 class SourceStatus:
-    """What the source is doing, joined with the players it is armed to feed."""
+    """The source's state, for the bridge status and the hardware read model."""
 
     enabled: bool
-    port: int | None
+    state: str
     phone: str | None
-    players: int
+    phone_mac: str | None
     streaming: bool
-    error: str | None
-    pairing_error: str | None
+    server: str | None
+    ma_connected: bool
+    ma_paired: bool
+    ma_pairing_required: bool
+    ma_pairing_code: str | None
+    ma_pairing_seconds_left: int
+    ma_error: str | None
     pairing_seconds_left: int
     pairing_adapters: tuple[str, ...]
-    attached_devices: tuple[str, ...]
+    error: str | None
 
     def as_status_dict(self) -> dict[str, Any]:
         """The bridge-status shape (the keys ``SendspinSourceStatus`` reads)."""
         return {
             "enabled": self.enabled,
-            "port": self.port,
+            "state": self.state,
             "phone": self.phone,
-            "players": self.players,
+            "phone_mac": self.phone_mac,
             "streaming": self.streaming,
-            "error": self.error,
+            "server": self.server,
+            "ma_connected": self.ma_connected,
+            "ma_paired": self.ma_paired,
+            "ma_pairing_required": self.ma_pairing_required,
+            "ma_pairing_code": self.ma_pairing_code,
+            "ma_pairing_seconds_left": self.ma_pairing_seconds_left,
+            "ma_error": self.ma_error,
             "pairing_seconds_left": self.pairing_seconds_left,
             "pairing_adapters": list(self.pairing_adapters),
-            "attached_devices": list(self.attached_devices),
+            "error": self.error,
         }
 
 
-def _configured_port(config: dict[str, Any]) -> int | None:
-    raw = config.get("SENDSPIN_SOURCE_PORT")
-    if isinstance(raw, bool) or not isinstance(raw, int | str):
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None
-
-
 def status(config: dict[str, Any]) -> SourceStatus:
-    """The source's state, for the bridge status and the hardware read model.
-
-    Never leaves the process: the snapshot and the armed-relay list are in
-    memory, so this is safe on the read path without a thread hop.
-    """
+    """The source's state, for the bridge status and the hardware read model."""
+    del config  # the snapshot carries everything; kept for the callers' signature
     current = source_state.snapshot()
     return SourceStatus(
         enabled=current.enabled,
-        port=current.port if current.port is not None else _configured_port(config),
+        state=current.state,
         phone=current.phone,
-        players=current.players,
+        phone_mac=current.phone_mac,
         streaming=current.streaming,
-        error=current.error,
-        pairing_error=current.pairing_error,
+        server=current.server,
+        ma_connected=current.ma_connected,
+        ma_paired=current.ma_paired,
+        ma_pairing_required=current.enabled and not current.ma_paired,
+        ma_pairing_code=current.ma_pairing_code,
+        ma_pairing_seconds_left=current.ma_pairing_seconds_left(),
+        ma_error=current.ma_error,
         pairing_seconds_left=current.pairing_seconds_left(),
         pairing_adapters=tuple(current.pairing_adapters),
-        attached_devices=tuple(relay.armed_devices()),
+        error=current.error,
     )
 
 
-async def _capture_available() -> bool:
-    """Whether this host can capture a phone's Bluetooth audio at all.
+async def resolve_server_url(config: dict[str, Any]) -> str | None:
+    """The Sendspin server URL, reusing the value a connected player already resolved.
 
-    The fact comes from the hardware inventory's capture capability (PipeWire's
-    tools are present), never from whether a phone is streaming right now: a
-    paired phone that is silent is a capture-capable host.
+    ``SENDSPIN_SERVER=auto`` is common on HAOS: the players discover MA over mDNS and record
+    the URL they dialled.  Before any player connects, discovery is the fallback.
     """
-    from sendspin_bridge.services.hardware import inventory
+    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+
+    for client in get_device_registry_snapshot().active_clients:
+        url = str(getattr(client, "connected_server_url", "") or "").strip()
+        if url:
+            return url
+
+    host = str(config.get("SENDSPIN_SERVER") or "").strip()
+    port = _port(config)
+    if host and host.lower() not in ("auto", "discover"):
+        if host.startswith(("ws://", "wss://")):
+            return host
+        return f"ws://{host}:{port}/sendspin"
+
+    from sendspin_bridge.services.music_assistant.ma_discovery import discover_ma_servers
 
     try:
-        read = await asyncio.to_thread(inventory.read_inventory)
-    except inventory.HardwareUnavailable:
-        return False
-    return read.capabilities.capture.available
+        servers = await discover_ma_servers(timeout=3.0)
+    except Exception:
+        logger.warning("Source: MA discovery failed", exc_info=True)
+        return None
+    for entry in servers:
+        parsed = urlparse(str(entry.get("url") or ""))
+        if parsed.hostname:
+            return f"ws://{parsed.hostname}:{port}/sendspin"
+    return None
 
 
-async def start() -> dict[str, Any]:
-    """Start the source from the bridge config; a second call is a no-op.
+def _port(config: dict[str, Any]) -> int:
+    raw = config.get("SENDSPIN_PORT")
+    try:
+        return int(raw) if raw is not None else DEFAULT_SENDSPIN_PORT
+    except (TypeError, ValueError):
+        return DEFAULT_SENDSPIN_PORT
 
-    A host without the capture capability would answer 200 and then never
-    stream, so it is refused with the documented 422 instead of starting a
-    source that cannot work.
-    """
+
+def _bridge_name(config: dict[str, Any]) -> str:
+    name = str(config.get("BRIDGE_NAME") or "").strip()
+    return name or "Bridge"
+
+
+async def start(*, config: dict[str, Any] | None = None, persist: bool = True) -> dict[str, Any]:
+    """Enable the source: resolve MA, pick the capture backend and connect the client."""
     from sendspin_bridge.bridge.orchestrator import _resolve_config_dir
-    from sendspin_bridge.config import load_config
+    from sendspin_bridge.config import load_config, update_config
+    from sendspin_bridge.services.hardware.capabilities import probe_audio_server, probe_capture
+    from sendspin_bridge.services.source.backends import backend_for
+    from sendspin_bridge.services.source.client import SourceSettings
 
-    if not manager.running():
-        available = await _capture_available()
-        if not available and not manager.running():
-            raise UseCaseError(
-                422,
-                "capture_unavailable",
-                "This host cannot capture Bluetooth audio: PipeWire's wpctl is not available.",
-            )
-    config = await asyncio.to_thread(load_config)
-    return await manager.start(config, _resolve_config_dir())
+    if manager.running():
+        return {"started": True, "already": True}
+    if config is None:
+        config = await asyncio.to_thread(load_config)
+    if config is None:  # load_config is typed loosely; keep the contract explicit
+        raise UseCaseError(500, "config_unavailable", "The bridge configuration could not be read.")
+    server_name = await asyncio.to_thread(probe_audio_server)
+    if not probe_capture(server_name):
+        raise UseCaseError(
+            422,
+            "capture_unavailable",
+            f"This host cannot capture Bluetooth audio: the {server_name or 'no'} audio server "
+            "does not expose the phone's recording source (needs wpctl, or pactl and parecord).",
+        )
+    backend = backend_for(server_name)
+    if backend is None:
+        raise UseCaseError(422, "capture_unavailable", "No audio server answers; the phone cannot be captured.")
+    server_url = await resolve_server_url(config)
+    if not server_url:
+        raise UseCaseError(
+            422,
+            "ma_unreachable",
+            "Music Assistant's Sendspin address is unknown: set SENDSPIN_SERVER or connect a player first.",
+        )
+    settings = SourceSettings(
+        server_url=server_url,
+        state_dir=_resolve_config_dir(),
+        client_name=f"Sendspin BT Bridge ({_bridge_name(config)})",
+    )
+    if persist:
+        await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE", True))
+    return await manager.start(settings, backend)
 
 
 async def stop() -> dict[str, Any]:
-    """Stop the source, its relays and its pairing agent; a second call is a no-op."""
-    return await manager.stop()
+    """Disable the source and remember that choice."""
+    from sendspin_bridge.config import update_config
+
+    result = await manager.stop()
+    await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE", False))
+    return result
 
 
-async def set_players(device_id: str, enabled: bool) -> dict[str, Any]:
-    """Arm a speaker to play the phone's capture, or send it back to Music Assistant.
+async def open_ma_pairing() -> dict[str, Any]:
+    """Open the Music Assistant pairing window and return its code."""
+    client = manager.client()
+    if client is None:
+        raise UseCaseError(409, "source_off", "The source is off; enable it first.")
+    try:
+        return await client.open_ma_pairing()
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code == "ma_already_paired":
+            raise UseCaseError(409, "ma_already_paired", str(exc)) from exc
+        raise UseCaseError(422, code or "ma_pairing_failed", str(exc)) from exc
 
-    The client is resolved first even when disarming, so an unknown device is a
-    404 rather than a silent no-op (the route behaved this way before E3).
-    """
-    from sendspin_bridge.application.status import find_client
 
-    client = find_client(device_id)
-    if not enabled:
-        await asyncio.to_thread(relay.disarm, device_id)
-        return {"device_id": device_id, "playing_source": False}
-    # The speaker the bridge drives itself: relay the phone's capture straight
-    # to its sink.  The device stays armed, so a phone that reconnects (or a
-    # bridge restart) resumes it.
-    sink = getattr(client, "bluetooth_sink_name", None) or getattr(client, "sink_name", None)
-    if not sink:
-        raise conflict("That speaker has no audio output", code="source_sink_missing")
-    await asyncio.to_thread(relay.arm, device_id, str(sink))
-    return {"device_id": device_id, "playing_source": True}
+async def cancel_ma_pairing(*, forget: bool = False) -> None:
+    """Close the Music Assistant pairing window; ``forget`` also drops the stored PSK."""
+    client = manager.client()
+    if client is None:
+        raise UseCaseError(409, "source_off", "The source is off; enable it first.")
+    await client.cancel_ma_pairing(forget=forget)
 
 
 async def open_pairing_window(seconds: int = DEFAULT_PAIRING_WINDOW_S) -> dict[str, Any]:
-    """Make the adapters discoverable and pairable for a couple of minutes."""
+    """Make the adapters discoverable and pairable so a phone can pair."""
     return await pairing.open_window(seconds)
 
 

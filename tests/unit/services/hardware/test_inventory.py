@@ -64,7 +64,7 @@ class _RecordingLease(FakeLease):
 def _fresh_reader(monkeypatch):
     inventory.clear_cache()
     monkeypatch.setattr(inventory, "probe_audio_server", lambda: "PulseAudio")
-    monkeypatch.setattr(inventory, "probe_capture", lambda: True)
+    monkeypatch.setattr(inventory, "probe_capture", lambda _name=None: True)
     monkeypatch.setattr(inventory, "_take_read_lease", lambda: _RecordingLease([]))
     yield
     inventory.clear_cache()

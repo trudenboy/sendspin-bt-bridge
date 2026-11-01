@@ -145,10 +145,10 @@ light theme, English:
 - `screenshot-hardware-overview.png` — the whole page.
 - `screenshot-hardware-audio.png` — the audio group, with the **Default** badge on
   the first output.
-- `screenshot-hardware-source.png` — the source strip waiting for a phone.
+- `screenshot-hardware-source.png` — the source strip with the Music Assistant block (connected) and the phone's Bluetooth block (streaming).
 - `screenshot-hardware-unavailable.png` — the "no D-Bus" banner. The demo host
   always has D-Bus, so this frame was rendered from a snapshot shaped like a
   container without it (the banner, the records and the codes are the app's own);
   it is not a capture of a real broken host.
 
-Retake them with `DEMO_MODE=true` and the same viewport when the page changes.
+Retake them with `DEMO_MODE=true` and the same viewport when the page changes. Recaptured 2026-11-01 for the Music Assistant source-client strip: the demo stand publishes a streaming source through a fake manager (the real protocol path is covered by the integration test, not by the stand).

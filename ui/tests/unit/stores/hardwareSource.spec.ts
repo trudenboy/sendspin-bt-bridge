@@ -10,23 +10,31 @@ vi.mock('@/api/hardware', () => ({ getHardware: vi.fn() }))
 vi.mock('@/api/source', () => ({
   SOURCE_PAIRING_WINDOW_S: 120,
   setSourceEnabled: vi.fn(),
-  setSourcePlayer: vi.fn(),
+  openMaPairing: vi.fn(),
+  cancelMaPairing: vi.fn(),
   openSourcePairing: vi.fn(),
   closeSourcePairing: vi.fn(),
 }))
 
 import { ApiError } from '@/api/client'
 import { getHardware } from '@/api/hardware'
-import { closeSourcePairing, openSourcePairing, setSourceEnabled, setSourcePlayer } from '@/api/source'
+import { cancelMaPairing, closeSourcePairing, openMaPairing, openSourcePairing, setSourceEnabled } from '@/api/source'
 import { useHardwareStore } from '@/stores/hardware'
 
 const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
-  port: 8940,
   state: 'waiting',
   phone_mac: null,
   capture: { kind: 'pipewire_node', node: 'bluez_input.FC_58_FA_EB_08_6C.0' },
-  relays: [],
+  ma: {
+    server: 'ws://ma.local:8927/sendspin',
+    connected: true,
+    paired: true,
+    pairing_required: false,
+    pairing_code: null,
+    pairing_seconds_left: 0,
+    error: null,
+  },
   error: null,
   ...overrides,
 })
@@ -65,7 +73,8 @@ describe('useHardwareStore: source', () => {
     asOfTick = 0
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
     vi.mocked(setSourceEnabled).mockResolvedValue({} as never)
-    vi.mocked(setSourcePlayer).mockResolvedValue({ device_id: 'eneby20', playing_source: true } as never)
+    vi.mocked(openMaPairing).mockResolvedValue({ code: '12345678', seconds_left: 300, client_id: 'peer' } as never)
+    vi.mocked(cancelMaPairing).mockResolvedValue(undefined as never)
     vi.mocked(openSourcePairing).mockResolvedValue(window() as never)
     vi.mocked(closeSourcePairing).mockResolvedValue(undefined as never)
     store = useHardwareStore()
@@ -81,7 +90,7 @@ describe('useHardwareStore: source', () => {
 
   it('exposes the feed, and null when the bridge reports no source at all', async () => {
     expect(store.source?.state).toBe('waiting')
-    expect(store.source?.port).toBe(8940)
+    expect(store.source?.ma.paired).toBe(true)
 
     vi.mocked(getHardware).mockResolvedValue(snapshot({ source: null }) as never)
     await store.refresh()
@@ -186,8 +195,8 @@ describe('useHardwareStore: source', () => {
   })
 
   it('clears a refusal when the page is left', async () => {
-    vi.mocked(setSourcePlayer).mockRejectedValue(problem(409, 'source_sink_missing', 'No output'))
-    await expect(store.setSourcePlayer('eneby20', true)).rejects.toMatchObject({ code: 'source_sink_missing' })
+    vi.mocked(openMaPairing).mockRejectedValue(problem(409, 'ma_already_paired', 'Already paired'))
+    await expect(store.openMaPairingWindow()).rejects.toMatchObject({ code: 'ma_already_paired' })
     expect(store.sourceError).not.toBeNull()
 
     store.disconnect()
@@ -195,27 +204,23 @@ describe('useHardwareStore: source', () => {
     expect(store.sourceError).toBeNull()
   })
 
-  it('arms and disarms a relay through the players route', async () => {
-    await store.setSourcePlayer('eneby20', true)
+  it('opens the Music Assistant pairing window and counts it down', async () => {
+    vi.useFakeTimers()
+    const result = await store.openMaPairingWindow()
 
-    expect(setSourcePlayer).toHaveBeenCalledWith('eneby20', true)
-    expect(getHardware).toHaveBeenCalledOnce()
-    expect(store.sourceError).toBeNull()
+    expect(openMaPairing).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({ code: '12345678' })
+    expect(store.maPairingSecondsLeft).toBe(300)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(store.maPairingSecondsLeft).toBe(299)
   })
 
-  it('keeps the server code and the speaker when a relay has no output (409 source_sink_missing)', async () => {
-    vi.mocked(setSourcePlayer).mockRejectedValue(
-      problem(409, 'source_sink_missing', 'That speaker has no audio output'),
-    )
+  it('forgets the Music Assistant pairing through the delete route', async () => {
+    await store.forgetMaPairing()
 
-    await expect(store.setSourcePlayer('eneby20', true)).rejects.toMatchObject({ code: 'source_sink_missing' })
-
-    expect(store.sourceError).toEqual({
-      code: 'source_sink_missing',
-      detail: 'That speaker has no audio output',
-      player: 'eneby20',
-    })
-    expect(store.sourceBusy).toBe(false)
+    expect(cancelMaPairing).toHaveBeenCalledOnce()
+    expect(store.maPairingSecondsLeft).toBe(0)
+    expect(store.sourceError).toBeNull()
   })
 
   it('surfaces the server code when the source itself cannot start', async () => {

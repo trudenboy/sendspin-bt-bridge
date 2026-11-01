@@ -60,13 +60,13 @@ def test_each_unavailable_capability_has_a_reason_code():
     assert caps.audio_server == "none"
     assert caps.bluetooth == Capability(available=False, reason="bluetooth_unavailable")
     assert caps.dbus == Capability(available=False, reason="dbus_unavailable")
-    assert caps.capture == Capability(available=False, reason="pipewire_required")
+    assert caps.capture == Capability(available=False, reason="pulse_unavailable")
     assert caps.default_sink == Capability(available=False, reason="pulse_unavailable")
     assert caps.reasons == {
         "bluetooth": "bluetooth_unavailable",
         "dbus": "dbus_unavailable",
         "audio_server": "pulse_unavailable",
-        "capture": "pipewire_required",
+        "capture": "pulse_unavailable",
         "default_sink": "pulse_unavailable",
     }
 
@@ -87,6 +87,28 @@ def test_probe_capture_checks_for_the_pipewire_tool(monkeypatch):
     import sendspin_bridge.services.hardware.capabilities as capabilities
 
     monkeypatch.setattr(capabilities.shutil, "which", lambda name: "/usr/bin/wpctl" if name == "wpctl" else None)
-    assert probe_capture() is True
+    assert probe_capture("PulseAudio (on PipeWire 1.0.5)") is True
     monkeypatch.setattr(capabilities.shutil, "which", lambda name: None)
-    assert probe_capture() is False
+    assert probe_capture("PulseAudio (on PipeWire 1.0.5)") is False
+
+
+def test_probe_capture_on_pulseaudio_needs_both_recording_tools(monkeypatch):
+    import sendspin_bridge.services.hardware.capabilities as capabilities
+
+    installed = {"pactl"}
+    monkeypatch.setattr(capabilities.shutil, "which", lambda name: f"/usr/bin/{name}" if name in installed else None)
+
+    assert probe_capture("PulseAudio") is False
+    installed.add("parecord")
+    assert probe_capture("PulseAudio") is True
+
+
+def test_a_pulseaudio_host_without_tools_says_so():
+    caps = build_capabilities(
+        bluetooth=True,
+        dbus=True,
+        server_name="PulseAudio",
+        capture=False,
+        default_sink=True,
+    )
+    assert caps.reasons == {"capture": "pulse_tools_missing"}

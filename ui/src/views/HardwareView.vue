@@ -46,6 +46,13 @@ watch(
   },
   { immediate: true },
 )
+watch(
+  () => bridge.bridge?.sendspin_source?.ma_pairing_seconds_left ?? 0,
+  (left) => {
+    if (left > 0) store.adoptMaPairingWindow(left)
+  },
+  { immediate: true },
+)
 
 const snapshot = computed(() => store.snapshot)
 const controllers = computed(() => snapshot.value?.controllers ?? [])
@@ -55,11 +62,6 @@ const capabilities = computed(() => snapshot.value?.capabilities ?? null)
 // ---------------------------------------------------------------------------
 // Source strip
 // ---------------------------------------------------------------------------
-
-/** Every player, so a relay reads as a speaker and the sink refusal names one. */
-const sourcePlayers = computed(() =>
-  bridge.devices.map((device) => ({ id: device.id, name: speakerName(device.name) || device.id })),
-)
 
 /** The name the paired device carries, when the Bluetooth list has the streaming phone. */
 const sourcePhoneName = computed(() => {
@@ -79,22 +81,40 @@ function onSourceStart() {
   })
 }
 
-/** Stopping interrupts whatever the relays are playing, so it asks and names them. */
+/** Stopping disconnects the source from Music Assistant, so it asks first. */
 async function onSourceStop() {
-  const names = (store.source?.relays ?? []).map(
-    (id) => sourcePlayers.value.find((player) => player.id === id)?.name ?? id,
-  )
   const ok = await confirmAction('source.stop', {
     title: t('hardware.source.stopConfirmTitle'),
-    consequences: [
-      names.length ? t('hardware.source.stopConsequence', { players: names.join(', ') }) : t('hardware.source.stopNoRelays'),
-    ],
+    consequences: [t('hardware.source.stopConsequence')],
     confirmLabel: t('hardware.source.stop'),
   })
   if (!ok) return
   try {
     await store.stopSource()
     notifications.success(t('hardware.source.stopped'))
+  } catch (e) {
+    notifications.error(sourceCommandFailure(e))
+  }
+}
+
+function onMaPair() {
+  void undoable('source.maPairing', () => store.openMaPairingWindow(), () => store.forgetMaPairing(), {
+    doneKey: 'undo.sourceMaPairing',
+    name: '',
+    failure: sourceCommandFailure,
+  })
+}
+
+async function onMaForget() {
+  const ok = await confirmAction('source.maForget', {
+    title: t('hardware.source.maForgetConfirmTitle'),
+    consequences: [t('hardware.source.maForgetConfirmBody')],
+    confirmLabel: t('hardware.source.maForget'),
+  })
+  if (!ok) return
+  try {
+    await store.forgetMaPairing()
+    notifications.success(t('hardware.source.maForgetDone'))
   } catch (e) {
     notifications.error(sourceCommandFailure(e))
   }
@@ -121,20 +141,6 @@ function onSourceStopPairing() {
     {
       doneKey: 'undo.sourcePairingClosed',
       name: '',
-      failure: sourceCommandFailure,
-    },
-  )
-}
-
-function onSourceRelay(playerId: string, enabled: boolean) {
-  const name = sourcePlayers.value.find((player) => player.id === playerId)?.name ?? playerId
-  void undoable(
-    'source.relay',
-    () => store.setSourcePlayer(playerId, enabled),
-    () => store.setSourcePlayer(playerId, !enabled),
-    {
-      doneKey: enabled ? 'undo.sourceAttached' : 'undo.sourceDetached',
-      name,
       failure: sourceCommandFailure,
     },
   )
@@ -655,7 +661,7 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
       <SourceFeedPanel
         :source="store.source"
         :pairing-seconds-left="store.pairingSecondsLeft"
-        :players="sourcePlayers"
+        :ma-pairing-seconds-left="store.maPairingSecondsLeft"
         :phone-name="sourcePhoneName"
         :failure="store.sourceError"
         :busy="store.sourceBusy"
@@ -663,7 +669,8 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
         @stop="onSourceStop"
         @pair="onSourcePair"
         @stop-pairing="onSourceStopPairing"
-        @relay="onSourceRelay"
+        @ma-pair="onMaPair"
+        @forget-ma="onMaForget"
       />
 
       <section class="mb-8" data-controllers-section>

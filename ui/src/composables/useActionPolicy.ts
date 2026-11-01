@@ -54,13 +54,15 @@ export const ACTION_POLICY = {
   // reconfigures, and an output can lose whatever was playing on it. Both ask.
   'audio.cardProfile': 'confirm',
   'audio.sinkPort': 'confirm',
-  // Hardware → Source: starting, pairing and relaying are reversible (the undo
-  // is the opposite command); stopping interrupts every relay, so it asks.
+  // Hardware → Source: starting and opening either pairing window are reversible
+  // (the undo is the opposite command); stopping disconnects Music Assistant and
+  // forgetting the pairing needs a new code, so both ask.
   'source.start': 'undo',
   'source.stop': 'confirm',
+  'source.maPairing': 'undo',
+  'source.maForget': 'confirm',
   'source.pairing': 'undo',
   'source.pairingStop': 'undo',
-  'source.relay': 'undo',
   // Hardware → Bluetooth link: bringing the link up or down is reversible (the
   // undo is the opposite command) and destroys nothing, so it runs at once.
   'bluetooth.connect': 'undo',

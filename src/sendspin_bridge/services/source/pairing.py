@@ -170,7 +170,7 @@ async def close_window() -> dict[str, Any]:
         # A phone paired in the window would lose its agent with the window; trusting it lets
         # A2DP connect afterwards without one.
         paired = await asyncio.to_thread(_devices)
-        newly_paired = {mac for mac in paired - _known_devices if mac not in {"FC:58:FA:EB:08:6C"}}
+        newly_paired = paired - _known_devices
         if newly_paired:
             await asyncio.to_thread(_trust, newly_paired)
     if adapters:

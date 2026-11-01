@@ -35,7 +35,7 @@ INFO = (
 def _fresh(monkeypatch, tmp_config):
     inventory.clear_cache()
     monkeypatch.setattr(inventory, "probe_audio_server", lambda: "PulseAudio (on PipeWire 1.0.5)")
-    monkeypatch.setattr(inventory, "probe_capture", lambda: True)
+    monkeypatch.setattr(inventory, "probe_capture", lambda _name=None: True)
     tmp_config.write_text(
         json.dumps(
             {
@@ -168,7 +168,8 @@ def test_bluetooth_detail_has_uuids_and_manufacturer(installed_bluez):
 
 
 def _use_audio(monkeypatch) -> None:
-    async def fake_audio():
+    async def fake_audio(server_name: str | None = None):
+        del server_name
         return hardware_audio.facts()
 
     monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
@@ -300,7 +301,8 @@ def test_no_audio_server_gives_an_empty_audio_section(installed_bluez, monkeypat
 
 
 def test_the_default_sink_is_a_flag_on_the_endpoints(installed_bluez, monkeypatch):
-    async def fake_audio():
+    async def fake_audio(server_name: str | None = None):
+        del server_name
         return replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK)
 
     monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
@@ -312,7 +314,8 @@ def test_the_default_sink_is_a_flag_on_the_endpoints(installed_bluez, monkeypatc
 
 
 def test_the_default_sink_capability_follows_a_successful_read(installed_bluez, monkeypatch):
-    async def fake_audio():
+    async def fake_audio(server_name: str | None = None):
+        del server_name
         return replace(hardware_audio.facts(), default_sink=hardware_audio.USB_SINK)
 
     monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
@@ -329,17 +332,21 @@ def test_no_source_key_when_the_feature_is_off(installed_bluez):
 
 
 def test_the_source_feed_has_the_contract_shape(installed_bluez, monkeypatch, tmp_config):
-    from sendspin_bridge.services.source import relay
-
     _use_audio(monkeypatch)
-    source_state.publish(enabled=True, port=8940, phone="bluez_input.6C_5C_3D_35_17_99.1")
-    monkeypatch.setattr(relay, "armed_devices", lambda: ["eneby"])
+    source_state.publish(
+        enabled=True,
+        state="waiting",
+        phone="bluez_input.6C_5C_3D_35_17_99.1",
+        phone_mac=DEVICE,
+        server="ws://ma:8927/sendspin",
+        ma_connected=True,
+        ma_paired=True,
+    )
     tmp_config.write_text(
         json.dumps(
             {
                 "CONFIG_SCHEMA_VERSION": 6,
                 "SENDSPIN_SOURCE": True,
-                "SENDSPIN_SOURCE_PORT": 8940,
                 "players": [
                     {
                         "id": "eneby",
@@ -355,11 +362,18 @@ def test_the_source_feed_has_the_contract_shape(installed_bluez, monkeypatch, tm
 
     assert body["source"] == {
         "enabled": True,
-        "port": 8940,
         "state": "waiting",
         "phone_mac": DEVICE,
         "capture": {"kind": "pipewire_node", "node": hardware_audio.CAPTURE_NODE},
-        "relays": ["eneby"],
+        "ma": {
+            "server": "ws://ma:8927/sendspin",
+            "connected": True,
+            "paired": True,
+            "pairing_required": False,
+            "pairing_code": None,
+            "pairing_seconds_left": 0,
+            "error": None,
+        },
         "error": None,
     }
     phone = next(device for device in body["bluetooth_devices"] if device["mac"] == DEVICE)

@@ -1,232 +1,145 @@
-"""The Sendspin source as a use case: start/stop, players, pairing and status."""
+"""The Sendspin source as a use case: start/stop, Music Assistant pairing and status."""
 
 from __future__ import annotations
-
-import json
 
 import pytest
 
 from sendspin_bridge.application import source as source_uc
-from sendspin_bridge.application import status as status_uc
 from sendspin_bridge.application.errors import UseCaseError
-from sendspin_bridge.services.source import manager, pairing, relay
+from sendspin_bridge.services.source import manager, pairing
 from sendspin_bridge.services.source import state as source_state
 
-PHONE_NODE = "bluez_input.34_C7_E9_25_A3_A3.2"
-BLUEZ_SINK = "bluez_sink.6C_5C_3D_35_17_99.a2dp_sink"
+SERVER_URL = "ws://ma.local:8927/sendspin"
 
 
 @pytest.fixture(autouse=True)
-def _clean_state(monkeypatch):
+def _clean_state(monkeypatch, tmp_path):
     source_state.reset()
-    monkeypatch.setattr(relay, "armed_devices", lambda: [])
+    manager.reset()
+    monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: tmp_path)
     yield
     source_state.reset()
+    manager.reset()
 
 
-class _Client:
-    """A running speaker, as the registry exposes it."""
-
-    def __init__(self, sink: str | None = None, *, legacy: str | None = None):
-        if legacy is not None:
-            self.sink_name = legacy
-        else:
-            self.bluetooth_sink_name = sink
-
-
-def _client(monkeypatch, client: _Client) -> None:
-    monkeypatch.setattr(status_uc, "find_client", lambda device_id: client)
-
-
-# -- status ---------------------------------------------------------------------------------------
-
-
-def test_status_reads_the_typed_snapshot_and_the_armed_relays(monkeypatch):
-    source_state.publish(enabled=True, port=8940, phone=PHONE_NODE, players=2, streaming=True)
-    monkeypatch.setattr(relay, "armed_devices", lambda: ["eneby"])
-
-    view = source_uc.status({"SENDSPIN_SOURCE": True, "SENDSPIN_SOURCE_PORT": 9000})
-
-    assert view.as_status_dict() == {
-        "enabled": True,
-        "port": 8940,
-        "phone": PHONE_NODE,
-        "players": 2,
-        "streaming": True,
-        "error": None,
-        "pairing_seconds_left": 0,
-        "pairing_adapters": [],
-        "attached_devices": ["eneby"],
-    }
-
-
-def test_status_falls_back_to_the_configured_port_before_the_source_runs():
-    view = source_uc.status({"SENDSPIN_SOURCE": True, "SENDSPIN_SOURCE_PORT": 9000})
-
-    assert view.port == 9000
-    assert (view.enabled, view.streaming) == (False, False)
-
-
-def test_status_keeps_a_pairing_error_separate_from_the_source_error():
-    source_state.publish(pairing_error="no_adapter")
+def test_status_reads_the_typed_snapshot():
+    source_state.publish(
+        enabled=True,
+        state="streaming",
+        phone="bluez_source.34_C7_E9_25_A3_A3",
+        phone_mac="34:C7:E9:25:A3:A3",
+        streaming=True,
+        server=SERVER_URL,
+        ma_connected=True,
+        ma_paired=True,
+    )
 
     view = source_uc.status({"SENDSPIN_SOURCE": True})
 
-    assert view.error is None
-    assert view.pairing_error == "no_adapter"
-    assert view.as_status_dict()["error"] is None
+    assert view.state == "streaming"
+    assert view.phone_mac == "34:C7:E9:25:A3:A3"
+    assert view.as_status_dict()["ma_connected"] is True
 
 
-def test_status_keeps_every_key_the_spa_reads():
-    source_state.publish(error="port_in_use")
-    view = source_uc.status({"SENDSPIN_SOURCE": True})
+def test_status_reports_a_missing_pairing_as_required():
+    source_state.publish(enabled=True, state="pairing", ma_paired=False)
 
-    assert set(view.as_status_dict()) == {
-        "enabled",
-        "port",
-        "phone",
-        "players",
-        "streaming",
-        "error",
-        "pairing_seconds_left",
-        "pairing_adapters",
-        "attached_devices",
-    }
-    assert view.error == "port_in_use"
+    view = source_uc.status({})
+
+    assert view.ma_pairing_required is True
 
 
-# -- start / stop ---------------------------------------------------------------------------------
+async def test_start_picks_the_backend_and_persists_the_choice(monkeypatch, tmp_path):
+    recorded: list[dict] = []
+    started: list[tuple] = []
+
+    async def fake_manager_start(settings, backend):
+        started.append((settings, backend))
+        return {"started": True, "server": settings.server_url}
+
+    monkeypatch.setattr("sendspin_bridge.services.hardware.capabilities.probe_audio_server", lambda: "PulseAudio")
+    monkeypatch.setattr("sendspin_bridge.services.hardware.capabilities.probe_capture", lambda _name: True)
+    monkeypatch.setattr("sendspin_bridge.services.source.backends.backend_for", lambda _name: object())
+    monkeypatch.setattr("sendspin_bridge.services.source.manager.start", fake_manager_start)
+
+    def record(mutator):
+        config: dict = {}
+        mutator(config)
+        recorded.append(config)
+
+    monkeypatch.setattr("sendspin_bridge.config.update_config", record)
+    monkeypatch.setattr(source_uc, "resolve_server_url", lambda _config: _async(SERVER_URL))
+
+    result = await source_uc.start(config={"SENDSPIN_SOURCE": False, "BRIDGE_NAME": "Flat"})
+
+    assert result["started"] is True
+    assert recorded == [{"SENDSPIN_SOURCE": True}]
+    settings, backend = started[0]
+    assert settings.server_url == SERVER_URL
+    assert settings.client_name == "Sendspin BT Bridge (Flat)"
+    assert backend is not None
 
 
-async def test_start_hands_the_loaded_config_and_its_directory_to_the_manager(monkeypatch, tmp_config):
-    seen: list[tuple[dict, object]] = []
+async def test_start_refuses_a_host_that_cannot_capture(monkeypatch):
+    monkeypatch.setattr("sendspin_bridge.services.hardware.capabilities.probe_audio_server", lambda: "not available")
+    monkeypatch.setattr("sendspin_bridge.services.hardware.capabilities.probe_capture", lambda _name: False)
 
-    async def fake_start(config, config_dir):
-        seen.append((config, config_dir))
-        return {"started": True, "port": 8940}
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.start(config={})
 
-    async def capture_available():
-        return True
-
-    monkeypatch.setattr(source_uc, "_capture_available", capture_available)
-    monkeypatch.setattr(manager, "start", fake_start)
-    monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: tmp_config.parent)
-    tmp_config.write_text(json.dumps({"SENDSPIN_SOURCE": True, "SENDSPIN_SOURCE_PORT": 8940}))
-
-    result = await source_uc.start()
-
-    assert result == {"started": True, "port": 8940}
-    assert len(seen) == 1
-    assert seen[0][0]["SENDSPIN_SOURCE_PORT"] == 8940
-    assert seen[0][1] == tmp_config.parent
+    assert raised.value.status == 422
+    assert raised.value.code == "capture_unavailable"
 
 
-async def test_a_host_that_cannot_capture_is_refused_before_the_manager_starts(monkeypatch):
-    started: list[int] = []
+async def test_start_refuses_when_music_assistant_is_unknown(monkeypatch):
+    monkeypatch.setattr("sendspin_bridge.services.hardware.capabilities.probe_audio_server", lambda: "PipeWire")
+    monkeypatch.setattr("sendspin_bridge.services.hardware.capabilities.probe_capture", lambda _name: True)
+    monkeypatch.setattr("sendspin_bridge.services.source.backends.backend_for", lambda _name: object())
+    monkeypatch.setattr(source_uc, "resolve_server_url", lambda _config: _async(None))
 
-    async def cannot_capture():
-        return False
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.start(config={})
 
-    async def fake_start(config, config_dir):
-        started.append(1)
-        return {"started": True}
-
-    monkeypatch.setattr(source_uc, "_capture_available", cannot_capture)
-    monkeypatch.setattr(manager, "start", fake_start)
-
-    with pytest.raises(UseCaseError) as exc:
-        await source_uc.start()
-
-    assert (exc.value.status, exc.value.code) == (422, "capture_unavailable")
-    assert started == []
+    assert raised.value.code == "ma_unreachable"
 
 
-async def test_the_capture_capability_is_the_inventorys_not_the_phones(monkeypatch):
-    from types import SimpleNamespace
+async def test_stop_keeps_the_disabled_choice_in_the_config(monkeypatch):
+    written: list[bool] = []
 
-    from sendspin_bridge.services.hardware import inventory
-
-    monkeypatch.setattr(
-        inventory,
-        "read_inventory",
-        lambda: SimpleNamespace(capabilities=SimpleNamespace(capture=SimpleNamespace(available=False))),
-    )
-    assert await source_uc._capture_available() is False
-
-    monkeypatch.setattr(
-        inventory,
-        "read_inventory",
-        lambda: SimpleNamespace(capabilities=SimpleNamespace(capture=SimpleNamespace(available=True))),
-    )
-    assert await source_uc._capture_available() is True
-
-
-async def test_stop_delegates_to_the_manager(monkeypatch):
     async def fake_stop():
-        return {"started": False, "already": True}
+        return {"started": False}
 
-    monkeypatch.setattr(manager, "stop", fake_stop)
+    monkeypatch.setattr("sendspin_bridge.services.source.manager.stop", fake_stop)
 
-    assert await source_uc.stop() == {"started": False, "already": True}
+    def record(mutator):
+        config: dict = {}
+        mutator(config)
+        written.append(config["SENDSPIN_SOURCE"])
 
+    monkeypatch.setattr("sendspin_bridge.config.update_config", record)
 
-# -- players --------------------------------------------------------------------------------------
+    result = await source_uc.stop()
 
-
-async def test_set_players_arms_the_speakers_audio_sink(monkeypatch):
-    _client(monkeypatch, _Client(BLUEZ_SINK))
-    armed: list[tuple[str, str]] = []
-    monkeypatch.setattr(relay, "arm", lambda device_id, sink: armed.append((device_id, sink)))
-
-    result = await source_uc.set_players("eneby", True)
-
-    assert result == {"device_id": "eneby", "playing_source": True}
-    assert armed == [("eneby", BLUEZ_SINK)]
+    assert result == {"started": False}
+    assert written == [False]
 
 
-async def test_set_players_reads_the_legacy_sink_name_fallback(monkeypatch):
-    _client(monkeypatch, _Client(legacy="alsa_output.usb.dac"))
-    armed: list[tuple[str, str]] = []
-    monkeypatch.setattr(relay, "arm", lambda device_id, sink: armed.append((device_id, sink)))
+async def test_pairing_with_music_assistant_needs_a_running_source():
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.open_ma_pairing()
 
-    await source_uc.set_players("dac", True)
-
-    assert armed == [("dac", "alsa_output.usb.dac")]
+    assert raised.value.status == 409
+    assert raised.value.code == "source_off"
 
 
-async def test_set_players_disarms_the_device(monkeypatch):
-    _client(monkeypatch, _Client())
-    disarmed: list[str] = []
-    monkeypatch.setattr(relay, "disarm", lambda device_id: disarmed.append(device_id))
+async def test_forgetting_the_music_assistant_pairing_needs_a_running_source():
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.cancel_ma_pairing(forget=True)
 
-    result = await source_uc.set_players("eneby", False)
-
-    assert result == {"device_id": "eneby", "playing_source": False}
-    assert disarmed == ["eneby"]
+    assert raised.value.status == 409
 
 
-async def test_a_speaker_with_no_audio_output_is_a_409(monkeypatch):
-    _client(monkeypatch, _Client())
-
-    with pytest.raises(UseCaseError) as exc:
-        await source_uc.set_players("eneby", True)
-
-    assert exc.value.status == 409
-    assert exc.value.code == "source_sink_missing"
-
-
-async def test_an_unknown_device_is_still_a_404_even_when_disarming():
-    with pytest.raises(UseCaseError) as exc:
-        await source_uc.set_players("no.such.player", False)
-
-    assert exc.value.status == 404
-    assert exc.value.code == "unknown_device"
-
-
-# -- pairing window -------------------------------------------------------------------------------
-
-
-async def test_open_pairing_window_passes_the_requested_seconds(monkeypatch):
+async def test_the_phone_pairing_window_is_delegated(monkeypatch):
     seen: list[int] = []
 
     async def fake_open(seconds):
@@ -235,32 +148,57 @@ async def test_open_pairing_window_passes_the_requested_seconds(monkeypatch):
 
     monkeypatch.setattr(pairing, "open_window", fake_open)
 
-    assert await source_uc.open_pairing_window(45) == {"pairing_seconds_left": 45}
-    assert seen == [45]
+    result = await source_uc.open_pairing_window(30)
+
+    assert seen == [30]
+    assert result == {"pairing_seconds_left": 30}
 
 
-async def test_open_pairing_window_defaults_to_two_minutes(monkeypatch):
-    seen: list[int] = []
+async def test_resolve_server_url_prefers_the_url_a_connected_player_dialled(monkeypatch):
+    class _Client:
+        connected_server_url = SERVER_URL
 
-    async def fake_open(seconds):
-        seen.append(seconds)
-        return {"pairing_seconds_left": seconds}
+    class _Snapshot:
+        active_clients = [_Client()]
 
-    monkeypatch.setattr(pairing, "open_window", fake_open)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.device_registry.get_device_registry_snapshot",
+        lambda: _Snapshot(),
+    )
 
-    await source_uc.open_pairing_window()
-
-    assert seen == [120]
+    assert await source_uc.resolve_server_url({"SENDSPIN_SERVER": "auto"}) == SERVER_URL
 
 
-async def test_close_pairing_window_closes_the_window(monkeypatch):
-    called: list[int] = []
+async def test_resolve_server_url_uses_an_explicit_host_and_port(monkeypatch):
+    class _Snapshot:
+        active_clients: list = []
 
-    async def fake_close():
-        called.append(1)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.device_registry.get_device_registry_snapshot",
+        lambda: _Snapshot(),
+    )
 
-    monkeypatch.setattr(pairing, "close_window", fake_close)
+    assert await source_uc.resolve_server_url({"SENDSPIN_SERVER": "ma.local", "SENDSPIN_PORT": 9001}) == (
+        "ws://ma.local:9001/sendspin"
+    )
 
-    await source_uc.close_pairing_window()
 
-    assert called == [1]
+async def test_resolve_server_url_falls_back_to_discovery_for_auto(monkeypatch):
+    class _Snapshot:
+        active_clients: list = []
+
+    async def fake_discovery(timeout=5.0):
+        del timeout
+        return [{"url": "http://ma.local:8095"}]
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.device_registry.get_device_registry_snapshot",
+        lambda: _Snapshot(),
+    )
+    monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_discovery.discover_ma_servers", fake_discovery)
+
+    assert await source_uc.resolve_server_url({"SENDSPIN_SERVER": "auto"}) == "ws://ma.local:8927/sendspin"
+
+
+async def _async(value):
+    return value

@@ -1,12 +1,11 @@
 """One typed snapshot of the source's runtime state.
 
-The Sendspin source runs on the bridge's event loop; its state was two
-module-level dicts updated key by key and read from API worker threads, so a
-reader could see half of a transition.  Every writer now publishes an immutable
-snapshot under a lock, and every reader takes a whole one.
+The source client runs on the bridge's event loop; readers live in API worker threads and
+in the hardware read model, so every writer publishes an immutable snapshot under a lock
+and every reader takes a whole one.
 
 The keys of :meth:`SourceState.status_dict` are the wire contract
-(``SendspinSourceStatus``); do not rename them.
+(``SendspinSourceStatus``); do not rename them without updating the models and the SPA.
 """
 
 from __future__ import annotations
@@ -14,9 +13,11 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Literal
 
 __all__ = ["SourceState", "publish", "reset", "snapshot"]
+
+SourceStateName = Literal["off", "pairing", "waiting", "streaming", "error"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,43 +25,55 @@ class SourceState:
     """What the source is doing right now, as one consistent snapshot."""
 
     enabled: bool = False
-    port: int | None = None
+    state: SourceStateName = "off"
     phone: str | None = None
-    players: int = 0
+    phone_mac: str | None = None
     streaming: bool = False
-    error: str | None = None
+    server: str | None = None
+    ma_connected: bool = False
+    ma_paired: bool = False
+    ma_pairing_code: str | None = None
+    ma_pairing_until: float = 0.0
+    ma_error: str | None = None
     pairing_until: float = 0.0
     pairing_adapters: tuple[str, ...] = ()
     pairing_error: str | None = None
+    error: str | None = None
 
     def pairing_seconds_left(self, *, now: float | None = None) -> int:
-        """Seconds the pairing window stays open (0 when it is closed)."""
-        current = time.time() if now is None else now
-        return max(0, int(self.pairing_until - current)) if self.pairing_until else 0
+        """Seconds the phone's pairing window stays open (0 when it is closed)."""
+        return _seconds_left(self.pairing_until, now)
+
+    def ma_pairing_seconds_left(self, *, now: float | None = None) -> int:
+        """Seconds the Music Assistant pairing window stays open (0 when it is closed)."""
+        return _seconds_left(self.ma_pairing_until, now)
 
     def status_dict(self) -> dict[str, Any]:
-        """The bridge-status shape: the same keys ``SendspinSourceStatus`` reads.
-
-        ``attached_devices`` is owned by the relay service rather than this
-        snapshot, so it defaults to none here; the bridge status joins the
-        armed relays in.  The key is present either way, which keeps
-        ``SendspinSourceStatus(**status_dict())`` valid on its own.
-
-        ``error`` is the *source's* error.  A pairing failure is a separate
-        field (``pairing_error``) and is reported by the pairing window, not
-        merged in here: a failed window does not stop the source streaming.
-        """
+        """The bridge-status shape (the keys ``SendspinSourceStatus`` reads)."""
         return {
             "enabled": self.enabled,
-            "port": self.port,
+            "state": self.state,
             "phone": self.phone,
-            "players": self.players,
+            "phone_mac": self.phone_mac,
             "streaming": self.streaming,
-            "error": self.error,
+            "server": self.server,
+            "ma_connected": self.ma_connected,
+            "ma_paired": self.ma_paired,
+            "ma_pairing_required": self.enabled and not self.ma_paired,
+            "ma_pairing_code": self.ma_pairing_code,
+            "ma_pairing_seconds_left": self.ma_pairing_seconds_left(),
+            "ma_error": self.ma_error,
             "pairing_seconds_left": self.pairing_seconds_left(),
             "pairing_adapters": list(self.pairing_adapters),
-            "attached_devices": [],
+            "error": self.error,
         }
+
+
+def _seconds_left(until: float, now: float | None) -> int:
+    if not until:
+        return 0
+    current = time.time() if now is None else now
+    return max(0, int(until - current))
 
 
 _lock = threading.Lock()

@@ -722,7 +722,6 @@ class SendspinClient:
     ):
         self.player_name = player_name
         # Set while this speaker plays the bridge's own Sendspin source (#563) instead of MA.
-        self.source_stream_url: str | None = None
         # The BlueZ transport last described in the log (one line per connect).
         self._described_transport_path: str | None = None
         # The speaker's reported A2DP Delay as last written to the log, so a
@@ -2127,15 +2126,6 @@ class SendspinClient:
                 self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 
-    async def use_source_stream(self, url: str | None) -> None:
-        """Play the bridge's Bluetooth source (a URL) or go back to Music Assistant (#563)."""
-        if url == self.source_stream_url:
-            return
-        self.source_stream_url = url
-        logger.info("[%s] %s", self.player_name, "playing the Bluetooth source" if url else "back to Music Assistant")
-        await self.stop_sendspin()
-        await self.start_sendspin()
-
     def _config_entry(self, config: dict) -> dict:
         """This player's entry in *config*'s ``players`` (empty when it has none)."""
         entry = find_player_by_id(config, self.config_id) if self.config_id else None
@@ -2278,7 +2268,7 @@ class SendspinClient:
                         probed,
                     )
                     effective_port = probed
-                server_url = self.source_stream_url or f"ws://{self.server_host}:{effective_port}/sendspin"
+                server_url = f"ws://{self.server_host}:{effective_port}/sendspin"
                 logger.info(
                     "Starting Sendspin player '%s' connecting to %s (port %s)",
                     self.player_name,
@@ -2423,13 +2413,7 @@ class SendspinClient:
                             "playout_diag": bool(spawn_config.get("PLAYOUT_DIAG", False)),
                             # PLAYOUT_SYNC: off (legacy player) / measure / loop.
                             # A speaker that opted out (playout_sync_enabled=false) always runs "off".
-                            # A source stream is a live phone feed: the legacy player is
-                            # enough and does not need the sink's audio clock (#563).
-                            "playout": {
-                                "mode": "off"
-                                if self.source_stream_url
-                                else effective_playout_mode(player_cfg, spawn_config)
-                            },
+                            "playout": {"mode": effective_playout_mode(player_cfg, spawn_config)},
                             # The pre-open (#555) is skipped when the speaker is meant to sleep.
                             "idle_mode": str(getattr(self, "idle_mode", "default") or "default"),
                             # EXPERIMENTAL_AIR_SENSOR: only a speaker the sensor is effective for

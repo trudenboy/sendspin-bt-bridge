@@ -1,11 +1,11 @@
-"""``/bridge/source`` keeps its paths and response shapes after the E3 extraction."""
+"""``/bridge/source``: the source client, its Music Assistant pairing and the phone window."""
 
 from __future__ import annotations
 
 import pytest
 
 from sendspin_bridge.application import source as source_uc
-from sendspin_bridge.application import status as status_uc
+from sendspin_bridge.application.errors import UseCaseError
 
 
 @pytest.fixture(autouse=True)
@@ -17,136 +17,82 @@ def _clean_state():
     state.reset()
 
 
-def test_starting_the_source_answers_exactly_as_before(api_client, monkeypatch):
-    async def fake_start():
-        return {"started": True, "port": 8940}
+def test_enabling_the_source_answers_with_the_start_result(api_client, monkeypatch):
+    async def fake_start(**kwargs):
+        assert kwargs == {}
+        return {"started": True, "server": "ws://ma:8927/sendspin"}
 
     monkeypatch.setattr(source_uc, "start", fake_start)
 
     response = api_client.post("/api/v1/bridge/source", json={"enabled": True})
 
     assert response.status_code == 200
-    assert response.json() == {"started": True, "port": 8940}
+    assert response.json() == {"started": True, "server": "ws://ma:8927/sendspin"}
 
 
-def test_stopping_the_source_answers_exactly_as_before(api_client, monkeypatch):
+def test_disabling_the_source_answers_with_the_stop_result(api_client, monkeypatch):
     async def fake_stop():
-        return {"started": False, "already": True}
+        return {"started": False, "already": False}
 
     monkeypatch.setattr(source_uc, "stop", fake_stop)
 
     response = api_client.post("/api/v1/bridge/source", json={"enabled": False})
 
     assert response.status_code == 200
-    assert response.json() == {"started": False, "already": True}
+    assert response.json() == {"started": False, "already": False}
 
 
-def test_arming_a_player_keeps_its_two_keys(api_client, monkeypatch):
-    seen: list[tuple[str, bool]] = []
+def test_the_music_assistant_pairing_code_is_returned(api_client, monkeypatch):
+    async def fake_open():
+        return {"code": "12345678", "seconds_left": 300, "client_id": "peer"}
 
-    async def fake_set_players(device_id, enabled):
-        seen.append((device_id, enabled))
-        return {"device_id": device_id, "playing_source": enabled}
+    monkeypatch.setattr(source_uc, "open_ma_pairing", fake_open)
 
-    monkeypatch.setattr(source_uc, "set_players", fake_set_players)
-
-    response = api_client.post("/api/v1/bridge/source/players", json={"device_id": "eneby", "enabled": True})
+    response = api_client.post("/api/v1/bridge/source/ma-pairing")
 
     assert response.status_code == 200
-    assert response.json() == {"device_id": "eneby", "playing_source": True}
-    assert seen == [("eneby", True)]
+    assert response.json() == {"code": "12345678", "seconds_left": 300, "client_id": "peer"}
 
 
-def test_disarming_a_player_keeps_its_two_keys(api_client, monkeypatch):
-    async def fake_set_players(device_id, enabled):
-        return {"device_id": device_id, "playing_source": enabled}
+def test_forgetting_the_pairing_answers_204_and_passes_forget(api_client, monkeypatch):
+    seen: list[bool] = []
 
-    monkeypatch.setattr(source_uc, "set_players", fake_set_players)
+    async def fake_cancel(*, forget):
+        seen.append(forget)
 
-    response = api_client.post("/api/v1/bridge/source/players", json={"device_id": "eneby", "enabled": False})
+    monkeypatch.setattr(source_uc, "cancel_ma_pairing", fake_cancel)
 
-    assert response.status_code == 200
-    assert response.json() == {"device_id": "eneby", "playing_source": False}
+    response = api_client.delete("/api/v1/bridge/source/ma-pairing")
+
+    assert response.status_code == 204
+    assert seen == [True]
 
 
-def test_a_player_without_a_sink_is_the_same_409(api_client, monkeypatch):
-    class _Client:
-        bluetooth_sink_name = None
-        sink_name = None
-
-    monkeypatch.setattr(status_uc, "find_client", lambda device_id: _Client())
-
+def test_the_player_relay_route_is_gone(api_client):
     response = api_client.post("/api/v1/bridge/source/players", json={"device_id": "eneby", "enabled": True})
 
-    assert response.status_code == 409
-    assert response.json()["code"] == "source_sink_missing"
+    assert response.status_code == 404
 
 
-def test_opening_the_pairing_window_passes_its_seconds(api_client, monkeypatch):
-    seen: list[int] = []
-
+def test_the_phone_pairing_window_is_still_available(api_client, monkeypatch):
     async def fake_open(seconds):
-        seen.append(seconds)
         return {"pairing_seconds_left": seconds, "pairing_adapters": ["AA:BB:CC:DD:EE:FF"], "error": None}
 
     monkeypatch.setattr(source_uc, "open_pairing_window", fake_open)
 
-    response = api_client.post("/api/v1/bridge/source/pairing", json={"seconds": 45})
+    response = api_client.post("/api/v1/bridge/source/pairing", json={"seconds": 30})
 
     assert response.status_code == 200
-    assert set(response.json()) == {"pairing_seconds_left", "pairing_adapters", "error"}
-    assert seen == [45]
+    assert response.json()["pairing_seconds_left"] == 30
 
 
-def test_opening_the_pairing_window_without_a_body_uses_the_default(api_client, monkeypatch):
-    seen: list[int] = []
+def test_a_pairing_command_without_a_source_is_a_problem(api_client, monkeypatch):
+    async def fake_open():
+        raise UseCaseError(409, "source_off", "The source is off")
 
-    async def fake_open(seconds):
-        seen.append(seconds)
-        return {"pairing_seconds_left": seconds, "pairing_adapters": [], "error": None}
+    monkeypatch.setattr(source_uc, "open_ma_pairing", fake_open)
 
-    monkeypatch.setattr(source_uc, "open_pairing_window", fake_open)
+    response = api_client.post("/api/v1/bridge/source/ma-pairing")
 
-    response = api_client.post("/api/v1/bridge/source/pairing")
-
-    assert response.status_code == 200
-    assert seen == [120]
-
-
-def test_closing_the_pairing_window_is_still_a_204_without_a_body(api_client, monkeypatch):
-    called: list[int] = []
-
-    async def fake_close():
-        called.append(1)
-
-    monkeypatch.setattr(source_uc, "close_pairing_window", fake_close)
-
-    response = api_client.delete("/api/v1/bridge/source/pairing")
-
-    assert response.status_code == 204
-    assert response.content == b""
-    assert called == [1]
-
-
-def test_starting_the_source_through_the_real_use_case_reaches_the_manager(api_client, monkeypatch):
-    from sendspin_bridge.services.source import manager
-
-    seen: list[dict] = []
-
-    async def fake_start(config, config_dir):
-        seen.append(config)
-        return {"started": True, "port": 8940}
-
-    async def capture_available():
-        return True
-
-    monkeypatch.setattr(source_uc, "_capture_available", capture_available)
-    monkeypatch.setattr(manager, "start", fake_start)
-    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {"SENDSPIN_SOURCE": True})
-    monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: None)
-
-    response = api_client.post("/api/v1/bridge/source", json={"enabled": True})
-
-    assert response.status_code == 200
-    assert response.json() == {"started": True, "port": 8940}
-    assert seen == [{"SENDSPIN_SOURCE": True}]
+    assert response.status_code == 409
+    assert response.json()["code"] == "source_off"

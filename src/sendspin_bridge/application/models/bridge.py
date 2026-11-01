@@ -8,6 +8,7 @@ from pydantic import ConfigDict, Field
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.application.models.devices import Device, DisabledDevice, LinkStatus
+from sendspin_bridge.application.models.source import SourceStateName
 
 
 class GroupMember(ResponseModel):
@@ -79,19 +80,26 @@ class BridgeVerdict(ResponseModel):
 
 
 class SendspinSourceStatus(ResponseModel):
-    """A phone streaming into the bridge, offered to Sendspin players as a live source."""
+    """The phone-to-Music-Assistant source: capture, pairing and connection state."""
 
-    enabled: bool = Field(default=False, description="The source server is running.")
-    port: int | None = Field(default=None, description="The port players connect to (ws://<bridge>:port/sendspin).")
-    phone: str | None = Field(default=None, description="The capture node of the phone that is playing, if any.")
-    players: int = Field(default=0, description="Sendspin players connected to the source.")
-    streaming: bool = Field(default=False, description="A player is connected and the phone's audio is being pushed.")
-    error: str | None = Field(default=None, description="Why the source is off: port_in_use.")
-    pairing_seconds_left: int = Field(default=0, description="Seconds the phone-pairing window stays open (0: closed).")
-    pairing_adapters: list[str] = Field(default_factory=list, description="Adapters the pairing window opened.")
-    attached_devices: list[str] = Field(
-        default_factory=list, description="Speakers playing the source instead of Music Assistant."
+    enabled: bool = Field(default=False, description="The source client is enabled by the operator.")
+    state: SourceStateName = Field(
+        default="off",
+        description="off | pairing | waiting | streaming | error.",
     )
+    phone: str | None = Field(default=None, description="The capture node of the phone that is playing, if any.")
+    phone_mac: str | None = Field(default=None, description="That phone's address, when the node names it.")
+    streaming: bool = Field(default=False, description="The phone's audio is reaching Music Assistant.")
+    server: str | None = Field(default=None, description="The Sendspin server URL the source dials.")
+    ma_connected: bool = Field(default=False, description="The source client is admitted by Music Assistant.")
+    ma_paired: bool = Field(default=False, description="A long-term pairing PSK is stored.")
+    ma_pairing_required: bool = Field(default=False, description="A code must be entered in Music Assistant.")
+    ma_pairing_code: str | None = Field(default=None, description="The code, while the pairing window is open.")
+    ma_pairing_seconds_left: int = Field(default=0, description="Seconds the MA pairing window stays open.")
+    ma_error: str | None = Field(default=None, description="Stable code: ma_unreachable, ma_pairing_rejected, …")
+    pairing_seconds_left: int = Field(default=0, description="Seconds the phone-pairing window stays open.")
+    pairing_adapters: list[str] = Field(default_factory=list, description="Adapters the pairing window opened.")
+    error: str | None = Field(default=None, description="A terminal source error (capture_unavailable, …).")
 
 
 class Bridge(ResponseModel):

@@ -1,0 +1,1071 @@
+<!doctype html><meta charset=utf-8><title>UX audit</title><style>body{max-width:960px;margin:2em auto;padding:0 16px;font:15px/1.55 system-ui,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px;vertical-align:top}code{background:#f2f2f2;padding:0 3px}img{max-width:100%}@media (prefers-color-scheme:dark){body{background:#16181c;color:#ddd}code{background:#2a2d33}td,th{border-color:#444}a{color:#8ab4f8}}</style><h1 id="uiux-audit-sendspin-bridge-web-ui-v3-beta-2026-10-28">UI/UX audit: Sendspin Bridge web UI (v3 beta), 2026-10-28</h1>
+<p><strong>Scope.</strong> I read the Vue 3 SPA on branch <code>v3</code> (3.1.0-beta.17): <code>ui/src</code> (views, components, kit, stores, i18n en/ru, router), the API it calls, and the docs site. I also read the <code>feat/air-sensor</code> UI diff (<code>/mnt/data/Projects/sbb-airsensor</code>, <code>git diff v3...HEAD -- ui/</code>).</p>
+<p><strong>Live checks.</strong> I browsed the live instance at <code>http://127.0.0.1:8091</code> (a standalone desktop bridge with one wired output, "Local Headphones", and no Music Assistant API sign-in). I used widths of 1366 px and 375 px, light and dark, English and Russian. I took no action that plays sound, saves, pairs, scans, restarts or updates. The phone capture page, the measure wizard and the pairing steps were checked by reading the code only.</p>
+<p><strong>Screenshots</strong> are in <code>docs/ux-audit-2026-10-28/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01</td>
+<td>Home, desktop, light</td>
+</tr>
+<tr>
+<td>02</td>
+<td>Home, desktop, dark</td>
+</tr>
+<tr>
+<td>03</td>
+<td>Home, phone</td>
+</tr>
+<tr>
+<td>04–07</td>
+<td>Device drawer tabs (Status, Settings, Timing, Events), phone</td>
+</tr>
+<tr>
+<td>08</td>
+<td>Add speaker dialog</td>
+</tr>
+<tr>
+<td>09</td>
+<td>Focus ring</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Groups</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Settings, full page</td>
+</tr>
+<tr>
+<td>12–14</td>
+<td>Diagnostics tabs (Overview, Logs, System)</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Bug report dialog</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Sync page error state</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Blank page at <code>/login</code></td>
+</tr>
+<tr>
+<td>18–19</td>
+<td>Russian UI, phone (Home, Diagnostics)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Severity.</strong>
+- <strong>critical</strong>: a user cannot finish a core task, or the UI tells them something false.
+- <strong>major</strong>: high friction, a risky action, or a WCAG AA failure.
+- <strong>minor</strong>: polish.</p>
+<hr />
+<h2 id="1-summary-top-10-issues-by-user-impact">1. Summary: top 10 issues by user impact</h2>
+<ol>
+<li><strong>Sign-in is broken (critical).</strong> The router and the login page navigate to a route named <code>dashboard</code>, which does not exist.</li>
+<li>After a correct password, <code>router.push</code> throws. The catch block then shows "Invalid password. Please try again." and the user stays on the login page.</li>
+<li>Opening <code>/login</code> while sign-in is off gives a blank page (screenshot 17).</li>
+<li>Evidence: <code>ui/src/router/index.ts:73</code>, <code>ui/src/views/LoginView.vue:42,55</code>.</li>
+<li><strong>Status indicators contradict each other (critical).</strong> At the same moment, with the same data:</li>
+<li>the header says "Music Assistant not connected" and "Music Assistant needs attention";</li>
+<li>the speaker card says "Connected to Music Assistant 192.168.10.10";</li>
+<li>Diagnostics says "Bridge Health: Healthy" above two warnings;</li>
+<li>a recovery item reads "Local Headphones … is disconnected" with the summary "Connected and ready", while the card shows Connected.</li>
+</ol>
+<p>The words "connected" and "Music Assistant" cover two different links: the Sendspin audio link and the MA API sign-in.
+3. <strong>Half of the text ignores the chosen language (major).</strong> In the Russian UI, a lot of text still appears in English:
+   - guidance banners, the header status pill and recovery items;
+   - "Why?" reasons and API error messages;
+   - event titles (<code>playback-started</code>), the badges <code>warning</code>/<code>info</code>, the sink state <code>running</code> and the code <code>not_found</code>.</p>
+<p>The kit's accessible names are hard-coded English ("Close dialog", "Loading", "Expand sidebar"). The Diagnostics tab labels are evaluated once and do not change when the language changes.
+4. <strong>Names for the same things are inconsistent (major).</strong>
+   - "Release" means "hand the speaker to other devices" in bulk actions, but "free the audio output" in the idle-mode option. The drawer calls that second action "Suspend audio output", and the bulk bar calls it "Power save".
+   - The hand-over feature has six names: Release, Hand over, Handed over, Released, Auto-released, Take back.
+   - The same object is called Speaker, Player or Device; a wired output is shown under "Speakers".
+   - Timing has five overlapping numbers: speaker delay, reported delay, sync error, playout error, and (air-sensor branch) speaker latency and air error.
+5. <strong>Disruptive actions run with one click and no confirmation or undo (major).</strong>
+   - Adapter <strong>Power</strong> and <strong>Reboot</strong> in one speaker's Settings tab drop every speaker on that adapter.
+   - Single "Hand over" runs at once, while bulk hand-over asks first.
+   - Disable runs at once.
+   - Config <strong>Import</strong> replaces the whole configuration immediately.
+   - <strong>Restart now</strong> and <strong>Update now</strong> run without warning that playback stops.
+   - <strong>Click track: Start</strong> and <strong>Measure</strong> play sound at once, with no warning.
+6. <strong>Dead ends (major).</strong>
+   - The "Restart failed" banner never goes away and offers no next step.
+   - Pairing a speaker and then pressing Cancel leaves it paired but not added, and does not say so.
+   - Recovery items show "→ action" as plain text, not as a button.
+   - In the bug report, Submit stays disabled with no explanation, and the 500 error loading diagnostics only appears in a 4-second toast behind the dialog.
+   - The Logs tab shows "No log entries" when the fetch failed.
+   - The empty Groups page offers "Discover Groups" but no way to create a group.
+   - Cancel is disabled while a measurement records.
+7. <strong>Accessibility AA failures across the app (major).</strong>
+   - The focus ring is <code>primary/50</code> on white, about 1.6:1 (needs 3:1).
+   - <code>text-warning</code> (#ffa600) is used as text in 13 places, about 1.9:1.
+   - <code>text-secondary</code> on grey fills is 4.2:1, and the guidance summary is 3.7:1.
+   - Disabled cards use <code>opacity-60</code>, which drops all their text below 3:1.
+   - Dialog, drawer and toast close buttons are 16–20 px (needs 24 px).
+   - The single-key shortcuts (<code>1</code>–<code>4</code>, <code>a</code>, <code>/</code>) cannot be turned off (SC 2.1.4).
+   - Error toasts disappear after 4 s.
+   - The group volume slider has no accessible name.
+8. <strong>Phone layout breaks in places (major).</strong>
+   - Diagnostics → Recovery toolbar widens the page to 556 px at 375 px wide (screenshot 19, WCAG 1.4.10).
+   - The drawer's 5 tabs scroll sideways with a visible scrollbar, and "Signal Path" is off-screen.
+   - The header health pill and the runtime row are hidden on phones.
+   - Bulk actions become unlabeled icons, with <code>title</code> tooltips that touch screens never show.
+9. <strong>Several save models and duplicated features (major).</strong>
+   - The device drawer mixes instant toggles (Enabled, Playout sync), instantly applied timing fields, and a form that needs Save.
+   - Closing the drawer discards unsaved edits without a prompt, and no page warns on reload or tab close.
+   - Two calibration tools exist: the per-speaker mic "Measure" and the group sync wizard.
+   - The MA sign-in form exists twice (Groups and Settings).
+   - The update channel can be changed in two places.
+   - The Status and Signal Path tabs repeat sink, codec and format.
+10. <strong>The docs describe a different UI (major).</strong> <code>docs-site/.../web-ui.mdx</code> (and its Russian twin) describe the v2 dashboard: onboarding checklist, "Show checklist", a "Bulk actions" dropdown that targets the whole fleet, and Configuration tabs General/Audio/Devices. None of these exist in v3.</p>
+<pre><code>The air-sensor branch adds "Speaker latency (air → sound)" right next to the existing "Speaker delay", plus raw engineering terms (H, PSR, host placement, Locked/Holding) with no explanation.
+</code></pre>
+<hr />
+<h2 id="2-findings-by-area">2. Findings by area</h2>
+<h3 id="21-global-shell-header-sidebar-bottom-bar-banners">2.1 Global shell (header, sidebar, bottom bar, banners)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G1</td>
+<td>critical</td>
+<td>Navigation to the unknown route name <code>dashboard</code>, at sign-in and on <code>/login</code></td>
+<td><code>router/index.ts:73</code>, <code>LoginView.vue:42,55</code>; screenshot 17</td>
+<td>Use <code>{ name: 'home' }</code>. Add a unit test that every <code>router.push({name})</code> target exists.</td>
+</tr>
+<tr>
+<td>G2</td>
+<td>critical</td>
+<td>Two meanings of "Music Assistant connected" on the same screen. The runtime row and header pill track the MA API session; the card chip tracks the Sendspin link.</td>
+<td><code>RuntimeRow.vue:55</code>, <code>ServerChip.vue</code>; screenshot 01</td>
+<td>Name them separately everywhere, for example "Audio link to MA: connected" and "MA account: not signed in". The pill could say "Sign in to Music Assistant".</td>
+</tr>
+<tr>
+<td>G3</td>
+<td>major</td>
+<td>The health pill (<code>md:inline-flex</code>) and the runtime row (<code>hidden md:block</code>) are hidden on phones. The phone summary line shows only part of it.</td>
+<td><code>AppHeader.vue:78</code>, <code>App.vue:47</code></td>
+<td>Show a compact health dot or pill in the phone header that opens Diagnostics.</td>
+</tr>
+<tr>
+<td>G4</td>
+<td>major</td>
+<td>The restart banner in the <code>error</code> state has no dismiss button, no auto-hide and no next step. It stays until reload.</td>
+<td><code>RestartBanner.vue:53-56,120</code></td>
+<td>Add "Try again", "Open logs" and dismiss. Add <code>role="status"</code> / <code>aria-live</code> to the banner.</td>
+</tr>
+<tr>
+<td>G5</td>
+<td>minor</td>
+<td>The bottom bar says "Health" (EN) / "Состояние" (RU), but the page is "Diagnostics".</td>
+<td><code>en.json nav.diagnosticsShort</code></td>
+<td>Use "Diagnostics" (or "Diag."), or rename the page to "Health".</td>
+</tr>
+<tr>
+<td>G6</td>
+<td>minor</td>
+<td>The sidebar collapse button has a hard-coded English title, no <code>aria-label</code> and no <code>aria-expanded</code>. The sidebar height <code>calc(100vh-4rem)</code> ignores the runtime row, so it ends early and leaves a grey band on long pages.</td>
+<td><code>AppSidebar.vue:26,58</code>; screenshots 11–12</td>
+<td>Localize the label, add <code>aria-expanded</code>, and use a sticky full-height layout.</td>
+</tr>
+<tr>
+<td>G7</td>
+<td>minor</td>
+<td>On phones the update badge is icon-only, with only a <code>title</code> and no <code>aria-label</code>.</td>
+<td><code>AppHeader.vue:87-96</code></td>
+<td>Add <code>aria-label</code>.</td>
+</tr>
+<tr>
+<td>G8</td>
+<td>minor</td>
+<td>The language and theme menu items do not expose which one is selected (only bold text). The menu headings are <code>&lt;p&gt;</code> inside <code>role=menu</code>.</td>
+<td><code>AppHeader.vue:130-137</code></td>
+<td>Use <code>menuitemradio</code> + <code>aria-checked</code>, and <code>role=group</code> with a label.</td>
+</tr>
+<tr>
+<td>G9</td>
+<td>minor</td>
+<td>The page always shows a vertical scrollbar, even when empty (<code>min-h-screen</code> under <code>pt-16</code> plus the runtime row).</td>
+<td><code>App.vue:46,51</code></td>
+<td>Use <code>min-h-[calc(100dvh-…)]</code> or move to a grid layout.</td>
+</tr>
+<tr>
+<td>G10</td>
+<td>minor</td>
+<td>Toasts sit bottom-right with <code>z-100</code> and overlap the phone bottom bar. They also hide behind a dialog's dim (screenshot 15).</td>
+<td><code>SbToastContainer.vue:9</code></td>
+<td>On phones, place them above the bottom bar and the dialog.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-speakers-home-cards-list-bulk-actions">2.2 Speakers (home), cards, list, bulk actions</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H1</td>
+<td>major</td>
+<td><strong>Release / Hand over name collision.</strong> Bulk "Release" means hand-over (stop managing Bluetooth). Idle mode "Release audio (power save)" and drawer "Suspend audio output" mean freeing the output. The drawer button is "Hand over to other devices"; badges say "Released" / "Handed over" / "Auto-released"; the way back is "Take back".</td>
+<td><code>en.json devices.bulk.release</code>, <code>settings.device.idle_mode.options.power_save</code>, <code>drawer.actions.release</code>, <code>bluetooth.release</code></td>
+<td>Pick one word per concept: <strong>Hand over / Take back</strong> (Bluetooth control) and <strong>Pause output / Resume output</strong> (power save). Never use "Release" for both. Apply to EN and RU.</td>
+</tr>
+<tr>
+<td>H2</td>
+<td>major</td>
+<td>Single "Hand over" (card menu, list quick action, drawer) runs immediately. Bulk hand-over asks for confirmation and explains "They will not reconnect until you take them back".</td>
+<td><code>SpeakerActionsMenu.vue:78</code>, <code>DeviceListRow.vue</code> quick actions, <code>GroupActionBar.vue:116-120</code></td>
+<td>Use one rule: confirm, or better, show an undo toast ("Handed over. Undo") everywhere.</td>
+</tr>
+<tr>
+<td>H3</td>
+<td>major</td>
+<td>Disable (menu and drawer toggle) takes effect at once with no confirm or undo. The player disappears from MA.</td>
+<td><code>SpeakerActionsMenu.vue:84</code>, <code>DeviceSettingsPanel.vue:184</code></td>
+<td>Add an undo toast.</td>
+</tr>
+<tr>
+<td>H4</td>
+<td>major</td>
+<td>The bulk bar has "Mute all" and "Pause all" but no "Unmute all" or "Resume all". After a bulk mute you must unmute speakers one by one.</td>
+<td><code>GroupActionBar.vue:214-237</code></td>
+<td>Make them toggles that follow the state of the selection.</td>
+</tr>
+<tr>
+<td>H5</td>
+<td>major</td>
+<td>The group volume slider sets the same absolute level on every selected speaker, which wipes out their relative balance. It has no accessible name. It is called "Group volume", which clashes with MA groups.</td>
+<td><code>GroupActionBar.vue:197-209</code></td>
+<td>Rename it "Volume of selected". Offer relative steps (−/+), or warn that it flattens levels. Add <code>aria-label</code>.</td>
+</tr>
+<tr>
+<td>H6</td>
+<td>major</td>
+<td>Volume and mute failures show "Failed to toggle device". Hand-over failure in the drawer shows the same text.</td>
+<td><code>DevicePlayerPanel.vue:83,87</code>, <code>DeviceDetailDrawer.vue:159</code></td>
+<td>Use specific messages ("Could not change the volume of {name}") and include the server reason.</td>
+</tr>
+<tr>
+<td>H7</td>
+<td>major</td>
+<td>Disabled cards are drawn with <code>opacity-60</code>, so the name, room, badge and menu fall below 3:1. These are live controls, so the disabled-control exemption does not apply.</td>
+<td><code>DisabledPlayerCard.vue:34</code>, <code>DeviceCard.vue:72</code></td>
+<td>Use a "Disabled" badge plus muted icon and background, and keep the text at full contrast.</td>
+</tr>
+<tr>
+<td>H8</td>
+<td>minor</td>
+<td>Filters appear only at 6+ players, but the filter state lives in the store. If the count drops below 6, the filters vanish while still applied, leaving "No results" with no way to clear them.</td>
+<td><code>HomeView.vue:83-84,460</code></td>
+<td>Clear filters when hiding the bar, and add "Clear filters" to the no-results state.</td>
+</tr>
+<tr>
+<td>H9</td>
+<td>minor</td>
+<td>Choosing a group filter also changes the selection, which is a hidden side effect.</td>
+<td><code>HomeView.vue:178-186</code></td>
+<td>Keep filter and selection separate, or say "Selected the 3 speakers of {group}".</td>
+</tr>
+<tr>
+<td>H10</td>
+<td>minor</td>
+<td>The bulk bar shows "0 selected" and a select-all checkbox as soon as there are 2 players. That is permanent clutter for small setups.</td>
+<td><code>HomeView.vue:81</code></td>
+<td>Show it only after the first selection, with selection started from a card checkbox or long-press.</td>
+</tr>
+<tr>
+<td>H11</td>
+<td>minor</td>
+<td>List view: the transport cell is empty when paused, so there is no Play button (cards have one). Its buttons are 22 px.</td>
+<td><code>DeviceListRow.vue:236-262</code></td>
+<td>Mirror the card: Play/Pause toggle, 32 px targets.</td>
+</tr>
+<tr>
+<td>H12</td>
+<td>minor</td>
+<td>Success is silent for Reconnect, Standby, Wake and Claim (errors only).</td>
+<td><code>SpeakerActionsMenu.vue:34-40</code></td>
+<td>Show a short confirmation, or a spinner state on the badge.</td>
+</tr>
+<tr>
+<td>H13</td>
+<td>minor</td>
+<td>Jargon on cards: "Transfer / Not ready" chip (room handoff), "Δ dB" signal, "×3" re-anchors, "Re-anchoring", "Playout", "Claim audio" = "Make this bridge the active source".</td>
+<td><code>en.json device.chips.*</code></td>
+<td>Hide these behind an "Advanced details" switch, or turn them into plain-language tooltips. Show the transfer chip only when handoff is configured.</td>
+</tr>
+<tr>
+<td>H14</td>
+<td>minor</td>
+<td>A local output's chip shows the raw <code>alsa_output.pci-…</code> name until the sinks list loads (RU screenshot 18), then switches to the description.</td>
+<td><code>HomeView.vue:44-55</code></td>
+<td>Show a skeleton, or fetch sinks before the first render.</td>
+</tr>
+<tr>
+<td>H15</td>
+<td>minor</td>
+<td>Status "Connected" (<code>ready</code>) and "Not connected" (<code>offline</code>) both use the neutral tone, with grey vs green dot as the only difference.</td>
+<td><code>DeviceStatusBadge.vue:26,30</code></td>
+<td>Give a distinct tone or icon (as well as color).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-device-drawer-status-settings-timing-events-signal-path">2.3 Device drawer (Status, Settings, Timing, Events, Signal Path)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>major</td>
+<td><strong>Adapter Power and Reboot sit inside one speaker's Settings tab</strong>, with no confirmation. They disconnect every speaker on that adapter. "Power" is a toggle that does not show the current state.</td>
+<td><code>DeviceDetailDrawer.vue:326-360</code></td>
+<td>Move them to Settings → Bluetooth → Adapters. Confirm with the list of affected speakers, and show "Turn off / Turn on".</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>major</td>
+<td>Priorities are inverted. "Hand over to other devices" is a prominent button on Status, while the common recovery actions (Reconnect, Pair again) are hidden in an unlabeled "…" menu. That menu always shows "Unmute the audio output" and "Resume audio output", even when they do not apply.</td>
+<td><code>DeviceDetailDrawer.vue:283-318</code></td>
+<td>Make Reconnect the primary button and move Hand over to the menu. Show Unmute/Resume only when muted or suspended. Give the "…" a visible label ("More").</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>major</td>
+<td>Three save models in one drawer: Enabled and Playout sync apply instantly, Timing fields apply instantly ("no save step"), and the Settings fields need Save. Closing the drawer with unsaved fields silently drops them.</td>
+<td><code>DeviceSettingsPanel.vue:183-188,221-224</code>, <code>DeviceTimingPanel.vue:28</code></td>
+<td>Either make every field auto-save with inline "Saved ✓", or guard close with "Discard changes?".</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>major</td>
+<td>On phones, the 5 tabs scroll sideways with a visible scrollbar, and "Signal Path" is off-screen (screenshots 04–07).</td>
+<td><code>SbTabs.vue:79</code></td>
+<td>Merge Signal Path into Status, so there are 4 tabs that fit 375 px. Or use a select / segmented control on phones.</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>minor</td>
+<td>The Status and Signal Path tabs repeat sink, codec and "Sample Rate". The "Sample Rate" field shows <code>flac 48000Hz/16-bit/2ch</code>, which is a format, not a rate. "State: Connected" and "Connected: Yes" say the same thing.</td>
+<td><code>DeviceDetailDrawer.vue:208-247,383-395</code></td>
+<td>Show one "Audio" block labeled "Format". Drop the duplicate "Connected" row.</td>
+</tr>
+<tr>
+<td>D6</td>
+<td>minor</td>
+<td>Events show raw slugs as titles (<code>playback-started</code>) above a message that repeats them. Times use the browser locale (en-US in the RU UI). The order is newest first here but oldest first in Diagnostics.</td>
+<td><code>DeviceDetailDrawer.vue:115-126</code>; screenshots 07, 12</td>
+<td>Localize event labels, format dates with the UI locale (<code>Intl</code> with <code>locale</code>), and use the same order everywhere.</td>
+</tr>
+<tr>
+<td>D7</td>
+<td>minor</td>
+<td>Hard-coded English: <code>"Audio Sink"</code>, <code>"port …"</code>, <code>"… corrections"</code>, <code>"Music Assistant"</code>/<code>"Sendspin"</code> labels. "Subprocess" is jargon.</td>
+<td><code>DeviceDetailDrawer.vue:98-111,394</code></td>
+<td>Use i18n keys. Rename "Subprocess" to "Player process".</td>
+</tr>
+<tr>
+<td>D8</td>
+<td>minor</td>
+<td>Device number fields accept out-of-range values (no client validation). Clearing a non-nullable number silently writes <code>min</code>.</td>
+<td><code>SettingField.vue:84-91</code></td>
+<td>Validate inline against min/max and show the error, linked with <code>aria-describedby</code>.</td>
+</tr>
+<tr>
+<td>T1</td>
+<td>major</td>
+<td><strong>Timing: "Click track → Start" and "Measure" play sound right away.</strong> Nothing warns about this. The mic measure runs 3 rounds with no Cancel.</td>
+<td><code>DeviceTimingPanel.vue:186-206,75-113</code></td>
+<td>Label the buttons "Play clicks (audible)". Add Stop/Cancel during the measurement.</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>major</td>
+<td>Two calibration tools that overlap: the per-speaker mic compare (Timing tab) and the group sync wizard (Groups → Sync). Their steps and words differ.</td>
+<td><code>DeviceTimingPanel.vue</code>, <code>SyncView.vue</code></td>
+<td>Keep one path: the Timing tab shows the value and a link "Tune in group sync". Retire the per-speaker mic compare, or present it as a "quick check".</td>
+</tr>
+<tr>
+<td>T3</td>
+<td>major</td>
+<td>The meaning of "Speaker delay" is backwards from intuition ("larger = earlier", "+ plays earlier"). In the air-sensor branch, a second value, "Speaker latency (air → sound)", sits next to it. Users will mix them up.</td>
+<td><code>en.json settings.device.static_delay_ms</code>, <code>sync.delayHeading</code>; air branch <code>timing.air.calibration.line</code>, <code>sync.air.title</code></td>
+<td>Rename to "Speaker latency compensation (ms)" with the help text "How late this speaker plays; the bridge sends audio earlier by this much". Name the air value "Measured Bluetooth latency" and say how it relates to the compensation (does saving it change the compensation?).</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>minor</td>
+<td>The sparkline draws each series against its own max and has no axis, values or units. The sync-error line is mostly off the chart (screenshot 06). "Sync error −21.1 ms" is shown with a warning tone but never says what a good value is.</td>
+<td><code>DeviceTimingPanel.vue:126-133,249-252</code></td>
+<td>Use a shared y-axis with a ±20 ms band, and add a "Good: within ±20 ms" hint.</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>minor</td>
+<td>The playout rows are raw engineering terms (p95, drift ms/s, ppm, clock slew, sink rate, Warm).</td>
+<td><code>DeviceTimingPanel.vue:151-165</code></td>
+<td>Put them under "Technical details" (collapsed), with one-line help each.</td>
+</tr>
+<tr>
+<td>T6</td>
+<td>minor</td>
+<td>"Show advanced settings" is a native checkbox here but an <code>SbToggle</code> in Settings, and it is not remembered here.</td>
+<td><code>DeviceTimingPanel.vue:255-258</code></td>
+<td>Use one component and one stored preference.</td>
+</tr>
+<tr>
+<td>A1</td>
+<td>minor</td>
+<td>(air) The "Last confirmed {s} s ago" row is computed from <code>Date.now()</code>, which is not reactive, so it goes stale.</td>
+<td>air <code>DeviceTimingPanel.vue</code> <code>airRows</code></td>
+<td>Use <code>useNow()</code>.</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>minor</td>
+<td>(air) <code>border-border-default</code> is not a design token (only <code>border</code> and <code>border-strong</code> exist).</td>
+<td>air <code>AirCalibrations.vue:65</code></td>
+<td>Use <code>border-border</code>.</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>minor</td>
+<td>(air) The "outside 0–2000 ms" text uses <code>text-warning</code> (≈1.9:1). The reference picker silently also changes "the reference for the proposed delays".</td>
+<td>air <code>AirCalibrations.vue:105,72-79</code></td>
+<td>Use the <code>tone-warning</code> utility. Make the side effect explicit ("Changing the reference recomputes the proposed delays").</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>minor</td>
+<td>(air) The EXPERIMENTAL_AIR_SENSOR toggle can be turned on while PLAYOUT_SYNC is off. The UI then just reports "Needs playout sync in measure mode" later.</td>
+<td>air <code>settings/layout.ts</code></td>
+<td>Disable it with the reason shown, or offer "Turn on measure mode too".</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>minor</td>
+<td>(air) The chip tooltip "air: locked, H +3.1 ms" and the rows Host placement / PSR / Air error are unexplained.</td>
+<td>air <code>en.json timing.air.*</code></td>
+<td>Explain each term in plain words, or hide them under the debug/advanced switch.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-add-speaker-and-pairing">2.4 Add speaker and pairing</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1</td>
+<td>major</td>
+<td>After a successful pair, the name step's Cancel (and Esc, X or backdrop) leaves the speaker <strong>paired but not on the bridge</strong>, with no notice. The way back is buried under "Speaker not found or pairing fails?" → "Choose a speaker that is already paired".</td>
+<td><code>AddSpeakerDialog.vue:96-97,248-250</code></td>
+<td>On cancel after pairing, ask "Keep the pairing / Unpair". Or add the speaker with its default name immediately and let the user rename it.</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>minor</td>
+<td>The dialog gives two contradictory instructions: "Speakers nearby appear below" (implies automatic scanning) and "press Search". The code comment says the scan "starts by itself", but it does not.</td>
+<td><code>AddSpeakerDialog.vue:17,145,191</code></td>
+<td>Auto-start the scan when the dialog opens (with a Stop), or keep one instruction.</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>minor</td>
+<td>When there is no powered adapter, Search is disabled with no explanation.</td>
+<td><code>AddSpeakerDialog.vue:46,158</code></td>
+<td>Show "No Bluetooth adapter is on: Settings → Bluetooth".</td>
+</tr>
+<tr>
+<td>P4</td>
+<td>minor</td>
+<td>On a pair failure, the troubleshooting options stay folded away.</td>
+<td><code>AddSpeakerDialog.vue:91-95,194</code></td>
+<td>Open the "trouble" section automatically on failure and suggest the matching option.</td>
+</tr>
+<tr>
+<td>P5</td>
+<td>minor</td>
+<td>The test step waits with "Connecting… a few seconds" and has no timeout or next step.</td>
+<td><code>AddSpeakerDialog.vue:236</code></td>
+<td>After about 20 s, show "Still no audio. Open details / Reconnect".</td>
+</tr>
+<tr>
+<td>P6</td>
+<td>minor</td>
+<td>The audio-output tab shows a raw <code>running</code> badge and puts its buttons inline, while the Bluetooth tab puts them in the footer.</td>
+<td><code>AudioOutputPicker.vue:85,97-100</code></td>
+<td>Translate the state and use the same footer pattern.</td>
+</tr>
+<tr>
+<td>P7</td>
+<td>minor</td>
+<td>Focus starts on the 20×20 close button, and the tab panel adds an extra Tab stop (<code>tabindex=0</code>).</td>
+<td><code>SbDialog.vue:78-84</code>, <code>SbTabs.vue:120</code></td>
+<td>Focus the first meaningful control (or the title). Drop <code>tabindex</code> on panels that contain focusable content.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-groups-music-assistant-sign-in">2.5 Groups, Music Assistant sign-in</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M1</td>
+<td>major</td>
+<td>The MA sign-in form shows three methods at equal weight: password, the "Sign in with Home Assistant" popup, and a token. It does not say which credentials go in "Username/Password" (MA or HA). The server URL is empty even though the bridge already talks to MA at 192.168.10.10.</td>
+<td><code>MaLoginFlow.vue</code>; screenshot 10</td>
+<td>Prefill the URL from the known server. Recommend one method, chosen by the environment (HA popup when MA runs behind HA), and fold the others under "Other ways". Label the fields "Music Assistant username".</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>major</td>
+<td>The same form appears on Groups and in Settings → Music Assistant. There are three entry points to the same fix (header pill → Diagnostics, banner → Settings, Groups).</td>
+<td><code>GroupsView.vue:37-40</code>, <code>MaConnectionSection.vue</code></td>
+<td>Keep one sign-in place (Settings) and link to it from the others, or use one shared dialog.</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>minor</td>
+<td>Auto-Discover silently does nothing when no server is found. A blocked popup gives no feedback. "Sign in with Home Assistant" is disabled with no reason (it needs a URL).</td>
+<td><code>MaLoginFlow.vue:24-32,74-77,122</code></td>
+<td>Show "No server found on the network". Detect <code>window.open</code> returning null. Add a hint under the disabled button.</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>minor</td>
+<td>The empty Groups state ("No Sync Groups … Discover groups to get started") offers no way to create a group, which only MA can do.</td>
+<td><code>MaGroupList.vue:91-104</code></td>
+<td>Add "Create a group in Music Assistant ↗" (<code>ma_web_url</code>) and a one-line explanation.</td>
+</tr>
+<tr>
+<td>M5</td>
+<td>minor</td>
+<td>"Auto-connect failed, please log in manually" gives no reason.</td>
+<td><code>GroupsView.vue:30-35</code></td>
+<td>Include the server's reason and a retry.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-group-sync-tuning-manual-measure-phone-capture">2.6 Group sync tuning (manual, measure, phone capture)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td>major</td>
+<td>Opening the <strong>Manual</strong> tab starts a tuning session, which locks the group ("Tuning on another device" elsewhere). Leaving the tab triggers a "Save as profile?" dialog. A tab should not start work.</td>
+<td><code>SyncView.vue:128-206,317</code></td>
+<td>Make Manual a screen with an explicit "Start manual tuning" button. Tabs only switch views.</td>
+</tr>
+<tr>
+<td>S2</td>
+<td>major</td>
+<td>Cancel and Back are disabled while a speaker records (<code>!!active</code>), and while the phone sequence runs. Clicks keep playing until it finishes; there is no emergency stop.</td>
+<td><code>StepMembers.vue:231-235</code>, <code>PhoneCapture.vue:238</code></td>
+<td>Keep Cancel active at all times (it aborts the recording and restores the group).</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>minor</td>
+<td>There are 7 wizard steps (Where and how → Stop music → Start clicks → Volume → Speaker by speaker → Listen → Finished) and two parallel entry points: the Group / Manual / Measure tabs and the "Manual tuning" / "Measure with a microphone" buttons on the Group tab.</td>
+<td><code>SyncView.vue:22-26,528-560</code>; <code>en.json sync.wizard.steps</code></td>
+<td>Merge Stop music and Start clicks into one "Prepare the group" step (stop, then start the clicks automatically after confirmation). Remove either the tabs or the duplicate buttons.</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>minor</td>
+<td>Error messages show raw codes: "Could not open this group (not_found)" (screenshot 16), and <code>({code})</code> across <code>sync.*</code>. There is no Retry on the group error.</td>
+<td><code>SyncView.vue:501,510</code></td>
+<td>Map codes to sentences, keep the code in small text, and add Retry.</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>minor</td>
+<td>The phone page asks the user to accept a self-signed certificate warning ("accept it once"). That is unsettling for non-experts, and the HTTP fallback (the phone's recorder app) is harder.</td>
+<td><code>en.json sync.phone.certificate</code>, <code>capture_page.py</code></td>
+<td>Explain why the warning appears and what it means. Consider a QR code to install the bridge CA, or prefer HA ingress HTTPS when available.</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>✓</td>
+<td>Good: live regions (<code>role=status</code>, <code>aria-live</code>) exist on every step, cancellation states what is restored, and the capture page is localized.</td>
+<td><code>MeasureWizard.vue:1048</code>, <code>StepClicker.vue:45</code>, <code>capture_page.py:135</code></td>
+<td>Keep.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="27-settings">2.7 Settings</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td>major</td>
+<td><strong>Import replaces the whole configuration immediately</strong>, with no confirmation, no diff and no undo. Meanwhile "Edit as JSON" needs Save.</td>
+<td><code>BackupSection.vue:24-35</code></td>
+<td>Show a diff or summary dialog ("12 changes, 2 speakers added") before applying, and offer an automatic backup download.</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>major</td>
+<td>"Require sign-in" can be switched on with no password. The save then fails with the English server error "Set a password before enabling authentication".</td>
+<td><code>settings/layout.ts:206</code>; <code>application/config.py:750-759</code></td>
+<td>Disable the toggle and link "Create a password first". In the HA add-on, hide the whole Security sign-in block (HA handles it; <code>config.haAuthInfo</code> exists but is unused).</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>major</td>
+<td>"Restart now" (banner) runs without confirmation, although it stops playback on every speaker.</td>
+<td><code>ConfigView.vue:131-134,192</code></td>
+<td>Confirm, and name what is playing.</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>minor</td>
+<td>Update channel shows "Stable" while the installed version is 3.1.0-beta.17, and says "No newer version found on this channel" (screenshot 11). The two pieces of information contradict each other.</td>
+<td>Settings → Updates</td>
+<td>Say "You run a beta; channel Stable will offer the next stable (3.x)". The channel picker also exists in the Update dialog, so keep only one.</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>minor</td>
+<td>Search hides the section parts (Password, Tokens, Adapters, MA account) unless the section title matches. Searching "password" shows the lockout fields but not the place to change the password.</td>
+<td><code>ConfigView.vue:116-119</code></td>
+<td>Give each part searchable keywords.</td>
+</tr>
+<tr>
+<td>C6</td>
+<td>minor</td>
+<td>The section nav highlight changes only on click, not on scroll.</td>
+<td><code>ConfigView.vue:123-127</code></td>
+<td>Use an <code>IntersectionObserver</code> to follow the scroll position.</td>
+</tr>
+<tr>
+<td>C7</td>
+<td>minor</td>
+<td>No <code>beforeunload</code> guard: a reload or tab close discards unsaved settings (only route changes are guarded).</td>
+<td><code>grep beforeunload</code> (none)</td>
+<td>Add one while <code>isDirty</code>.</td>
+</tr>
+<tr>
+<td>C8</td>
+<td>minor</td>
+<td>In the HA add-on, "Install updates automatically" and the channel have no effect (HA store). Guidance grace periods are niche but shown by default.</td>
+<td><code>settings/layout.ts:218-233</code></td>
+<td>Hide them in the add-on, and mark the grace periods <code>advanced</code>.</td>
+</tr>
+<tr>
+<td>C9</td>
+<td>minor</td>
+<td>Sendspin port 8927 while the help says "normally 9000". Buffer presets 300/600/800 when the current value is 200 and none matches.</td>
+<td>screenshot 11</td>
+<td>Show "current: custom" on the presets. The port help could say "found automatically: 8927".</td>
+</tr>
+</tbody>
+</table>
+<h3 id="28-diagnostics-logs-bug-report">2.8 Diagnostics, logs, bug report</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>X1</td>
+<td>critical</td>
+<td>"Healthy" above recovery warnings. A recovery item contradicts itself ("is disconnected" / "Connected and ready") while the card shows Connected.</td>
+<td>screenshot 12; <code>services/diagnostics/operator_guidance.py</code>, <code>RecoveryPanel.vue</code></td>
+<td>Compute one verdict from the same issue list (the health card shows "2 warnings" when there are any). Fix the stale or contradictory recovery text on the server.</td>
+</tr>
+<tr>
+<td>X2</td>
+<td>major</td>
+<td>Recovery actions are rendered as plain text ("→ Reconnect speaker"), not buttons. The same issue on Home has a working button.</td>
+<td><code>RecoveryPanel.vue:86</code></td>
+<td>Reuse <code>useGuidanceActions().run</code> and render an <code>SbButton</code>.</td>
+</tr>
+<tr>
+<td>X3</td>
+<td>major</td>
+<td>The Recovery toolbar does not wrap, so the page widens to 556 px at 375 px (RU) (screenshot 19).</td>
+<td><code>RecoveryPanel.vue:51</code></td>
+<td>Add <code>flex-wrap</code> and gap, or move the actions into a menu on phones.</td>
+</tr>
+<tr>
+<td>X4</td>
+<td>major</td>
+<td>Logs are not live, although an "Auto-scroll" toggle suggests a live tail. A fetch error shows "No log entries". Applying the log level changes the bridge's level, sits next to the view-filter chips, and gives no success or error feedback.</td>
+<td><code>LogsViewer.vue:88-116</code></td>
+<td>Stream logs from the existing <code>log</code> SSE events, or label the control "Refresh". Show load errors. Move "Bridge log level" out of the filter row and confirm "Now logging at DEBUG".</td>
+</tr>
+<tr>
+<td>X5</td>
+<td>major</td>
+<td>Bug report: Submit is disabled until the title has ≥5 and the description ≥10 characters, with no hint (the specific messages can never appear). The diagnostics 500 shows only as a 4-second toast behind the backdrop. "Submit Report" with the GitHub method actually opens GitHub in a new tab, which needs a GitHub account.</td>
+<td><code>BugReportDialog.vue:37,88-100,278</code>; screenshot 15</td>
+<td>Validate on blur and show the character minimums. Show the load error inside the dialog with Retry. Label the button by method ("Open GitHub issue ↗" / "Copy report" / "Send"). Make the proxy the default when it is available.</td>
+</tr>
+<tr>
+<td>X6</td>
+<td>minor</td>
+<td>Raw badges <code>warning</code> / <code>info</code>, and the level filter chip "info". "Run Checks" only re-fetches. Copy labels are fixed at mount time (they do not follow language changes).</td>
+<td><code>RecoveryPanel.vue:78-80,197</code>, <code>EventTimeline.vue:10,24-30</code></td>
+<td>Translate severities. Rename to "Refresh", or make it re-run the checks. Compute labels reactively.</td>
+</tr>
+<tr>
+<td>X7</td>
+<td>minor</td>
+<td>The Diagnostics tabs are a constant array built with <code>t()</code> once, so they do not update on language switch.</td>
+<td><code>DiagnosticsView.vue:21-25</code></td>
+<td>Use <code>computed</code>.</td>
+</tr>
+<tr>
+<td>X8</td>
+<td>minor</td>
+<td>Uptime appears in three formats: "up 1:01:58", "1h 1m", and the runtime row. The version appears only in the Help menu, not in System.</td>
+<td><code>RuntimeRow.vue:49</code>, <code>SystemPanel.vue</code></td>
+<td>Use one formatter, and add the version and build date to System → Bridge.</td>
+</tr>
+<tr>
+<td>X9</td>
+<td>minor</td>
+<td>Webhooks disappear on restart (said only in the help text). There is no URL validation feedback, and Categories is free text with no list.</td>
+<td><code>SystemPanel.vue</code> hooks</td>
+<td>Validate, offer category chips, and show a "temporary" badge.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="29-updates-and-restart">2.9 Updates and restart</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U1</td>
+<td>major</td>
+<td>"Update Now" has no confirmation. It does not say that playback stops, how long it takes, or how to roll back. After it starts, the dialog closes and only a toast remains.</td>
+<td><code>UpdateDialog.vue:188-196</code>, <code>stores/update.ts:60-75</code></td>
+<td>Confirm with "Playback stops for about 1 min", then keep a progress state (reuse the restart banner: "Updating…").</td>
+</tr>
+<tr>
+<td>U2</td>
+<td>minor</td>
+<td>The heading "Release Notes" and the button "Release Notes" (<code>update.viewRelease</code>) use identical labels. Release notes are rendered as raw Markdown in a <code>&lt;pre&gt;</code>.</td>
+<td><code>en.json update.viewRelease/releaseNotes</code>, <code>UpdateDialog.vue:140-146</code></td>
+<td>Use "View on GitHub ↗", and render the Markdown.</td>
+</tr>
+<tr>
+<td>U3</td>
+<td>minor</td>
+<td><code>channel_warning</code> uses <code>text-warning</code> (≈1.9:1).</td>
+<td><code>UpdateDialog.vue:104-107</code></td>
+<td>Use the <code>tone-warning</code> utility.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="210-sign-in-and-auth">2.10 Sign-in and auth</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L1</td>
+<td>critical</td>
+<td>See G1.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>L2</td>
+<td>minor</td>
+<td>The method radios have no <code>fieldset</code>/<code>legend</code>. The fallback text "authenticator app" is hard-coded English. A failed login says "Invalid password" for every error (including MA/HA account errors).</td>
+<td><code>LoginView.vue:74,83-88,34</code></td>
+<td>Group the radios with a legend, localize the fallback, and make the message match the method.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="211-home-assistant-ingress-specifics">2.11 Home Assistant ingress specifics</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I1</td>
+<td>major</td>
+<td><code>data-embedded</code> is set but never used. Inside the HA panel, the app shows its own 64 px header, the runtime row, a 240 px sidebar and a Sponsor link. That stacks on top of HA's own header and sidebar and leaves little room on tablets.</td>
+<td><code>useTheme.ts:34</code>; no CSS uses it</td>
+<td>When embedded, collapse the sidebar by default (or use the bottom bar), hide the brand/Sponsor, and fold the runtime row into the header.</td>
+</tr>
+<tr>
+<td>I2</td>
+<td>minor</td>
+<td>The language follows <code>localStorage</code>, not HA's user language.</td>
+<td><code>AppHeader.vue:40-47</code></td>
+<td>Read HA's <code>language</code> from the host like the theme is read.</td>
+</tr>
+<tr>
+<td>I3</td>
+<td>✓</td>
+<td>Good: the HA accent colour is applied only to decorative <code>--sb-primary</code>, so text contrast is kept; overscroll is blocked so a drag does not reload the panel; SSE headers are handled.</td>
+<td><code>app.css</code>, <code>useTheme.ts</code></td>
+<td>Keep.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="212-error-empty-and-loading-states">2.12 Error, empty and loading states</h3>
+<ul>
+<li><strong>Good:</strong> skeleton cards on Home, a Settings load-error card with Retry, a drawer settings load error with Retry, and a connection-lost banner with a 4 s grace period.</li>
+<li><strong>Gaps:</strong></li>
+<li>The Logs, Groups, Recovery and Bug report failures above.</li>
+<li>The SSE connection-lost banner has no "Reload" button and no time since the last update.</li>
+<li>"Loading..." uses three dots in EN, while the ellipsis character is used elsewhere.</li>
+</ul>
+<h3 id="213-cross-cutting-accessibility-wcag-22-aa">2.13 Cross-cutting accessibility (WCAG 2.2 AA)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Sev</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>W1</td>
+<td>major</td>
+<td>The focus indicator of <code>SbButton</code> is <code>ring-primary/50</code> with a 1 px offset, about 1.6:1 against white, so it fails 1.4.11. Several custom buttons (header icons, view toggle, list transport, menu items) have no focus style beyond the browser default, or <code>outline-none</code>.</td>
+<td><code>SbButton.vue:46</code>; screenshot 09</td>
+<td>Use a single global <code>:focus-visible { outline: 2px solid var(--sb-primary-fill); outline-offset: 2px }</code> (≥3:1 on both themes).</td>
+</tr>
+<tr>
+<td>W2</td>
+<td>major</td>
+<td><code>text-warning</code> (#ffa600 in light) is used as text, about 1.9:1. Examples: released note on cards, drawer "foreign server" warning, playout fallback, update channel warning, restart-error banner, battery 20–50 %.</td>
+<td><code>app.css:66</code>; 13 usages (<code>grep text-warning</code>)</td>
+<td>Add a <code>--sb-warning-text</code> (for example #8a5a00 light, #ffb74d dark) and use the <code>tone-warning</code> utility for all text.</td>
+</tr>
+<tr>
+<td>W3</td>
+<td>major</td>
+<td>Measured light-mode failures: <code>text-secondary</code> on fill 4.22:1 (runtime pills, chips, badges, 12 px), the speakers pill 3.72:1, the guidance summary 3.68:1 (13 px), the active sidebar item 3.83:1. <code>text-tertiary</code> #8a8a8a on white is 3.5:1 and is used in 23 places. Dark mode passes.</td>
+<td>contrast script on screenshot 01</td>
+<td>Darken <code>--sb-text-secondary</code> to about #616161 and <code>--sb-text-tertiary</code> to about #707070. Use <code>primary-fill</code> for the active nav text.</td>
+</tr>
+<tr>
+<td>W4</td>
+<td>major</td>
+<td>Single-character shortcuts (1–4, a, /, ?) have no way to turn them off or remap them (SC 2.1.4). They also fire while a dialog or drawer is open (for example "1" navigates behind the modal).</td>
+<td><code>useKeyboardShortcuts.ts:24-46</code></td>
+<td>Add a preference to disable them, and ignore keys while <code>aria-modal</code> is open.</td>
+</tr>
+<tr>
+<td>W5</td>
+<td>major</td>
+<td>Toasts auto-dismiss after 4 s, including errors. <code>role="alert"</code> is used even for success. There is no pause on hover or focus.</td>
+<td><code>stores/notifications.ts:18</code>, <code>SbToast.vue:59</code></td>
+<td>Errors stay until dismissed. Success and info use <code>role=status</code>. Pause the timer on hover and focus.</td>
+</tr>
+<tr>
+<td>W6</td>
+<td>minor</td>
+<td>Targets under 24 px: dialog and drawer close (20 px), toast close (16 px), the "Why?" link, list transport (22 px).</td>
+<td><code>SbDialog.vue:146</code>, <code>SbDrawer.vue:150</code>, <code>SbToast.vue:75</code></td>
+<td>Use <code>size-10</code> hit areas with the icon centred.</td>
+</tr>
+<tr>
+<td>W7</td>
+<td>minor</td>
+<td>Every <code>SbStatusDot</code> is a <code>role="status"</code> live region, so a card list creates dozens of live regions. Its default labels are English.</td>
+<td><code>SbStatusDot.vue:46-49</code></td>
+<td>Use <code>role="img"</code> with a localized label, and keep live regions for real updates only.</td>
+</tr>
+<tr>
+<td>W8</td>
+<td>minor</td>
+<td>The dialog focus trap counts disabled buttons, so Tab can escape when the last control is disabled. Dropdown Escape does not return focus to the trigger. Custom triggers lack <code>aria-expanded</code>.</td>
+<td><code>SbDialog.vue:56</code>, <code>SbDropdown.vue:61-64</code></td>
+<td>Filter out <code>:disabled</code>, restore focus on close, and set <code>aria-expanded</code> on the slot trigger.</td>
+</tr>
+<tr>
+<td>W9</td>
+<td>minor</td>
+<td>Information is only in <code>title</code> tooltips (chips, bulk icons, reported delay hint, sync chip), which touch and keyboard users cannot reach.</td>
+<td>many</td>
+<td>Use <code>SbTooltip</code> on focus as well, or an inline info button.</td>
+</tr>
+<tr>
+<td>W10</td>
+<td>✓</td>
+<td>Good: <code>prefers-reduced-motion</code> is honoured globally, <code>&lt;html lang&gt;</code> follows the locale, the tab title names page and bridge, sliders have <code>aria-valuetext</code>, and touch taps step volume ±5 instead of jumping.</td>
+<td><code>app.css</code>, <code>App.vue</code>, <code>VolumeSlider.vue</code></td>
+<td>Keep.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="214-i18n-completeness">2.14 i18n completeness</h3>
+<ul>
+<li><strong>Key parity:</strong> en and ru have identical key sets (1331 strings each). The 25 identical values are proper names, which is fine.</li>
+<li><strong>Dead keys:</strong> about 140 legacy keys are unused (<code>config.*</code>, <code>dashboard.*</code>, <code>app.*</code>, <code>header.health*</code>, <code>diagnostics.bugreport.*</code>, <code>bluetooth.scan.*</code>). They include the <strong>contradictory</strong> <code>config.staticDelayHint</code> = "Negative delay…", which contradicts sendspin 7 semantics. Delete them so they cannot be reused by mistake.</li>
+<li><strong>Server text:</strong> the server sends English for guidance, recovery, check summaries, blocked-control reasons, API errors and event labels. Either send stable codes plus parameters and translate in the UI (<code>guidance_issue_registry</code> already has keys), or honour <code>Accept-Language</code> on the server.</li>
+<li><strong>Dates:</strong> dates use <code>toLocaleString()</code> with no locale. Pass the UI locale.</li>
+</ul>
+<hr />
+<h2 id="3-quick-wins-1-h-each">3. Quick wins (≤1 h each)</h2>
+<ol>
+<li>Replace <code>{ name: 'dashboard' }</code> with <code>{ name: 'home' }</code> (router + login), and add a test that every route name used exists (G1).</li>
+<li>Add a global <code>:focus-visible</code> outline token with ≥3:1 contrast, and drop <code>ring-primary/50</code> (W1).</li>
+<li>Add <code>--sb-warning-text</code>, and replace <code>text-warning</code> on text with the <code>tone-warning</code> utility or the new token (W2, U3, A3).</li>
+<li>Darken <code>--sb-text-secondary</code> and <code>--sb-text-tertiary</code> in light mode (W3).</li>
+<li>Add <code>flex-wrap</code> to the Recovery toolbar and the Diagnostics header (X3).</li>
+<li>Make the Diagnostics tabs and the copy labels <code>computed</code> (X7, X6).</li>
+<li>Render recovery actions as buttons using <code>useGuidanceActions</code> (X2).</li>
+<li>Make error toasts persistent, use <code>role=status</code> for the others, and pause on hover (W5).</li>
+<li>Fix the wrong error messages for volume, mute and hand-over (H6).</li>
+<li>Add a dismiss button and "Open logs" to the restart error banner (G4).</li>
+<li>Confirm before Adapter Power and Reboot, and list the affected speakers (D1).</li>
+<li>Confirm (or show an undo toast) for single Hand over and Disable, matching the bulk behaviour (H2, H3).</li>
+<li>Confirm Import, Restart now and Update now (C1, C3, U1).</li>
+<li>Disable "Require sign-in" until a password exists (C2).</li>
+<li>Show the bug report minimum lengths as hints, show the load error inside the dialog, and label the submit button by method (X5).</li>
+<li>Logs: show fetch errors, and give feedback on applying the level (X4).</li>
+<li>Localize the hard-coded kit labels and the drawer strings ("Close dialog", "Audio Sink", "corrections", "port", sidebar toggle) (D7, G6).</li>
+<li>Add <code>aria-label</code> to the group volume slider and the mobile update badge (H5, G7).</li>
+<li>Enlarge the close buttons of dialogs, drawers and toasts to 40 px hit areas (W6).</li>
+<li>Prefill the MA server URL from the known Sendspin server, and give "Auto-Discover" a "nothing found" message (M1, M3).</li>
+<li>Add "Create a group in Music Assistant ↗" to the empty Groups page (M4).</li>
+<li>Add "Clear filters" to "No results", and reset the filters when the bar hides (H8).</li>
+<li>Keep Cancel active during recording and the phone sequence (S2).</li>
+<li>Delete the unused i18n keys, including "Negative delay…".</li>
+<li>Air-sensor branch: use <code>border-border</code>, a reactive "seconds ago", and disable the toggle unless measure mode is on (A1, A2, A4).</li>
+</ol>
+<h2 id="4-structural-proposals">4. Structural proposals</h2>
+<ol>
+<li><strong>One status model, with distinct names (fixes G2, X1, the top-2 issue).</strong> Define three independent states shown the same way everywhere (header pill, runtime row, card chip, Diagnostics):</li>
+<li><strong>Audio link</strong> (Sendspin ↔ MA, per speaker);</li>
+<li><strong>Music Assistant account</strong> (API sign-in, bridge-wide);</li>
+<li><strong>Bluetooth</strong> (per speaker).</li>
+</ol>
+<p>Derive the Diagnostics verdict and the header pill from the same issue list, so "Healthy" can never sit above warnings. Make the server guidance text impossible to contradict (generate the summary from the same state as the title).
+2. <strong>Glossary and string review (H1, T3, H13).</strong> Write a short glossary for EN and RU and lint against it:
+   - Speaker (Bluetooth) / Audio output (wired) / Player (both).
+   - Hand over / Take back.
+   - Pause output / Resume output.
+   - Standby / Wake.
+   - Disable / Enable.
+   - Speaker latency compensation.
+   - Sync error.</p>
+<p>Retire "Release", "Claim audio", "Transfer" and "Re-anchor" from the default UI.
+3. <strong>Server-side codes, client-side words (i18n).</strong> Guidance, recovery, check results, blocked reasons and events should carry <code>code</code> + <code>params</code>, and the SPA should translate them. The English <code>summary</code> stays as a fallback. This also allows contradiction checks in unit tests.
+4. <strong>One save model for the device drawer (D3, D2, D4).</strong> Use auto-save per field with inline "Saved" / "Undo", as Home Assistant's entity settings do. Restructure into 4 tabs:
+   - <strong>Overview</strong>: state, one primary action, the audio path diagram merged from Signal Path, and a short events list;
+   - <strong>Settings</strong>;
+   - <strong>Timing</strong>: a single value, a link to group sync, and technical details folded;
+   - <strong>History</strong>: events.</p>
+<p>Recovery tools go in a labelled "Troubleshoot" menu, and adapter tools move to Settings → Bluetooth.
+5. <strong>One calibration path (T2, S1, S3).</strong> Remove the per-speaker mic compare. The Timing tab shows the value and "Tune with your group →". The sync page has a single entry point ("Tune by ear" / "Measure"), and no tab ever starts a session. Merge the stop-music and start-clicks steps. Present the air-sensor latency as a result of the measurement ("Bluetooth latency measured: 182 ms, saved"), not as a separate concept beside "delay".
+6. <strong>Destructive-action policy (top-5 issue).</strong> Write down one rule and apply it in the kit:
+   - reversible actions (Hand over, Disable, Standby, Mute all) run at once with an <strong>undo toast</strong>;
+   - disruptive or irreversible ones (Remove, Forget, Adapter power or reset, Import, Restart, Update) use a <strong>confirm dialog that names the consequences</strong> (which speakers, whether playback stops).</p>
+<p>Also: a long-operation component (progress plus Cancel) for scan, pairing, update, restart and measurement.
+7. <strong>HA-embedded layout (I1).</strong> When <code>data-embedded</code> is set:
+   - no brand header;
+   - the runtime row folds into a compact status pill;
+   - sidebar collapsed or bottom navigation;
+   - the Security section is replaced by "Signed in through Home Assistant";
+   - update settings are replaced by "Updates come from the HA add-on store".
+8. <strong>Progressive disclosure on cards and in Settings.</strong> Keep a "Show technical details" preference that, when off, hides the chips Δ dB, ×re-anchors, Playout, Transfer and the server ID, the playout rows, PSR / H, Signal Path, and the advanced settings. It is off by default for new installs and on for existing power users.
+9. <strong>Docs refresh.</strong> Rewrite <code>docs-site/.../web-ui.mdx</code> (EN + RU) against the v3 UI and current screenshots. Add a check that fails when UI terms in the glossary are missing from the docs.
+10. <strong>Regression guards.</strong> Add an axe-core pass in the component tests (contrast, names, targets). Add a 375 px Playwright screenshot test per page that asserts <code>scrollWidth &lt;= innerWidth</code>. Add a router test that every <code>push({name})</code> target exists. Add an i18n test that rejects English text arriving from the API in the RU build (needs proposal 3).</p>

@@ -1,4 +1,4 @@
-"""The bridge status carries the Bluetooth source only when it is configured (#563)."""
+"""The bridge status carries the phone source only when it is configured (#563)."""
 
 from __future__ import annotations
 
@@ -21,19 +21,29 @@ def test_no_source_block_when_the_source_is_off():
 
 
 def test_the_source_block_reports_the_state():
-    source_state.publish(enabled=True, port=8940, phone="bluez_input.1", players=1, streaming=True)
+    source_state.publish(
+        enabled=True,
+        state="streaming",
+        phone="bluez_source.34_C7_E9_25_A3_A3",
+        phone_mac="34:C7:E9:25:A3:A3",
+        streaming=True,
+        server="ws://ma:8927/sendspin",
+        ma_connected=True,
+        ma_paired=True,
+    )
 
     block = status._sendspin_source({"SENDSPIN_SOURCE": True})
 
     assert block is not None
-    assert (block.enabled, block.port, block.players, block.streaming) == (True, 8940, 1, True)
-    assert block.phone == "bluez_input.1"
+    assert (block.enabled, block.state, block.streaming) == (True, "streaming", True)
+    assert block.phone == "bluez_source.34_C7_E9_25_A3_A3"
 
 
 def test_the_source_block_keeps_a_pairing_error_out_of_its_error():
-    source_state.publish(enabled=True, port=8940, pairing_error="no_adapter")
+    source_state.publish(enabled=True, state="pairing", pairing_error="no_adapter", ma_error="ma_pairing_required")
 
     block = status._sendspin_source({"SENDSPIN_SOURCE": True})
 
     assert block is not None
     assert block.error is None
+    assert block.ma_error == "ma_pairing_required"

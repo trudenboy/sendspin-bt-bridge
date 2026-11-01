@@ -14,9 +14,11 @@ from typing import Literal
 
 __all__ = [
     "AUDIO_SERVERS",
+    "PULSE_TOOLS_MISSING",
     "Capabilities",
     "Capability",
     "build_capabilities",
+    "capture_reason",
     "classify_audio_server",
     "probe_audio_server",
     "probe_capture",
@@ -31,6 +33,7 @@ BLUETOOTH_UNAVAILABLE = "bluetooth_unavailable"
 DBUS_UNAVAILABLE = "dbus_unavailable"
 PULSE_UNAVAILABLE = "pulse_unavailable"
 PIPEWIRE_REQUIRED = "pipewire_required"
+PULSE_TOOLS_MISSING = "pulse_tools_missing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +97,7 @@ def build_capabilities(
         bluetooth=Capability(bluetooth, None if bluetooth else BLUETOOTH_UNAVAILABLE),
         dbus=Capability(dbus, None if dbus else DBUS_UNAVAILABLE),
         audio_server=audio_server,
-        capture=Capability(capture, None if capture else PIPEWIRE_REQUIRED),
+        capture=Capability(capture, None if capture else capture_reason(audio_server)),
         default_sink=Capability(default_sink, None if default_sink else PULSE_UNAVAILABLE),
     )
 
@@ -106,10 +109,25 @@ def probe_audio_server() -> str:
     return pulse.get_server_name()
 
 
-def probe_capture() -> bool:
-    """Whether PipeWire's tools are here to expose the phone's capture node.
+def capture_reason(audio_server: AudioServer) -> str:
+    """The stable code for a host that cannot capture the phone, given its audio server."""
+    if audio_server == "pipewire":
+        return PIPEWIRE_REQUIRED
+    if audio_server == "pulseaudio":
+        return PULSE_TOOLS_MISSING
+    return PULSE_UNAVAILABLE
+
+
+def probe_capture(server_name: str) -> bool:
+    """Whether the host's audio server can expose the phone's capture at all.
 
     Presence, not activity: a paired phone that is not streaming is still a
-    capture-capable host.
+    capture-capable host.  PipeWire needs ``wpctl``; PulseAudio needs ``pactl``
+    and ``parecord`` (HAOS ships both).
     """
-    return shutil.which("wpctl") is not None
+    audio_server = classify_audio_server(server_name)
+    if audio_server == "pipewire":
+        return shutil.which("wpctl") is not None
+    if audio_server == "pulseaudio":
+        return shutil.which("pactl") is not None and shutil.which("parecord") is not None
+    return False

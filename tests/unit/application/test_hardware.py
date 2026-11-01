@@ -11,7 +11,6 @@ from sendspin_bridge.application import hardware as hardware_uc
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.models.hardware import RoleEvidence
 from sendspin_bridge.services.hardware import inventory
-from sendspin_bridge.services.source import relay
 from sendspin_bridge.services.source import state as source_state
 from tests.support import hardware_audio
 
@@ -37,7 +36,7 @@ INFO = (
 def _configured(monkeypatch, tmp_config):
     inventory.clear_cache()
     monkeypatch.setattr(inventory, "probe_audio_server", lambda: "PulseAudio")
-    monkeypatch.setattr(inventory, "probe_capture", lambda: True)
+    monkeypatch.setattr(inventory, "probe_capture", lambda _name=None: True)
     tmp_config.write_text(
         json.dumps(
             {
@@ -162,7 +161,8 @@ async def test_a_host_that_cannot_answer_is_hardware_unavailable(installed_bluez
 
 
 def _use_audio(monkeypatch) -> None:
-    async def fake_audio():
+    async def fake_audio(server_name: str | None = None) -> inventory.AudioFacts:
+        del server_name
         return hardware_audio.facts()
 
     monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
@@ -353,7 +353,8 @@ PHONE_NODE = "bluez_input.6C_5C_3D_35_17_99.1"
 
 
 def _use_audio_facts(monkeypatch, audio: inventory.AudioFacts) -> None:
-    async def fake_audio() -> inventory.AudioFacts:
+    async def fake_audio(server_name: str | None = None) -> inventory.AudioFacts:
+        del server_name
         return audio
 
     monkeypatch.setattr(inventory, "_read_audio_async", fake_audio)
@@ -365,7 +366,6 @@ def _write_source_config(tmp_config) -> None:
             {
                 "CONFIG_SCHEMA_VERSION": 6,
                 "SENDSPIN_SOURCE": True,
-                "SENDSPIN_SOURCE_PORT": 8940,
                 "players": [
                     {
                         "id": "eneby",
@@ -391,16 +391,23 @@ async def test_the_source_feed_is_built_from_the_runtime_and_the_capture_facts(
 ):
     _write_source_config(tmp_config)
     _use_audio(monkeypatch)
-    source_state.publish(enabled=True, port=8940, phone=PHONE_NODE)
-    monkeypatch.setattr(relay, "armed_devices", lambda: ["eneby"])
+    source_state.publish(
+        enabled=True,
+        state="waiting",
+        phone=PHONE_NODE,
+        phone_mac=DEVICE,
+        server="ws://ma:8927/sendspin",
+        ma_connected=True,
+        ma_paired=True,
+    )
 
     snapshot = await hardware_uc.snapshot()
 
     feed = snapshot.source
     assert feed is not None
-    assert (feed.enabled, feed.port, feed.state, feed.phone_mac) == (True, 8940, "waiting", DEVICE)
+    assert (feed.enabled, feed.state, feed.phone_mac) == (True, "waiting", DEVICE)
     assert (feed.capture.kind, feed.capture.node) == ("pipewire_node", hardware_audio.CAPTURE_NODE)
-    assert feed.relays == ["eneby"]
+    assert (feed.ma.connected, feed.ma.paired) == (True, True)
     assert feed.error is None
 
     by_mac = {device.mac: device for device in snapshot.bluetooth_devices}
@@ -411,7 +418,7 @@ async def test_the_source_feed_is_built_from_the_runtime_and_the_capture_facts(
 async def test_a_streaming_source_reports_streaming(installed_bluez, monkeypatch, tmp_config):
     _write_source_config(tmp_config)
     _use_audio(monkeypatch)
-    source_state.publish(enabled=True, port=8940, phone=PHONE_NODE, players=1, streaming=True)
+    source_state.publish(enabled=True, state="streaming", phone=PHONE_NODE, streaming=True)
 
     snapshot = await hardware_uc.snapshot()
 
@@ -421,9 +428,7 @@ async def test_a_streaming_source_reports_streaming(installed_bluez, monkeypatch
 async def test_a_pairing_error_does_not_make_a_streaming_source_an_error(installed_bluez, monkeypatch, tmp_config):
     _write_source_config(tmp_config)
     _use_audio(monkeypatch)
-    source_state.publish(
-        enabled=True, port=8940, phone=PHONE_NODE, players=1, streaming=True, pairing_error="no_adapter"
-    )
+    source_state.publish(enabled=True, state="streaming", phone=PHONE_NODE, streaming=True, pairing_error="no_adapter")
 
     snapshot = await hardware_uc.snapshot()
 
@@ -448,7 +453,7 @@ async def test_only_a_known_device_is_marked_as_the_source_phone(installed_bluez
     _write_source_config(tmp_config)
     _use_audio(monkeypatch)
     unknown_node = f"bluez_input.{UNPAIRED.replace(':', '_')}.3"
-    source_state.publish(enabled=True, port=8940, phone=unknown_node, streaming=True)
+    source_state.publish(enabled=True, state="streaming", phone=unknown_node, streaming=True)
 
     snapshot = await hardware_uc.snapshot()
 
