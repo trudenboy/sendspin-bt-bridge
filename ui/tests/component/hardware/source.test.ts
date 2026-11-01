@@ -60,7 +60,7 @@ describe('Hardware page: source strip', () => {
     vi.useRealTimers()
   })
 
-  it('says the source is off when the bridge reports none, with no controls', async () => {
+  it('says the source is off when the bridge reports none, and can enable it in place', async () => {
     vi.mocked(getHardware).mockResolvedValue(snapshot({ source: null }) as never)
 
     wrapper = mountView()
@@ -69,10 +69,14 @@ describe('Hardware page: source strip', () => {
     const panel = wrapper.get('[data-source-panel]')
     expect(panel.attributes('data-source-state')).toBe('off')
     expect(panel.get('[data-source-off]').text()).toBe(en.hardware.source.offBody)
-    expect(panel.find('[data-source-start]').exists()).toBe(false)
+    expect(panel.get('[data-source-start]').exists()).toBe(true)
     expect(panel.find('[data-source-stop]').exists()).toBe(false)
     expect(panel.find('[data-source-pair]').exists()).toBe(false)
     expect(panel.find('[data-source-player]').exists()).toBe(false)
+
+    await wrapper.get('[data-source-start]').trigger('click')
+    await flushPromises()
+    expect(setSourceEnabled).toHaveBeenCalledWith(true)
   })
 
   it('shows the Music Assistant link and the phone block without relays', async () => {

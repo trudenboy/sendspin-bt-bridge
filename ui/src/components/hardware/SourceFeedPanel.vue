@@ -140,10 +140,18 @@ const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
       <SbBadge data-source-state-badge :tone="tone" size="sm" dot>{{ stateLabel }}</SbBadge>
     </header>
 
-    <!-- The feature is off: say where it lives, offer nothing that would not work. -->
-    <p v-if="!source" data-source-off class="mt-3 max-w-2xl text-sm text-text-secondary">
-      {{ t('hardware.source.offBody') }}
-    </p>
+    <!-- The feature is off: explain it and let the operator enable it right here. -->
+    <template v-if="!source">
+      <p data-source-off class="mt-3 max-w-2xl text-sm text-text-secondary">
+        {{ t('hardware.source.offBody') }}
+      </p>
+      <div class="mt-3">
+        <SbButton size="sm" data-source-start :loading="busy" @click="emit('start')">
+          <template #icon-left><Play class="h-3.5 w-3.5" aria-hidden="true" /></template>
+          {{ t('hardware.source.start') }}
+        </SbButton>
+      </div>
+    </template>
 
     <template v-else>
       <div class="mt-4 grid gap-4 lg:grid-cols-2">

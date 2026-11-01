@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.4] - 2026-11-01
+
+### Fixed
+
+- The Hardware page enables the phone source in place instead of pointing at Settings → Music Assistant, which no longer holds those controls.
+
 ## [3.2.0-beta.3] - 2026-11-01
 
 ### Fixed

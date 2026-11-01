@@ -779,7 +779,7 @@
       "stateWaiting": "Waiting for a phone",
       "stateStreaming": "Streaming",
       "stateError": "Error",
-      "offBody": "The phone source is off; enable it in Settings → Music Assistant and it will show up here.",
+      "offBody": "The phone source is off. Enable it here to offer the phone to Music Assistant.",
       "phone": "Phone",
       "start": "Start source",
       "stop": "Stop source",
