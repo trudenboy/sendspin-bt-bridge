@@ -413,7 +413,9 @@ def test_a_quiet_host_with_capture_tools_is_not_degraded(installed_bluez, monkey
         cards=facts.cards,
         sinks=facts.sinks,
         sources=facts.sources,
-        capture=inventory.CaptureFacts(kind="unavailable", reason="No bluez_source is present; the phone is not streaming."),
+        capture=inventory.CaptureFacts(
+            kind="unavailable", reason="No bluez_source is present; the phone is not streaming."
+        ),
     )
     _use_audio(monkeypatch, audio)
 
