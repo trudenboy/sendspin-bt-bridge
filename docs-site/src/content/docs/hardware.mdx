@@ -12,6 +12,8 @@ controller, a paired phone or a sound card is hardware. A device that no player
 points at — a phone that is not streaming, a second adapter with nothing on it —
 is still listed here.
 
+![The Hardware page: the phone source strip, the Bluetooth controllers, the paired devices and the audio devices](/sendspin-bt-bridge/screenshots/screenshot-hardware-overview.png)
+
 ## Controllers
 
 One card per Bluetooth adapter:
@@ -70,6 +72,8 @@ panel. Both ask first, because the change is audible: the confirmation names the
 outputs that may go silent. A Bluetooth card's profile is not offered — the
 connection decides it, and the panel says so.
 
+![The audio group: cards with their profiles and ports, outputs with volume and mute, and an input fed by the phone](/sendspin-bt-bridge/screenshots/screenshot-hardware-audio.png)
+
 ## The phone source
 
 When the Sendspin source is enabled, a strip at the top shows whether a phone is
@@ -80,6 +84,8 @@ the cause (for example a port already in use) with a next step.
 Pairing a phone opens a two-minute window; the strip counts it down and can stop
 it early. When the source is off entirely, the strip says where it is enabled
 (Settings → Music Assistant) instead of showing controls that cannot work.
+
+![The phone source strip waiting for a phone, with the pairing action and the capture node](/sendspin-bt-bridge/screenshots/screenshot-hardware-source.png)
 
 ## When a section is empty
 
@@ -95,6 +101,8 @@ other:
 
 If a read fails while an earlier one succeeded, the page keeps the last data and
 marks it as possibly stale rather than blanking the screen.
+
+![A host without D-Bus: the page names the reason and the next step instead of showing an empty list](/sendspin-bt-bridge/screenshots/screenshot-hardware-unavailable.png)
 
 ## What the page does not do
 

@@ -137,13 +137,18 @@ These surfaces track the current UI screenshot queue, mixing already captured as
 
 **State:** Bluetooth tab showing adapter inventory. Future retakes should try to include enough surrounding context to make it obvious that paired-device tools live in the same tab.
 
-## Hardware page (new, 2026-10-31)
+## Hardware page (captured 2026-11-01)
 
-The Hardware page has no screenshots yet. Demo mode now serves two adapters, paired devices, nine local outputs, one input and a phone source, so it is the right stand:
+Four shots, taken from the demo stand with Playwright against Chrome at 1440 px,
+light theme, English:
 
-- `screenshot-hardware-overview.png` — the whole page at 1366 px, light theme: source strip, controllers, paired devices, audio.
-- `screenshot-hardware-audio.png` — the audio group: a card with its ports, an output carrying the **Default** badge, and an input with its kind.
-- `screenshot-hardware-unavailable.png` — the unavailable banner with its reason (stop the audio server in the demo container to produce it).
-- `screenshot-hardware-source.png` — the source strip while a phone streams.
+- `screenshot-hardware-overview.png` — the whole page.
+- `screenshot-hardware-audio.png` — the audio group, with the **Default** badge on
+  the first output.
+- `screenshot-hardware-source.png` — the source strip waiting for a phone.
+- `screenshot-hardware-unavailable.png` — the "no D-Bus" banner. The demo host
+  always has D-Bus, so this frame was rendered from a snapshot shaped like a
+  container without it (the banner, the records and the codes are the app's own);
+  it is not a capture of a real broken host.
 
-**Used in:** `hardware.mdx` and `ru/hardware.mdx`, once captured.
+Retake them with `DEMO_MODE=true` and the same viewport when the page changes.
