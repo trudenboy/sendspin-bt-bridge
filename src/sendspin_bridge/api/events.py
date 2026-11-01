@@ -150,10 +150,13 @@ class EventHub:
         from sendspin_bridge.application.hardware import snapshot
         from sendspin_bridge.services.hardware.inventory import _TTL_S
 
-        loop = asyncio.get_running_loop()
         while True:
             try:
-                payload = await loop.run_in_executor(None, lambda: asyncio.run(snapshot()))
+                # Await the snapshot on this loop.  Building a throwaway loop in an
+                # executor thread on every tick stranded a PulseAudio helper loop
+                # (selector + socket pair) on a thread that then died, so the add-on
+                # exhausted its fd limit within minutes of the Hardware page opening.
+                payload = await snapshot()
             except asyncio.CancelledError:
                 raise
             except Exception:

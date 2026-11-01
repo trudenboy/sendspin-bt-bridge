@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -180,6 +181,32 @@ def test_cleanup_loops_skips_already_closed():
     _pulse_mod._cleanup_loops()  # should not raise
     with _pulse_mod._thread_loops_lock:
         assert len(_pulse_mod._thread_loops) == 0
+
+
+def test_run_closes_the_loop_of_a_thread_that_died():
+    """A helper loop is bound to its thread; the next call must reap it.
+
+    Short-lived worker threads (executor pools, hardware snapshots) create one
+    loop each.  Left in ``_thread_loops`` until process exit they strand a
+    selector and a socket pair per thread, which is how the add-on ran out of
+    file descriptors.
+    """
+    captured: dict[str, asyncio.AbstractEventLoop] = {}
+
+    def worker() -> None:
+        _pulse_mod._run(asyncio.sleep(0))
+        captured["loop"] = _pulse_mod._thread_local.loop
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    thread.join()
+    loop = captured["loop"]
+    assert not loop.is_closed()
+
+    del thread  # the only strong reference; the loop must not keep the thread alive
+    _pulse_mod._run(asyncio.sleep(0))
+
+    assert loop.is_closed()
 
 
 # ---------------------------------------------------------------------------

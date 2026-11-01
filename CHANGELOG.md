@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.6] - 2026-11-02
+
+### Fixed
+
+- The bridge no longer exhausts its file-descriptor limit while the Hardware page is open, which used to break configuration writes and Bluetooth control within minutes: live hardware updates are built on the bridge's own event loop instead of a throwaway loop per update.
+- A helper event loop created on a short-lived worker thread is closed when that thread ends instead of being kept until shutdown.
+
 ## [3.2.0-beta.5] - 2026-11-01
 
 ### Changed

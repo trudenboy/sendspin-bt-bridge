@@ -21,6 +21,7 @@ import atexit
 import logging
 import subprocess
 import threading
+import weakref
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -761,17 +762,35 @@ def _fallback_load_null_sink() -> bool:
 
 _thread_local = threading.local()
 _thread_loops: list = []  # Track for cleanup
+# Owner of each tracked loop, so a loop cached for a thread that has since died
+# can be reaped instead of keeping its selector and self-pipe fds until exit.
+_thread_owner: dict[int, weakref.ref[threading.Thread]] = {}
 _thread_loops_lock = threading.Lock()
+
+
+def _prune_dead_thread_loops_locked() -> None:
+    """Close helper loops whose thread is gone: a dead thread cannot reuse one."""
+    for loop in list(_thread_loops):
+        owner = _thread_owner.get(id(loop))
+        if owner is None or owner() is not None:
+            continue
+        _thread_loops.remove(loop)
+        _thread_owner.pop(id(loop), None)
+        if not loop.is_closed():
+            loop.close()
 
 
 def _run(coro):
     """Run *coro* synchronously, reusing a thread-local event loop."""
+    with _thread_loops_lock:
+        _prune_dead_thread_loops_locked()
     loop = getattr(_thread_local, "loop", None)
     if loop is None or loop.is_closed():
         loop = asyncio.new_event_loop()
         _thread_local.loop = loop
         with _thread_loops_lock:
             _thread_loops.append(loop)
+            _thread_owner[id(loop)] = weakref.ref(threading.current_thread())
     return loop.run_until_complete(coro)
 
 
@@ -780,6 +799,7 @@ def _cleanup_loops():
     with _thread_loops_lock:
         loops = list(_thread_loops)
         _thread_loops.clear()
+        _thread_owner.clear()
     for loop in loops:
         if not loop.is_closed():
             loop.close()

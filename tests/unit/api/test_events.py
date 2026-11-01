@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 
 import pytest
 
@@ -242,6 +243,35 @@ async def test_a_hardware_listener_starts_a_producer_that_publishes_snapshots(mo
     assert event["type"] == "hardware"
     assert event["data"] == {"controllers": [{"id": "hci0"}], "mode": "json"}
     assert built
+
+
+@pytest.mark.asyncio
+async def test_the_hardware_snapshot_runs_on_the_event_loop_thread(monkeypatch):
+    """The producer must await the snapshot, not spin a throwaway loop in a worker.
+
+    Every hardware tick used to build a fresh event loop in an executor thread.
+    PulseAudio helpers cache one loop per *thread*, so each tick stranded three
+    fds (the loop's selector and self-pipe) on a thread that then died — the
+    bridge hit its 1024-fd limit in minutes while the Hardware page was open.
+    """
+    loop_thread = threading.get_ident()
+    seen: list[int] = []
+
+    async def _snapshot():
+        seen.append(threading.get_ident())
+        return _Snapshot()
+
+    monkeypatch.setattr("sendspin_bridge.application.hardware.snapshot", _snapshot)
+    hub = events.EventHub(auth_enabled=False)
+    hub.start()
+    try:
+        async with hub.listen(frozenset({"hardware"})) as listener:
+            await asyncio.wait_for(listener.queue.get(), timeout=2.0)
+    finally:
+        await hub.stop()
+
+    assert seen
+    assert set(seen) == {loop_thread}
 
 
 @pytest.mark.asyncio
