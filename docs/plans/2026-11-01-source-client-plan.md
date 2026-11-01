@@ -71,3 +71,11 @@
   состояние источника (`streaming`, MA подключён) через фейковый менеджер. Реальный
   протокол покрыт `tests/integration/test_source_protocol.py`; встроенный сервер в
   демо остаётся кандидатом на следующий цикл (fallback B/C из плана).
+
+## Релиз
+
+- `3.2.0-beta.2` выпущен: тег `v3.2.0-beta.2`, prerelease, tarball
+  `sendspin-bt-bridge-3.2.0-beta.2.tar.gz`, образы amd64+arm64.
+- Бета-аддон обновлён до `3.2.0-beta.2` релизным workflow (коммит `6b77de61`).
+- Приёмка на HAOS (телефон → MA → ENEBY Portable) выполняется после обновления
+  аддона в UI Home Assistant.
