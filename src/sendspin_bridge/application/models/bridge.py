@@ -89,6 +89,7 @@ class SendspinSourceStatus(ResponseModel):
     )
     phone: str | None = Field(default=None, description="The capture node of the phone that is playing, if any.")
     phone_mac: str | None = Field(default=None, description="That phone's address, when the node names it.")
+    paired_phone_mac: str | None = Field(default=None, description="A phone paired during the window, before it streams.")
     streaming: bool = Field(default=False, description="The phone's audio is reaching Music Assistant.")
     server: str | None = Field(default=None, description="The Sendspin server URL the source dials.")
     ma_connected: bool = Field(default=False, description="The source client is admitted by Music Assistant.")

@@ -25,6 +25,7 @@ const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
   state: 'waiting',
   phone_mac: null,
+  paired_phone_mac: null,
   capture: { kind: 'pipewire_node', node: 'bluez_input.FC_58_FA_EB_08_6C.0' },
   ma: {
     server: 'ws://ma.local:8927/sendspin',
@@ -230,5 +231,19 @@ describe('useHardwareStore: source', () => {
 
     expect(store.sourceError).toMatchObject({ code: 'capture_unavailable', player: null })
     expect(store.sourceBusy).toBe(false)
+  })
+})
+
+describe('useHardwareStore: pairing window follows the server', () => {
+  it('clears the countdown when the bridge closes the window early', async () => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    const store = useHardwareStore()
+    store.adoptPairingWindow(30)
+    expect(store.pairingSecondsLeft).toBe(30)
+
+    store.adoptPairingWindow(0)
+
+    expect(store.pairingSecondsLeft).toBe(0)
   })
 })

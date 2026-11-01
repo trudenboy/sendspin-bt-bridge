@@ -88,6 +88,8 @@ export const useHardwareStore = defineStore('hardware', () => {
   /** The Music Assistant pairing window, counted down from the server's own answer. */
   const maPairingEndsAt = ref<number | null>(null)
   const pairingNow = ref(Date.now())
+  /** The last non-zero countdown the server reported; zero after it means "closed early". */
+  const serverPairingSeen = ref(0)
   const pairingSecondsLeft = computed(() => {
     // ``pairingNow`` is the tick: Date.now() alone would not make this reactive.
     pairingNow.value
@@ -485,7 +487,17 @@ export const useHardwareStore = defineStore('hardware', () => {
   // than what we already count, so a lagging status event cannot shorten a
   // window a command has just opened.
   function adoptPairingWindow(seconds: number) {
-    if (seconds > pairingSecondsLeft.value) setPairingWindow(seconds)
+    if (seconds > 0) {
+      serverPairingSeen.value = seconds
+      if (seconds > pairingSecondsLeft.value) setPairingWindow(seconds)
+      return
+    }
+    // The backend closes the window as soon as the phone bonds; the local countdown must
+    // stop then, not keep counting a window the server already ended.
+    if (serverPairingSeen.value > 0) {
+      serverPairingSeen.value = 0
+      clearPairingWindow()
+    }
   }
 
   /** The MA window comes from the status stream; never let a lagging event shorten it. */

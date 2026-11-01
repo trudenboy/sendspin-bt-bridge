@@ -102,26 +102,28 @@ def mac_from_node(name: str) -> str | None:
     return match.group(1).replace("_", ":").upper()
 
 
-async def run_command(argv: Sequence[str], *, timeout: float = RUN_TIMEOUT_S) -> CommandResult:
-    """Run a short helper command; never raise, report the failure in the result."""
+def _run_command_sync(argv: list[str], timeout: float) -> CommandResult:
+    """One short helper command in a worker thread; its pipes are closed by ``subprocess``."""
+    import subprocess
+
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
     except (FileNotFoundError, PermissionError) as exc:
         return CommandResult(returncode=-1, stderr=str(exc))
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except TimeoutError:
-        await terminate_process(proc)
+    except subprocess.TimeoutExpired:
         return CommandResult(returncode=-1, stderr=f"{argv[0]} timed out after {timeout:.0f}s")
-    return CommandResult(
-        returncode=int(proc.returncode if proc.returncode is not None else -1),
-        stdout=stdout.decode(errors="replace"),
-        stderr=stderr.decode(errors="replace"),
-    )
+    return CommandResult(returncode=int(proc.returncode), stdout=proc.stdout or "", stderr=proc.stderr or "")
+
+
+async def run_command(argv: Sequence[str], *, timeout: float = RUN_TIMEOUT_S) -> CommandResult:
+    """Run a short helper command; never raise, report the failure in the result.
+
+    Deliberately a thread, not ``asyncio.create_subprocess_exec``: the source polls
+    ``pactl`` every couple of seconds, and on Python 3.13 each asyncio subprocess transport
+    left two sockets and an epoll object behind on the add-on, exhausting the 1024-fd limit
+    after a few minutes of streaming.  ``subprocess.run`` closes its pipes deterministically.
+    """
+    return await asyncio.to_thread(_run_command_sync, list(argv), timeout)
 
 
 async def terminate_process(proc: Any, *, timeout: float = STOP_TIMEOUT_S) -> None:

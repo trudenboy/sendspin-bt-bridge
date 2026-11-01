@@ -836,7 +836,9 @@
       "phoneTitle": "Телефон (Bluetooth)",
       "phoneIdle": "не передаёт",
       "phoneNoPhone": "В мост не стримит ни один телефон.",
-      "phoneHint": "Телефон спаривается с мостом по Bluetooth; Music Assistant получает захваченный звук."
+      "phoneHint": "Телефон спаривается с мостом по Bluetooth; Music Assistant получает захваченный звук.",
+      "phonePaired": "Телефон спарен",
+      "phonePairedHint": "Сопряжение сохранено; включите воспроизведение на телефоне, и мост начнёт захват."
     }
   },
   "kit": {

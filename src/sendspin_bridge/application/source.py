@@ -43,6 +43,7 @@ class SourceStatus:
     state: str
     phone: str | None
     phone_mac: str | None
+    paired_phone_mac: str | None
     streaming: bool
     server: str | None
     ma_connected: bool
@@ -62,6 +63,7 @@ class SourceStatus:
             "state": self.state,
             "phone": self.phone,
             "phone_mac": self.phone_mac,
+            "paired_phone_mac": self.paired_phone_mac,
             "streaming": self.streaming,
             "server": self.server,
             "ma_connected": self.ma_connected,
@@ -85,6 +87,7 @@ def status(config: dict[str, Any]) -> SourceStatus:
         state=current.state,
         phone=current.phone,
         phone_mac=current.phone_mac,
+        paired_phone_mac=current.paired_phone_mac,
         streaming=current.streaming,
         server=current.server,
         ma_connected=current.ma_connected,

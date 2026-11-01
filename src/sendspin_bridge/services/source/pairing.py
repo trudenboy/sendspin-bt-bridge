@@ -144,13 +144,36 @@ async def open_window(seconds: int = PAIRING_WINDOW_S) -> dict[str, Any]:
         pairing_error=None,
     )
     logger.info("Bluetooth pairing window open for %d s on %s", seconds, ", ".join(adapters))
-    _task = asyncio.create_task(_close_after(seconds), name="source-pairing-window")
+    _task = asyncio.create_task(_watch_window(seconds, adapters), name="source-pairing-window")
     return pairing_status()
 
 
-async def _close_after(seconds: int) -> None:
+async def _watch_window(seconds: int, adapters: list[str]) -> None:
+    """Close the window when the phone pairs, or when the time runs out.
+
+    A two-minute countdown after the bond already exists reads as "still waiting" in the
+    UI; the window exists to let a phone in, so it ends at the first new bond.
+    """
+    deadline = time.time() + seconds
     with contextlib.suppress(asyncio.CancelledError):
-        await asyncio.sleep(seconds)
+        while time.time() < deadline:
+            devices = await asyncio.to_thread(_devices)
+            new = devices - _known_devices
+            if new:
+                await asyncio.to_thread(_trust, new)
+                mac = sorted(new)[0]
+                await asyncio.to_thread(_set_discoverable, adapters, False)
+                from sendspin_bridge.services.source import state as source_state
+
+                source_state.publish(
+                    pairing_until=0.0,
+                    pairing_adapters=(),
+                    pairing_error=None,
+                    paired_phone_mac=mac,
+                )
+                logger.info("Bluetooth pairing window closed: %s paired", mac)
+                return
+            await asyncio.sleep(2.0)
         await close_window()
 
 

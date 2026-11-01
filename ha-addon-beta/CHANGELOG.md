@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.5] - 2026-11-01
+
+### Changed
+
+- The default Sendspin port is now 8927, matching Music Assistant's Sendspin provider; existing configurations keep their own value.
+
+### Fixed
+
+- The phone pairing window closes as soon as the phone bonds, instead of counting down a window that already did its job and still asking for a phone.
+- A busy PulseAudio host no longer leaks file descriptors while the source polls it for the phone: helper commands run in a worker thread and close their pipes.
+
 ## [3.2.0-beta.4] - 2026-11-01
 
 ### Fixed

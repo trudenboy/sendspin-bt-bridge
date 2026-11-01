@@ -256,6 +256,7 @@ def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collecti
         enabled=view.enabled,
         state=_source_state(view),
         phone_mac=_phone_mac(view.phone, known_macs),
+        paired_phone_mac=view.paired_phone_mac,
         capture=SourceCapture(kind=audio.capture.kind, node=audio.capture.node),
         ma=SourceMa(
             server=view.server,

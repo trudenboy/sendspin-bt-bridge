@@ -235,6 +235,10 @@ const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
             <span v-if="phoneLabel" class="font-medium text-text-primary">{{ phoneLabel }}</span>
             <span class="font-mono text-xs text-text-secondary">{{ source.phone_mac }}</span>
           </p>
+          <p v-else-if="source.paired_phone_mac" data-source-phone-paired class="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm">
+            <span class="text-text-secondary">{{ t('hardware.source.phonePaired') }}</span>
+            <span class="font-mono text-xs text-text-secondary">{{ source.paired_phone_mac }}</span>
+          </p>
           <p v-else class="mt-2 text-sm text-text-secondary">{{ t('hardware.source.phoneNoPhone') }}</p>
 
           <div v-if="pairingSecondsLeft > 0" data-source-pairing class="mt-3 rounded-(--radius-card) border border-info/40 bg-info/10 px-3 py-2">
@@ -253,6 +257,9 @@ const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
               {{ t('hardware.source.pair') }}
             </SbButton>
           </div>
+          <p v-if="source.paired_phone_mac && !source.phone_mac" class="mt-1 text-xs text-text-secondary">
+            {{ t('hardware.source.phonePairedHint') }}
+          </p>
           <p class="mt-2 text-xs text-text-secondary">{{ t('hardware.source.phoneHint') }}</p>
         </div>
       </div>

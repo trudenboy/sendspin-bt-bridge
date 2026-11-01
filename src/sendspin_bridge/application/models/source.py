@@ -40,6 +40,7 @@ class SourceFeed(ResponseModel):
         "streaming: the phone's audio is reaching MA; error: it failed.",
     )
     phone_mac: str | None = Field(default=None, description="The paired phone currently streaming, if any.")
+    paired_phone_mac: str | None = Field(default=None, description="A phone paired for the source, before it streams.")
     capture: SourceCapture = Field(description="The phone's capture node, or the reason there is none.")
     ma: SourceMa = Field(default_factory=SourceMa, description="The link to the Music Assistant server.")
     error: str | None = None

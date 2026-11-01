@@ -364,6 +364,7 @@ def test_the_source_feed_has_the_contract_shape(installed_bluez, monkeypatch, tm
         "enabled": True,
         "state": "waiting",
         "phone_mac": DEVICE,
+        "paired_phone_mac": None,
         "capture": {"kind": "pipewire_node", "node": hardware_audio.CAPTURE_NODE},
         "ma": {
             "server": "ws://ma:8927/sendspin",

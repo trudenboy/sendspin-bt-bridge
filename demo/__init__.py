@@ -335,6 +335,7 @@ def _demo_publish_source(enabled: bool = True) -> None:
         state="streaming" if enabled else "off",
         phone=node if enabled else None,
         phone_mac=phone_mac if enabled else None,
+        paired_phone_mac=phone_mac if enabled else None,
         streaming=enabled,
         server="ws://demo-ma.local:8927/sendspin" if enabled else None,
         ma_connected=enabled,

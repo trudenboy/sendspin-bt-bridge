@@ -181,6 +181,7 @@ class SourceClient:
             ma_error=None,
             phone=None,
             phone_mac=None,
+            paired_phone_mac=None,
             streaming=False,
             ma_paired=await self._psk_paired(),
         )
@@ -222,6 +223,7 @@ class SourceClient:
             state="off",
             phone=None,
             phone_mac=None,
+            paired_phone_mac=None,
             streaming=False,
             ma_connected=False,
             ma_pairing_code=None,
@@ -327,11 +329,10 @@ class SourceClient:
     # -- phone capture ---------------------------------------------------------------------
 
     async def _watch(self) -> None:
-        if hasattr(self._capture_backend, "subscribe"):
-            with contextlib.suppress(Exception):
-                self._subscription = await self._capture_backend.subscribe(  # type: ignore[attr-defined]
-                    lambda: self._spawn(self._sync_endpoint())
-                )
+        # Polling, not ``pactl subscribe``: on the add-on every subscription event spawned a
+        # watcher task whose subprocess transport leaked two sockets and an eventpoll, and a
+        # busy PulseAudio exhausted the 1024-fd limit within minutes of enabling the source.
+        # A 2 s poll is one short-lived helper call and keeps the same phone-detection latency.
         while not self._stop.is_set():
             try:
                 await self._sync_endpoint()
@@ -359,6 +360,11 @@ class SourceClient:
             source_state.publish(
                 phone=endpoint.node if endpoint else None,
                 phone_mac=endpoint.phone_mac if endpoint else None,
+                paired_phone_mac=(
+                    endpoint.phone_mac
+                    if endpoint is not None and endpoint.phone_mac
+                    else source_state.snapshot().paired_phone_mac
+                ),
             )
             await self._nudge_profile(endpoint)
             await self._report_signal(force=True)

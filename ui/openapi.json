@@ -2295,7 +2295,7 @@
                 "type": "null"
               }
             ],
-            "default": 9000,
+            "default": 8927,
             "description": "Music Assistant WebSocket port.",
             "title": "Sendspin Port"
           },
@@ -8656,6 +8656,18 @@
             "title": "Ma Pairing Seconds Left",
             "type": "integer"
           },
+          "paired_phone_mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A phone paired during the window, before it streams.",
+            "title": "Paired Phone Mac"
+          },
           "pairing_adapters": {
             "description": "Adapters the pairing window opened.",
             "items": {
@@ -8731,6 +8743,7 @@
           "state",
           "phone",
           "phone_mac",
+          "paired_phone_mac",
           "streaming",
           "server",
           "ma_connected",
@@ -9358,6 +9371,18 @@
             "$ref": "#/components/schemas/SourceMa",
             "description": "The link to the Music Assistant server."
           },
+          "paired_phone_mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A phone paired for the source, before it streams.",
+            "title": "Paired Phone Mac"
+          },
           "phone_mac": {
             "anyOf": [
               {
@@ -9388,6 +9413,7 @@
           "enabled",
           "state",
           "phone_mac",
+          "paired_phone_mac",
           "capture",
           "ma",
           "error"

@@ -91,6 +91,7 @@ def test_demo_mode_serves_audio_and_the_phone_source():
     assert source["capture"]["kind"] == "pulse_source"
     assert source["capture"]["node"] == body["audio"]["sources"][0]["name"]
     assert source["phone_mac"] == DEMO_BT_DEVICE_INFO[0]["mac"]
+    assert source["paired_phone_mac"] == DEMO_BT_DEVICE_INFO[0]["mac"]
     assert [device["mac"] for device in body["bluetooth_devices"] if device["source_phone"]] == [
         DEMO_BT_DEVICE_INFO[0]["mac"]
     ]

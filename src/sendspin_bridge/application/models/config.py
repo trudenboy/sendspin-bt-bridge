@@ -163,7 +163,7 @@ class BridgeConfig(BaseModel):
     """
     Music Assistant server hostname/IP. 'auto' uses mDNS discovery.
     """
-    SENDSPIN_PORT: int | None = Field(9000, ge=1, le=65535)
+    SENDSPIN_PORT: int | None = Field(8927, ge=1, le=65535)
     """
     Music Assistant WebSocket port.
     """

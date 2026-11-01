@@ -22,7 +22,7 @@
     },
     "SENDSPIN_PORT": {
       "type": "integer",
-      "default": 9000,
+      "default": 8927,
       "minimum": 1,
       "maximum": 65535,
       "description": "Music Assistant WebSocket port."

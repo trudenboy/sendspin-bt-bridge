@@ -836,7 +836,9 @@
       "phoneTitle": "Phone (Bluetooth)",
       "phoneIdle": "not streaming",
       "phoneNoPhone": "No phone is streaming into the bridge.",
-      "phoneHint": "The phone pairs with the bridge over Bluetooth; Music Assistant receives the captured audio."
+      "phoneHint": "The phone pairs with the bridge over Bluetooth; Music Assistant receives the captured audio.",
+      "phonePaired": "Phone paired",
+      "phonePairedHint": "The bond is saved; start playing on the phone and the bridge will capture it."
     }
   },
   "kit": {

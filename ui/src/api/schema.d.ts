@@ -3696,7 +3696,7 @@ export interface components {
             /**
              * Sendspin Port
              * @description Music Assistant WebSocket port.
-             * @default 9000
+             * @default 8927
              */
             SENDSPIN_PORT?: number | null;
             /**
@@ -6315,6 +6315,11 @@ export interface components {
              */
             ma_pairing_seconds_left: number;
             /**
+             * Paired Phone Mac
+             * @description A phone paired during the window, before it streams.
+             */
+            paired_phone_mac: string | null;
+            /**
              * Pairing Adapters
              * @description Adapters the pairing window opened.
              */
@@ -6606,6 +6611,11 @@ export interface components {
             error: string | null;
             /** @description The link to the Music Assistant server. */
             ma: components["schemas"]["SourceMa"];
+            /**
+             * Paired Phone Mac
+             * @description A phone paired for the source, before it streams.
+             */
+            paired_phone_mac: string | null;
             /**
              * Phone Mac
              * @description The paired phone currently streaming, if any.

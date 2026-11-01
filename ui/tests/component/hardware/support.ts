@@ -146,6 +146,7 @@ export const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
   state: 'waiting',
   phone_mac: null,
+  paired_phone_mac: null,
   capture: { kind: 'pipewire_node', node: 'bluez_input.FC_58_FA_EB_08_6C.0' },
   ma: {
     server: 'ws://ma.local:8927/sendspin',

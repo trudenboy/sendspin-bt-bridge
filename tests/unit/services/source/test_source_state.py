@@ -25,6 +25,7 @@ def test_a_fresh_snapshot_is_off_and_keeps_the_status_keys_unchanged():
         "state": "off",
         "phone": None,
         "phone_mac": None,
+        "paired_phone_mac": None,
         "streaming": False,
         "server": None,
         "ma_connected": False,

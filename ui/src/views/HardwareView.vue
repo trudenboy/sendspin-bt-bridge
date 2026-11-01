@@ -65,7 +65,7 @@ const capabilities = computed(() => snapshot.value?.capabilities ?? null)
 
 /** The name the paired device carries, when the Bluetooth list has the streaming phone. */
 const sourcePhoneName = computed(() => {
-  const mac = store.source?.phone_mac
+  const mac = store.source?.phone_mac ?? store.source?.paired_phone_mac
   if (!mac) return null
   const device = devices.value.find((entry) => entry.mac.toUpperCase() === mac.toUpperCase())
   return device ? speakerName(device.alias || device.name) || mac : null

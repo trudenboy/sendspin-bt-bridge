@@ -11,6 +11,7 @@ from sendspin_bridge.services.source.capture import (
     ProcessCapture,
     chunk_bytes,
     mac_from_node,
+    run_command,
     terminate_process,
 )
 from sendspin_bridge.services.source.capture.pipewire import (
@@ -147,3 +148,19 @@ async def test_stop_terminates_and_then_kills_a_process_that_ignores_term():
             proc.kill()
         with contextlib.suppress(Exception):
             await proc.wait()
+
+
+async def test_helper_commands_do_not_leak_file_descriptors():
+    """The source polls pactl every couple of seconds; a leak exhausts the add-on's fd limit."""
+    import os
+
+    if not os.path.isdir("/proc/self/fd"):
+        import pytest
+
+        pytest.skip("no /proc on this host")
+    before = len(os.listdir("/proc/self/fd"))
+    for _ in range(100):
+        await run_command(["true"])
+    after = len(os.listdir("/proc/self/fd"))
+
+    assert after <= before + 2, f"helper commands leaked {after - before} file descriptors"
