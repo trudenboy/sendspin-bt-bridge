@@ -177,6 +177,18 @@ def test_demo_install_seeds_the_current_tree_and_its_source(tmp_path):
     assert payload["source_status"]["phone"] == "bluez_source.AA_BB_CC_DD_EE_01"
 
 
+def test_demo_mode_marks_one_output_as_the_default():
+    from demo import install_inventory
+
+    install_inventory()
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    defaults = [sink for sink in body["audio"]["sinks"] if sink["is_default"]]
+    assert len(defaults) == 1
+    assert body["capabilities"]["default_sink"] is True
+
+
 def test_demo_mode_opens_a_pairing_window_the_strip_can_count_down():
     from demo import install_inventory
 

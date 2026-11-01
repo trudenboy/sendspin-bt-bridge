@@ -176,7 +176,13 @@ def _demo_audio_facts() -> Any:
         if sources
         else CaptureFacts(kind="unavailable", reason="The demo stand has no capture source.")
     )
-    return build_audio_facts(_demo_local_cards(), _demo_local_sinks(), sources, capture)
+    return build_audio_facts(
+        _demo_local_cards(),
+        _demo_local_sinks(),
+        sources,
+        capture,
+        default_sink=_demo_default_sink,
+    )
 
 
 def _demo_invalidate_hardware() -> None:
@@ -259,6 +265,14 @@ def _demo_install_audio() -> None:
     _sp.get_sink_mute = lambda name: _demo_sink_muted.get(name, False)  # type: ignore[assignment]
     _sp.suspend_sink = _demo_suspend_sink  # type: ignore[assignment]
     _sp.set_default_sink = _demo_set_default_sink  # type: ignore[assignment]
+
+    # The Default badge on the audio page comes from the server's own answer, so
+    # the demo has to answer it too — otherwise the stand shows no default at all.
+    async def _demo_aget_default_sink_name() -> str | None:
+        return _demo_default_sink
+
+    _sp.aget_default_sink_name = _demo_aget_default_sink_name  # type: ignore[assignment]
+    _sp.get_default_sink_name = lambda: _demo_default_sink  # type: ignore[assignment]
 
 
 def build_demo_config() -> dict[str, Any]:
