@@ -643,13 +643,18 @@ async def _wpctl_status() -> str | None:
     return out.decode(errors="replace")
 
 
+def _wpctl_available() -> bool:
+    """Whether the PipeWire tools are installed; one seam for tests and the reason code."""
+    import shutil
+
+    return shutil.which("wpctl") is not None
+
+
 async def _capture_facts(sources: Collection[LocalSource], server_name: str) -> CaptureFacts:
     # ``wpctl`` presence is a PipeWire fact; ``probe_capture`` is the host's overall answer
     # (PulseAudio needs pactl/parecord instead).  Keep them apart: the classifier reasons
     # about the PipeWire node even on a PulseAudio host.
-    import shutil
-
-    wpctl_available = shutil.which("wpctl") is not None
+    wpctl_available = _wpctl_available()
     status = await _wpctl_status() if wpctl_available else None
     return classify_capture(status, sources, wpctl_available=wpctl_available)
 

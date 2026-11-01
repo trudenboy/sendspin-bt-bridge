@@ -214,6 +214,7 @@ def test_capture_facts_carries_a_wpctl_timeout_distinctly(monkeypatch):
     async def ran_with_no_node() -> str:
         return "Audio\n"
 
+    monkeypatch.setattr(inventory, "_wpctl_available", lambda: True)
     monkeypatch.setattr(inventory, "_wpctl_status", timed_out)
     timeout = asyncio.run(inventory._capture_facts(sources, "PulseAudio"))
     monkeypatch.setattr(inventory, "_wpctl_status", ran_with_no_node)

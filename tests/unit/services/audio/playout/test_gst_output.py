@@ -653,6 +653,9 @@ def test_buffers_reaching_the_sink_are_reported_while_the_engine_asks():
     _wait_until(lambda: len(handed) >= 4)
     player._tick(now_us=2_000_000.0)  # drains what arrived since the last tick
     assert noted, "no arrival reported"
+    # The probe reports a buffer on the streaming thread; the fake sink's Python-side record of
+    # that push can trail it. Wait for the two views to settle instead of sampling them once.
+    _wait_until(lambda: all(x in {b.pts for b in handed} for x, _sample in noted))
     pushed = {b.pts for b in handed}
     assert all(x in pushed and sample is not None for x, sample in noted)
     xs = [x for x, _ in noted]
