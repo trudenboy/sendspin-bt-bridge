@@ -1,0 +1,2105 @@
+[
+  {
+    "label": "desktop-light",
+    "route": "home",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"adapter\"] > .hover\\:brightness-95.tone-success.px-2 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"audio_link\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 30
+  },
+  {
+    "label": "desktop-light",
+    "route": "home",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(3) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(4) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(5) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(9) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 6
+  },
+  {
+    "label": "desktop-light",
+    "route": "home",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "groups",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .min-w-0.truncate",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "p > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .min-w-0.truncate",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Living Room\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Kitchen\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 12
+  },
+  {
+    "label": "desktop-light",
+    "route": "groups",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "groups",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "sync",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".rounded-\\(--radius-badge\\) > .min-w-0.truncate",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 5
+  },
+  {
+    "label": "desktop-light",
+    "route": "sync",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "sync",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "config",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "button[aria-current=\"true\"]",
+        "summary": "  Element has insufficient color contrast of 4.08 (foreground color: #0277bd, background color: #dcf0f9, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".items-center.flex.gap-2 > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-primary",
+        "summary": "  Element has insufficient color contrast of 4.27 (foreground color: #0277bd, background color: #e1f5fe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 13
+  },
+  {
+    "label": "desktop-light",
+    "route": "config",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "config",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "diagnostics",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".router-link-active.router-link-exact-active.bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(1) > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 24
+  },
+  {
+    "label": "desktop-light",
+    "route": "diagnostics",
+    "id": "heading-order",
+    "impact": "moderate",
+    "help": "Heading levels should only increase by one",
+    "tags": [
+      "cat.semantics",
+      "best-practice"
+    ],
+    "nodes": [
+      {
+        "target": "h3",
+        "summary": "  Heading order invalid"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "diagnostics",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "diagnostics",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "logs",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".router-link-active.router-link-exact-active.bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-transparent.px-2\\.5.bg-surface-secondary:nth-child(1) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.98 (foreground color: #c62828, background color: #ead4d4, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-transparent.px-2\\.5.bg-surface-secondary:nth-child(3) > .tone-info.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.51 (foreground color: #0277bd, background color: #cfdfe9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10.rounded-md.text-primary-text",
+        "summary": "  Element has insufficient color contrast of 4.17 (foreground color: #0277bd, background color: #e1f2f9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 17
+  },
+  {
+    "label": "desktop-light",
+    "route": "logs",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "logs",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "logs",
+    "id": "select-name",
+    "impact": "critical",
+    "help": "Select element must have an accessible name",
+    "tags": [
+      "cat.forms",
+      "wcag2a",
+      "wcag412",
+      "section508",
+      "section508.22.n",
+      "TTv5",
+      "TT5.c",
+      "EN-301-549",
+      "EN-9.4.1.2",
+      "ACT",
+      "RGAAv4",
+      "RGAA-11.1.1"
+    ],
+    "nodes": [
+      {
+        "target": "select",
+        "summary": "  Element does not have an implicit (wrapped) <label>"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "system",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".router-link-active.router-link-exact-active.bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 5
+  },
+  {
+    "label": "desktop-light",
+    "route": "system",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "system",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "hardware",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[title=\"Update available\"] > .sm\\:inline.hidden",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"mode\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-runtime=\"playing\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.33 (foreground color: #0277bd, background color: #e6f6fe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-source-state-badge=\"\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "div[data-source-ma=\"\"] > .flex-wrap.gap-2.flex:nth-child(1) > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "div[data-source-phone-block=\"\"] > .flex-wrap.gap-2.flex:nth-child(1) > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 32
+  },
+  {
+    "label": "desktop-light",
+    "route": "hardware",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "hardware",
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "help": "Links must be distinguishable without relying on color",
+    "tags": [
+      "cat.color",
+      "wcag2a",
+      "wcag141",
+      "TTv5",
+      "TT13.a",
+      "EN-301-549",
+      "EN-9.1.4.1",
+      "RGAAv4",
+      "RGAA-10.6.1"
+    ],
+    "nodes": [
+      {
+        "target": "a[href$=\"demo-ma.local:8095\"]",
+        "summary": "  The link has insufficient color contrast of 1.57:1 with the surrounding text. (Minimum contrast is 3:1, link text: #0277bd, surrounding text: #545454)"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-light",
+    "route": "hardware",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "home",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"adapter\"] > .hover\\:brightness-95.tone-success.px-2 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"audio_link\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .inline-flex[data-chip=\"transfer\"] > .tone-error.px-2.py-0\\.5",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > header > .tone-success.px-2.py-0\\.5",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"adapter\"] > .hover\\:brightness-95.tone-success.px-2 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 31
+  },
+  {
+    "label": "desktop-dark",
+    "route": "home",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(3) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(4) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(5) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(9) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 6
+  },
+  {
+    "label": "desktop-dark",
+    "route": "home",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "groups",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .min-w-0.truncate",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Living Room\"]",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Kitchen\"]",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Studio\"]",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".rounded-\\(--radius-card\\).overflow-hidden.border:nth-child(1) > .relative > div > .py-3.border-t.border-border > .gap-4.flex > .flex-1.min-w-0 > .text-text-disabled",
+        "summary": "  Element has insufficient color contrast of 2.62 (foreground color: #5e5e5e, background color: #1c1c1c, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Office\"]",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".rounded-\\(--radius-card\\).overflow-hidden.border:nth-child(2) > .relative > div > .py-3.border-t.border-border > .gap-4.flex > .flex-1.min-w-0 > .text-text-disabled",
+        "summary": "  Element has insufficient color contrast of 2.62 (foreground color: #5e5e5e, background color: #1c1c1c, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 7
+  },
+  {
+    "label": "desktop-dark",
+    "route": "groups",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "groups",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "sync",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".rounded-\\(--radius-badge\\) > .min-w-0.truncate",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "sync",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "sync",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "config",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".items-center.flex.gap-2 > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "#settings-adapter-hci0 > .min-w-0 > .items-center.flex.gap-2 > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "#settings-adapter-hci1 > .min-w-0 > .items-center.flex.gap-2 > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "#settings-adapter-hci2 > .min-w-0 > .items-center.flex.gap-2 > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 5
+  },
+  {
+    "label": "desktop-dark",
+    "route": "config",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "config",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "diagnostics",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(1) > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(3) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(3) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(4) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(4) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 20
+  },
+  {
+    "label": "desktop-dark",
+    "route": "diagnostics",
+    "id": "heading-order",
+    "impact": "moderate",
+    "help": "Heading levels should only increase by one",
+    "tags": [
+      "cat.semantics",
+      "best-practice"
+    ],
+    "nodes": [
+      {
+        "target": "h3",
+        "summary": "  Heading order invalid"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "diagnostics",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "diagnostics",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "logs",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-transparent.px-2\\.5.bg-surface-secondary:nth-child(1) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.59 (foreground color: #ef5350, background color: #442e2e, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".shrink-0:nth-child(2) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.8 (foreground color: #ef5350, background color: #402a29, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 3
+  },
+  {
+    "label": "desktop-dark",
+    "route": "logs",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "logs",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "logs",
+    "id": "select-name",
+    "impact": "critical",
+    "help": "Select element must have an accessible name",
+    "tags": [
+      "cat.forms",
+      "wcag2a",
+      "wcag412",
+      "section508",
+      "section508.22.n",
+      "TTv5",
+      "TT5.c",
+      "EN-301-549",
+      "EN-9.4.1.2",
+      "ACT",
+      "RGAAv4",
+      "RGAA-11.1.1"
+    ],
+    "nodes": [
+      {
+        "target": "select",
+        "summary": "  Element does not have an implicit (wrapped) <label>"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "system",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-runtime=\"ma\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(1) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(2) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(3) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(4) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(5) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(6) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "tr:nth-child(7) > td:nth-child(5) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.13 (foreground color: #ef5350, background color: #3a2423, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 10
+  },
+  {
+    "label": "desktop-dark",
+    "route": "system",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "system",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".md\\:block",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "hardware",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-source-state-badge=\"\"]",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article[data-controller-card=\"\"]:nth-child(1) > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article[data-controller-card=\"\"]:nth-child(2) > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article[data-controller-card=\"\"]:nth-child(3) > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(1) > article[data-device-card=\"\"] > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".font-normal",
+        "summary": "  Element has insufficient color contrast of 4.29 (foreground color: #279cd1, background color: #1e323b, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > article[data-device-card=\"\"] > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.3 (foreground color: #43a047, background color: #212e22, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 13
+  },
+  {
+    "label": "desktop-dark",
+    "route": "hardware",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": ".shrink",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "hardware",
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "help": "Links must be distinguishable without relying on color",
+    "tags": [
+      "cat.color",
+      "wcag2a",
+      "wcag141",
+      "TTv5",
+      "TT13.a",
+      "EN-301-549",
+      "EN-9.1.4.1",
+      "RGAAv4",
+      "RGAA-10.6.1"
+    ],
+    "nodes": [
+      {
+        "target": "a[href$=\"demo-ma.local:8095\"]",
+        "summary": "  The link has insufficient color contrast of 1.15:1 with the surrounding text. (Minimum contrast is 3:1, link text: #4fc3f7, surrounding text: #aaaaaa)"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "desktop-dark",
+    "route": "hardware",
+    "id": "region",
+    "impact": "moderate",
+    "help": "All page content should be contained by landmarks",
+    "tags": [
+      "cat.keyboard",
+      "best-practice",
+      "RGAAv4",
+      "RGAA-9.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".py-1\\.5",
+        "summary": "  Some page content is not contained by landmarks"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "mobile-light",
+    "route": "home",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".gap-x-4 > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"adapter\"] > .hover\\:brightness-95.tone-success.px-2 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(1) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"audio_link\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > header > .tone-success.px-2.py-0\\.5",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"adapter\"] > .hover\\:brightness-95.tone-success.px-2 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.px-2.py-0\\.5 > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 26
+  },
+  {
+    "label": "mobile-light",
+    "route": "home",
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "help": "Elements must have their visible text as part of their accessible name",
+    "tags": [
+      "cat.semantics",
+      "wcag21a",
+      "wcag253",
+      "EN-301-549",
+      "EN-9.2.5.3",
+      "RGAAv4",
+      "RGAA-6.1.5"
+    ],
+    "nodes": [
+      {
+        "target": "article:nth-child(2) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(3) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(4) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(5) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      },
+      {
+        "target": "article:nth-child(9) > .empty\\:hidden.gap-1\\.5.flex-wrap > .rounded-\\(--radius-badge\\).max-w-full[data-chip=\"group\"]",
+        "summary": "  Text inside the element is not included in the accessible name"
+      }
+    ],
+    "count": 5
+  },
+  {
+    "label": "mobile-light",
+    "route": "groups",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "p > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .min-w-0.truncate",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Living Room\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Kitchen\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Studio\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".rounded-\\(--radius-card\\).overflow-hidden.border:nth-child(1) > .relative > div > .py-3.border-t.border-border > .gap-4.flex > .flex-1.min-w-0 > .text-text-disabled",
+        "summary": "  Element has insufficient color contrast of 1.87 (foreground color: #bdbdbd, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[title=\"Office\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".rounded-\\(--radius-card\\).overflow-hidden.border:nth-child(2) > .relative > div > .py-3.border-t.border-border > .gap-4.flex > .flex-1.min-w-0 > .text-text-disabled",
+        "summary": "  Element has insufficient color contrast of 1.87 (foreground color: #bdbdbd, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 7
+  },
+  {
+    "label": "mobile-light",
+    "route": "config",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "button[aria-current=\"true\"]",
+        "summary": "  Element has insufficient color contrast of 4.08 (foreground color: #0277bd, background color: #dcf0f9, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".items-center.flex.gap-2 > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.rounded-\\(--radius-badge\\).px-2 > .truncate",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-primary",
+        "summary": "  Element has insufficient color contrast of 4.27 (foreground color: #0277bd, background color: #e1f5fe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-primary > span",
+        "summary": "  Element has insufficient color contrast of 4.27 (foreground color: #0277bd, background color: #e1f5fe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "#settings-adapter-hci0 > .min-w-0 > .items-center.flex.gap-2 > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "#settings-adapter-hci1 > .min-w-0 > .items-center.flex.gap-2 > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "#settings-adapter-hci2 > .min-w-0 > .items-center.flex.gap-2 > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".tone-info.rounded-\\(--radius-badge\\).py-1",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 8
+  },
+  {
+    "label": "mobile-light",
+    "route": "diagnostics",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "li:nth-child(1) > .max-w-full[data-status-state=\"ma_account\"][data-state=\"signed_in\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(2) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(3) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(3) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(4) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(4) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-state=\"streaming\"][data-status-state=\"audio_link\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(5) > .gap-1\\.5.flex-wrap.flex > .max-w-full[data-status-state=\"bluetooth\"][data-state=\"connected\"] > .tone-success.max-w-full.rounded-\\(--radius-badge\\) > .truncate.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 19
+  },
+  {
+    "label": "mobile-light",
+    "route": "diagnostics",
+    "id": "heading-order",
+    "impact": "moderate",
+    "help": "Heading levels should only increase by one",
+    "tags": [
+      "cat.semantics",
+      "best-practice"
+    ],
+    "nodes": [
+      {
+        "target": "h3",
+        "summary": "  Heading order invalid"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "mobile-light",
+    "route": "logs",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": ".border-transparent.px-2\\.5.bg-surface-secondary:nth-child(1) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.98 (foreground color: #c62828, background color: #ead4d4, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".border-transparent.px-2\\.5.bg-surface-secondary:nth-child(3) > .tone-info.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.51 (foreground color: #0277bd, background color: #cfdfe9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".bg-primary\\/10.rounded-md.text-primary-text",
+        "summary": "  Element has insufficient color contrast of 4.17 (foreground color: #0277bd, background color: #e1f2f9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".py-1.bg-surface-secondary.font-mono:nth-child(1) > .shrink-0:nth-child(2) > .tone-info.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.51 (foreground color: #0277bd, background color: #cfdfe9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".py-1.bg-surface-secondary.font-mono:nth-child(1) > .text-info.break-all.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.21 (foreground color: #0277bd, background color: #f0f0f0, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".py-1.bg-surface-secondary.font-mono:nth-child(3) > .shrink-0:nth-child(2) > .tone-info.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 3.51 (foreground color: #0277bd, background color: #cfdfe9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".py-1.bg-surface-secondary.font-mono:nth-child(3) > .text-info.break-all.min-w-0",
+        "summary": "  Element has insufficient color contrast of 4.21 (foreground color: #0277bd, background color: #f0f0f0, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": ".shrink-0:nth-child(2) > .tone-error.rounded-\\(--radius-badge\\).gap-1",
+        "summary": "  Element has insufficient color contrast of 4.17 (foreground color: #c62828, background color: #efd9d9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 8
+  },
+  {
+    "label": "mobile-light",
+    "route": "logs",
+    "id": "scrollable-region-focusable",
+    "impact": "serious",
+    "help": "Scrollable region must have keyboard access",
+    "tags": [
+      "cat.keyboard",
+      "wcag2a",
+      "wcag211",
+      "wcag213",
+      "TTv5",
+      "TT4.a",
+      "EN-301-549",
+      "EN-9.2.1.1",
+      "EN-9.2.1.3",
+      "RGAAv4",
+      "RGAA-7.3.2"
+    ],
+    "nodes": [
+      {
+        "target": ".max-h-\\[600px\\]",
+        "summary": "  Element should have focusable content"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "mobile-light",
+    "route": "logs",
+    "id": "select-name",
+    "impact": "critical",
+    "help": "Select element must have an accessible name",
+    "tags": [
+      "cat.forms",
+      "wcag2a",
+      "wcag412",
+      "section508",
+      "section508.22.n",
+      "TTv5",
+      "TT5.c",
+      "EN-301-549",
+      "EN-9.4.1.2",
+      "ACT",
+      "RGAAv4",
+      "RGAA-11.1.1"
+    ],
+    "nodes": [
+      {
+        "target": "select",
+        "summary": "  Element does not have an implicit (wrapped) <label>"
+      }
+    ],
+    "count": 1
+  },
+  {
+    "label": "mobile-light",
+    "route": "hardware",
+    "id": "color-contrast",
+    "impact": "serious",
+    "help": "Elements must meet minimum color contrast ratio thresholds",
+    "tags": [
+      "cat.color",
+      "wcag2aa",
+      "wcag143",
+      "TTv5",
+      "TT13.c",
+      "EN-301-549",
+      "EN-9.1.4.3",
+      "ACT",
+      "RGAAv4",
+      "RGAA-3.2.1"
+    ],
+    "nodes": [
+      {
+        "target": "span[data-source-state-badge=\"\"]",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "div[data-source-ma=\"\"] > .flex-wrap.gap-2.flex:nth-child(1) > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "div[data-source-phone-block=\"\"] > .flex-wrap.gap-2.flex:nth-child(1) > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.07 (foreground color: #2e7d32, background color: #dde8de, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article[data-controller-card=\"\"]:nth-child(1) > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article[data-controller-card=\"\"]:nth-child(2) > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "article[data-controller-card=\"\"]:nth-child(3) > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "li:nth-child(1) > article[data-device-card=\"\"] > header > .tone-success.rounded-\\(--radius-badge\\).px-2",
+        "summary": "  Element has insufficient color contrast of 4.25 (foreground color: #2e7d32, background color: #e2ede2, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      },
+      {
+        "target": "span[data-role=\"input\"]",
+        "summary": "  Element has insufficient color contrast of 3.96 (foreground color: #0277bd, background color: #dcecf6, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+      }
+    ],
+    "count": 27
+  },
+  {
+    "label": "mobile-light",
+    "route": "hardware",
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "help": "Links must be distinguishable without relying on color",
+    "tags": [
+      "cat.color",
+      "wcag2a",
+      "wcag141",
+      "TTv5",
+      "TT13.a",
+      "EN-301-549",
+      "EN-9.1.4.1",
+      "RGAAv4",
+      "RGAA-10.6.1"
+    ],
+    "nodes": [
+      {
+        "target": "a[href$=\"demo-ma.local:8095\"]",
+        "summary": "  The link has insufficient color contrast of 1.57:1 with the surrounding text. (Minimum contrast is 3:1, link text: #0277bd, surrounding text: #545454)"
+      }
+    ],
+    "count": 1
+  }
+]
