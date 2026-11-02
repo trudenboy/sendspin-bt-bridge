@@ -30,41 +30,6 @@ configuration:
     description: >-
       IANA timezone name (e.g. "Europe/Moscow", "America/New_York").
       Leave empty to automatically use the Home Assistant system timezone.
-  pulse_latency_msec:
-    name: "PulseAudio latency (ms)"
-    description: >-
-      Requested PulseAudio buffer latency in milliseconds. Larger values reduce
-      audio dropouts on slow hardware at the cost of slightly higher latency.
-      Default is 600 ms; reduce it on faster hardware if you want lower latency.
-  startup_banner_grace_seconds:
-    name: "Startup finalizing grace period (sec)"
-    description: >-
-      How long the web UI keeps the restart page in the finalizing state after
-      the backend reports ready. Lower this if Save & Restart feels stuck near
-      "Startup 90%". Set to 0 to unlock immediately.
-  recovery_banner_grace_seconds:
-    name: "Recovery banner delay after unlock (sec)"
-    description: >-
-      How long top-level recovery banners stay hidden after the restart page
-      unlocks. Use this to give Bluetooth devices extra time to reconnect
-      before attention banners appear.
-  prefer_sbc_codec:
-    name: "Prefer SBC codec"
-    description: >-
-      When enabled, the bridge attempts to switch the Bluetooth A2DP codec to
-      SBC immediately after each device connects. SBC is the simplest mandatory
-      A2DP codec and requires the least CPU for encoding. Useful on slow
-      hardware (e.g. Celeron G1610T) with multiple simultaneous speakers.
-      Has no effect if PulseAudio does not support send-message (PA < 15) or
-      the device is already using SBC. Enable this alongside changing the
-      Music Assistant audio format to PCM 44.1 kHz / 16-bit for maximum CPU
-      savings.
-  bt_check_interval:
-    name: "Bluetooth check interval"
-    description: >-
-      Bluetooth reconnect check interval in seconds. The bridge polls each
-      device at this rate and reconnects automatically if the connection drops.
-      Default is 10 seconds.
   bt_max_reconnect_fails:
     name: "Max reconnect failures"
     description: >-
@@ -82,85 +47,12 @@ configuration:
       Logging level for the bridge. Use "info" for normal operation or
       "debug" for detailed troubleshooting output. Debug mode produces
       significantly more log data.
-  ma_api_url:
-    name: "Music Assistant API URL"
-    description: >-
-      Music Assistant REST API URL for volume routing
-      (e.g. http://192.168.1.100:8095). Required when "Volume via MA" is
-      enabled. Leave empty if not using MA volume routing.
-  ma_api_token:
-    name: "Music Assistant API token"
-    description: >-
-      Authentication token for the Music Assistant REST API. Required only
-      if your MA instance has authentication enabled. Leave empty otherwise.
-  ma_auto_silent_auth:
-    name: "Auto-get MA token on UI open"
-    description: >-
-      When enabled, the ingress web UI will try to create a long-lived Music
-      Assistant token automatically using the current Home Assistant session
-      as soon as the page opens. Applies to Home Assistant addon ingress mode only.
   volume_via_ma:
     name: "Volume via Music Assistant"
     description: >-
       Route volume changes through the Music Assistant API instead of
       direct PulseAudio control. Ensures MA stays in sync with actual
       speaker volume. Requires "Music Assistant API URL" to be set.
-  bluetooth_devices:
-    name: "Bluetooth devices"
-    description: >-
-      List of Bluetooth speakers to bridge. Each entry requires a MAC
-      address and a player name that will appear in Music Assistant.
-    fields:
-      mac:
-        name: "MAC address"
-        description: >-
-          Bluetooth MAC address of the speaker (format: AA:BB:CC:DD:EE:FF).
-          Find it in bluetoothctl with "devices" after pairing.
-      player_name:
-        name: "Player name"
-        description: >-
-          Display name shown in Music Assistant for this speaker.
-          Each device must have a unique name.
-      adapter:
-        name: "Bluetooth adapter"
-        description: >-
-          MAC address of the Bluetooth adapter to use for this device.
-          Leave blank to use the system default adapter.
-      static_delay_ms:
-        name: "Static delay (ms)"
-        description: >-
-          Extra delay in milliseconds (0–5000) added on top of DAC-anchored sync.
-          Default 0. Use small positive values (e.g. 50) only if audio plays slightly too late.
-      listen_host:
-        name: "Listen host"
-        description: >-
-          Override the network address this player listens on. Leave empty
-          to use the default address. Only needed in advanced network setups.
-      listen_port:
-        name: "Listen port"
-        description: >-
-          Override the port this player listens on. Leave empty to use an
-          automatically assigned port.
-      enabled:
-        name: "Enabled"
-        description: >-
-          Enable or disable this Bluetooth device. Disabled devices are
-          not connected or bridged until re-enabled.
-      preferred_format:
-        name: "Preferred audio format"
-        description: >-
-          Preferred audio format string (e.g. "pcm,44100,16,2"). Leave
-          empty to use the Music Assistant default format.
-      keepalive_silence:
-        name: "Keepalive silence"
-        description: >-
-          Send silent audio when idle to keep the Bluetooth connection
-          alive. Prevents some speakers from auto-powering off.
-      keepalive_interval:
-        name: "Keepalive interval"
-        description: >-
-          Interval in seconds between keepalive silence packets. Only
-          applies when "Keepalive silence" is enabled.
   bluetooth_adapters:
     name: "Bluetooth adapters"
     description: >-
