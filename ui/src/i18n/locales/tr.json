@@ -1,0 +1,2970 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "bugReport": "Hata bildirimi",
+    "docs": "Belgeler",
+    "github": "GitHub deposu",
+    "help": "Yardım",
+    "preferences": "Tercihler",
+    "display": "Görünüm",
+    "language": "Dil",
+    "theme": "Tema",
+    "themes": {
+      "auto": "Otomatik",
+      "light": "Açık",
+      "dark": "Koyu"
+    },
+    "openDiagnostics": "Tanılamayı aç",
+    "sponsor": "Sponsor",
+    "sponsorHint": "Projeyi destekle",
+    "bridgeName": "Bu köprü",
+    "runtimeRow": "Köprü çalışma ortamı",
+    "hostname": "Ana bilgisayar adı",
+    "ipAddress": "IP adresi",
+    "upFor": "{uptime} süredir açık",
+    "speakersConnected": "{n}/{total} Bluetooth bağlı",
+    "runtime": {
+      "ha_addon": "Home Assistant eklentisi",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Bağımsız"
+    }
+  },
+  "status": {
+    "kind": {
+      "audio_link": "Ses bağlantısı",
+      "ma_account": "Music Assistant hesabı",
+      "bluetooth": "Bluetooth bağlantısı"
+    },
+    "hint": {
+      "audio_link": "Ses bağlantısı, bu oynatıcı ile Music Assistant arasındaki akıştır",
+      "ma_account": "Music Assistant hesabı, köprünün Music Assistant API’sine oturum açmasıdır",
+      "bluetooth": "Bluetooth bağlantısı, köprü ile hoparlör arasındaki bağdır"
+    },
+    "audio_link": {
+      "streaming": "Çalıyor",
+      "connected": "Açık",
+      "foreign": "Başka sunucu",
+      "disconnected": "Kapalı",
+      "unavailable": "Kullanılamıyor"
+    },
+    "ma_account": {
+      "signed_in": "Oturum açık",
+      "signed_out": "Oturum kapalı",
+      "not_configured": "Ayarlanmamış"
+    },
+    "bluetooth": {
+      "connected": "Bağlı",
+      "connecting": "Bağlanıyor",
+      "disconnected": "Bağlı değil",
+      "standby": "Bekleme",
+      "released": "Serbest bırakıldı",
+      "disabled": "Devre dışı",
+      "not_paired": "Eşleştirilmemiş"
+    },
+    "reason": {
+      "reconnecting": "Köprü yeniden bağlanıyor",
+      "user": "Tarafınızdan serbest bırakıldı",
+      "auto": "Tekrarlanan bağlantı sorunlarından sonra otomatik olarak serbest bırakıldı",
+      "foreign_server": "Oynatıcı, bu köprüye ait olmayan bir Music Assistant üzerinde",
+      "bluetooth_down": "Bluetooth bağlantısı bekleniyor",
+      "standby": "Hoparlör bekleme modunda",
+      "released": "Hoparlör serbest bırakıldı",
+      "disabled": "Oynatıcı devre dışı",
+      "unreachable_or_rejected": "Music Assistant’a ulaşılamıyor veya oturum açma kabul edilmedi"
+    },
+    "bluetoothSummary": "{n}/{total} Bluetooth bağlı",
+    "sectionTitle": "Bağlantı durumları",
+    "accountRow": "Music Assistant hesabı",
+    "speakersTitle": "Hoparlörler"
+  },
+  "device": {
+    "status": {
+      "streaming": "Çalıyor",
+      "ready": "Hazır",
+      "connecting": "Bağlanıyor",
+      "error": "Hata",
+      "offline": "Çevrimdışı",
+      "standby": "Bekleme",
+      "idle": "Boşta",
+      "degraded": "Sorun",
+      "recovering": "Yeniden bağlanıyor…",
+      "transitioning": "Bağlanıyor…",
+      "disabled": "Devre dışı",
+      "released": "Serbest bırakıldı",
+      "output_missing": "Ses çıkışı yok",
+      "buffering": "Tamponlanıyor",
+      "sink_muted": "Sistem tarafından sessize alındı",
+      "stopping": "Durduruluyor",
+      "reconnecting": "Yeniden bağlanıyor",
+      "autoReleased": "Otomatik serbest bırakıldı",
+      "autoReleasedTitle": "Köprü, tekrarlanan bağlantı sorunlarından sonra bu hoparlörü serbest bıraktı. Yeniden denemek için geri al.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "{time} beri bekleme modunda"
+    },
+    "actions": {
+      "reconnect": "Yeniden bağlan",
+      "disconnect": "Bağlantıyı kes",
+      "remove": "Kaldır",
+      "wake": "Uyandır",
+      "standby": "Bekleme",
+      "enable": "Etkinleştir",
+      "disable": "Devre dışı bırak",
+      "details": "Ayrıntılar",
+      "enableFailed": "Oynatıcı etkinleştirilemedi veya devre dışı bırakılamadı",
+      "volumeFailed": "{name} adlı oynatıcının ses düzeyi değiştirilemedi",
+      "muteFailed": "{name} sessize alınamadı veya sesi açılamadı",
+      "releaseFailed": "{name} serbest bırakılamadı",
+      "claimFailed": "{name} geri alınamadı",
+      "forget": "Bluetooth eşleşmesini unut",
+      "forgetConfirm": "Bluetooth eşleşmesi unutulsun mu? Hoparlörün yeniden eşleştirilmesi gerekir.",
+      "repair": "Yeniden eşleştir",
+      "claim": "Bu köprüyü kaynak olarak kullan",
+      "reconnectFailed": "Yeniden bağlanma başarısız",
+      "forgetTitle": "{name} unutulsun mu?",
+      "more": "{name} için diğer işlemler"
+    },
+    "battery": "Pil {level}%",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Yerel ses",
+      "usb_audio": "USB ses",
+      "virtual_sink": "Sanal çıkış",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "select": "{name} öğesini seç",
+    "chips": {
+      "sync": {
+        "label": "Eşitleme",
+        "reanchoring": "Yeniden eşitleniyor",
+        "errorMs": "{ms} ms",
+        "title": "Oynatma grupla eşitlenmiş",
+        "reanchoringTitle": "Akış zamanlaması yeniden eşitleniyor",
+        "count": "×{count}",
+        "countTitle": "Yeniden eşitleme: bu oturumda {count} · 5 dakikada {m5} · 30 dakikada {m30}",
+        "playout": "Çalma",
+        "playoutTitle": "Hoparlör çıkışında ölçülen çalma hatası",
+        "settling": "Oturma",
+        "settlingTitle": "Eşitleme oturuyor; hata ölçüldüğü gibi gösterilir ve en geç {s} sn içinde kararlı sayılır",
+        "jumpsTitle": "Çalma sıçramaları: bu oturumda {count}"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "Sinyal, bağdaştırıcının ideal alma aralığından {value} Δ dB",
+        "tier": {
+          "excellent": "Mükemmel sinyal",
+          "strong": "Güçlü sinyal",
+          "fair": "Orta sinyal",
+          "poor": "Zayıf sinyal",
+          "bad": "Kötü sinyal",
+          "stale": "Sinyal ölçümü güncel değil"
+        },
+        "staleTitle": "Son sinyal ölçümü ({value} Δ dB) 30 sn’den eski"
+      },
+      "group": {
+        "title": "Music Assistant grubu {name}",
+        "external": "Diğer köprülerde {n} tane daha",
+        "openAction": "Music Assistant’ta aç"
+      },
+      "adapter": {
+        "title": "Bağdaştırıcı {name} ({hci}) · {state}",
+        "open": "{name} bağdaştırıcısını Yapılandırma’da aç",
+        "state": {
+          "connected": "Bluetooth bağlı",
+          "disconnected": "Bluetooth bağlı değil",
+          "reconnecting": "Bluetooth yeniden bağlanıyor",
+          "released": "Bluetooth serbest bırakıldı",
+          "autoReleased": "Bağlantı sorunlarından sonra Bluetooth otomatik olarak serbest bırakıldı",
+          "disabled": "Hoparlör devre dışı"
+        }
+      },
+      "output": {
+        "title": "Ses çıkışı {name}"
+      },
+      "transfer": {
+        "ready": "Oda değiştirme",
+        "notReady": "Hazır değil",
+        "readyTitle": "Oda değiştirmeye hazır",
+        "notReadyTitle": "Oda değiştirmeye hazır değil: {reason}",
+        "reasons": {
+          "ready": "hazır",
+          "disabled": "hoparlör devre dışı",
+          "bt_management_disabled": "Bluetooth serbest bırakıldı",
+          "stopping": "durduruluyor",
+          "reconnecting": "yeniden bağlanıyor",
+          "music_assistant_reconnecting": "Music Assistant yeniden bağlanıyor",
+          "reanchoring": "yeniden eşitleniyor",
+          "output_missing": "ses çıkışı yok",
+          "daemon_unavailable": "oynatıcı çalışmıyor",
+          "bluetooth_disconnected": "Bluetooth bağlı değil",
+          "music_assistant_disconnected": "Music Assistant bağlı değil",
+          "sink_missing": "ses çıkışı bulunamadı"
+        }
+      },
+      "blocked": {
+        "why": "Neden?",
+        "needs": "Gerekli: {list}",
+        "openDiagnostics": "Tanılamayı aç",
+        "sinkMutedReason": "Ses çıkışı sistem düzeyinde sessize alınmış, bu yüzden ses çalmayacak. Ses düzeyi denetiminden sesini aç.",
+        "title": {
+          "sink_muted": "Sistem tarafından sessize alındı",
+          "reconnect": "Yeniden bağlanma kullanılamıyor",
+          "toggle_bt_management": "Serbest bırakma kullanılamıyor",
+          "play_pause": "Oynatma kullanılamıyor",
+          "volume": "Ses düzeyi kullanılamıyor",
+          "queue_control": "Kuyruk denetimleri kullanılamıyor"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth bu köprü tarafından yönetiliyor",
+          "bluetooth_paired": "Bluetooth eşleştirmesi",
+          "reconnect_idle": "Yeniden bağlanmanın tamamlanması",
+          "device_not_stopping": "Oynatıcının durması",
+          "sendspin_connected": "Sendspin bağlantısı",
+          "audio_sink": "Bir ses çıkışı",
+          "ma_connected": "Music Assistant bağlantısı",
+          "ma_player_registered": "Oynatıcının Music Assistant’ta kayıtlı olması"
+        },
+        "summary": "Bazı denetimler kullanılamıyor"
+      },
+      "backend": {
+        "bluetooth": "Bluetooth hoparlör",
+        "output": "Ses çıkışı"
+      },
+      "server": {
+        "title": "Music Assistant’a ses bağlantısı {where}",
+        "foreign": "Ses bağlantısı {where} adresine gidiyor — bu köprünün Music Assistant’ı değil"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 dk",
+      "minutes": "{n} dk",
+      "hours": "{h} sa {m} dk"
+    }
+  },
+  "config": {
+    "ma": "Music Assistant",
+    "save": "Kaydet",
+    "adapterPowered": "Açık",
+    "adapterOff": "Kapalı",
+    "noAdapters": "Bağdaştırıcı bulunamadı",
+    "passwordMismatch": "Parolalar eşleşmiyor",
+    "invalidJson": "Geçersiz JSON"
+  },
+  "diagnostics": {
+    "tabs": {
+      "logs": "Günlükler",
+      "system": "Sistem",
+      "overview": "Genel bakış"
+    },
+    "health": {
+      "title": "Köprü sağlığı",
+      "healthy": "Sağlıklı",
+      "degraded": "Kısmi sorun",
+      "error": "Hata",
+      "unknown": "Bilinmiyor",
+      "audio": "Ses altyapısı",
+      "bluetooth": "BT denetleyicisi",
+      "dbus": "D-Bus",
+      "memory": "Bellek",
+      "check": {
+        "ok": "Tamam",
+        "warning": "Dikkat",
+        "error": "Sorun",
+        "unknown": "Bilinmiyor"
+      }
+    },
+    "events": {
+      "loadMore": "Daha fazla yükle",
+      "empty": "Olay yok",
+      "emptyDesc": "Henüz hiçbir olay kaydedilmedi."
+    },
+    "recovery": {
+      "title": "Kurtarma rehberi",
+      "runChecks": "Denetimleri çalıştır",
+      "noIssues": "Sorun yok",
+      "noIssuesDesc": "Sorun bulunamadı. Tüm sistemler normal çalışıyor."
+    },
+    "copy": "Kopyala",
+    "copied": "Kopyalandı!",
+    "copyFailed": "Kopyalama başarısız",
+    "downloadCsv": "CSV indir",
+    "audioSink": "Ses çıkışı",
+    "codec": "Kodek",
+    "sampleRate": "Örnekleme hızı",
+    "reanchorCount": "Yeniden eşitleme sayısı",
+    "logs": {
+      "title": "Uygulama günlükleri",
+      "logLevel": "Günlük düzeyi",
+      "autoScroll": "Otomatik kaydır",
+      "refresh": "Yenile",
+      "download": "İndir",
+      "apply": "Uygula",
+      "search": "Günlüklerde ara…",
+      "showingLines": "{total} satırdan {shown} tanesi gösteriliyor",
+      "noLogs": "Günlük kaydı yok",
+      "loadFailed": "Günlükler yüklenemedi.",
+      "levelApplied": "Artık {level} düzeyinde günlük tutuluyor",
+      "levelFailed": "Günlük düzeyi değiştirilemedi",
+      "copyLine": "Satırı kopyala"
+    },
+    "timeline": {
+      "title": "Son olaylar"
+    }
+  },
+  "ma": {
+    "login": {
+      "title": "Music Assistant’a bağlan",
+      "step1": "1. Adım: Sunucu adresi",
+      "step2": "2. Adım: Music Assistant hesabıyla oturum aç",
+      "serverUrl": "Sunucu URL’si",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Otomatik bul",
+      "token": "Belirteç",
+      "submit": "Bağlan",
+      "failed": "Bağlantı başarısız. Kimlik bilgilerini denetle.",
+      "username": "Kullanıcı adı",
+      "password": "Parola",
+      "withHa": "Home Assistant ile oturum aç",
+      "connected": "{url} adresindeki Music Assistant’ta oturum açıldı",
+      "useToken": "Bunun yerine belirteç kullan",
+      "maToken": "Music Assistant belirteci",
+      "maTokenHint": "Music Assistant → Ayarlar → Profil bölümünde uzun ömürlü bir belirteç oluştur, sonra buraya yapıştır.",
+      "tokenSubmit": "Belirteçle bağlan",
+      "tokenFailed": "Music Assistant belirteci kabul etmedi.",
+      "noServers": "Ağda Music Assistant sunucusu bulunamadı. Adresini yukarıya gir."
+    },
+    "groups": {
+      "members": "üye",
+      "empty": "Eşitleme grubu yok",
+      "emptyDesc": "Music Assistant eşitleme grubu bulunamadı. Başlamak için grupları bul.",
+      "discover": "Grupları bul",
+      "create": "Music Assistant’ta grup oluştur"
+    },
+    "nowPlaying": {
+      "artwork": "Albüm kapağı",
+      "artworkPreview": "Kapak önizlemesi",
+      "artworkClose": "Kapat",
+      "noTrack": "Çalan bir şey yok",
+      "prev": "Önceki parça",
+      "playPause": "Oynat / Duraklat",
+      "next": "Sonraki parça",
+      "notPlaying": "Çalmıyor — son çalan"
+    },
+    "autoConnecting": "Music Assistant’a bağlanılıyor...",
+    "openInMA": "Music Assistant’ta aç",
+    "silentAuthFailed": "Otomatik bağlanma başarısız, lütfen elle oturum aç"
+  },
+  "login": {
+    "title": "Oturum aç",
+    "password": "Parola",
+    "passwordPlaceholder": "Parolanı gir",
+    "submit": "Oturum aç",
+    "failed": "Geçersiz parola. Lütfen yeniden dene.",
+    "username": "Kullanıcı adı",
+    "code": "Kimlik doğrulama kodu",
+    "codePrompt": "{module} üzerindeki kodu gir",
+    "codeSubmit": "Doğrula",
+    "method": {
+      "password": "Köprü parolası",
+      "ma": "Music Assistant hesabı",
+      "ha_via_ma": "Home Assistant hesabı",
+      "ha": "Home Assistant hesabı"
+    }
+  },
+  "devices": {
+    "addDevice": "Hoparlör ekle",
+    "empty": {
+      "title": "Henüz oynatıcı yok",
+      "description": "Bluetooth hoparlörlerini tara veya elle bir oynatıcı ekle."
+    },
+    "viewGrid": "Izgara görünümü",
+    "viewList": "Liste görünümü",
+    "allAdapters": "Tüm bağdaştırıcılar",
+    "allGroups": "Tüm gruplar",
+    "selected": "{total} öğenin {count} tanesi seçili",
+    "noneSelected": "0 seçili",
+    "selectAll": "Tümünü seç",
+    "groupVolume": "Grup ses düzeyi",
+    "muteAll": "Tümünü sessize al",
+    "pauseAll": "Tümünü duraklat",
+    "reconnectAll": "Tümünü yeniden bağla",
+    "list": {
+      "name": "Ad",
+      "status": "Durum",
+      "volume": "Ses düzeyi",
+      "transport": "Oynatma",
+      "adapter": "Bağdaştırıcı",
+      "actions": "İşlemler",
+      "expand": "{name} ayrıntılarını göster",
+      "collapse": "{name} ayrıntılarını gizle",
+      "quickActions": "Hızlı işlemler"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Güç tasarrufu",
+        "title": "Seçili {total} öğenin {count} tanesi için güç tasarrufunu aç (Bluetooth bağlı kalır)"
+      },
+      "standby": {
+        "label": "Bekleme",
+        "title": "Hoparlörlerin pilini korumak için seçili {total} öğenin {count} tanesinde Bluetooth bağlantısını kes",
+        "confirmTitle": "{count} hoparlör bekleme moduna alınsın mı?",
+        "confirmMessage": "Şunlarda Bluetooth bağlantısı kesilir ve oynatma durur: {names}. Menülerinden uyandır."
+      },
+      "release": {
+        "label": "Serbest bırak",
+        "title": "Diğer cihazların kullanabilmesi için seçili {total} öğenin {count} tanesini serbest bırak",
+        "confirmTitle": "{count} hoparlör serbest bırakılsın mı?",
+        "confirmMessage": "Köprü şunları yönetmeyi bırakır: {names}. Geri alınana kadar yeniden bağlanmazlar."
+      },
+      "failed": "{action} şunlar için başarısız oldu: {names}",
+      "enable": {
+        "label": "Etkinleştir",
+        "title": "Seçili {total} öğenin {count} tanesini etkinleştir (devre dışı oynatıcılar)"
+      },
+      "remove": {
+        "label": "Kaldır",
+        "title": "Seçili {total} öğenin {count} tanesini kaldır (devre dışı oynatıcılar)",
+        "confirmTitle": "{count} oynatıcı kaldırılsın mı?",
+        "confirmMessage": "Oynatıcıları Music Assistant’tan kaybolur ve Bluetooth eşleşmeleri kaldırılır: {names}."
+      }
+    },
+    "sort": {
+      "label": "Sıralama ölçütü",
+      "activity": "Etkinlik",
+      "name": "Ad",
+      "status": "Durum"
+    },
+    "backendFilter": {
+      "label": "Oynatıcı türü",
+      "all": "Tüm oynatıcılar",
+      "bluetooth": "Bluetooth hoparlörler",
+      "output": "Ses çıkışları"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "overview": "Genel bakış",
+      "config": "Ayarlar",
+      "timing": "Zamanlama",
+      "history": "Geçmiş"
+    },
+    "status": {
+      "playerState": "Durum",
+      "audioSink": "Ses çıkışı",
+      "codec": "Kodek",
+      "reportedDelay": "Bildirilen gecikme",
+      "reportedDelayHint": "Hoparlörün Bluetooth üzerinden bildirdiği gecikme (A2DP gecikme bildirimi). Bilgilendirme amaçlıdır: ölçülmez, hoparlör tarafından bildirilir.",
+      "sampleRate": "Örnekleme hızı"
+    },
+    "config": {
+      "name": "Ad",
+      "mac": "MAC adresi",
+      "adapter": "Bağdaştırıcı",
+      "port": "Dinleme bağlantı noktası",
+      "delay": "Hoparlör gecikme telafisi",
+      "enabled": "Etkin",
+      "save": "Kaydet",
+      "saveFailed": "Yapılandırma kaydedilemedi",
+      "enabledHelp": "Devre dışı bırakılan hoparlör ayarlarını korur ama bir oynatıcıya sahip olmaz.",
+      "playoutSync": "Çalma eşitlemesi",
+      "playoutSyncHelp": "Bu hoparlörü çalma eşitlemesi öncesindeki gibi, yani ölçüm yapılmadan düz ses çıkışı olarak çalıştırmak için kapat.",
+      "notConfigured": "Bu hoparlör yapılandırmada değil."
+    },
+    "events": {
+      "empty": "Kaydedilmiş olay yok"
+    },
+    "signal": {
+      "port": "bağlantı noktası {port}",
+      "corrections": "{n} düzeltme | {n} düzeltme",
+      "subprocess": "Oynatıcı süreci"
+    },
+    "actions": {
+      "more": "Diğer işlemler",
+      "reconnect": "Yeniden bağlan",
+      "reconnectDone": "Yeniden bağlanıyor",
+      "repair": "Yeniden eşleştir",
+      "repairDone": "Yeniden eşleştiriliyor",
+      "pairing": "Music Assistant’ın eşleştirmesine izin ver",
+      "pairingDone": "Music Assistant bir süre eşleştirme yapabilir",
+      "unmute": "Ses çıkışının sesini aç",
+      "unmuteDone": "Ses çıkışının sesi açıldı",
+      "release": "Güç tasarrufunu aç",
+      "releaseDone": "Güç tasarrufu açık",
+      "resume": "Güç tasarrufunu kapat",
+      "resumeDone": "Güç tasarrufu kapalı"
+    },
+    "server": {
+      "title": "Music Assistant sunucusu",
+      "name": "Ad",
+      "host": "Adres",
+      "id": "Sunucu kimliği",
+      "url": "URL",
+      "foreign": "Ses bağlantısı {where} adresindeki Music Assistant’a gidiyor, bu köprünün Music Assistant’ına değil. Bu oynatıcıyı önce başka bir sunucu aldı; bu köprünün Music Assistant’ının alabilmesi için oynatıcıyı yeniden bağla.",
+      "refusedTitle": "Reddedildi",
+      "refusedCount": "{n} deneme"
+    },
+    "troubleshoot": {
+      "label": "Sorun gider"
+    },
+    "overview": {
+      "audioPath": "Ses yolu",
+      "events": "Son olaylar",
+      "allEvents": "Tüm olaylar →"
+    }
+  },
+  "volume": {
+    "mute": "Sessize al",
+    "unmute": "Sesi aç",
+    "label": "{name} ses düzeyi"
+  },
+  "bluetooth": {
+    "scan": {
+      "scanning": "Taranıyor…",
+      "pair": "Eşleştir",
+      "unknown": "Bilinmeyen cihaz",
+      "noDevices": "Cihaz bulunamadı",
+      "adapter": "Bağdaştırıcı",
+      "add": "Ekle",
+      "added": "Bu köprüde",
+      "pairFailed": "Eşleştirme başarısız: {reason}",
+      "quiesce": "Eşleştirme sırasında bu bağdaştırıcıdaki diğer hoparlörlerin bağlantısını geçici olarak kes",
+      "noIo": "PIN istemi olmadan eşleştir (Just Works) — eşleştirmeyi iptal eden hoparlörler için",
+      "hfp": "Eller serbest profiline (aramalar) de izin ver"
+    },
+    "audioOnly": "Yalnızca ses",
+    "release": "Hoparlörü serbest bırak",
+    "reclaim": "Hoparlörü geri al",
+    "released": "Serbest bırakıldı"
+  },
+  "common": {
+    "loading": "Yükleniyor...",
+    "error": "Hata",
+    "retry": "Yeniden dene",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "close": "Kapat",
+    "search": "Ara",
+    "noResults": "Sonuç yok",
+    "no": "Hayır"
+  },
+  "update": {
+    "title": "Yazılım güncellemesi",
+    "available": "Güncelleme mevcut",
+    "badge": "Güncelleme v{version}",
+    "checkNow": "Güncellemeleri denetle",
+    "upToDate": "En son sürüm kullanılıyor",
+    "versionCompare": "Sürüm güncellemesi",
+    "instructions": "Güncelleme yönergeleri",
+    "releaseNotes": "Sürüm notları",
+    "recheck": "Yeniden denetle",
+    "viewRelease": "Sürüm notları",
+    "applyNow": "Şimdi güncelle",
+    "confirmTitle": "v{version} sürümüne güncellensin mi?",
+    "applyStarted": "Güncelleme başladı — köprü kısa süre içinde yeniden başlayacak",
+    "openHa": "HA’da güncelle",
+    "copyCommand": "Komutu kopyala",
+    "checking": "Güncellemeler denetleniyor…",
+    "channel": "Kanal",
+    "checkChannel": "Denetle"
+  },
+  "transport": {
+    "play": "Oynat",
+    "pause": "Duraklat",
+    "next": "Sonraki parça",
+    "previous": "Önceki parça",
+    "failed": "Oynatma komutu başarısız",
+    "position": "Parça konumu",
+    "shuffleOn": "Karıştırma açık — kapat",
+    "shuffleOff": "Karıştırma kapalı — aç",
+    "repeat": {
+      "off": "Tekrar kapalı — tümünü tekrarla",
+      "all": "Tümünü tekrarla — birini tekrarla",
+      "one": "Birini tekrarla — kapat"
+    },
+    "pending": "Music Assistant’ın onaylaması bekleniyor",
+    "queue": "Kuyruk denetimleri"
+  },
+  "adapter": {
+    "turnOff": "Kapat",
+    "turnOn": "Aç",
+    "confirmOffTitle": "{adapter} bağdaştırıcısı kapatılsın mı?",
+    "confirmRebootTitle": "{adapter} bağdaştırıcısı yeniden başlatılsın mı?",
+    "reboot": "Yeniden başlat",
+    "powerToggled": "Bağdaştırıcının gücü değiştirildi",
+    "powerFailed": "Bağdaştırıcının gücü değiştirilemedi",
+    "rebooted": "Bağdaştırıcı yeniden başlatıldı",
+    "rebootFailed": "Bağdaştırıcı yeniden başlatılamadı",
+    "confirmNone": "Şu anda onu kullanan hoparlör yok.",
+    "openInHardware": "Donanım’da aç"
+  },
+  "hardware": {
+    "subtitle": "Bluetooth bağdaştırıcıları, bunlara eşleştirilmiş cihazlar ve bu ana bilgisayarın sesi.",
+    "refresh": "Yenile",
+    "stale": "Veriler güncel olmayabilir",
+    "controllers": "Bluetooth denetleyicileri",
+    "devices": "Bluetooth cihazları",
+    "noControllers": "Bluetooth denetleyicisi bulunamadı",
+    "noDevices": "Eşleştirilmiş Bluetooth cihazı yok",
+    "deviceCount": "Cihaz: {n}",
+    "powered": "Açık",
+    "poweredOff": "Kapalı",
+    "connected": "Bağlı",
+    "paired": "Eşleştirilmiş",
+    "trusted": "Güvenilir",
+    "roleOutput": "Ses çalar",
+    "roleInput": "Ses alır",
+    "roleEvidence": "Kanıt: {evidence}",
+    "battery": "Pil: {pct}%",
+    "rssi": "{db} dB",
+    "signal": "Sinyal: {db} dB",
+    "addAsSpeaker": "Hoparlör olarak ekle",
+    "addSpeakerFailed": "{name} hoparlör olarak eklenemedi.",
+    "forgotBond": "{name} için Bluetooth eşleşmesi unutuldu.",
+    "forgetFailed": "Eşleşme unutulamadı: {reason}",
+    "forgetPlayer": "Bu eşleşme, {player} oynatıcısının bağlantısını sağlıyor.",
+    "connect": "Bağlan",
+    "disconnect": "Bağlantıyı kes",
+    "pairDevice": "Cihaz eşleştir",
+    "connectFailed": "{name} bağlanamadı: {reason}",
+    "disconnectFailed": "{name} bağlantısı kesilemedi: {reason}",
+    "bondInUseTitle": "Bu eşleşme bir oynatıcı tarafından kullanılıyor",
+    "bondInUse": "Bu eşleşme bir oynatıcı tarafından kullanılıyor; eşleşmeyi unutmadan önce o oynatıcıyı kaldır.",
+    "openPlayer": "{player} oynatıcısını Ana sayfa’da aç",
+    "btRefused": "BlueZ reddetti ({code})",
+    "btUnavailable": "Bluetooth yığını yanıt vermedi ({code})",
+    "player": "Oynatıcı",
+    "controllerId": "Denetleyici",
+    "classOfDevice": "Cihaz sınıfı",
+    "area": "Alan",
+    "openDetails": "{name} ayrıntılarını göster",
+    "yes": "Evet",
+    "no": "Hayır",
+    "unknown": "Bilinmiyor",
+    "unavailable": {
+      "dbusTitle": "Bu ana bilgisayarda D-Bus yok",
+      "dbusBody": "D-Bus yanıt vermedi, bu yüzden köprü BlueZ’e bağdaştırıcılarını soramıyor.",
+      "bluetoothTitle": "Bu ana bilgisayarın Bluetooth’u okunamıyor",
+      "bluetoothBody": "Köprü bu ana bilgisayarda bir Bluetooth bağdaştırıcısı göremiyor.",
+      "hardwareTitle": "Bu ana bilgisayarın donanımı okunamıyor",
+      "hardwareBody": "Ne D-Bus ne de bluetoothctl yanıt verebildi.",
+      "nextStep": "Köprünün ana bilgisayarın Bluetooth yığınına erişebildiğini denetle, sonra bu sayfayı yenile.",
+      "reason": "Neden kodu: {reason}"
+    },
+    "unsupported": {
+      "title": "Bu köprü donanımı bildiremiyor",
+      "body": "API’sinde /hardware yolu yok. Köprüyü güncelle veya Ayarlar ve Tanılama sayfalarını kullan."
+    },
+    "drawer": {
+      "overview": "Genel bakış",
+      "technical": "Teknik ayrıntılar",
+      "power": "Güç",
+      "present": "Mevcut",
+      "area": "Alan",
+      "classOfDevice": "Cihaz sınıfı",
+      "deviceCount": "Bu denetleyicideki cihazlar",
+      "roles": "Bağlantı rolleri",
+      "player": "Oynatıcı",
+      "battery": "Pil",
+      "rssi": "Sinyal",
+      "bonded": "Kalıcı eşleşme",
+      "controllers": "Eşleşmeyi tutan denetleyiciler",
+      "synthetic": "Sentetik kimlik (sysfs girdisi yok)",
+      "observedAt": "Gözlemlenme zamanı",
+      "id": "Kimlik",
+      "mac": "MAC"
+    },
+    "audio": {
+      "title": "Ses",
+      "cards": "Ses kartları",
+      "outputs": "Ses çıkışları",
+      "inputs": "Ses girişleri",
+      "noDevices": "Ses cihazı yok",
+      "noDevicesBody": "Ses sunucusu yanıt verdi ve hiç kart, çıkış veya giriş bildirmiyor.",
+      "noCards": "Ses kartı yok",
+      "noOutputs": "Ses çıkışı yok",
+      "noInputs": "Ses girişi yok",
+      "notReportedTitle": "Bu köprü sesi bildirmiyor",
+      "notReportedBody": "Donanım API’si ses bölümünden önce geliyor. Kartları, çıkışları ve girişleri görmek için köprüyü güncelle.",
+      "unavailableTitle": "Bu ana bilgisayarın sesi okunamıyor",
+      "unavailableBody": "PulseAudio uyumlu bir sunucu yanıt vermedi, bu yüzden kartlar, çıkışlar ve girişler bilinmiyor.",
+      "captureUnavailableTitle": "Telefon girişi kullanılamıyor",
+      "captureUnavailableBody": "Bluetooth üzerinden telefon bu ana bilgisayarda yakalanamıyor, bu yüzden kaynak akışının çalacak bir şeyi yok.",
+      "noDriver": "Sürücü yok",
+      "driver": "Sürücü",
+      "activeProfile": "Etkin profil",
+      "profileCount": "Profiller",
+      "portCount": "Bağlantı noktaları",
+      "profiles": "Profiller",
+      "profileActive": "Kullanımda",
+      "profileAvailable": "Kullanılabilir",
+      "profileUnavailable": "Kullanılamıyor",
+      "profileUnknown": "Kullanılabilirlik bilinmiyor",
+      "profileSwitch": "Profil değiştir",
+      "profileSelectLabel": "Profil",
+      "profileConfirmTitle": "{card} kartı {profile} profiline geçirilsin mi?",
+      "profileConsequence": "Yeni profil başlarken {card} üzerindeki tüm çıkışlar sessiz kalabilir.",
+      "profileConsequenceInUse": "Yeni profil başlarken {card} üzerindeki tüm çıkışlar ve {players} sessiz kalabilir.",
+      "profileConfirm": "Profili değiştir",
+      "profileSwitched": "{card} artık {profile} profilini kullanıyor.",
+      "detailStale": "Ses sunucusu bu okumayı yenileyemedi; en son durumu göstermiyor olabilir.",
+      "profileManagedByConnection": "Bu kartın profilini Bluetooth bağlantısı seçer.",
+      "profileNone": "Profil yok",
+      "ports": "Bağlantı noktaları",
+      "portActive": "Etkin",
+      "portAvailable": "Kullanılabilir",
+      "portUnavailable": "Kullanılamıyor",
+      "portUnknown": "Kullanılabilirlik bilinmiyor",
+      "portSwitch": "Bağlantı noktasını değiştir",
+      "portSelectLabel": "Bağlantı noktası",
+      "portConfirmTitle": "{name}, {port} bağlantı noktasına geçirilsin mi?",
+      "portConsequence": "Yeni bağlantı noktası devralırken {name} ve onun üzerinden çalan her şey sessiz kalabilir.",
+      "portConsequenceInUse": "Yeni bağlantı noktası devralırken {name} ve onun üzerinden çalan {player} sessiz kalabilir.",
+      "portConfirm": "Bağlantı noktasını değiştir",
+      "portSwitched": "{name} artık {port} bağlantı noktasını kullanıyor.",
+      "endpoints": "Uç noktalar",
+      "output": "Çıkış",
+      "input": "Giriş",
+      "direction": "Yön",
+      "state": "Durum",
+      "stateRunning": "Çalışıyor",
+      "stateIdle": "Boşta",
+      "stateSuspended": "Duraklatıldı",
+      "stateUnavailable": "Kullanılamıyor",
+      "stateUnknown": "Bilinmiyor",
+      "activePort": "Etkin bağlantı noktası",
+      "portUnavailableReason": "Etkin bağlantı noktası kullanılamıyor, bu yüzden bu giriş hiçbir şey duymuyor.",
+      "inputUnavailable": "Bu giriş kullanılamıyor; ses sunucusu nedenini bildirmedi.",
+      "outputPortUnavailableReason": "Etkin bağlantı noktası kullanılamıyor, bu yüzden bu çıkış çalamıyor.",
+      "outputUnavailable": "Bu çıkış kullanılamıyor; ses sunucusu nedenini bildirmedi.",
+      "volume": "Ses düzeyi",
+      "muted": "Sessize alındı",
+      "inUse": "Kullanan",
+      "default": "Varsayılan",
+      "setDefault": "Varsayılan yap",
+      "defaultConfirmTitle": "{name} varsayılan çıkış yapılsın mı?",
+      "defaultConsequence": "Seçili çıkışı olmayan her ses {name} üzerinde çalar.",
+      "makeDefault": "Varsayılan yap",
+      "defaultSet": "{name} artık varsayılan çıkış.",
+      "suspend": "Duraklat",
+      "resume": "Sürdür",
+      "suspendConfirmTitle": "{name} duraklatılsın mı?",
+      "suspendConsequence": "Yalnızca {name} sessizleşir: listede kalır ve sürdürülene kadar hiçbir şey çalmaz.",
+      "suspended": "{name} duraklatıldı.",
+      "commandFailed": "{name} değiştirilemedi: {reason}",
+      "kindMicrophone": "Mikrofon",
+      "kindLineIn": "Hat girişi",
+      "kindMonitor": "Monitör",
+      "kindPhone": "Bluetooth üzerinden telefon",
+      "monitorOf": "İzlediği",
+      "owner": "Ait olduğu",
+      "ownerUnknown": "Sınıflandırılmamış",
+      "ownerCard": "Kart {card}",
+      "ownerBluetooth": "Bluetooth cihazı {mac}",
+      "ownerInternal": "Köprünün kendisi",
+      "sampleSpec": "Örnek biçimi",
+      "identifierSerial": "Seri numarası",
+      "identifierBusPath": "Veri yolu konumu",
+      "identifierVendorId": "Satıcı kimliği",
+      "identifierProductId": "Ürün kimliği",
+      "identifierAlsaLongCardName": "ALSA uzun kart adı"
+    },
+    "source": {
+      "title": "Kaynak",
+      "stateOff": "Kapalı",
+      "stateWaiting": "Telefon bekleniyor",
+      "stateStreaming": "Akış yapılıyor",
+      "stateError": "Hata",
+      "offBody": "Telefon kaynağı kapalı. Telefonu Music Assistant’a sunmak için burada etkinleştir.",
+      "phone": "Telefon",
+      "start": "Kaynağı başlat",
+      "stop": "Kaynağı durdur",
+      "stopConfirmTitle": "Kaynak durdurulsun mu?",
+      "stopConsequence": "Bu hoparlörler Music Assistant’a geri döner: {players}.",
+      "stopped": "Kaynak durduruldu.",
+      "pair": "Telefon eşleştir",
+      "stopPairing": "Eşleştirmeyi durdur",
+      "pairing": "Eşleştirmeye açık: {time} kaldı.",
+      "pairingHint": "Telefonu şimdi eşleştir; PIN’in yanlış olduğunu söylüyorsa önce telefonda bu köprüyü unut (eski bir eşleşme).",
+      "errorTitle": "Kaynak başarısız oldu",
+      "errorCapture": "Telefonun sesi bu ana bilgisayarda yakalanamıyor.",
+      "errorCaptureNext": "Köprünün telefon için PipeWire yakalama düğümlerine ihtiyacı var; ana bilgisayarın ses altyapısını denetle.",
+      "errorNoAdapter": "Hiçbir Bluetooth bağdaştırıcısı keşfedilebilirliği kabul etmedi.",
+      "errorNoAgent": "Köprü bir Bluetooth eşleştirme aracısı kaydedemedi.",
+      "errorBluetoothNext": "Yukarıdaki Bluetooth denetleyicilerini denetle, sonra eşleştirmeyi yeniden dene.",
+      "errorNextStep": "Ayarlar → Music Assistant bölümündeki kaynak ayarlarını denetle, sonra kaynağı yeniden başlat.",
+      "failureTitle": "Son kaynak komutu reddedildi",
+      "failureNextStep": "Kaynağı denetle ve yeniden dene.",
+      "commandFailed": "Kaynak değiştirilemedi: {reason}",
+      "capture": "Yakalama",
+      "capturePipewire": "PipeWire düğümü",
+      "capturePulse": "PulseAudio kaynağı",
+      "captureUnavailable": "Kullanılamıyor",
+      "node": "Düğüm",
+      "noNode": "Yakalama düğümü yok",
+      "subtitle": "Telefon köprüye akış yapar; köprü bunu bir kaynak olarak Music Assistant’a gönderir.",
+      "statePairing": "Eşleştirme kodu bekleniyor",
+      "maTitle": "Music Assistant",
+      "maOff": "Kaynak kapalı. Telefonu Music Assistant’a sunmak için etkinleştir.",
+      "maError": "Music Assistant bağlantısı başarısız oldu.",
+      "maConnected": "Bağlandı. Oynatma ve yönlendirme Music Assistant’ta yönetilir.",
+      "maReconnecting": "Eşleştirildi. Music Assistant’a yeniden bağlanılıyor…",
+      "maNotPaired": "Henüz eşleştirilmedi. Aşağıdaki kodu Music Assistant’a gir.",
+      "maConnectedShort": "bağlı",
+      "maPairedShort": "eşleştirildi",
+      "maUnpairedShort": "eşleştirilmedi",
+      "maCodeLabel": "Eşleştirme kodu",
+      "maCodeHint": "Bu kodu Music Assistant’a gir. {time} boyunca geçerli kalır.",
+      "maPair": "Music Assistant ile eşleştir",
+      "maForget": "Eşleştirmeyi unut",
+      "maForgetConfirmTitle": "Music Assistant eşleştirmesi unutulsun mu?",
+      "maForgetConfirmBody": "Music Assistant’ın telefonu yeniden çalabilmesi için köprünün yeni bir koda ihtiyacı olacak.",
+      "maForgetDone": "Music Assistant eşleştirmesi unutuldu",
+      "maRouting": "Telefonu Music Assistant’tan oynat; köprü onu hoparlörlere kendisi yönlendirmez.",
+      "maOpen": "Music Assistant’ı aç",
+      "maUnreachable": "Music Assistant’a ulaşılamıyor.",
+      "maUnreachableNext": "Music Assistant’ın çalıştığını ve SENDSPIN_SERVER’ın ona işaret ettiğini denetle; köprü yeniden denemeye devam eder.",
+      "maPairingRequired": "Bir eşleştirme kodu gerekiyor.",
+      "maRejected": "Music Assistant eşleştirme kodunu reddetti.",
+      "maUnsupported": "Bu Music Assistant bir Sendspin kaynağı sunmuyor.",
+      "maUnsupportedNext": "Music Assistant’ı 2.10 veya daha yeni bir sürüme güncelle ve Sendspin kaynak sağlayıcısını etkinleştir.",
+      "maPairingNext": "Bir eşleştirme penceresi aç ve kodu Music Assistant’a gir.",
+      "phoneTitle": "Telefon (Bluetooth)",
+      "phoneIdle": "akış yok",
+      "phoneNoPhone": "Köprüye akış yapan telefon yok.",
+      "phoneHint": "Telefon köprüyle Bluetooth üzerinden eşleşir; Music Assistant yakalanan sesi alır.",
+      "phonePaired": "Telefon eşleştirildi",
+      "phonePairedHint": "Eşleşme kaydedildi; telefonda oynatmayı başlat, köprü sesi yakalayacak.",
+      "maSettingsHint": "Eşleştirme ve kod Ayarlar bölümünde.",
+      "maSettingsAction": "Eşleştirme ayarlarını aç",
+      "maNotPairedWhere": "Eşleştirilmedi. Köprüyü Ayarlar bölümünde Music Assistant ile eşleştir.",
+      "phonePairedNeedMa": "Telefon eşleştirildi. Sesi duymak için köprüyü Music Assistant ile eşleştir.",
+      "phonePairedNeedMaAction": "Music Assistant ile eşleştir"
+    }
+  },
+  "kit": {
+    "closeDialog": "İletişim kutusunu kapat",
+    "closeDrawer": "Çekmeceyi kapat",
+    "dismissNotification": "Bildirimi kapat",
+    "removeBadge": "Kaldır",
+    "signalPath": "Sinyal yolu",
+    "selectAllRows": "Tüm satırları seç",
+    "clearSearch": "Aramayı temizle",
+    "loading": "Yükleniyor"
+  },
+  "sidebar": {
+    "collapse": "Kenar çubuğunu daralt",
+    "expand": "Kenar çubuğunu genişlet"
+  },
+  "undo": {
+    "label": "Geri al",
+    "handedOver": "{name} serbest bırakıldı. Geri alınana kadar yeniden bağlanmaz.",
+    "disabled": "{name} devre dışı bırakıldı.",
+    "standby": "{name} bekleme modunda: Bluetooth bağlantısı kesildi, oynatma durdu.",
+    "woke": "{name} uyandırıldı.",
+    "enabled": "{name} etkinleştirildi.",
+    "muted": "Sessize alındı: {name}.",
+    "powerSave": "Güç tasarrufu açık: {name}.",
+    "btConnected": "{name} bağlandı.",
+    "btDisconnected": "{name} bağlantısı kesildi.",
+    "audioMuted": "{name} sessize alındı.",
+    "audioUnmuted": "{name} sesi açıldı.",
+    "audioVolume": "Ses düzeyi ayarlandı: {name}.",
+    "audioResumed": "Sürdürüldü: {name}.",
+    "sourceStarted": "Kaynak başlatıldı.",
+    "sourcePairingOpen": "Eşleştirme penceresi açık: telefonu şimdi eşleştir.",
+    "sourcePairingClosed": "Eşleştirme penceresi kapandı."
+  },
+  "restart": {
+    "stopping": "Köprü durduruluyor…",
+    "restarting": "Köprü yeniden başlatılıyor…",
+    "ready": "Köprü başarıyla yeniden başlatıldı",
+    "error": "Yeniden başlatma başarısız",
+    "openLogs": "Günlükleri aç",
+    "dismiss": "Kapat",
+    "updating": "Güncelleniyor… köprü yeniden başlıyor",
+    "updated": "Güncellendi, köprü geri döndü",
+    "updateFailed": "Güncelleme başarısız",
+    "errorNext": "Nedenini görmek için günlükleri aç, sonra yeniden dene.",
+    "updateTimedOut": "Güncelleme tamamlanmadı — günlükleri aç",
+    "updateTimedOutNext": "Köprü 3 dakika sonra geri dönmedi. Güncellemenin nerede durduğunu görmek için günlükleri aç; köprü hâlâ eski sürümdeyse güncellemeyi yeniden dene."
+  },
+  "bugreport": {
+    "title": "Hata bildir",
+    "hints": {
+      "min": "En az {n} karakter."
+    },
+    "submitBy": {
+      "github": "GitHub sorunu aç",
+      "proxy": "Raporu gönder",
+      "copy": "Raporu kopyala"
+    },
+    "fileReport": "Hata bildirimi gönder",
+    "fields": {
+      "title": "Sorun başlığı",
+      "titlePlaceholder": "Sorunun kısa açıklaması",
+      "description": "Açıklama",
+      "descPlaceholder": "Ne oldu? Bunun yerine ne bekliyordun?",
+      "email": "E-posta adresin (geri dönüş için)"
+    },
+    "errors": {
+      "titleShort": "Başlık en az 5 karakter olmalı",
+      "descShort": "Açıklama en az 10 karakter olmalı",
+      "emailInvalid": "Lütfen geçerli bir e-posta adresi gir"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "Gönder",
+      "copy": "Kopyala"
+    },
+    "diagnosticsPreview": "Tanılama verileri",
+    "autoAttached": "otomatik eklenir",
+    "loadingDiagnostics": "Tanılama verileri yükleniyor...",
+    "loadFailed": "Tanılama verileri yüklenemedi",
+    "submit": "Raporu gönder",
+    "download": "İndir",
+    "submitted": "Hata bildirimi başarıyla gönderildi",
+    "submitFailed": "Hata bildirimi gönderilemedi",
+    "copied": "Rapor panoya kopyalandı",
+    "copyFailed": "Panoya kopyalanamadı"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "showAdvanced": "Teknik ayrıntıları göster",
+    "unsaved": "Kaydedilmemiş değişiklikler",
+    "save": "Kaydet",
+    "discard": "Vazgeç",
+    "saved": "Ayarlar kaydedildi",
+    "restartNeeded": "Bazı değişiklikleri uygulamak için köprüyü yeniden başlat",
+    "restartNow": "Şimdi yeniden başlat",
+    "restartConfirmTitle": "Köprü şimdi yeniden başlatılsın mı?",
+    "units": {
+      "ms": "ms",
+      "s": "sn",
+      "min": "dk",
+      "h": "sa"
+    },
+    "auto": "Otomatik",
+    "embedded": {
+      "security": "Home Assistant üzerinden oturum açıldı. Oturum ve erişim orada yönetilir.",
+      "updates": "Güncellemeler Home Assistant eklenti mağazasından gelir."
+    },
+    "sections": {
+      "general": {
+        "title": "Genel",
+        "description": "Ad, saat dilimi ve günlükleme."
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "Music Assistant sunucusuyla bağlantı ve oynatıcıların nasıl denetlendiği."
+      },
+      "audio": {
+        "title": "Ses",
+        "description": "Bluetooth oynatma için tamponlama ve kodek seçimleri."
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "Bağdaştırıcılar, yeniden bağlanma ve kurtarma."
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Home Assistant’taki varlıklar ve alanlarından gelen oda adları."
+      },
+      "security": {
+        "title": "Güvenlik",
+        "description": "Oturum açma, oturumlar ve API belirteçleri."
+      },
+      "updates": {
+        "title": "Güncellemeler",
+        "description": "Köprünün yeni sürümleri nasıl bulup kurduğu."
+      },
+      "guidance": {
+        "title": "Yönlendirme",
+        "description": "Panonun kurulum ve kurtarma ipuçlarını ne zaman göstermeye başlayacağı."
+      },
+      "backup": {
+        "title": "Yedekleme",
+        "description": "Yapılandırma dosyasını dışa aktar, içe aktar veya düzenle."
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "Köprü adı",
+        "help": "Music Assistant’ta her oynatıcının yanında gösterilir. Ana bilgisayar adını kullanmak için boş bırak."
+      },
+      "TZ": {
+        "label": "Saat dilimi",
+        "help": "IANA adı, örneğin Europe/Berlin. Günlük ve olay saatleri için kullanılır."
+      },
+      "WEB_PORT": {
+        "label": "Web bağlantı noktası",
+        "help": "Bu web arayüzünün bağlantı noktası. Boş bırakılırsa WEB_PORT ortam değişkeni veya 8080 kullanılır. Yeniden başlatmadan sonra etkili olur."
+      },
+      "LOG_LEVEL": {
+        "label": "Günlük düzeyi",
+        "help": "DEBUG çok daha fazla ayrıntı yazar; bir sorunu incelerken kullan.",
+        "addonHelp": "Home Assistant eklentisinde, eklentinin kendi log_level seçeneği (Yapılandırma sekmesi) her yeniden başlatmada bunu ayarlar. Kalıcı olması için orada değiştir."
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Music Assistant sunucusu",
+        "help": "Music Assistant’ın ana bilgisayar adı veya IP adresi ya da ağda bulmak için auto."
+      },
+      "SENDSPIN_PORT": {
+        "label": "Sendspin bağlantı noktası",
+        "help": "Music Assistant’ın Sendspin bağlantı noktası, normalde 8927."
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "İlk oynatıcı bağlantı noktası",
+        "help": "Hoparlörler buradan itibaren ardışık bağlantı noktalarını dinler. Boş bırakılırsa boş bağlantı noktaları otomatik seçilir."
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "Eşleştirme zorunlu",
+        "help": "Music Assistant’ın bu hoparlörlere çalabilmesi için önce bir PIN girmesi gerekir."
+      },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "Yalnızca bu köprünün Music Assistant’ı",
+        "help": "Bir hoparlörü almaya çalışan diğer Music Assistant’ları reddet. Köprü kendi Music Assistant’ını (bir sunucu adresi veya Music Assistant API URL’si) öğrendikten sonra geçerli olur."
+      },
+      "VOLUME_VIA_MA": {
+        "label": "Music Assistant üzerinden ses düzeyi",
+        "help": "Ses düzeyi değişiklikleri Music Assistant üzerinden gider, böylece kaydırıcıları eşit kalır."
+      },
+      "MUTE_VIA_MA": {
+        "label": "Music Assistant üzerinden sessize alma",
+        "help": "Sessize alma Music Assistant üzerinden gider, böylece oynatıcıları aynı durumu gösterir."
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Music Assistant’tan canlı güncellemeler",
+        "help": "Çalan parça, kuyruk ve grup değişiklikleri için bağlantıyı açık tut."
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "Oturumu otomatik yenile",
+        "help": "Music Assistant oturumunu süresi dolduğunda arka planda yenile."
+      },
+      "MA_ADDON_SLUG": {
+        "label": "Başka bir depodan Music Assistant eklentisi",
+        "help": "Yalnızca Home Assistant eklentisi. Resmî Music Assistant eklentisi veya yerel eklenti klasöründeki bir eklenti için boş bırak. Başka bir depodan gelen eklenti için köprünün onun üzerinden oturum açabilmesi amacıyla slug’ını gir."
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "Diğer köprülerdeki hoparlörler için uyar",
+        "help": "Music Assistant’a aynı hoparlöre başka bir köprünün zaten hizmet verip vermediğini sor."
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "Ses tamponu",
+        "help": "Yüksek değerler yoğun ana bilgisayarlarda ve sanal makinelerde daha dayanıklıdır; düşük değerler daha hızlı tepki verir."
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "SBC kodeğini tercih et",
+        "help": "AAC veya aptX yerine SBC kullan. Diğer kodeklerle takılan hoparlörlere yardımcı olur."
+      },
+      "SMOOTH_RESTART": {
+        "label": "Yumuşak yeniden başlatmalar",
+        "help": "Bir hoparlörün oynatıcısını sıfırdan yeniden başlatmak yerine yeniden bağla."
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "PulseAudio’nun akışları taşımasını durdur",
+        "help": "module-rescue-streams modülünü kaldır, böylece yeniden bağlanan bir hoparlör asla başkasının sesini ödünç almaz."
+      },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "Ses tamponu gecikmesini telafi et",
+        "help": "PulseAudio gecikmesi ne olursa olsun zamanında çal. Kapalı, eski zamanlamayı geri getirir ve o gecikme kadar geride kalır."
+      },
+      "PLAYOUT_SYNC": {
+        "label": "Çalma eşitlemesi",
+        "help": "Kapalı, düz ses çıkışını korur. Ölçüm deneyseldir: hoparlör çıkışındaki çalma hatasını ölçer ve düzeltmeden bildirir. Ölç ve düzelt, hava sensörünü kullanarak her başlatmanın yerleşimini düzeltir; deneysel hava sensörünü gerektirir ve onsuz ölçüm gibi davranır. Hoparlörler yeniden başladıktan sonra etkili olur.",
+        "options": {
+          "off": "Kapalı",
+          "measure": "Yalnızca ölç",
+          "loop": "Ölç ve düzelt"
+        }
+      },
+      "PLAYOUT_DIAG": {
+        "label": "Oynatma saati tanılaması",
+        "help": "Hoparlör çıkışının kendi saat hızını da dakika dakika Saat tanılama satırına yaz. Oynatma değişmez."
+      },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "Başlangıçta ses çıkışlarını sıfırla",
+        "help": "Her yerel ses çıkışını oynatıcısı ilk kez başlamadan önce bir kez duraklat ve sürdür. Sessiz açılan bir çıkışa yardımcı olur."
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "Bağlantı denetim aralığı",
+        "help": "Köprünün her hoparlörün hâlâ bağlı olup olmadığını ne sıklıkla denetlediği."
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "Yeniden bağlanma denemeleri",
+        "help": "Köprü denemeyi bırakmadan önce art arda başarısız yeniden bağlanma sayısı. 0, denemeye devam eder."
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "Varsayılan olarak teknik ayrıntılar",
+        "help": "Henüz seçim yapmamış tarayıcılarda sinyal düzeylerini, eşitleme sayaçlarını, sunucu kimliklerini ve gelişmiş ayarları göster. Her tarayıcı bunu tercihler menüsünden değiştirebilir."
+      },
+      "RSSI_BADGE": {
+        "label": "Sinyal gücü",
+        "help": "Bağlı her hoparlörde canlı sinyal gücünü göster."
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "Yeniden bağlanma döngüsü sınırı",
+        "help": "Köprünün bir hoparlörü serbest bırakmasına yol açan, pencere içindeki bağlan/bağlantı kes döngüsü sayısı. 0 bunu kapatır."
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "Yeniden bağlanma döngüsü penceresi",
+        "help": "Bu döngülerin sayıldığı zaman aralığı."
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "Eksik ses çıkışını kurtar",
+        "help": "Varsayılan olarak açık. Aynı zamanda ses kaynağı olan bir hoparlörden (örneğin Amazon Echo) bağlanır bağlanmaz ses kabul etmesini ister, kaynak profilinde kalmış bir ses kartını yeniden çıkış profiline geçirir (kısa süre yeniden dener, çünkü yeni bir bağlantı BlueZ çıkışı hazırlayana kadar \"Input/output error\" yanıtı verir) ve ses çıkışı hâlâ görünmezse hoparlörü on dakika içinde en fazla iki kez yeniden bağlar."
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "PulseAudio Bluetooth modülünü yeniden yükle",
+        "help": "Deneysel. PulseAudio Bluetooth çıkışları oluşturmayı bıraktığında son çare."
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "Takılmış bağdaştırıcıyı sıfırla",
+        "help": "Deneysel. Yeniden bağlanma denemeleri tükendiğinde Bluetooth bağdaştırıcısını kapatıp aç veya sıfırla."
+      },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "Hava sensörü (SBC hoparlörler)",
+        "help": "Deneysel, isteğe bağlı; köprünün yeniden başlatılmasını gerektirir. Sesin gerçekten havadan ne zaman çıktığını ölçer. Ölçüm veya döngü modunda çalma eşitlemesi, bir Bluetooth SBC hoparlör ve CAP_NET_RAW gerektirir. Ölçüm modunda ölçer; döngü modunda yerleşimi düzeltir.",
+        "disabledReason": "Önce çalma eşitlemesini aç (ölçüm veya döngü modu)."
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "Home Assistant bağlantısı",
+          "help": "MQTT, varlıkları broker üzerinden yayımlar; Entegrasyon, Sendspin Bridge özel entegrasyonunu kullanır.",
+          "options": {
+            "off": "Kapalı",
+            "mqtt": "MQTT",
+            "rest": "Entegrasyon"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "MQTT broker",
+            "help": "Ana bilgisayar adı veya IP ya da Mosquitto eklentisini kullanmak için auto."
+          },
+          "port": {
+            "label": "MQTT bağlantı noktası",
+            "help": "Genellikle 1883, TLS ile 8883."
+          },
+          "tls": {
+            "label": "TLS kullan",
+            "help": "Broker bağlantısını şifrele."
+          },
+          "username": {
+            "label": "MQTT kullanıcısı",
+            "help": "Broker anonim istemcilere izin veriyorsa boş bırak."
+          },
+          "password": {
+            "label": "MQTT parolası",
+            "help": "Köprüde saklanır ve bir daha gösterilmez."
+          },
+          "discovery_prefix": {
+            "label": "Keşif öneki",
+            "help": "Home Assistant’ın MQTT keşif önekiyle eşleşmelidir."
+          },
+          "client_id": {
+            "label": "İstemci kimliği",
+            "help": "Boş bırakılırsa köprüden bir tane türetilir."
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "Ağda duyur",
+            "help": "Home Assistant’ın köprüyü keşfetmesine ve entegrasyonu önermesine izin ver."
+          },
+          "supervisor_pair": {
+            "label": "Supervisor üzerinden eşleştir",
+            "help": "Home Assistant OS’ta entegrasyon belirtecini elle kopyalamadan alır."
+          },
+          "advertise_host": {
+            "label": "Duyurulan adres",
+            "help": "Home Assistant’ın köprüye ulaşmak için kullandığı adres. Köprü bir ters proxy veya NAT arkasındaysa ayarla; boş bırakılırsa otomatik algılanır."
+          },
+          "advertise_port": {
+            "label": "Duyurulan bağlantı noktası",
+            "help": "0, web bağlantı noktasını duyurur."
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "Alanlardan oda adları",
+        "help": "Hoparlörler için Home Assistant alanlarından oda adları öner."
+      },
+      "AUTH_ENABLED": {
+        "label": "Oturum açma zorunlu",
+        "help": "Bu arayüzü göstermeden önce parola veya hesap iste.",
+        "disabledReason": "Önce bir parola belirle."
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "Oturum süresi",
+        "help": "Bir oturum açmanın ne kadar sürdüğü."
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "Tekrarlanan başarısızlıkları kilitle",
+        "help": "Çok fazla yanlış paroladan sonra oturum açmayı bir süre engelle."
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "İzin verilen başarısız deneme",
+        "help": "Kilit başlamadan önce pencere içinde kabul edilen yanlış parola sayısı."
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "Sayım penceresi",
+        "help": "Başarısız denemelerin sayıldığı zaman aralığı."
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "Kilit süresi",
+        "help": "Oturum açmanın ne kadar süre engelli kalacağı."
+      },
+      "TRUSTED_PROXIES": {
+        "label": "Güvenilen proxy’ler",
+        "help": "Her satıra bir IP adresi. Köprüye gerçek istemci adresini yalnızca bunlar bildirebilir."
+      },
+      "CHECK_UPDATES": {
+        "label": "Güncellemeleri denetle",
+        "help": "Yeni sürümleri arka planda ara."
+      },
+      "UPDATE_CHANNEL": {
+        "label": "Güncelleme kanalı",
+        "help": "Günlük kullanım için kararlı; sürüm adayları ve beta sürümler daha erken gelir ve bozulabilir.",
+        "options": {
+          "stable": "Kararlı",
+          "rc": "Sürüm adayı",
+          "beta": "Beta"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "Güncellemeleri otomatik kur",
+        "help": "Seçilen kanaldaki yeni sürümü bulunur bulunmaz kur."
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "Açılış tolerans süresi",
+        "help": "Kurulum ipuçlarını göstermeden önce başlangıçtan sonra bu kadar bekle."
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "Kurtarma tolerans süresi",
+        "help": "Bağlantısı düşen bir hoparlör için düzeltme önermeden önce bu kadar bekle."
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "Telefonu kaynak olarak kabul et",
+        "help": "Köprüyle Bluetooth üzerinden eşleştirilen bir telefon ona akış yapar ve köprü bu sesi diğer oynatıcıların çalabileceği bir Sendspin kaynağı olarak sunar. PipeWire ile ve Home Assistant OS’ta PulseAudio ile çalışır."
+      }
+    },
+    "sectionsNav": "Bölümler",
+    "parts": {
+      "maConnection": {
+        "label": "Music Assistant hesabı",
+        "help": "Köprünün grupları ve çalan parçayı gösterebilmesi ve kuyruğu denetleyebilmesi için oturum aç.",
+        "change": "Yeniden oturum aç",
+        "signIn": "Oturum aç"
+      },
+      "sendspinTest": {
+        "label": "Sendspin bağlantısı",
+        "help": "Köprünün yukarıdaki sunucu ve bağlantı noktasıyla Music Assistant’a ulaştığını denetle.",
+        "run": "Test et",
+        "ok": "Tamam",
+        "failed": "Başarısız"
+      },
+      "adapters": {
+        "label": "Bağdaştırıcılar",
+        "help": "Bağdaştırıcılara tanıdığın bir ad ver. Cihaz sınıfı, bilinmeyen bilgisayarları reddeden hoparlörler için bir geçici çözümdür; gerekmiyorsa boş bırak.",
+        "name": "Ad",
+        "deviceClass": "Cihaz sınıfı",
+        "deviceClassHelp": "Altı haneli onaltılık değer, örneğin 0x00010c (dizüstü). Boş bırakılırsa sistem varsayılanı korunur."
+      },
+      "ha": {
+        "publisher": "MQTT yayımcısı",
+        "publisherHelp": "Köprüyü ve hoparlörlerini Home Assistant varlıkları olarak yayımlar.",
+        "publisherBroker": "{broker} adresine bağlı.",
+        "mosquitto": "Mosquitto eklentisi",
+        "mosquittoMissing": "Home Assistant’ta henüz MQTT broker yok. Mosquitto eklentisini kur, sonra broker’ı auto olarak ayarla.",
+        "install": "Kur",
+        "broker": "Broker",
+        "brokerHelp": "Broker’ı otomatik bul veya kaydetmeden önce aşağıdaki adresi ve kimlik bilgilerini sına.",
+        "detect": "Algıla",
+        "test": "Test et",
+        "detected": "Broker bulundu ve dolduruldu.",
+        "notDetected": "Broker bulunamadı; elle gir.",
+        "testOk": "Broker bağlantıyı kabul etti ({ms} ms).",
+        "testFailed": "Broker bağlantıyı reddetti.",
+        "component": "Sendspin Bridge entegrasyonu",
+        "componentSeen": "Son iletişim {when}.",
+        "componentMissing": "Entegrasyonu HACS’ten kur, sonra Home Assistant’ta ekle.",
+        "installHacs": "HACS’te aç",
+        "connected": "Bağlı",
+        "mdns": "Ağ duyurusu",
+        "mdnsHelp": "Home Assistant köprüyü bu duyuru aracılığıyla bulur.",
+        "announced": "Duyuruluyor",
+        "notAnnounced": "Duyurulmuyor"
+      },
+      "areaMap": {
+        "label": "Bağdaştırıcıya göre odalar",
+        "help": "Bir bağdaştırıcıdaki hoparlörler onun odasını alır. Alan kimliği, Home Assistant’taki alan adresinin son parçasıdır (Ayarlar → Alanlar).",
+        "areaId": "Alan kimliği",
+        "areaName": "Oda adı"
+      },
+      "password": {
+        "label": "Parola",
+        "set": "Bu arayüze oturum açmak için bir parola belirlenmiş.",
+        "notSet": "Henüz parola yok. Oturum açmayı zorunlu kılmadan önce bir tane oluştur.",
+        "change": "Değiştir",
+        "create": "Oluştur",
+        "current": "Mevcut parola",
+        "new": "Yeni parola",
+        "confirm": "Yeni parolayı yinele",
+        "tooShort": "En az 8 karakter.",
+        "save": "Parolayı kaydet",
+        "changed": "Parola kaydedildi"
+      },
+      "tokens": {
+        "label": "API belirteçleri",
+        "help": "Home Assistant entegrasyonu ve kendi betiklerin için: Authorization: Bearer <token> olarak gönder.",
+        "once": "Bu belirteci şimdi kopyala. Bir daha gösterilmez.",
+        "copy": "Kopyala",
+        "copied": "Belirteç kopyalandı",
+        "created": "oluşturuldu: {when}",
+        "lastUsed": "son kullanım: {when}",
+        "revoke": "İptal et",
+        "revokeConfirm": "Bu belirteç iptal edilsin mi? Onu kullanan her şey çalışmayı durdurur.",
+        "newLabel": "Belirteç adı",
+        "create": "Belirteç oluştur"
+      },
+      "updates": {
+        "label": "Sürüm {version}",
+        "available": "{version} sürümü mevcut.",
+        "upToDate": "Bu kanalda daha yeni bir sürüm bulunamadı.",
+        "check": "Şimdi denetle",
+        "install": "Güncelle"
+      },
+      "backup": {
+        "export": "Dışa aktar",
+        "exportHelp": "Yapılandırmayı parola ve belirteçler çıkarılmış olarak indir.",
+        "download": "İndir",
+        "import": "İçe aktar",
+        "importHelp": "Yapılandırmayı daha önce dışa aktarılan bir dosyayla değiştir. Köprüde zaten bulunan gizli değerler korunur.",
+        "choose": "Dosya seç",
+        "imported": "Yapılandırma içe aktarıldı",
+        "confirmTitle": "Yapılandırma değiştirilsin mi?",
+        "confirmLabel": "Değiştir",
+        "raw": "JSON olarak düzenle",
+        "rawHelp": "Bu ekranın göstermediği anahtarlar için. Değişiklikler Kaydet düğmesiyle kaydedilir.",
+        "edit": "Düzenle",
+        "apply": "Uygula"
+      },
+      "latency": {
+        "label": "Tampon ön ayarları",
+        "recommended": "önerilen"
+      },
+      "sourceLink": {
+        "label": "Telefon kaynağı",
+        "help": "Telefonu Bluetooth üzerinden eşleştir ve yakalama durumunu Donanım sayfasında gör.",
+        "action": "Donanım’ı aç"
+      },
+      "maPairing": {
+        "label": "Telefon kaynağı eşleştirmesi",
+        "help": "Music Assistant’ın telefonun sesini çalabilmesi için önce bu köprüye güvenmesi gerekir.",
+        "off": "Telefon kaynağı kapalı. Donanım sayfasında etkinleştir, sonra burada Music Assistant ile eşleştir.",
+        "offAction": "Donanım’ı aç",
+        "whereToEnter": "Music Assistant’ta: Ayarlar → Oynatıcılar → bu köprü → Yapılandır → Statik eşleştirme kodu.",
+        "routing": "Oynatma ve yönlendirme Music Assistant’ta kalır; köprü yalnızca telefonu yakalar.",
+        "notPaired": "Henüz eşleştirilmedi. Bir eşleştirme penceresi aç, sonra kodu Music Assistant’a gir."
+      }
+    },
+    "leaveConfirm": "Kaydedilmemiş ayarlar var. Yine de çıkılsın mı?",
+    "device": {
+      "name": {
+        "label": "Ad",
+        "help": "Music Assistant’ta oynatıcı olarak gösterilir."
+      },
+      "backend": {
+        "adapter": {
+          "label": "Bluetooth bağdaştırıcısı",
+          "help": "Bu hoparlörü bağlayan bağdaştırıcı. Otomatik, varsayılan bağdaştırıcıyı kullanır."
+        },
+        "sink": {
+          "label": "Ses çıkışı",
+          "help": "Bu oynatıcının çaldığı, bu bilgisayarın ses çıkışı. Başka bir oynatıcının kullandığı çıkışlar önerilmez."
+        }
+      },
+      "room_name": {
+        "label": "Oda",
+        "help": "Oynatıcıyla birlikte gösterilir ve Home Assistant’a sunulur."
+      },
+      "room_id": {
+        "label": "Home Assistant alan kimliği",
+        "help": "Hoparlörü Home Assistant’taki bir alana bağlar."
+      },
+      "volume_controller": {
+        "label": "Ses düzeyi denetimi",
+        "help": "PulseAudio hoparlörün sistem ses düzeyini değiştirir; Sendspin bunun yerine ses akışını ölçekler.",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Sendspin akışı"
+        }
+      },
+      "listen_port": {
+        "label": "Oynatıcı bağlantı noktası",
+        "help": "Music Assistant’ın bu hoparlör için bağlandığı bağlantı noktası. Boş bırakılırsa otomatik seçilir."
+      },
+      "idle_mode": {
+        "label": "Boştayken",
+        "help": "Hiçbir şey çalmıyorken köprünün yaptığı şey.",
+        "options": {
+          "default": "Bağlı kal",
+          "power_save": "Güç tasarrufu",
+          "auto_disconnect": "Bağlantıyı kes",
+          "keep_alive": "Hoparlörü uyanık tut"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "Güç tasarrufu gecikmesi",
+        "help": "Bu kadar süre ses olmadığında güç tasarrufunu aç."
+      },
+      "idle_disconnect_minutes": {
+        "label": "Bağlantıyı kesme süresi",
+        "help": "Bu kadar süre ses olmadığında Bluetooth bağlantısını kes. 0 asla kesmez."
+      },
+      "keep_alive_method": {
+        "label": "Uyanık tutma sinyali",
+        "help": "Duyulmayan 2 Hz ton çoğu hoparlöre uygundur; sessizlik, tona tepki veren az sayıda hoparlöre yardımcı olur.",
+        "options": {
+          "infrasound": "Duyulmayan ton",
+          "silence": "Sessizlik",
+          "none": "Hiçbir şey"
+        }
+      },
+      "keepalive_interval": {
+        "label": "Sinyal aralığı",
+        "help": "Uyanık tutma sinyalleri arasındaki süre."
+      },
+      "static_delay_ms": {
+        "label": "Hoparlör gecikme telafisi",
+        "help": "Bu hoparlörün sesini ne kadar geç çaldığı. Köprü sesi bu kadar erken gönderir, böylece grupla zamanında kalır."
+      },
+      "min_buffer_ms": {
+        "label": "En düşük tampon",
+        "help": "Hoparlörün çalarken kuyrukta tuttuğu ses."
+      },
+      "required_lead_time_ms": {
+        "label": "Başlatma öncesi süre",
+        "help": "Hoparlörün ilk ses çalmadan önce ihtiyaç duyduğu süre."
+      },
+      "allow_hfp_profile": {
+        "label": "Kulaklık profiline (aramalar) izin ver",
+        "help": "Kapalı, hoparlörü müzik için A2DP’de tutar ve ana bilgisayar kulaklık profilini geri getirirse kartı yeniden değiştirir. Açık, başka bir uygulamanın aramalar için hoparlörün mikrofonunu kullanmasına izin verir; bu profil etkinken ses 8 kHz monoya düşer."
+      },
+      "calibration_bed": {
+        "label": "Ayarlama sırasında bu hoparlörü uyanık tut",
+        "help": "Bazı yükselteçler sessizlikten sonra kısa kalibrasyon tıklamaları için asla sesi açmaz ve ayarlama sesi duyulmaz olur. Açık, yalnızca bir grup ayarlama oturumu sürerken bu hoparlöre yumuşak bir gürültü çalar; diğer hoparlörler temiz tıklamaları korur."
+      }
+    },
+    "deviceGroups": {
+      "speaker": "Hoparlör",
+      "idle": "Boşta davranışı",
+      "sync": "Zamanlama"
+    },
+    "leave": "Kaydetmeden çık",
+    "search": "Ayarlarda ara",
+    "nothingFound": "“{q}” ile eşleşen bir şey yok.",
+    "changed": "Değiştirildi",
+    "loadFailed": "Ayarlar yüklenemedi.",
+    "retry": "Yeniden dene",
+    "autosave": {
+      "saved": "Kaydedildi",
+      "failed": "Kaydedilmedi: {reason}"
+    },
+    "appliesAfterRestart": "Buradaki bazı ayarlar yeniden başlatmadan sonra geçerli olur; kaydetme gerektiğinde yeniden başlatma önerir."
+  },
+  "timing": {
+    "suggestion": "Önerilen gecikme telafisi: {value} ms",
+    "applySuggestion": "Uygula",
+    "history": {
+      "title": "Son zamanlama",
+      "syncError": "Eşitleme hatası {ms} ms",
+      "empty": "Henüz zamanlama örneği yok; hoparlör çalarken görünürler.",
+      "buffer": "Tamponlanan ses",
+      "error": "Eşitleme hatası"
+    },
+    "playout": {
+      "title": "Çalma",
+      "yes": "Evet",
+      "no": "Hayır",
+      "settling": "oturuyor, en fazla {s} sn",
+      "fallback": "Çalma eşitlemesi düz çıkışa geri döndü: {reason}",
+      "unknownReason": "bilinmeyen neden",
+      "rows": {
+        "error": "Hata",
+        "p95": "Hata p95",
+        "slope": "Hata kayması",
+        "corrections": "Düzeltmeler",
+        "jumps": "Sıçramalar",
+        "underruns": "Tampon boşalmaları",
+        "paLatency": "PulseAudio gecikmesi",
+        "hostLatency": "Ana bilgisayar gecikmesi",
+        "sinkRate": "Çıkış hızı",
+        "clockSlew": "Saat kaydırması",
+        "warm": "Isınma"
+      }
+    },
+    "air": {
+      "title": "Hava sensörü",
+      "chip": "hava: {state}, H {h} ms",
+      "chipNoH": "hava: {state}",
+      "states": {
+        "off": "Kapalı",
+        "unavailable": "Kullanılamıyor",
+        "unsupported_codec": "Desteklenmeyen kodek",
+        "unsupported_input": "Desteklenmeyen giriş",
+        "no_signal": "Sinyal yok",
+        "acquiring": "Kilit aranıyor",
+        "locked": "Kilitli",
+        "holding": "Korunuyor",
+        "no_lock": "Kilit kayboldu"
+      },
+      "rows": {
+        "state": "Durum",
+        "host": "Ana bilgisayar yerleşimi",
+        "air": "Hava hatası",
+        "confidence": "Güven",
+        "psr": "Tepe oranı (PSR)",
+        "lock": "Son doğrulama",
+        "learnedTarget": "Hava hedefi"
+      },
+      "needsCalibration": "Kalibrasyon gerekli",
+      "agoSeconds": "{s} sn önce",
+      "reasons": {
+        "needs_measure": "Ölçüm veya döngü modunda çalma eşitlemesi gerekir.",
+        "not_bluetooth": "Yalnızca Bluetooth hoparlörler desteklenir.",
+        "cpu_budget": "Durdu: sensör çok fazla işlemci zamanı kullandı.",
+        "internal_error": "Bir iç hatadan sonra durdu; sonraki akışla yeniden başlar.",
+        "playout_fallback": "Çalma eşitlemesi düz çıkışa geri döndü.",
+        "unsupported_input": "Ses biçimi desteklenmiyor (44,1 ve 48 kHz, 16-32 bit).",
+        "no_cap_net_raw": "Bluetooth monitörü kullanılamıyor (CAP_NET_RAW gerektirir).",
+        "unsupported_platform": "Bu sistemde Bluetooth HCI monitörü yok (yalnızca Linux).",
+        "monitor_error": "Bluetooth monitörü başarısız oldu.",
+        "sbc_params": "SBC akış parametreleri desteklenmiyor.",
+        "sbc_fragmented": "Hoparlör SBC çerçevelerini birkaç pakete bölüyor.",
+        "codec": "Hoparlör {codec} kullanıyor; yalnızca SBC desteklenir.",
+        "unknown": "Neden: {reason}"
+      },
+      "calibration": {
+        "title": "Kalibrasyonlar",
+        "line": "Havadan sese gecikme: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "Unut",
+        "forgetTitle": "Bu kalibrasyon unutulsun mu?",
+        "forgetConfirm": "Eşitleme sihirbazı yeniden ölçene kadar {name}, {adapter} üzerinde {codec} {rate} kHz için kalibre edilmemiş olarak bildirilir."
+      },
+      "correction": {
+        "target": "Hava düzeltmesi: {target}",
+        "calibrated": "kalibre edildi ({ms} ms)",
+        "learned": "öğrenildi ({n} başlatma)",
+        "noData": "veri yok (öğrenme: {need} başlatmadan {n} tanesi)",
+        "inactive": "etkin değil: kilitli değil",
+        "bias": "Hava sapması {value} ms",
+        "corrections": "Hava düzeltmeleri {n}",
+        "trimEarly": "Telafi kırpması {value} ms (hedef {ms} ms erken)",
+        "trimLate": "Telafi kırpması {value} ms (hedef {ms} ms geç)"
+      },
+      "learned": {
+        "title": "Öğrenilen gecikmeler",
+        "line": "Öğrenilen: {delay} ms telafide {latency} ms · {codec} · {adapter} · {starts} başlatma",
+        "forget": "Unut",
+        "forgetTitle": "Bu öğrenilen gecikme unutulsun mu?",
+        "forgetConfirm": "{name}, {adapter} üzerinde {codec} {rate} kHz için gecikmesini yeniden öğrenmeye başlar. Bunun için bir kalibrasyon da unutulur."
+      },
+      "learnedValue": "≈{ms} ms (öğrenildi)"
+    },
+    "details": "Teknik ayrıntılar"
+  },
+  "system": {
+    "bridge": "Köprü",
+    "uptime": "Çalışma süresi",
+    "memory": "Bellek",
+    "platform": "Platform",
+    "python": "Python",
+    "audio": "Ses sunucusu",
+    "bluez": "BlueZ",
+    "downloads": "İndirmeler",
+    "downloadAction": "İndir",
+    "download": {
+      "report": {
+        "label": "Tanılama raporu",
+        "help": "Bir hata bildirimi için gereken her şey, gizli değerler çıkarılmış olarak."
+      },
+      "logs": {
+        "label": "Hizmet günlüğü",
+        "help": "Köprü günlüğü metin olarak."
+      },
+      "timeline": {
+        "label": "Kurtarma zaman çizelgesi",
+        "help": "Başlangıç ve cihaz olayları CSV olarak."
+      },
+      "config": {
+        "label": "Yapılandırma",
+        "help": "Parola ve belirteçler olmadan."
+      }
+    },
+    "players": "Oynatıcı süreçleri",
+    "noPlayers": "Çalışan oynatıcı süreci yok.",
+    "player": "Oynatıcı",
+    "restarts": "Yeniden başlatmalar",
+    "state": "Durum",
+    "running": "Çalışıyor",
+    "reconnecting": "Yeniden bağlanıyor",
+    "stopped": "Durduruldu",
+    "hooks": {
+      "title": "Web kancaları",
+      "help": "Köprü, cihaz ve köprü olaylarını bu adreslere POST eder. Köprü yeniden başlayana kadar geçerli kalırlar.",
+      "allEvents": "tüm olaylar",
+      "counts": "{ok} teslim edildi, {failed} başarısız",
+      "remove": "Kaldır",
+      "url": "Adres",
+      "categories": "Kategoriler (isteğe bağlı)",
+      "add": "Ekle"
+    }
+  },
+  "guidance": {
+    "title": "Dikkat gerekenler",
+    "done": "Tamamlandı: {action}"
+  },
+  "nav": {
+    "home": "Hoparlörler",
+    "homeShort": "Hoparlörler",
+    "groups": "Gruplar",
+    "groupsShort": "Gruplar",
+    "settings": "Ayarlar",
+    "settingsShort": "Ayarlar",
+    "diagnostics": "Tanılama",
+    "diagnosticsShort": "Sağlık",
+    "hardware": "Donanım",
+    "hardwareShort": "Donanım",
+    "sync": "Grup eşitleme"
+  },
+  "home": {
+    "connected": "{total} cihazdan {n} tanesi Bluetooth bağlı",
+    "playing": "{n} çalıyor",
+    "source": {
+      "title": "Telefon → Music Assistant",
+      "streaming": "Telefondan çalıyor",
+      "pairing": "Eşleştirme sürüyor",
+      "waiting": "Telefon bekleniyor",
+      "off": "Kaynak kapalı",
+      "error": "Kaynak hatası",
+      "maConnected": "Music Assistant bağlı",
+      "maPaired": "Music Assistant eşleştirildi, yeniden bağlanılıyor",
+      "maUnpaired": "Music Assistant eşleştirilmedi",
+      "openHardware": "Donanım’ı aç",
+      "pairAction": "Music Assistant ile eşleştir"
+    },
+    "checklist": {
+      "title": "İlk adımlar",
+      "progress": "{total} adımdan {done} tanesi tamam",
+      "speaker": "İlk hoparlörünü ekle",
+      "speakerAction": "Hoparlör ekle",
+      "ma": "Music Assistant’ta oturum aç",
+      "maAction": "Ayarları aç",
+      "phone": "Telefon kaynağını etkinleştir ve eşleştir",
+      "phoneAction": "Donanım’ı aç",
+      "dismiss": "İlk adımları gizle"
+    }
+  },
+  "groups": {
+    "via": "{url} adresindeki Music Assistant",
+    "connectFirst": "Gruplarını görmek ve denetlemek için köprüyü Music Assistant’a bağla."
+  },
+  "addSpeaker": {
+    "title": "Hoparlör ekle",
+    "findHelp": "Hoparlörü eşleştirme moduna al. Yakındaki hoparlörler aşağıda görünür.",
+    "scan": "Ara",
+    "scanAgain": "Yeniden ara",
+    "scanHint": "Hoparlörü eşleştirme moduna al, sonra Ara’ya bas.",
+    "looking": "Hoparlörler aranıyor…",
+    "add": "Ekle",
+    "signal": {
+      "success": "Güçlü",
+      "warning": "Orta",
+      "error": "Zayıf",
+      "neutral": "—"
+    },
+    "trouble": "Hoparlör bulunamadı mı veya eşleştirme mi başarısız?",
+    "alreadyPaired": "Zaten eşleştirilmiş bir hoparlör seç",
+    "backToScan": "Aramaya dön",
+    "paired": "Eşleştirildi. Ona bir ad ve oda ver.",
+    "roomHint": "İsteğe bağlı. Oynatıcıyla birlikte gösterilir ve Home Assistant’a sunulur.",
+    "addToBridge": "Köprüye ekle",
+    "addedTitle": "{name} köprüde.",
+    "testHelp": "Duyduğunu denetlemek için kısa bir tıklama çal.",
+    "waiting": "Hoparlörün sesi bağlanıyor — bu birkaç saniye sürer.",
+    "testSound": "Test sesi çal",
+    "done": "Bitti",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "Ses çıkışı"
+    },
+    "audio": {
+      "intro": "Bu bilgisayarın USB DAC, ses kartı veya HDMI gibi bir ses çıkışına çal.",
+      "none": "Ses çıkışı bulunamadı.",
+      "refresh": "Yenile",
+      "inUse": "Zaten başka bir oynatıcı tarafından kullanılıyor",
+      "named": "Bu çıkış için bir ad ve oda seç.",
+      "looking": "Ses çıkışları aranıyor…",
+      "taken": "Bu çıkışı zaten başka bir oynatıcı kullanıyor."
+    },
+    "pairing": "{name} eşleştiriliyor…",
+    "errorNext": "Hoparlörün eşleştirme modunda ve bağdaştırıcıya yakın olduğunu denetle, sonra yeniden dene."
+  },
+  "connection": {
+    "lost": "Köprü bağlantısı kayboldu — yeniden bağlanılıyor. Gördüklerin güncel olmayabilir.",
+    "reload": "Yeniden yükle"
+  },
+  "shortcuts": {
+    "title": "Klavye kısayolları",
+    "places": "Hoparlörler, Gruplar, Ayarlar, Tanılama, Donanım bölümlerine git",
+    "add": "Hoparlör ekle",
+    "search": "Bu sayfada ara",
+    "help": "Bu listeyi göster",
+    "close": "İletişim kutusunu veya menüyü kapat"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "Bağlantı",
+      "bridge": "Bu köprüde"
+    },
+    "reconnect": "Yeniden bağlan",
+    "standby": "Bekleme moduna al",
+    "wake": "Uyandır",
+    "claim": "Bu köprüyü kaynak olarak kullan",
+    "handOver": "Hoparlörü serbest bırak",
+    "takeBack": "Hoparlörü geri al",
+    "disable": "Devre dışı bırak",
+    "enable": "Etkinleştir",
+    "remove": "Hoparlörü kaldır",
+    "removeTitle": "{name} kaldırılsın mı?",
+    "removeMessage": "Oynatıcısı Music Assistant’tan kaybolur ve Bluetooth eşleşmesi kaldırılır. Yeniden kullanmak için yeni bir hoparlör olarak ekle.",
+    "settings": "Ayarlar",
+    "repairTitle": "{name} yeniden eşleştirilsin mi?"
+  },
+  "sync": {
+    "open": "Eşitle",
+    "tuneGroup": "Tüm grubu ayarla",
+    "tuneGroupHelp": "Bu oynatıcının Music Assistant grubundaki tüm hoparlörleri tek seferde hizala.",
+    "backToGroups": "Gruplara dön",
+    "tabs": {
+      "group": "Grup",
+      "manual": "Elle",
+      "measure": "Ölçüm"
+    },
+    "members": "Üyeler",
+    "delay": "{ms} ms",
+    "delayHeading": "Gecikme telafisi (büyük = daha erken)",
+    "sign": "+ daha erken çalar · − daha geç çalar",
+    "noMembers": "Bu grubun üyesi yok.",
+    "loadError": "Grup üyeleri okunamadı ({code}).",
+    "restoreFailed": "Grup geri yüklenemedi",
+    "restoreFailedHelp": "Ayarlama bir yeniden başlatmayla kesildi, bu yüzden bazı hoparlörler hâlâ sessize alınmış olabilir ({code}). Köprü denemeye devam ediyor.",
+    "manualIntro": "Grupta tıklamalar çal ve her hoparlörü kulağına göre ayarla.",
+    "measureIntro": "Her hoparlörü bir mikrofonla ölç, sonra kulağına göre ince ayar yap.",
+    "switchToManual": "Mikrofon yok mu? Bunun yerine kulakla ayarla.",
+    "switchToMeasure": "Mikrofonlu bir telefon veya dizüstü var mı? Bunun yerine ölç.",
+    "state": {
+      "idle": "Süren ayarlama yok",
+      "created": "Başlıyor",
+      "measuring": "Ölçülüyor",
+      "proposed": "Ölçüldü",
+      "applying": "Gecikmeler uygulanıyor",
+      "tuning": "Kulakla ayarlanıyor",
+      "restoring": "Grup geri yükleniyor",
+      "done": "Bitti",
+      "cancelled": "İptal edildi",
+      "failed": "Başarısız"
+    },
+    "status": {
+      "prepare": "Grup hazırlanıyor",
+      "measure": "Ölçülüyor",
+      "tune": "Kulakla ayarlanıyor",
+      "done": "Bitti",
+      "elsewhere": "Başka bir cihazda ayarlanıyor"
+    },
+    "groupError": "Bu grup açılamadı ({code}). Music Assistant’a ulaşılabildiğini ve grubun hâlâ var olduğunu denetle.",
+    "origin": {
+      "other": "Ayarlanamıyor"
+    },
+    "measuredAgo": "Ölçüldü: {age}",
+    "noDelay": "Gecikme bildirilmedi",
+    "actions": {
+      "title": "Ayarla",
+      "manual": "Elle ayarlama",
+      "semi": "Mikrofonla ölç",
+      "manualHelp": "Mikrofon gerekmez. Duyabildiğin küçük düzeltmeler için en iyisi.",
+      "semiHelp": "Hoparlör başına yaklaşık bir dakika. Bitirmeden önce ölçülen gecikmeleri duyar ve ayarlarsın."
+    },
+    "profiles": {
+      "title": "Profiller",
+      "apply": "Uygula",
+      "saveCurrent": "Mevcut olanı farklı kaydet…",
+      "rename": "Yeniden adlandır",
+      "delete": "Sil",
+      "empty": "Henüz profil yok. Sonra dönmek için mevcut gecikmeleri kaydet.",
+      "skipped": "{n} üye atlandı | {n} üye atlandı",
+      "notInGroup": "Grupta değil: {names}",
+      "name": "Ad",
+      "notes": "Notlar (isteğe bağlı)",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "applyTitle": "“{name}” uygula",
+      "confirmApply": "Bu gecikmeleri uygula",
+      "member": "Hoparlör",
+      "change": "Mevcut → profil",
+      "noChanges": "Grubun hoparlörlerinin hiçbiri bu profilde değil.",
+      "unchanged": "değişmedi",
+      "applied": "“{name}” uygulandı.",
+      "saved": "“{name}” kaydedildi.",
+      "renamed": "“{name}” olarak yeniden adlandırıldı.",
+      "deleted": "“{name}” silindi.",
+      "deleteTitle": "“{name}” silinsin mi?",
+      "deleteMessage": "Gecikmeler olduğu gibi kalır; yalnızca kaydedilen profil kaldırılır.",
+      "renameLabel": "“{name}” için yeni ad",
+      "failed": "Bu işe yaramadı ({code}).",
+      "kind": {
+        "device": "Hoparlörlerin yanında",
+        "position": "Dinleme konumundan"
+      },
+      "playerId": "oynatıcı kimliği {id}",
+      "nameRequired": "Bir ad gir."
+    },
+    "listen": {
+      "title": "Dinle",
+      "play": "Tıklamaları çal",
+      "stop": "Tıklamaları durdur",
+      "solo": "Yalnızca bu hoparlör",
+      "soloHelp": "Tek başına duymak için bir hoparlör seç (diğerleri sessize alınır) ya da Herkes’i seç.",
+      "soloMember": "Yalnızca {name}",
+      "everyone": "Herkes",
+      "ab": "İki tanesini karşılaştır",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "İki hoparlör her dört saniyede bir sırayla çalar.",
+      "idle": "Tıklamalar durdu.",
+      "playing": "Tıklamalar her hoparlörde çalıyor.",
+      "soloed": "Tıklamalar yalnızca {name} üzerinde çalıyor.",
+      "alternating": "{a} ve {b} sırayla çalıyor.",
+      "failed": "Bu işe yaramadı ({code}).",
+      "needsClicks": "Hoparlörleri tek tek duymak veya karşılaştırmak için tıklamaları çal.",
+      "playHelp": "Grupta tıklama parçasını çalar (3 dakika; durduğunda yeniden çal). Grubun kuyruğunu değiştirir. Tıklamaları durdur yalnızca tıklama parçasını durdurur."
+    },
+    "sound": {
+      "label": "Ses",
+      "clicks": "Tıklamalar",
+      "accent": "Vurgulu tıklamalar",
+      "noise": "Gürültü",
+      "hint": {
+        "clicks": "Saniyede bir tıklama: her hoparlörün tıklaması tek ses gibi duyulana kadar gecikmeleri kaydır.",
+        "accent": "Her 4. tıklama daha yüksek ve daha tizdir: bir hoparlörün yüzlerce ms kaydığını gösterir.",
+        "noise": "İki hoparlör için: ortada dur; hizalıysa gürültü merkezde duyulur, değilse boş ve fazlı duyulur."
+      }
+    },
+    "manual": {
+      "title": "Gecikme telafisi",
+      "help": "Daha büyük bir değer hoparlörün daha erken çalmasını sağlar. Değişiklikler hemen duyulur; Kaydet bunları korur.",
+      "reset": "Gecikmeleri başlangıçtaki değerlere döndür",
+      "resetDone": "Gecikmeler bu ayarlamanın başladığı değerlere döndü.",
+      "minus": "−{n} ms (daha geç)",
+      "plus": "+{n} ms (daha erken)",
+      "valueLabel": "{name} gecikme telafisi (ms)",
+      "departed": "Gruptan ayrıldı",
+      "startFailed": "Elle ayarlama başlatılamadı ({code}).",
+      "busy": "Bu grup için bir ölçüm sürüyor. Önce Ölçüm sekmesinde tamamla.",
+      "saveOnLeave": "Gecikme değişiklikleri korunsun mu?",
+      "saveOnLeaveHelp": "Hoparlör gecikme telafisini değiştirdin ama kaydetmedin. Değişiklikleri koru ya da bu ayarlamanın başındaki değerlere dön.",
+      "saveConfirm": "Değişiklikleri koru",
+      "saveDecline": "Değişikliklerden vazgeç",
+      "nudges": "{name} öğesini ayarla",
+      "writeForbidden": "Music Assistant {name} öğesini değiştirmeyi reddetti: bu hesabın oynatıcı ayarlarını değiştirme izni yok.",
+      "writeFailed": "{name} değiştirilemedi ({code}). Gösterilen gecikme, Music Assistant’ın tuttuğu değerdir.",
+      "ended": "Bu ayarlama sona erdi (zaman aşımına uğradı veya başka bir cihazda kapatıldı). Gecikmeler olduğu gibi kalır. Yeniden ayarlamak için Tıklamaları başlat’a bas.",
+      "measured": "Ölçülen: {ms} ms ({change})",
+      "resetMeasured": "Ölçülene sıfırla",
+      "resetMeasuredMember": "{name} öğesini ölçülen gecikmeye sıfırla",
+      "endedNotice": "Elle ayarlama sona erdi: tıklamalar durdu, tüm hoparlörlerin sesi açıldı ve ses düzeyleri geri döndü.",
+      "startHelp": "Başlatmak, grubun çalmakta olduğu şeyi durdurur ve onda bir tıklama parçası çalar. Düğmeye basana kadar hiçbir şey başlamaz.",
+      "startClicks": "Tıklamaları başlat",
+      "volumes": "Ses düzeyi",
+      "needStart": "Ayarlamak için Tıklamaları başlat’a bas.",
+      "save": "Kaydet",
+      "saved": "Kaydedildi",
+      "discard": "Değişikliklerden vazgeç",
+      "unsaved": "Kaydedilmemiş değişiklikler",
+      "listenOne": "Bir hoparlörü dinle / iki tanesini karşılaştır",
+      "stillRestoring": "Grup son ayarlamadan sonra hâlâ geri yükleniyor. Birazdan yeniden dene."
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "Bu tarayıcı burada kayıt yapamıyor. Mikrofon için HTTPS (veya localhost) ve güncel bir tarayıcı gerekir.",
+        "permission": "Mikrofon erişimi reddedildi. Tarayıcı ayarlarında bu sayfa için mikrofona izin ver ve yeniden dene.",
+        "no_microphone": "Bu cihazda mikrofon bulunamadı.",
+        "mic_busy": "Mikrofon başka bir uygulama tarafından kullanılıyor veya başlatılamadı.",
+        "worklet": "Kayıt modülü yüklenemedi. Sayfayı yenile ve yeniden dene.",
+        "not_open": "Mikrofon açık değil.",
+        "busy": "Zaten bir kayıt sürüyor.",
+        "interrupted": "Ses kesintiye uğradı (sayfa arka plandaydı veya başka bir uygulama sesi aldı). Sürdürmek için dokun; etkilenen hoparlörler yeniden ölçülür.",
+        "timeout": "Kayıt zamanında tamamlanmadı.",
+        "mic_lost": "Mikrofon durdu (bağlantısı kesildi veya erişim geri alındı). Sürdürmek için yeniden aç; etkilenen hoparlörler yeniden ölçülür.",
+        "failed": "Kayıt başarısız oldu."
+      }
+    },
+    "wizard": {
+      "stageOf": "{stage} ({n}/{total}) · {name}",
+      "stages": {
+        "prepare": "Hazırla",
+        "measure": "Ölç",
+        "tune": "Ayarla",
+        "done": "Bitti"
+      },
+      "steps": {
+        "prepare": "Nerede ve nasıl",
+        "clicker": "Müziği durdur, tıklamaları başlat",
+        "volume": "Ses düzeyini ayarla",
+        "members": "Hoparlör hoparlör",
+        "tune": "Dinle ve ayarla",
+        "done": "Tamamlandı"
+      },
+      "notice": {
+        "title": "Ölçüm yaparken başka bir şey çalmaz.",
+        "help": "Tıklamaları başlattığında grupta tıklama parçası çalar; grup çalıyorsa önce onu durdurur. Bir hoparlör ölçülürken diğerleri sessize alınır. Bitirdiğinde köprünün sessize aldığı tüm hoparlörlerin sesi açılır, ses düzeyleri eski değerlerine döner ve tıklamalar durur.",
+        "queue": "Kalibrasyon, grubun kuyruğunu tıklama parçasıyla değiştirir; ardından müziğini yeniden başlat."
+      },
+      "point": {
+        "legend": "Nerede ölçeceksin?",
+        "device": "Her hoparlörün yanında",
+        "deviceHelp": "Telefonu sırayla her hoparlörün yanında tut. Hoparlör başına 6 sn; cihazları kendi aralarında hizalar.",
+        "position": "Dinleme konumundan",
+        "positionHelp": "Genellikle dinlediğin yerde kal. Hoparlör başına 12 sn; sesin sana ulaşma süresini de içerir."
+      },
+      "micPermission": "Tarayıcı mikrofon isteyecek. Kayıtlar bellekte kalır ve yalnızca bu köprüye gönderilir.",
+      "holdStill": "İpucu: oda sessiz kalsın ve kayıt sırasında telefonu sabit tut.",
+      "estimate": "Yaklaşık {min} dakika sürer.",
+      "byEar": "Yine de kulakla ayarlayabilirsin:",
+      "start": "Mikrofona izin ver ve başlat",
+      "micDenied": "Mikrofon kullanılamadı.",
+      "startFailed": "Ölçüm başlatılamadı ({code}).",
+      "level": {
+        "help": "Mikrofon göstergesi her tıklamada hareket etmeli.",
+        "meter": "Mikrofon",
+        "tooQuiet": "Çok sessiz: grubun sesini aç veya yaklaş.",
+        "tooLoud": "Çok yüksek: grubun sesini biraz kıs veya uzaklaş.",
+        "fine": "Mikrofon tıklamaları duyuyor.",
+        "value": "{pct} %"
+      },
+      "members": {
+        "help": "Her hoparlörü tek tek ölç. Herhangi bir hoparlörü yineleyebilirsin.",
+        "order": "Sıra yalnızca kolaylık için (odayı dolaş); sonucu değiştirmez.",
+        "moveUp": "{name} öğesini yukarı taşı",
+        "moveDown": "{name} öğesini aşağı taşı",
+        "notMeasured": "Ölçülmedi (ayarlanamaz): {names}",
+        "left": "Sürdürmek için her hoparlörü kaydet veya atla ({n} kaldı). | Sürdürmek için her hoparlörü kaydet veya atla ({n} kaldı)."
+      },
+      "hint": {
+        "notHeard": "Duyulmadı: {name} sesini aç veya yaklaş, sonra Yinele — ya da Atla.",
+        "unstable": "Kararsız: oda sessiz ve telefon sabit olsun, sonra Yinele — ya da Atla.",
+        "reason": {
+          "clipped": "Kayıt kırpılıyor: telefon çok yakındı veya {name} çok yüksekti. Telefonu geri çek veya {name} sesini kıs, sonra Yinele.",
+          "quiet": "Kayıt neredeyse sessiz: telefonu {name} öğesine daha yakın tut, sonra Yinele.",
+          "lowSnr": "Tıklamalar odanın gürültüsünde kayboldu: odayı sessiz tut veya telefonu {name} öğesine yaklaştır, sonra Yinele.",
+          "noClicks": "Kayıtta {name} tıklamaları bulunamadı: tıklamaları çaldığını denetle ve telefonu daha yakın tut, sonra Yinele.",
+          "tooFewClicks": "{name} için çok az tıklama duyuldu: telefon pencerenin bir kısmını kaçırmış olabilir — Yinele."
+        }
+      },
+      "holdNear": "Telefonu {name} öğesinden 30–50 cm uzakta tut",
+      "stayPut": "Olduğun yerde kal",
+      "record": "Kaydet",
+      "recordMember": "{name} öğesini kaydet",
+      "repeat": "Yinele",
+      "repeatMember": "{name} öğesini yinele",
+      "skip": "Atla",
+      "skipMember": "{name} öğesini atla",
+      "soloing": "{name} tek başına çalıyor…",
+      "recording": "{name} kaydediliyor…",
+      "heard": "Duyuldu",
+      "notHeard": "Duyulmadı",
+      "unstable": "Kararsız",
+      "skipped": "Atlandı",
+      "departed": "Gruptan ayrıldı",
+      "confidence": "{pct} %",
+      "redo": "Yeniden kaydet",
+      "result": "{name}: {result}",
+      "restartRound": "Mikrofon saati kesintiye uğradı, bu yüzden “Yeniden kaydet” olarak işaretlenen hoparlörleri bir kez daha kaydet.",
+      "tapToContinue": "Sürdürmek için dokun",
+      "micLost": "Mikrofon durdu (bağlantısı kesildi veya erişim geri alındı).",
+      "reopen": "Mikrofonu yeniden aç",
+      "failed": "Bu işe yaramadı ({code}).",
+      "ended": "Ölçüm sona erdi (zaman aşımına uğradı veya başka bir cihazda kapatıldı). Sessize aldığı hoparlörlerin sesi açıldı ve tıklamaları durdu.",
+      "next": "İleri",
+      "back": "Geri",
+      "cancel": "İptal",
+      "toTune": "Ölçülen gecikmeleri uygula ve dinle",
+      "memberGone": "{name} gruptan ayrıldı; ölçüm o olmadan sürüyor.",
+      "computing": "Gecikmeler hesaplanıyor…",
+      "proposalFailed": "Gecikmeler hesaplanamadı ({code}).",
+      "retry": "Yeniden dene",
+      "applying": "Ölçülen gecikmeler uygulanıyor…",
+      "applyFailed": "Gecikmeler uygulanamadı ({code}).",
+      "capture": {
+        "legend": "Ne kaydedecek?",
+        "device": "Bu cihazın mikrofonu",
+        "deviceHelp": "Bu cihazı her hoparlöre götür. Mikrofon için HTTPS (veya localhost) gerekir.",
+        "phone": "Bir telefon (QR kod okut)",
+        "phoneHelp": "Telefonda yakalama sayfasını aç; tüm hoparlörleri tek seferde kaydeder ve kaydı gönderir. Düz HTTP üzerinden de çalışır (telefonun kayıt aracıyla).",
+        "usePhone": "Bunun yerine telefonla ölç"
+      },
+      "startPhone": "Başlat"
+    },
+    "tune": {
+      "help": "Ölçülen gecikmeler uygulandı ve tıklamalar çalmaya devam ediyor. Her hoparlörü tek başına dinle veya iki tanesini karşılaştır, gereken gecikmeyi elle ayarla, sonra bitir.",
+      "spread": "Hoparlörler arasındaki en büyük fark: ölçülen {before} ms → şimdi yaklaşık {after} ms.",
+      "kept": "Duyulmadı veya atlandı, bu yüzden gecikmeleri değişmedi: {names}",
+      "ready": "Ölçülen gecikmeler uygulandı. Dinle ve ayarla.",
+      "finish": "Bitir",
+      "finishSave": "Bitir ve profil olarak kaydet…",
+      "saveTitle": "Bitir ve profil olarak kaydet",
+      "saveConfirm": "Kaydet ve bitir"
+    },
+    "air": {
+      "title": "Bluetooth gecikmesi ölçüldü",
+      "help": "Her köprü hoparlörünün sesi Bluetooth üzerinden aldıktan sonra çalmasının ne kadar sürdüğü, telefonun kaydından ölçülür. Sesi zamanında olan bir referansla (örneğin kulaklıkta bir web oynatıcı veya kablolu bir çıkış) karşılaştırılır. Kendi gecikmesi olan bir referans (PC hoparlörleri, Bluetooth kulaklık) her değeri o kadar yanlış yapar. Kaydedilen değerler köprü tarafından kendi başına kullanılır; hoparlörün gecikme ayarı değildirler.",
+      "reference": "Referans",
+      "referencePick": "Bir referans seç…",
+      "referenceHint": "Zamanında çalan bir kulaklık, kablolu çıkış veya başka bir referans seç. Önerilen gecikmeler için de referans olur.",
+      "referenceFailed": "Referans ayarlanamadı ({code}).",
+      "value": "Bluetooth gecikmesi ölçüldü: {ms} ms",
+      "hint": "hoparlör {ms} ms bildiriyor",
+      "save": "Bu Bluetooth gecikmesini kaydet",
+      "saveButton": "Kaydet",
+      "saveFailed": "Kaydedilemedi ({code}).",
+      "outOfRange": "{min}–{max} ms aralığının dışında, kaydedilemez",
+      "reasons": {
+        "not_effective": "Bu hoparlör için hava sensörü açık değildi",
+        "no_reference": "Önce bir referans seç",
+        "not_measured": "Bu hoparlör veya referans duyulmadı",
+        "not_sbc": "Hoparlör SBC çalmıyor",
+        "air_epoch_changed": "Sırası geldiğinde Bluetooth akışı yeniden başladı",
+        "air_delay_changed": "Kayıt sırasında hoparlörün gecikme telafisi değişti.",
+        "no_air_clicks": "Tıklamaları havada bulunamadı",
+        "no_written_clicks": "Tıklamaları köprünün yazdığı seste bulunamadı",
+        "fold_failed": "Bu hoparlör için hava ölçümü tamamlanamadı",
+        "no_air_frames": "Sırası geldiğinde bu hoparlörden havada Bluetooth sesi görülmedi"
+      },
+      "valueSaved": "Bluetooth gecikmesi ölçüldü: {ms} ms, kaydedildi"
+    },
+    "cancel": {
+      "title": "Ölçüm durdurulsun mu?",
+      "message": "Şimdiye kadarki kayıtlar kaybolur. Köprünün sessize aldığı hoparlörlerin sesi açılır, ses düzeyleri geri döner ve tıklamalar durur.",
+      "tuneTitle": "Durdurulup gecikmeler geri alınsın mı?",
+      "tuneMessage": "Gecikmeler ölçümden önceki değerlerine döner. Köprünün sessize aldığı hoparlörlerin sesi açılır, ses düzeyleri geri döner ve tıklamalar durur.",
+      "confirm": "Durdur",
+      "keep": "Sürdür",
+      "done": "Ölçüm iptal edildi. Hoparlörlerin sesi açıldı, ses düzeyleri geri kondu, tıklamalar durdu.",
+      "resetFailed": "Gecikmeler geri konamadı ({code}); ayarlama açık kalıyor. Yeniden dene."
+    },
+    "reloaded": {
+      "manual": "Sayfa yenilendiğinde elle ayarlama sona erdi. Gecikmeler olduğu gibi kalır.",
+      "measure": "Sayfa yenilendiğinde ölçüm sona erdi."
+    },
+    "joinManual": {
+      "title": "Elle ayarlama başka bir cihazda açık",
+      "help": "Buradan dinlemek ve ayarlamak için katıl veya sona erdir. Bu sayfadan ayrılmak onu asla sona erdirmez.",
+      "join": "Katıl"
+    },
+    "readOnly": "Başka bir cihazda ayarlama sürüyor",
+    "readOnlyHelp": "Bu sayfa, o ayarlama bitene kadar grubu yalnızca gösterir.",
+    "restoreRetrying": "Music Assistant’a ulaşılamadı ({code}), bu yüzden bazı hoparlörler hâlâ sessize alınmış veya tıklama çalıyor olabilir. Köprü denemeye devam ediyor.",
+    "proposal": {
+      "name": "Profil adı",
+      "nameRequired": "Bir ad gir.",
+      "defaultName": "Ölçüm {date}",
+      "warnings": "Uyarılar",
+      "clampedWarning": "Bazı gecikmeler 0–5000 ms aralığına sıkıştırıldı; kalan fark yaklaşık {ms} ms.",
+      "largeWarning": "2000 ms üzerindeki bir gecikme, Music Assistant’ın sesi çok önceden göndermesini gerektirir; küçük tamponlu hoparlörler kesilebilir.",
+      "forbidden": "Music Assistant gecikmeleri değiştirmeyi reddetti: bu hesap oynatıcı ayarlarını değiştiremez. Bu değerleri Music Assistant’ta elle ayarla:",
+      "forbiddenHint": "Ya da köprü ayarlarında Music Assistant’a yönetici hesabıyla yeniden bağlan ve yeniden dene.",
+      "copy": "Değerleri kopyala",
+      "copied": "Kopyalandı.",
+      "copyFailed": "Kopyalanamadı; değerleri seç ve elle kopyala."
+    },
+    "done": {
+      "restoring": "Grup geri yükleniyor…",
+      "restoringHelp": "Ses düzeyleri geri konuyor, hoparlörlerin sesi açılıyor ve tıklamalar durduruluyor. Gecikmeler bıraktığın gibi kalır.",
+      "restored": "Grup geri yüklendi",
+      "restoredHelp": "Tüm hoparlörlerin sesi açıldı, ses düzeyleri geri döndü ve tıklamalar durdu. Yeni gecikmeler kalıcı; müziğini Music Assistant’ta yeniden başlat.",
+      "spread": "Hoparlörler arasındaki en büyük fark: {before} ms → yaklaşık {after} ms",
+      "saved": "“{name}” profili olarak kaydedildi.",
+      "saveFailed": "Gecikmeler korundu, ancak profil kaydedilemedi ({code}).",
+      "listen": "Hızlı dinleme",
+      "listenHelp": "Tıklamalar tüm grupta 10 sn çalar, sonra durur.",
+      "listening": "Tıklamalar tüm grupta çalıyor…",
+      "listenFailed": "Tıklamalar çalınamadı ({code}).",
+      "again": "Yeniden ölç",
+      "queue": "Grubun kuyruğunda artık yalnızca tıklama parçası var: müziğini Music Assistant’ta yeniden başlat."
+    },
+    "endForeign": "O oturumu bitir",
+    "endForeignTitle": "Diğer cihazdaki ayarlama bitirilsin mi?",
+    "endForeignMessage": "Tıklamaları durur ve grup geri yüklenir. Zaten yazılmış gecikmeler olduğu gibi kalır.",
+    "signal": {
+      "restarted": "Tıklamalar yeniden başladı: her hoparlörü bir kez daha kaydet."
+    },
+    "prep": {
+      "failed": "Bu işe yaramadı ({code}).",
+      "group": {
+        "playing": "Çalıyor",
+        "idle": "Durduruldu",
+        "paused": "Duraklatıldı",
+        "unknown": "Bilinmiyor"
+      },
+      "clicker": {
+        "help": "Tıklama parçası, Music Assistant üzerinden grubun her hoparlöründe 3 dakika çalar. Durursa yeniden başlat.",
+        "start": "Tıklamaları başlat",
+        "again": "Tıklamaları yeniden başlat",
+        "playing": "Tıklamalar çalıyor.",
+        "stopped": "Tıklamalar çalmıyor.",
+        "groupPlaying": "Grup başka bir şey çalıyor: önce onu durdur.",
+        "whyDisabled": "Sürdürmek için tıklamaları başlat.",
+        "left": "Tıklamalar: {time} kaldı",
+        "helpStop": "Grup bir şey çalıyor. Tıklamaları başlatmak önce onu durdurur, sonra grubun her hoparlöründe 3 dakika tıklama parçası çalar.",
+        "groupState": "Grup:",
+        "stopAndStart": "Müziği durdur ve tıklamaları başlat",
+        "confirmTitle": "Grubun müziği durdurulsun mu?",
+        "confirmMessage": "Grubun çaldığı şey durur ve kuyruğu tıklama parçasıyla değiştirilir. Ardından müziğini yeniden başlat."
+      },
+      "volume": {
+        "help": "Tıklamaların ölçüm yaptığın yerde net duyulacağı bir düzey ayarla.",
+        "noVolume": "Ses düzeyi denetimi yok",
+        "silent": "Sessiz: ölçmek için sesini aç",
+        "back": "Bitirdiğinde ses düzeyleri eskisine döner."
+      },
+      "skip": "Atla"
+    },
+    "mute": {
+      "unsupported": "{name} sessize alınamıyor, bu yüzden o gruptayken diğer hoparlörler tek tek ölçülemez. Onları atla veya Elle ayarlama bölümünde kulakla ayarla.",
+      "unsupportedManual": "{name} sessize alınamıyor, bu yüzden diğer hoparlörler tek başına duyulamaz. Herkes ve yalnızca {name} hâlâ çalışır."
+    },
+    "ready": {
+      "title": "Ölçümden önce",
+      "unmutable": "{name} sessize alınamıyor. O gruptayken diğer hoparlörler tek tek ölçülemez. {name} öğesini yine de ölçebilir veya Elle ayarlama bölümünde kulakla ayarlayabilirsin.",
+      "unavailable": "{name} Music Assistant’ta kullanılamıyor (kapalı veya bağlı değil), bu yüzden ölçülemez.",
+      "silent": "{name} %0 düzeyinde: duyulmayacak. Ses düzeyi adımında aç veya atla.",
+      "muted": "{name} Music Assistant’ta sessize alınmış. Köprü onu sessize alınmış bırakır, bu yüzden duyulmayacak: sesini aç veya atla.",
+      "skip": "Ölçerken {name} öğesini atla",
+      "skipped": "{name} atlanacak (ölçmek için dokun)"
+    },
+    "badge": {
+      "unmutable": "Sessize alınamıyor",
+      "unavailable": "Kullanılamıyor",
+      "silent": "Ses düzeyi %0",
+      "muted": "Sessize alındı"
+    },
+    "phone": {
+      "help": "Telefonda yakalama sayfasını aç. Köprü sonra telefon bir kez kayıt yaparken tıklamaları sırayla her hoparlörde tek başına çalar.",
+      "qr": "Telefon yakalama bağlantısının QR kodu",
+      "scan": "Telefonun kamerasıyla okut veya bağlantıyı telefonda aç",
+      "copy": "Bağlantıyı kopyala",
+      "newLink": "Yeni bağlantı",
+      "linkFailed": "Bağlantı oluşturulamadı ({code}).",
+      "security": "Bağlantı, telefona yalnızca hangi hoparlörün çaldığını görmesine ve kaydını bu ölçüm için göndermesine izin verir. {min} dakika çalışır ve ölçüm bitince durur.",
+      "sameNetwork": "Telefon köprüyle aynı ağda olmalı.",
+      "step1": "Telefonda Başlat’a bas: kayıt yapar ve hoparlörler sırayla çalar.",
+      "step2": "Ya da telefon kayıt yaparken burada “Diziyi çal”a bas.",
+      "step3": "Dizi bittiğinde telefon kaydı gönderir; sonuçlar burada görünür.",
+      "play": "Diziyi çal ({n})",
+      "measureIt": "Ölç",
+      "notYet": "Henüz ölçülmedi",
+      "lead": "Başlıyor: her hoparlör bir an sessiz…",
+      "now": "Şimdi: yalnızca {name} ({n}/{total})",
+      "pause": "Duraklat: sonraki hoparlöre geç…",
+      "measured": "Telefonun kaydı ölçüldü.",
+      "waitingUpload": "Dizi bitti: telefonun kaydı bekleniyor…",
+      "failed": "Dizi durdu ({code}).",
+      "certificate": "Telefonun sertifika için bir kez uyarır — doğrudan tarayıcıda kayıt yapmak için kabul et.",
+      "httpFallback": "Sertifika olmadan düz bağlantıyı kullan (telefonun kayıt aracı):",
+      "keepsDelay": "Ölçülmedi, bunlar mevcut gecikmelerini korur: {names}"
+    },
+    "tuneLink": "Grubunla birlikte ayarla →",
+    "noGroupHelp": "{name} bir eşitleme grubunda değil. Diğerleriyle birlikte ayarlamak için Gruplar bölümünde bir eşitleme grubu oluştur ve bu hoparlörü ona ekle.",
+    "noGroupLink": "Grupları aç →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "{value} ms gecikme uygula"
+      },
+      "edit_ma_server": {
+        "label": "Music Assistant sunucusunu düzenle"
+      },
+      "enable_device": {
+        "label": "Etkinleştir | {count} hoparlörü etkinleştir"
+      },
+      "open_adapter_settings": {
+        "label": "Bağdaştırıcı ayarlarını aç"
+      },
+      "open_audio_diagnostics": {
+        "label": "Tanılamayı aç"
+      },
+      "open_bluetooth_settings": {
+        "label": "Bluetooth ayarlarını aç"
+      },
+      "open_config": {
+        "label": "Ayarları aç"
+      },
+      "open_devices_settings": {
+        "label": "Hoparlör ayarlarını aç"
+      },
+      "open_diagnostics": {
+        "label": "Tanılamayı aç"
+      },
+      "open_ma_settings": {
+        "label": "Music Assistant ayarlarını aç"
+      },
+      "open_output_diagnostics": {
+        "label": "Tanılamayı aç"
+      },
+      "open_player_settings": {
+        "label": "Oynatıcı ayarlarını aç"
+      },
+      "open_runtime_diagnostics": {
+        "label": "Tanılamayı aç"
+      },
+      "prefer_sbc_codec": {
+        "label": "SBC kodeğini tercih et"
+      },
+      "recheck_outputs": {
+        "label": "Ses çıkışlarını yeniden denetle"
+      },
+      "reclaim_bluetooth": {
+        "label": "Hoparlörü geri al | {count} hoparlörü geri al"
+      },
+      "reconnect_device": {
+        "label": "Hoparlörü yeniden bağla | {count} hoparlörü yeniden bağla"
+      },
+      "release_bluetooth": {
+        "label": "Hoparlörü serbest bırak"
+      },
+      "repair_speaker": {
+        "label": "Hoparlörü yeniden eşleştir"
+      },
+      "rerun_checks": {
+        "label": "Denetimleri yeniden çalıştır"
+      },
+      "rerun_preflight": {
+        "label": "Ana bilgisayar denetimini yeniden çalıştır"
+      },
+      "retry_ma_discovery": {
+        "label": "Music Assistant’ı yeniden bul"
+      },
+      "revalidate_ma_link": {
+        "label": "Music Assistant bağlantısını yeniden denetle"
+      },
+      "review_buffer_settings": {
+        "label": "Tampon ayarlarını gözden geçir"
+      },
+      "review_diagnostics": {
+        "label": "Tanılamayı gözden geçir"
+      },
+      "review_latency_settings": {
+        "label": "Gecikme ayarlarını gözden geçir"
+      },
+      "review_pulse_latency": {
+        "label": "Ses gecikmesini gözden geçir"
+      },
+      "scan_devices": {
+        "label": "Hoparlörleri tara"
+      },
+      "start_pairing": {
+        "label": "Eşleştirmeyi başlat"
+      },
+      "test_ma_connection": {
+        "label": "Music Assistant bağlantısını sına"
+      },
+      "tune_latency_compensation": {
+        "label": "Gecikme telafisini ayarla"
+      },
+      "unmute_speaker": {
+        "label": "Hoparlörün sesini aç"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "Music Assistant’a ses bağlantısı kurulu değil."
+      },
+      "ma_disconnected": {
+        "message": "Köprü Music Assistant API’sine bağlı değil."
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant’ta bu hoparlör için henüz kuyruk yok."
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant yeniden bağlanıyor."
+      },
+      "no_sink": {
+        "message": "Yapılandırılmış ses çıkışı yok."
+      },
+      "not_paired": {
+        "message": "Hoparlör artık eşleştirilmiş değil. Eşleştirme moduna al ve yeniden eşleştir."
+      },
+      "reconnecting": {
+        "message": "Zaten bir yeniden bağlanma sürüyor."
+      },
+      "released": {
+        "message": "Bluetooth köprüden serbest bırakıldı. Önce hoparlörü geri al."
+      },
+      "stopping": {
+        "message": "Oynatıcı duruyor."
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "Bu hoparlör için hava sensörü çalışmıyor (bir Bluetooth hoparlör gerektirir)."
+      },
+      "air_not_locked": {
+        "text": "Hava sensörü başladığından beri bu hoparlörün akışına kilitlenemedi."
+      },
+      "air_unavailable": {
+        "text": "Bu hoparlör için hava sensörü çalışamıyor (hava sensörü durumuna bak)."
+      },
+      "cpu_budget": {
+        "text": "Bluetooth monitörünü okumak bütçesinden fazla CPU kullandı, bu yüzden hava sensörü köprü yeniden başlayana kadar kapalı."
+      },
+      "internal_error": {
+        "text": "Hava sensörü bir iç hatayla karşılaştı ve kendini kapattı (ayrıntılar günlükte)."
+      },
+      "module_suspend_on_idle": {
+        "text": "PulseAudio’nun module-suspend-on-idle modülü yüklü ve boştaki çıkışları duraklatıyor."
+      },
+      "monitor_error": {
+        "text": "Bluetooth monitör soketi başarısız oldu; köprü yeniden denemeye devam ediyor."
+      },
+      "no_cap_net_raw": {
+        "text": "Köprü Bluetooth monitör soketini açamıyor: NET_RAW yeteneği gerekiyor (kapsayıcının cap_add listesine NET_RAW ekle)."
+      },
+      "observed_suspend": {
+        "text": "Ana bilgisayar, hoparlör bağlı ve boştayken bu hoparlörün ses çıkışını duraklattı."
+      },
+      "playout_fallback": {
+        "text": "Çalma motoru eski oynatıcıya geri döndü, bu yüzden karşılaştırılacak bir zamanlama yok."
+      },
+      "sink_ambiguous": {
+        "text": "Birkaç aynı çıkış onunla eşleşiyor ve hiçbiri ayırt edilemiyor."
+      },
+      "sink_in_use": {
+        "text": "Başka bir oynatıcı zaten ona çalıyor."
+      },
+      "sink_unplugged": {
+        "text": "Bağlantısı kesildi veya yeniden adlandırıldı."
+      },
+      "unknown_suspend": {
+        "text": "Ana bilgisayar bu hoparlörün ses çıkışını duraklattı."
+      },
+      "unsupported_input": {
+        "text": "Akışın ses biçimi desteklenmiyor (hava sensörü 44,1 veya 48 kHz gerektirir)."
+      },
+      "unsupported_platform": {
+        "text": "Bu sistemde Bluetooth monitör soketi yok (yalnızca Linux)."
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber boştaki Bluetooth düğümlerini duraklatıyor (session.suspend-timeout-seconds)."
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "Oynatma etkin ama ses akışı gelmiyor",
+        "title": "Ses durdu"
+      },
+      "audio-streaming": {
+        "summary": "Ses akışı etkinleşti",
+        "title": "Ses akışı"
+      },
+      "bluetooth-connected": {
+        "summary": "Bluetooth hoparlör bağlandı",
+        "title": "Hoparlör bağlandı"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Bluetooth hoparlörün bağlantısı kesildi",
+        "title": "Hoparlörün bağlantısı kesildi"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Bluetooth yeniden bağlanması başarısız oldu",
+        "title": "Yeniden bağlanma başarısız"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Bluetooth yeniden bağlanması başarılı oldu",
+        "title": "Hoparlör yeniden bağlandı"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "Hoparlör {idle_minutes} dakika ses olmadan bekleme moduna geçti",
+        "title": "Bekleme"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "Hoparlör bekleme modundan uyanıyor",
+        "title": "Uyanıyor"
+      },
+      "bt-management-disabled": {
+        "summary": "Köprü bu hoparlörün Bluetooth’unu serbest bıraktı",
+        "title": "Bluetooth serbest bırakıldı"
+      },
+      "bt-management-reclaimed": {
+        "summary": "Hoparlör kendi kendine yeniden bağlandı, bu yüzden köprü Bluetooth’unu geri aldı",
+        "title": "Bluetooth geri alındı"
+      },
+      "daemon-connected": {
+        "summary": "Oynatıcı Music Assistant’a bağlandı",
+        "title": "Ses bağlantısı açık"
+      },
+      "daemon-disconnected": {
+        "summary": "Oynatıcının Music Assistant bağlantısı kesildi",
+        "title": "Ses bağlantısı kapalı"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "Bluetooth hoparlörün bağlantısı kesildi",
+        "title": "Bağlı değil"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Sendspin oynatıcısı bağlı değil",
+        "title": "Ses bağlantısı kapalı"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "Hata"
+      },
+      "health-foreign_server": {
+        "summary": "{host} {name} adresindeki Music Assistant’a bağlı, bu köprünün Music Assistant’ına değil",
+        "title": "Başka bir Music Assistant"
+      },
+      "health-idle": {
+        "summary": "Boşta",
+        "title": "Boşta"
+      },
+      "health-ma_reconnecting": {
+        "summary": "Music Assistant bağlantısı yenileniyor",
+        "title": "Music Assistant bağlantısı yenileniyor"
+      },
+      "health-output_missing": {
+        "summary": "Ses çıkışı yok",
+        "title": "Ses çıkışı yok"
+      },
+      "health-playback_without_audio": {
+        "summary": "Oynatma etkin ama ses akışı gelmiyor",
+        "title": "Ses durdu"
+      },
+      "health-reconnecting": {
+        "summary": "Bluetooth yeniden bağlanması sürüyor",
+        "title": "Yeniden bağlanıyor"
+      },
+      "health-released": {
+        "summary": "Bluetooth köprüden serbest bırakıldı",
+        "title": "Serbest bırakıldı"
+      },
+      "health-resyncing": {
+        "summary": "Ses yeniden eşitleniyor",
+        "title": "Yeniden eşitleniyor"
+      },
+      "health-sink_muted": {
+        "summary": "Ses çıkışı sistemde sessize alınmış",
+        "title": "Ses çıkışı sessize alındı"
+      },
+      "health-stopping": {
+        "summary": "Oynatıcı duruyor",
+        "title": "Durduruluyor"
+      },
+      "ma-monitor-stale": {
+        "summary": "Music Assistant bağlantısı kesildi: {error}",
+        "title": "Music Assistant bağlantısı kayboldu"
+      },
+      "ma-server-refused": {
+        "summary": "{host} adresindeki Music Assistant reddedildi: bu köprü {owner} öğesine ait",
+        "title": "Music Assistant reddetti"
+      },
+      "playback-started": {
+        "summary": "Oynatma başladı",
+        "title": "Oynatma başladı"
+      },
+      "playback-stopped": {
+        "summary": "Oynatma durdu",
+        "title": "Oynatma durdu"
+      },
+      "reanchoring": {
+        "summary": "Akış zamanlaması yeniden eşitleniyor",
+        "title": "Yeniden eşitleniyor"
+      },
+      "reconnecting": {
+        "summary": "Bluetooth yeniden bağlanması sürüyor",
+        "title": "Yeniden bağlanıyor"
+      },
+      "runtime-error-cleared": {
+        "summary": "Hata giderildi",
+        "title": "Hata giderildi"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "Hata"
+      },
+      "sink-lost": {
+        "summary": "Ses çıkışının bağlantısı kesildi; oynatıcı geçici bir çıkışta bekliyor",
+        "title": "Ses çıkışı kayboldu"
+      },
+      "sink-muted": {
+        "summary": "Ses çıkışı sistemde sessize alınmış",
+        "title": "Ses çıkışı sessize alındı"
+      },
+      "sink-rematched": {
+        "summary": "Ses çıkışı yeni bir adla bulundu: {sink}",
+        "title": "Ses çıkışı yeniden adlandırıldı"
+      },
+      "sink-restored": {
+        "summary": "Ses çıkışı geri döndü: {sink}",
+        "title": "Ses çıkışı geri döndü"
+      },
+      "sink-unmuted": {
+        "summary": "Ses çıkışının sesi açıldı",
+        "title": "Ses çıkışının sesi açıldı"
+      },
+      "startup-config": {
+        "summary": "Yapılandırma yükleniyor",
+        "title": "Yapılandırma"
+      },
+      "startup-devices": {
+        "summary": "Hoparlör listesi hazırlandı",
+        "title": "Hoparlörler"
+      },
+      "startup-failed": {
+        "summary": "Başlatma başarısız: {message}",
+        "title": "Başlatma başarısız"
+      },
+      "startup-idle": {
+        "summary": "Başlatma tetiklendi",
+        "title": "Başlatma"
+      },
+      "startup-integrations": {
+        "summary": "Music Assistant entegrasyonu başlatıldı",
+        "title": "Entegrasyonlar"
+      },
+      "startup-ready": {
+        "summary": "Başlatma tamamlandı",
+        "title": "Hazır"
+      },
+      "startup-runtime": {
+        "summary": "Çalışma zamanı yapılandırması hazırlandı",
+        "title": "Çalışma zamanı"
+      },
+      "startup-shutdown": {
+        "summary": "Köprü kapatılıyor",
+        "title": "Kapatma"
+      },
+      "startup-web": {
+        "summary": "Web arayüzü hazır",
+        "title": "Web arayüzü"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "İlk hoparlörü ekle"
+      },
+      "all_disabled": {
+        "label": "Tüm hoparlörler devre dışı"
+      },
+      "all_released": {
+        "label": "Tüm hoparlörler serbest bırakıldı"
+      },
+      "devices_ready": {
+        "label": "{ready}/{total} etkin hoparlör hazır"
+      },
+      "first_run": {
+        "label": "İlk çalıştırma"
+      },
+      "issues_attention": {
+        "label": "{count} sorun dikkat gerektiriyor"
+      },
+      "no_playable_speaker": {
+        "label": "Çalınabilir hoparlör yok"
+      },
+      "setup_progress": {
+        "label": "Kurulum %{percent}"
+      },
+      "startup": {
+        "label": "Başlatma %{percent}"
+      },
+      "startup_finalizing": {
+        "label": "Başlatma %90"
+      },
+      "waiting_for_setup": {
+        "label": "Kurulum bekleniyor"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "Bu hoparlör döngü modunda ama hava düzeltmesi çalışmıyor; ölçüm modundaki gibi çalıyor. {cause}",
+        "title": "{device}: hava düzeltmesi çalışmıyor"
+      },
+      "air_sensor_codec": {
+        "summary": "Hoparlör {codec} akışı yapıyor ve hava sensörü yalnızca SBC okuyabiliyor. PREFER_SBC_CODEC seçeneğini aç ve hoparlörü yeniden bağla. Oynatma etkilenmez.",
+        "title": "{device}: hava sensörü SBC kodeği gerektiriyor"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "Hoparlör, hava sensörünün desteklemediği SBC ayarlarını kullanıyor ({settings}). Oynatma etkilenmez.",
+        "title": "{device}: hava sensörü bu hoparlörün SBC akışını okuyamıyor"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} Oynatma etkilenmez. Bunu gizlemek için EXPERIMENTAL_AIR_SENSOR seçeneğini kapat (yeniden başlatma gerekir).",
+        "title": "{device}: hava sensörü kullanılamıyor | {count} hoparlörde hava sensörü kullanılamıyor"
+      },
+      "audio_unavailable": {
+        "summary": "Köprü şu anda ses sistemine ulaşamıyor.",
+        "summary_all_disabled": "Köprü şu anda ses sistemine ulaşamıyor. Bir hoparlörü etkinleştirmeden önce ses erişimini geri getir, yoksa oynatma kullanılamaz kalır.",
+        "summary_no_server": "PulseAudio veya PipeWire sunucusu bulunamadı.",
+        "summary_no_server_env": "PulseAudio veya PipeWire sunucusu bulunamadı: PULSE_SERVER ayarlanmamış.",
+        "summary_socket_missing": "Ses soketi {socket} yapılandırılmış ama ana bilgisayarda yok; hiçbir ses sunucusu onu oluşturmamış.",
+        "summary_socket_refused": "Ses soketi {socket} bağlanmış, ancak ses sunucusu bağlantıyı reddetti ({error}).",
+        "summary_socket_unreachable": "Ses soketi {socket} bağlanmış, ancak köprü onu açamıyor ({error}).",
+        "title": "Ses sistemi kullanılamıyor"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "Bu hoparlör, tekrarlanan eşleştirme hatalarından sonra devre dışı bırakıldı. Eşleştirme moduna al ve yeniden denemek için Etkinleştir’e tıkla.",
+        "summary_error": "{error}",
+        "title": "{device} otomatik olarak devre dışı bırakıldı: hiç eşleştirilmedi"
+      },
+      "auto_released": {
+        "summary": "Köprü, tekrarlanan bağlantı sorunlarından sonra bu hoparlörün Bluetooth’unu serbest bıraktı. | Köprünün yeniden yönetmesi için {devices} geri al.",
+        "summary_error": "{error}",
+        "title": "{device} otomatik olarak serbest bırakıldı | {count} hoparlör otomatik olarak serbest bırakıldı"
+      },
+      "bluetooth_unavailable": {
+        "summary": "Köprü hiç Bluetooth bağdaştırıcısı bulamadı. Bağdaştırıcı ayarlarını aç ve listeyi yenile.",
+        "summary_all_disabled": "Köprü şu anda bir Bluetooth bağdaştırıcısına ulaşamıyor. Bir hoparlörü etkinleştirmeden önce bağdaştırıcı erişimini geri getir, yoksa oynatma kullanılamaz kalır.",
+        "summary_daemon_down": "Ana bilgisayarda Bluetooth hizmeti (bluetoothd) çalışmıyor, bu yüzden köprü o başlayana kadar bağdaştırıcı görmez.",
+        "title": "Bluetooth bağdaştırıcısı kullanılamıyor"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} Böyle bir duraklamadan sonra hoparlör akışını yeniden başlatır ve onlarca milisaniye kayabilir. Köprü ana bilgisayarın ses ayarlarını asla değiştirmez; bunu durdurmak için ana bilgisayarın boştaki ses çıkışlarını duraklatmasını engelle: {docs}",
+        "title": "{device}: ana bilgisayar şarkılar arasında ses çıkışını duraklatıyor"
+      },
+      "config_dir_not_writable": {
+        "summary": "Köprü süreci (UID {uid}) {config_dir} dizinine yazamıyor. Music Assistant belirtecini kaydetme, parola değişiklikleri ve hoparlör ayarları başarısız olur. Düzeltme: {remediation}",
+        "title": "Köprü {config_dir} dizinine yazamıyor"
+      },
+      "config_migration_failed": {
+        "summary": "Köprü hoparlörler olmadan başladı. config.json olduğu gibi bırakıldı ve hâlâ eski dosya. Hata: {error}. Lütfen bir hata bildirimi gönder.",
+        "title": "Yapılandırma bu sürüme güncellenemedi"
+      },
+      "disconnected": {
+        "summary": "Hoparlörü aç veya yeniden bağla. | {devices} aç veya yeniden bağla.",
+        "summary_error": "{error}",
+        "title": "{device} bağlı değil | {count} hoparlör bağlı değil"
+      },
+      "duplicate_device": {
+        "summary": "Bu hoparlör Music Assistant’ta '{other_bridge}' olarak da kayıtlı. İki köprüde çalıştırmak yeniden bağlanma döngülerine yol açar. Bir köprüde devre dışı bırak veya diğerini durdur. | Bu hoparlörler başka bir köprüde de kayıtlı: {devices}. Yeniden bağlanma döngülerini önlemek için bir köprüde devre dışı bırak veya diğerini durdur.",
+        "title": "{device} başka bir köprüyle çakışabilir | {count} hoparlör başka bir köprüyle çakışabilir"
+      },
+      "latency": {
+        "summary": "Gecikme ayarlaması iyileştirilebilir.",
+        "summary_high_latency": "Gecikme telafisi ayarlanmış, ancak genel ses gecikmesi hâlâ yüksek.",
+        "summary_multi_no_delays": "Birkaç hoparlör var ama hiçbirinde henüz gecikme telafisi yok.",
+        "summary_repeated_resyncs": "Oynatma sırasında tekrarlanan yeniden eşitlemeler görüldü.",
+        "title": "Gecikme ayarlaması dikkat gerektiriyor"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant henüz hazır değil.",
+        "summary_no_credentials": "Music Assistant oturum bilgileri eksik.",
+        "summary_no_url": "Music Assistant adresi ayarlanmamış.",
+        "summary_not_connected": "Music Assistant oturum bilgileri kaydedilmiş, ancak köprü bağlı değil.",
+        "title": "Music Assistant dikkat gerektiriyor"
+      },
+      "missing_sink": {
+        "summary": "Hoparlör bağlı, ancak Bluetooth ses çıkışı henüz hazır değil. | {devices} için yeniden bağla veya ses kurulumunu denetle.",
+        "summary_error": "{error}",
+        "title": "{device} bağlı ama ses çıkışı hazır değil | {count} hoparlör bağlı ama ses çıkışı hazır değil"
+      },
+      "needs_attention": {
+        "summary": "Son olayları ve tanılamayı gözden geçir.",
+        "summary_daemon_disconnected": "Sendspin oynatıcısı bağlı değil.",
+        "summary_error": "{error}",
+        "summary_foreign_server": "{host} {name} adresindeki Music Assistant’a bağlı, bu köprünün Music Assistant’ına değil.",
+        "summary_playback_without_audio": "Oynatma etkin ama ses akışı gelmiyor.",
+        "summary_reconnecting": "Bluetooth yeniden bağlanması sürüyor.",
+        "summary_resyncing": "Ses yeniden eşitleniyor.",
+        "summary_sink_muted": "Ses çıkışı sistemde sessize alınmış.",
+        "summary_stopping": "Oynatıcı duruyor.",
+        "title": "{device} dikkat gerektiriyor"
+      },
+      "never_paired": {
+        "summary": "Bu hoparlör köprüye eklendi ama Bluetooth’ta hiç görünmedi. Eşleştirme moduna al ve Eşleştirmeyi başlat’a tıkla. | Bu hoparlörler eklendi ama Bluetooth’ta hiç görünmedi: {devices}. Onları eşleştirme moduna al ve eşleştirmeyi başlat.",
+        "summary_error": "{error}",
+        "title": "{device} hiç eşleştirilmedi | {count} hoparlör hiç eşleştirilmedi"
+      },
+      "output_missing": {
+        "summary": "{sink} çıkışı kullanılamıyor. {cause} Cihazı yeniden tak veya oynatıcı ayarlarından başka bir çıkış seç. O zamana kadar oynatıcı Music Assistant gruplarında sessiz kalır.",
+        "title": "{device}: ses çıkışı yok"
+      },
+      "output_muted": {
+        "summary": "{sink} çıkışı sistem miksersinde sessize alınmış, bu yüzden hiçbir şey duyulmuyor. Music Assistant’ın ses düzeyi bunu açamaz: sistem ses ayarlarından sesini aç. | Aynısı şunlar için de geçerli: {others}.",
+        "title": "{device}: ses çıkışı sessize alınmış | {count} ses çıkışı dikkat gerektiriyor"
+      },
+      "output_port_unavailable": {
+        "summary": "{sink} çıkışının etkin bağlantı noktası {port} bağlantı bildirmiyor. Kabloyu veya hoparlörleri denetle. | Aynısı şunlar için de geçerli: {others}.",
+        "title": "{device}: ses çıkışına hiçbir şey bağlı değil | {count} ses çıkışı dikkat gerektiriyor"
+      },
+      "output_volume_zero": {
+        "summary": "{sink} çıkışı sistem miksersinde %0’a ayarlanmış. Music Assistant’ın ses düzeyi bunu yükseltemez: sistem ses ayarlarından yükselt. | Aynısı şunlar için de geçerli: {others}.",
+        "title": "{device}: ses çıkışı düzeyi %0 | {count} ses çıkışı dikkat gerektiriyor"
+      },
+      "pa_socket_missing": {
+        "summary": "Ses soketi {socket} yapılandırılmış ama ana bilgisayarda henüz yok; hiçbir PipeWire veya PulseAudio sunucusu onu oluşturmamış. Bu, kullanıcı oturumu lingering’i etkin olmayan başsız bir ana bilgisayarın olağan belirtisidir.",
+        "title": "Ses sunucusuna ulaşılamıyor: kullanıcı lingering’ini etkinleştir"
+      },
+      "pa_socket_refused": {
+        "summary": "Ses soketi {socket} bağlanmış, ancak ana bilgisayarın PipeWire veya PulseAudio sunucusu bağlantıyı reddetti. Bu, kullanıcı oturumu lingering’i etkin olmayan başsız bir ana bilgisayarın olağan belirtisidir.",
+        "title": "Ses sunucusuna ulaşılamıyor: kullanıcı lingering’ini etkinleştir"
+      },
+      "repair_required": {
+        "summary": "Hoparlör artık eşleştirilmiş değil, bu yüzden yeniden bağlanma denemeleri sürekli başarısız oluyor. Eşleştirme moduna al ve yeniden eşleştir. | Bu hoparlörler artık eşleştirilmiş değil. Eşleştirme modundan {devices} yeniden eşleştir.",
+        "summary_error": "{error}",
+        "title": "{device} yeniden eşleştirilmeli | {count} hoparlör yeniden eşleştirilmeli"
+      },
+      "runtime_access": {
+        "summary": "Köprü, Bluetooth denetimi için ihtiyaç duyduğu ana bilgisayar D-Bus hizmetlerine ulaşamıyor. Tanılamayı aç ve kapsayıcının bağlama noktalarını ve ayrıcalıklarını denetle.",
+        "summary_all_disabled": "Köprü şu anda ihtiyaç duyduğu ana bilgisayar hizmetlerine ulaşamıyor. Bir hoparlörü etkinleştirmeden önce ana bilgisayar erişimini geri getir, yoksa oynatma kullanılamaz kalır.",
+        "title": "Köprü ihtiyaç duyduğu ana bilgisayar hizmetlerine ulaşamıyor"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter}, bağlanma denemesini gönderdi ve hoparlör bunu 'Limited Resources' ile reddetti. Samsung Q serisi ses çubukları gelen eşleştirmeleri başlatanın Bluetooth Cihaz Sınıfı’na göre filtreler. Ayarlar, Bluetooth bölümünde {adapter} için device_class değerini 0x00010c yap, sonra yeniden eşleştir.",
+        "summary_no_adapter": "Bluetooth bağdaştırıcısı bağlanma denemesini gönderdi ve hoparlör bunu 'Limited Resources' ile reddetti. Samsung Q serisi ses çubukları gelen eşleştirmeleri başlatanın Bluetooth Cihaz Sınıfı’na göre filtreler. Ayarlar, Bluetooth bölümünde bağdaştırıcı için device_class değerini 0x00010c yap, sonra yeniden eşleştir.",
+        "title": "{device}: eşleştirme hoparlörün Cihaz Sınıfı filtresi tarafından reddedildi"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "Oynatıcı bağlanıyor ama düzenli bir zamanlayıcıyla ({interval} sn) düşürülüyor veya kendisi düşüyor. Music Assistant sunucusunu ve bağlantı noktasını denetle, sonra Bağlantıyı sına’yı çalıştır.",
+        "title": "{device}: Sendspin oynatıcısı her {interval} sn’de çıkıyor | {count} hoparlör: Sendspin oynatıcısı sabit aralıkla çıkıyor"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} Köprü ayarlarındaki SENDSPIN_PORT değerinin Music Assistant’taki Sendspin bağlantı noktasıyla eşleştiğini denetle.",
+        "summary_error_only": "{error}",
+        "title": "{device} Sendspin sunucusuna ulaşamıyor"
+      },
+      "sendspin_url_malformed": {
+        "summary": "Music Assistant sunucusunu Ayarlar bölümünde düzenle. Yalnızca bir ana bilgisayar adı veya IP adresi olmalı; http://, bağlantı noktası veya yol içermemeli.",
+        "title": "{device}: Music Assistant sunucu adresi geçersiz | Music Assistant sunucu adresi geçersiz"
+      },
+      "setup_audio": {
+        "summary_no_server": "PulseAudio veya PipeWire sunucusu bulunamadı.",
+        "summary_no_server_env": "PulseAudio veya PipeWire sunucusu bulunamadı: PULSE_SERVER ayarlanmamış.",
+        "summary_no_sinks": "Ses sunucusuna ulaşılabiliyor, ancak henüz ses çıkışı yok.",
+        "summary_socket_missing": "Ses soketi {socket} yapılandırılmış ama ana bilgisayarda yok; hiçbir ses sunucusu onu oluşturmamış.",
+        "summary_socket_refused": "Ses soketi {socket} bağlanmış, ancak ses sunucusu bağlantıyı reddetti ({error}).",
+        "summary_socket_unreachable": "Ses soketi {socket} bağlanmış, ancak köprü onu açamıyor ({error}).",
+        "title": "Ses sistemini denetle"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "Ana bilgisayarda Bluetooth hizmeti (bluetoothd) çalışmıyor, bu yüzden köprü o başlayana kadar bağdaştırıcı görmez.",
+        "summary_no_controller": "Köprü hiç Bluetooth bağdaştırıcısı bulamadı.",
+        "summary_no_paired": "Köprü için kullanılabilir eşleştirilmiş Bluetooth hoparlör yok.",
+        "summary_no_paired_disabled": "Kullanılabilir eşleştirilmiş Bluetooth hoparlör yok ve kayıtlı hoparlör devre dışı.",
+        "title": "Bluetooth erişimini denetle"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "Köprü için kullanılabilir eşleştirilmiş Bluetooth hoparlör yok.",
+        "summary_no_paired_disabled": "Kullanılabilir eşleştirilmiş Bluetooth hoparlör yok ve kayıtlı hoparlör devre dışı.",
+        "title": "Bir hoparlör eşleştir veya bul"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "Yapılandırılmış tüm hoparlörler şu anda devre dışı.",
+        "summary_all_released": "Yapılandırılmış tüm hoparlörler şu anda köprüden serbest bırakılmış.",
+        "summary_all_released_auto": "Köprü, bağlantı hatalarından sonra yapılandırılmış tüm hoparlörleri otomatik olarak serbest bıraktı.",
+        "title": "Bir hoparlörü kullanılabilir yap"
+      },
+      "setup_latency": {
+        "summary_high_latency": "Gecikme telafisi ayarlanmış, ancak genel ses gecikmesi oldukça yüksek.",
+        "summary_multi_no_delays": "Birkaç hoparlör var ama hiçbirinde henüz gecikme telafisi yok.",
+        "title": "Gecikme ayarlamasını gözden geçir"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Music Assistant oturum bilgileri eksik.",
+        "summary_no_url": "Music Assistant adresi ayarlanmamış.",
+        "summary_not_connected": "Music Assistant oturum bilgileri kaydedilmiş, ancak köprü bağlı değil.",
+        "title": "Music Assistant’ı bağla"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "Köprü, Bluetooth denetimi için ihtiyaç duyduğu ana bilgisayar D-Bus hizmetlerine ulaşamıyor.",
+        "title": "Ana bilgisayara erişimi denetle"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "Bağlı bazı hoparlörlerin Bluetooth ses çıkışı hazır değil.",
+        "summary_none_configured": "Henüz yapılandırılmış oynatıcı yok.",
+        "summary_none_connected_bluetooth": "Oynatıcılar yapılandırılmış, ancak şu anda Bluetooth üzerinden bağlı hoparlör yok.",
+        "summary_none_connected_mixed": "Oynatıcılar yapılandırılmış, ancak Bluetooth üzerinden bağlı hoparlör ve mevcut ses çıkışı yok.",
+        "summary_none_connected_outputs": "Oynatıcılar yapılandırılmış, ancak hiçbirinin ses çıkışı mevcut değil.",
+        "title": "İlk hoparlörünü bağla"
+      },
+      "setup_step": {
+        "summary": "Kurulum kontrol listesinde hâlâ tamamlanmamış bir adım var.",
+        "title": "Kurulumu bitir"
+      },
+      "sink_system_muted": {
+        "summary": "Ses çıkışı sessize alınmış. Sesi açılana kadar hiçbir şey çalmaz. Bu, bir çökme veya yeniden başlatmadan sonra olabilir.",
+        "summary_error": "{error}",
+        "title": "{device}: ses çıkışı sistemde sessize alınmış"
+      },
+      "transport_down": {
+        "summary": "Hoparlör bağlı, ancak Sendspin oynatıcısı çalışmıyor. | Ses bağlantısını geri getirmek için {devices} yeniden bağla.",
+        "summary_error": "{error}",
+        "title": "{device} ses bağlantısını kaybetti | {count} hoparlör ses bağlantısını kaybetti"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "Hoparlör zaten bekleme modunda."
+      },
+      "bad_request": {
+        "detail": "İstek geçerli değildi."
+      },
+      "bluetooth_busy": {
+        "detail": "Bluetooth başka bir işlemle meşgul. Birazdan yeniden dene."
+      },
+      "conflict": {
+        "detail": "Bu, mevcut durumla çakışıyor."
+      },
+      "forbidden": {
+        "detail": "Bunu yapma iznin yok."
+      },
+      "http_error": {
+        "detail": "İstek başarısız oldu."
+      },
+      "internal_error": {
+        "detail": "Köprü bir iç hatayla karşılaştı."
+      },
+      "invalid_credentials": {
+        "detail": "Oturum bilgileri doğru değil."
+      },
+      "invalid_mac": {
+        "detail": "Bluetooth adresi geçerli değil."
+      },
+      "invalid_request": {
+        "detail": "Bazı değerler geçerli değil."
+      },
+      "job_in_progress": {
+        "detail": "Aynı işlem zaten sürüyor."
+      },
+      "login_failed": {
+        "detail": "Oturum açma başarısız oldu."
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant henüz ayarlanmamış."
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant kullanılamıyor."
+      },
+      "ma_unreachable": {
+        "detail": "Köprü Music Assistant’a ulaşamıyor."
+      },
+      "method_not_allowed": {
+        "detail": "Bu işlem burada kullanılamıyor."
+      },
+      "network_error": {
+        "detail": "Köprüye ulaşılamıyor. Bağlantını denetle."
+      },
+      "no_bluetooth": {
+        "detail": "Kullanılabilir Bluetooth bağdaştırıcısı yok."
+      },
+      "not_connected": {
+        "detail": "Hoparlör bağlı değil."
+      },
+      "not_found": {
+        "detail": "Bulunamadı."
+      },
+      "not_in_standby": {
+        "detail": "Hoparlör bekleme modunda değil."
+      },
+      "not_ready": {
+        "detail": "Henüz hazır değil. Birazdan yeniden dene."
+      },
+      "pairing_disabled": {
+        "detail": "Eşleştirme kapalı."
+      },
+      "pairing_failed": {
+        "detail": "Eşleştirme başarısız oldu."
+      },
+      "payload_too_large": {
+        "detail": "Veri çok büyük."
+      },
+      "scan_in_progress": {
+        "detail": "Zaten bir tarama sürüyor."
+      },
+      "session_expired": {
+        "detail": "Oturumunun süresi doldu. Yeniden oturum aç."
+      },
+      "timeout": {
+        "detail": "İşlem çok uzun sürdü."
+      },
+      "too_many_requests": {
+        "detail": "Çok fazla istek. Biraz bekle ve yeniden dene."
+      },
+      "unauthorized": {
+        "detail": "Sürdürmek için oturum aç."
+      },
+      "unavailable": {
+        "detail": "Şu anda kullanılamıyor."
+      },
+      "unknown_check": {
+        "detail": "Böyle bir denetim yok."
+      },
+      "unknown_device": {
+        "detail": "Bu hoparlör köprü tarafından bilinmiyor."
+      },
+      "unknown_job": {
+        "detail": "Bu işlem bilinmiyor (süresi dolmuş olabilir)."
+      },
+      "upstream_error": {
+        "detail": "Köprünün bağlı olduğu bir hizmet hata yanıtı verdi."
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "başka bir sunucu"
+      },
+      "attempt": {
+        "open": "Yeniden bağlanma denemesi {attempt} sürüyor.",
+        "with_limit": "Yeniden bağlanma denemesi {attempt}/{max}. Köprünün hoparlörü serbest bırakmasına {remaining} deneme kaldı."
+      },
+      "list": {
+        "more": "{first}, {second} ve {count} tane daha"
+      },
+      "recovered": {
+        "text": "(kurtarıldı)"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "Köprü başlangıcı"
+      }
+    }
+  },
+  "consequence": {
+    "stopsPlayback": "Şunlarda oynatma durur: {names}.",
+    "disconnects": "Şunlarda Bluetooth bağlantısı kesilir: {names}.",
+    "leavesMa": "Oynatıcı Music Assistant’tan kaybolur: {names}.",
+    "unpairs": "Bluetooth eşleşmesi kaldırılır. Yeniden kullanmak için yeni bir hoparlör olarak ekle.",
+    "adapterDisconnects": "Üzerindeki tüm hoparlörlerin bağlantısı kesilir ve yeniden bağlanana kadar oynatma durur: {names}.",
+    "restartMinute": "Köprü yeniden başlarken tüm hoparlörlerde oynatma yaklaşık bir dakika durur.",
+    "playingNow": "Şu anda çalan: {names}.",
+    "replacesConfig": "Tüm ayarlar ve hoparlörler bu dosyanın içeriğiyle değiştirilir.",
+    "noUndo": "Bu işlem geri alınamaz.",
+    "rollback": "Geri dönmek için önceki sürümü kur.",
+    "noReconnect": "Köprü şunları yönetmeyi bırakır: {names}. Geri alınana kadar yeniden bağlanmazlar.",
+    "wakeFromMenu": "Menülerinden uyandır.",
+    "downloadFirst": "Önce mevcut yapılandırmayı indir",
+    "repairs": "Bluetooth eşleşmesi kaldırılıp yeniden oluşturulur; hoparlörün eşleştirme modunda olması gerekebilir."
+  },
+  "longOp": {
+    "elapsed": "{seconds} sn",
+    "cancel": "İptal",
+    "cancelling": "İptal ediliyor…",
+    "retry": "Yeniden dene"
+  }
+}

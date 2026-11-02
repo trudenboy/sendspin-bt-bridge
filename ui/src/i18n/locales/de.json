@@ -1,0 +1,2970 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "bugReport": "Fehler melden",
+    "docs": "Dokumentation",
+    "github": "GitHub-Repository",
+    "help": "Hilfe",
+    "preferences": "Einstellungen",
+    "display": "Darstellung",
+    "language": "Sprache",
+    "theme": "Design",
+    "themes": {
+      "auto": "Automatisch",
+      "light": "Hell",
+      "dark": "Dunkel"
+    },
+    "openDiagnostics": "Diagnose öffnen",
+    "sponsor": "Unterstützen",
+    "sponsorHint": "Unterstütze das Projekt",
+    "bridgeName": "Diese Bridge",
+    "runtimeRow": "Laufzeit der Bridge",
+    "hostname": "Hostname",
+    "ipAddress": "IP-Adresse",
+    "upFor": "läuft seit {uptime}",
+    "speakersConnected": "{n}/{total} Bluetooth verbunden",
+    "runtime": {
+      "ha_addon": "Home Assistant Add-on",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Eigenständig"
+    }
+  },
+  "status": {
+    "kind": {
+      "audio_link": "Audiostrecke",
+      "ma_account": "Music Assistant-Konto",
+      "bluetooth": "Bluetooth-Verbindung"
+    },
+    "hint": {
+      "audio_link": "Die Audiostrecke ist der Stream zwischen diesem Player und Music Assistant",
+      "ma_account": "Das Music Assistant-Konto ist die Anmeldung der Bridge bei der Music Assistant-API",
+      "bluetooth": "Die Bluetooth-Verbindung ist die Verbindung zwischen der Bridge und dem Lautsprecher"
+    },
+    "audio_link": {
+      "streaming": "Wiedergabe",
+      "connected": "Aktiv",
+      "foreign": "Anderer Server",
+      "disconnected": "Inaktiv",
+      "unavailable": "Nicht verfügbar"
+    },
+    "ma_account": {
+      "signed_in": "Angemeldet",
+      "signed_out": "Abgemeldet",
+      "not_configured": "Nicht eingerichtet"
+    },
+    "bluetooth": {
+      "connected": "Verbunden",
+      "connecting": "Verbinde…",
+      "disconnected": "Getrennt",
+      "standby": "Standby",
+      "released": "Freigegeben",
+      "disabled": "Deaktiviert",
+      "not_paired": "Nicht gekoppelt"
+    },
+    "reason": {
+      "reconnecting": "Die Bridge verbindet neu",
+      "user": "Von dir freigegeben",
+      "auto": "Nach wiederholten Verbindungsproblemen automatisch freigegeben",
+      "foreign_server": "Der Player ist einem Music Assistant zugeordnet, der nicht zu dieser Bridge gehört",
+      "bluetooth_down": "Warten auf die Bluetooth-Verbindung",
+      "standby": "Der Lautsprecher ist im Standby",
+      "released": "Der Lautsprecher ist freigegeben",
+      "disabled": "Der Player ist deaktiviert",
+      "unreachable_or_rejected": "Music Assistant ist nicht erreichbar oder hat die Anmeldung nicht akzeptiert"
+    },
+    "bluetoothSummary": "{n}/{total} Bluetooth verbunden",
+    "sectionTitle": "Verbindungsstatus",
+    "accountRow": "Music Assistant-Konto",
+    "speakersTitle": "Lautsprecher"
+  },
+  "device": {
+    "status": {
+      "streaming": "Wiedergabe",
+      "ready": "Bereit",
+      "connecting": "Verbinde…",
+      "error": "Fehler",
+      "offline": "Offline",
+      "standby": "Standby",
+      "idle": "Inaktiv",
+      "degraded": "Problem",
+      "recovering": "Verbinde neu…",
+      "transitioning": "Verbinde…",
+      "disabled": "Deaktiviert",
+      "released": "Freigegeben",
+      "output_missing": "Ausgang fehlt",
+      "buffering": "Puffern",
+      "sink_muted": "Vom System stummgeschaltet",
+      "stopping": "Wird gestoppt",
+      "reconnecting": "Verbinde neu",
+      "autoReleased": "Automatisch freigegeben",
+      "autoReleasedTitle": "Die Bridge hat diesen Lautsprecher nach wiederholten Verbindungsproblemen freigegeben. Hol ihn zurück, um es erneut zu versuchen.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "Seit {time} im Standby"
+    },
+    "actions": {
+      "reconnect": "Neu verbinden",
+      "disconnect": "Trennen",
+      "remove": "Entfernen",
+      "wake": "Aufwecken",
+      "standby": "Standby",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "details": "Details",
+      "enableFailed": "Der Player konnte nicht aktiviert oder deaktiviert werden",
+      "volumeFailed": "Die Lautstärke von {name} konnte nicht geändert werden",
+      "muteFailed": "Stummschalten von {name} fehlgeschlagen",
+      "releaseFailed": "{name} konnte nicht freigegeben werden",
+      "claimFailed": "{name} konnte nicht zurückgeholt werden",
+      "forget": "Bluetooth-Kopplung entfernen",
+      "forgetConfirm": "Bluetooth-Kopplung entfernen? Der Lautsprecher muss erneut gekoppelt werden.",
+      "repair": "Erneut koppeln",
+      "claim": "Diese Bridge als Quelle verwenden",
+      "reconnectFailed": "Neuverbindung fehlgeschlagen",
+      "forgetTitle": "{name} entfernen?",
+      "more": "Weitere Aktionen für {name}"
+    },
+    "battery": "Akku {level}%",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Lokales Audio",
+      "usb_audio": "USB-Audio",
+      "virtual_sink": "Virtueller Sink",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "select": "{name} auswählen",
+    "chips": {
+      "sync": {
+        "label": "Sync",
+        "reanchoring": "Neusynchronisierung",
+        "errorMs": "{ms} ms",
+        "title": "Wiedergabe synchron zur Gruppe",
+        "reanchoringTitle": "Stream-Timing wird neu synchronisiert",
+        "count": "×{count}",
+        "countTitle": "Neusynchronisierungen: {count} in dieser Sitzung · {m5} in 5 Min. · {m30} in 30 Min.",
+        "playout": "Playout",
+        "playoutTitle": "Gemessener Playout-Fehler am Lautsprecherausgang",
+        "settling": "Einschwingen",
+        "settlingTitle": "Der Sync schwingt noch ein; der Fehler wird gemessen angezeigt und gilt spätestens nach {s} s als stabil",
+        "jumpsTitle": "Playout-Sprünge: {count} in dieser Sitzung"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "Signal {value} Δ dB gegenüber dem idealen Empfangsbereich des Adapters",
+        "tier": {
+          "excellent": "Ausgezeichnetes Signal",
+          "strong": "Starkes Signal",
+          "fair": "Mäßiges Signal",
+          "poor": "Schwaches Signal",
+          "bad": "Schlechtes Signal",
+          "stale": "Signalwert ist veraltet"
+        },
+        "staleTitle": "Letzter Signalwert ({value} Δ dB) ist älter als 30 s"
+      },
+      "group": {
+        "title": "Music Assistant-Gruppe {name}",
+        "external": "{n} weitere auf anderen Bridges",
+        "openAction": "In Music Assistant öffnen"
+      },
+      "adapter": {
+        "title": "Adapter {name} ({hci}) · {state}",
+        "open": "Adapter {name} in der Konfiguration öffnen",
+        "state": {
+          "connected": "Bluetooth verbunden",
+          "disconnected": "Bluetooth getrennt",
+          "reconnecting": "Bluetooth wird neu verbunden",
+          "released": "Bluetooth freigegeben",
+          "autoReleased": "Bluetooth nach Verbindungsproblemen automatisch freigegeben",
+          "disabled": "Lautsprecher deaktiviert"
+        }
+      },
+      "output": {
+        "title": "Audioausgang {name}"
+      },
+      "transfer": {
+        "ready": "Raumwechsel",
+        "notReady": "Nicht bereit",
+        "readyTitle": "Bereit für den Raumwechsel",
+        "notReadyTitle": "Raumwechsel nicht möglich: {reason}",
+        "reasons": {
+          "ready": "bereit",
+          "disabled": "Lautsprecher deaktiviert",
+          "bt_management_disabled": "Bluetooth freigegeben",
+          "stopping": "wird gestoppt",
+          "reconnecting": "wird neu verbunden",
+          "music_assistant_reconnecting": "Music Assistant verbindet neu",
+          "reanchoring": "Neusynchronisierung läuft",
+          "output_missing": "Ausgang fehlt",
+          "daemon_unavailable": "Player läuft nicht",
+          "bluetooth_disconnected": "Bluetooth getrennt",
+          "music_assistant_disconnected": "Music Assistant getrennt",
+          "sink_missing": "kein Audio-Sink"
+        }
+      },
+      "blocked": {
+        "why": "Warum?",
+        "needs": "Benötigt: {list}",
+        "openDiagnostics": "Diagnose öffnen",
+        "sinkMutedReason": "Der Audioausgang ist auf Systemebene stummgeschaltet, daher wird kein Ton ausgegeben. Hebe die Stummschaltung in der Lautstärkeregelung auf.",
+        "title": {
+          "sink_muted": "Vom System stummgeschaltet",
+          "reconnect": "Neuverbindung nicht verfügbar",
+          "toggle_bt_management": "Freigeben nicht verfügbar",
+          "play_pause": "Wiedergabe nicht verfügbar",
+          "volume": "Lautstärke nicht verfügbar",
+          "queue_control": "Warteschlangen-Steuerung nicht verfügbar"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth von dieser Bridge verwaltet",
+          "bluetooth_paired": "Bluetooth-Kopplung",
+          "reconnect_idle": "Neuverbindung muss abgeschlossen sein",
+          "device_not_stopping": "Player-Stopp muss abgeschlossen sein",
+          "sendspin_connected": "Sendspin-Verbindung",
+          "audio_sink": "Ein Audio-Sink",
+          "ma_connected": "Music Assistant-Verbindung",
+          "ma_player_registered": "Player in Music Assistant registriert"
+        },
+        "summary": "Einige Steuerungen sind nicht verfügbar"
+      },
+      "backend": {
+        "bluetooth": "Bluetooth-Lautsprecher",
+        "output": "Audioausgang"
+      },
+      "server": {
+        "title": "Audiostrecke zu Music Assistant {where}",
+        "foreign": "Die Audiostrecke führt zu {where} – nicht zum Music Assistant dieser Bridge"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 Min.",
+      "minutes": "{n} Min.",
+      "hours": "{h} Std. {m} Min."
+    }
+  },
+  "config": {
+    "ma": "Music Assistant",
+    "save": "Speichern",
+    "adapterPowered": "Eingeschaltet",
+    "adapterOff": "Aus",
+    "noAdapters": "Keine Adapter erkannt",
+    "passwordMismatch": "Passwörter stimmen nicht überein",
+    "invalidJson": "Ungültiges JSON"
+  },
+  "diagnostics": {
+    "tabs": {
+      "logs": "Logs",
+      "system": "System",
+      "overview": "Übersicht"
+    },
+    "health": {
+      "title": "Zustand der Bridge",
+      "healthy": "Gesund",
+      "degraded": "Beeinträchtigt",
+      "error": "Fehler",
+      "unknown": "Unbekannt",
+      "audio": "Audio-Backend",
+      "bluetooth": "BT-Controller",
+      "dbus": "D-Bus",
+      "memory": "Arbeitsspeicher",
+      "check": {
+        "ok": "OK",
+        "warning": "Achtung",
+        "error": "Problem",
+        "unknown": "Unbekannt"
+      }
+    },
+    "events": {
+      "loadMore": "Mehr laden",
+      "empty": "Keine Ereignisse",
+      "emptyDesc": "Es wurden noch keine Ereignisse aufgezeichnet."
+    },
+    "recovery": {
+      "title": "Hilfe zur Wiederherstellung",
+      "runChecks": "Prüfungen starten",
+      "noIssues": "Alles in Ordnung",
+      "noIssuesDesc": "Keine Probleme erkannt. Alle Systeme laufen normal."
+    },
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "copyFailed": "Kopieren fehlgeschlagen",
+    "downloadCsv": "CSV herunterladen",
+    "audioSink": "Audio-Sink",
+    "codec": "Codec",
+    "sampleRate": "Abtastrate",
+    "reanchorCount": "Neusynchronisierungen",
+    "logs": {
+      "title": "Anwendungs-Logs",
+      "logLevel": "Log-Level",
+      "autoScroll": "Automatisch scrollen",
+      "refresh": "Aktualisieren",
+      "download": "Herunterladen",
+      "apply": "Übernehmen",
+      "search": "Logs durchsuchen…",
+      "showingLines": "{shown} von {total} Zeilen werden angezeigt",
+      "noLogs": "Keine Log-Einträge",
+      "loadFailed": "Logs konnten nicht geladen werden.",
+      "levelApplied": "Log-Level jetzt: {level}",
+      "levelFailed": "Log-Level konnte nicht geändert werden",
+      "copyLine": "Zeile kopieren"
+    },
+    "timeline": {
+      "title": "Letzte Ereignisse"
+    }
+  },
+  "ma": {
+    "login": {
+      "title": "Mit Music Assistant verbinden",
+      "step1": "Schritt 1: Serveradresse",
+      "step2": "Schritt 2: Mit deinem Music Assistant-Konto anmelden",
+      "serverUrl": "Server-URL",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Automatisch suchen",
+      "token": "Token",
+      "submit": "Verbinden",
+      "failed": "Verbindung fehlgeschlagen. Prüfe deine Zugangsdaten.",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "withHa": "Mit Home Assistant anmelden",
+      "connected": "Bei Music Assistant unter {url} angemeldet",
+      "useToken": "Stattdessen einen Token verwenden",
+      "maToken": "Music Assistant-Token",
+      "maTokenHint": "Erstelle in Music Assistant unter Einstellungen → Profil einen langlebigen Token und füge ihn hier ein.",
+      "tokenSubmit": "Mit Token verbinden",
+      "tokenFailed": "Music Assistant hat den Token nicht akzeptiert.",
+      "noServers": "Im Netzwerk wurde kein Music Assistant-Server gefunden. Gib oben seine Adresse ein."
+    },
+    "groups": {
+      "members": "Mitglieder",
+      "empty": "Keine Sync-Gruppen",
+      "emptyDesc": "Keine Music Assistant-Sync-Gruppen gefunden. Suche nach Gruppen, um zu starten.",
+      "discover": "Gruppen suchen",
+      "create": "Gruppe in Music Assistant erstellen"
+    },
+    "nowPlaying": {
+      "artwork": "Albumcover",
+      "artworkPreview": "Cover-Vorschau",
+      "artworkClose": "Schließen",
+      "noTrack": "Nichts wird wiedergegeben",
+      "prev": "Vorheriger Titel",
+      "playPause": "Wiedergabe / Pause",
+      "next": "Nächster Titel",
+      "notPlaying": "Keine Wiedergabe – zuletzt gespielt"
+    },
+    "autoConnecting": "Verbinde mit Music Assistant…",
+    "openInMA": "In Music Assistant öffnen",
+    "silentAuthFailed": "Automatische Verbindung fehlgeschlagen, bitte melde dich manuell an"
+  },
+  "login": {
+    "title": "Anmelden",
+    "password": "Passwort",
+    "passwordPlaceholder": "Passwort eingeben",
+    "submit": "Anmelden",
+    "failed": "Falsches Passwort. Bitte versuche es erneut.",
+    "username": "Benutzername",
+    "code": "Authentifizierungscode",
+    "codePrompt": "Gib den Code von {module} ein",
+    "codeSubmit": "Bestätigen",
+    "method": {
+      "password": "Bridge-Passwort",
+      "ma": "Music Assistant-Konto",
+      "ha_via_ma": "Home Assistant-Konto",
+      "ha": "Home Assistant-Konto"
+    }
+  },
+  "devices": {
+    "addDevice": "Lautsprecher hinzufügen",
+    "empty": {
+      "title": "Noch keine Player",
+      "description": "Nach Bluetooth-Lautsprechern suchen oder einen Player manuell hinzufügen."
+    },
+    "viewGrid": "Rasteransicht",
+    "viewList": "Listenansicht",
+    "allAdapters": "Alle Adapter",
+    "allGroups": "Alle Gruppen",
+    "selected": "{count} von {total} ausgewählt",
+    "noneSelected": "0 ausgewählt",
+    "selectAll": "Alle auswählen",
+    "groupVolume": "Gruppenlautstärke",
+    "muteAll": "Alle stummschalten",
+    "pauseAll": "Alle pausieren",
+    "reconnectAll": "Alle neu verbinden",
+    "list": {
+      "name": "Name",
+      "status": "Status",
+      "volume": "Lautstärke",
+      "transport": "Steuerung",
+      "adapter": "Adapter",
+      "actions": "Aktionen",
+      "expand": "Details für {name} anzeigen",
+      "collapse": "Details für {name} ausblenden",
+      "quickActions": "Schnellaktionen"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Energiesparen",
+        "title": "Energiesparen für {count} von {total} ausgewählte aktivieren (Bluetooth bleibt verbunden)"
+      },
+      "standby": {
+        "label": "Standby",
+        "title": "Bluetooth für {count} von {total} ausgewählte trennen, um den Akku der Lautsprecher zu schonen",
+        "confirmTitle": "{count} Lautsprecher in den Standby versetzen?",
+        "confirmMessage": "Bluetooth wird getrennt und die Wiedergabe stoppt bei: {names}. Wecke sie über ihr Menü."
+      },
+      "release": {
+        "label": "Freigeben",
+        "title": "{count} von {total} ausgewählte freigeben, damit andere Geräte sie nutzen können",
+        "confirmTitle": "{count} Lautsprecher freigeben?",
+        "confirmMessage": "Die Bridge verwaltet nicht mehr: {names}. Sie verbinden sich erst wieder, wenn du sie zurückholst."
+      },
+      "failed": "{action} fehlgeschlagen für: {names}",
+      "enable": {
+        "label": "Aktivieren",
+        "title": "{count} von {total} ausgewählte aktivieren (deaktivierte Player)"
+      },
+      "remove": {
+        "label": "Entfernen",
+        "title": "{count} von {total} ausgewählte entfernen (deaktivierte Player)",
+        "confirmTitle": "{count} Player entfernen?",
+        "confirmMessage": "Die Player verschwinden aus Music Assistant und die Bluetooth-Kopplungen werden entfernt: {names}."
+      }
+    },
+    "sort": {
+      "label": "Sortieren nach",
+      "activity": "Aktivität",
+      "name": "Name",
+      "status": "Status"
+    },
+    "backendFilter": {
+      "label": "Player-Typ",
+      "all": "Alle Player",
+      "bluetooth": "Bluetooth-Lautsprecher",
+      "output": "Audioausgänge"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "overview": "Übersicht",
+      "config": "Einstellungen",
+      "timing": "Timing",
+      "history": "Verlauf"
+    },
+    "status": {
+      "playerState": "Status",
+      "audioSink": "Audio-Sink",
+      "codec": "Codec",
+      "reportedDelay": "Gemeldete Latenz",
+      "reportedDelayHint": "Latenz, die der Lautsprecher über Bluetooth meldet (A2DP Delay Reporting). Richtwert: vom Lautsprecher gemeldet, nicht gemessen.",
+      "sampleRate": "Abtastrate"
+    },
+    "config": {
+      "name": "Name",
+      "mac": "MAC-Adresse",
+      "adapter": "Adapter",
+      "port": "Listen-Port",
+      "delay": "Latenzkompensation des Lautsprechers",
+      "enabled": "Aktiviert",
+      "save": "Speichern",
+      "saveFailed": "Konfiguration konnte nicht gespeichert werden",
+      "enabledHelp": "Ein deaktivierter Lautsprecher behält seine Einstellungen, erhält aber keinen Player.",
+      "playoutSync": "Playout-Sync",
+      "playoutSyncHelp": "Deaktiviere dies, um diesen Lautsprecher wie vor dem Playout-Sync zu betreiben: reiner Audioausgang, ohne Playout-Messung.",
+      "notConfigured": "Dieser Lautsprecher ist nicht in der Konfiguration."
+    },
+    "events": {
+      "empty": "Keine Ereignisse aufgezeichnet"
+    },
+    "signal": {
+      "port": "Port {port}",
+      "corrections": "{n} Korrektur | {n} Korrekturen",
+      "subprocess": "Player-Prozess"
+    },
+    "actions": {
+      "more": "Weitere Aktionen",
+      "reconnect": "Neu verbinden",
+      "reconnectDone": "Verbindung wird neu aufgebaut",
+      "repair": "Erneut koppeln",
+      "repairDone": "Kopplung läuft",
+      "pairing": "Von Music Assistant koppeln lassen",
+      "pairingDone": "Music Assistant kann eine Weile koppeln",
+      "unmute": "Audioausgang wieder einschalten",
+      "unmuteDone": "Stummschaltung des Audioausgangs aufgehoben",
+      "release": "Energiesparen einschalten",
+      "releaseDone": "Energiesparen ist an",
+      "resume": "Energiesparen ausschalten",
+      "resumeDone": "Energiesparen ist aus"
+    },
+    "server": {
+      "title": "Music Assistant-Server",
+      "name": "Name",
+      "host": "Adresse",
+      "id": "Server-ID",
+      "url": "URL",
+      "foreign": "Die Audiostrecke führt zu Music Assistant auf {where}, nicht zum Music Assistant dieser Bridge. Ein anderer Server hat diesen Player zuerst übernommen; verbinde den Player neu, damit der Music Assistant dieser Bridge ihn übernehmen kann.",
+      "refusedTitle": "Abgewiesen",
+      "refusedCount": "{n} Versuche"
+    },
+    "troubleshoot": {
+      "label": "Fehlerbehebung"
+    },
+    "overview": {
+      "audioPath": "Audiopfad",
+      "events": "Letzte Ereignisse",
+      "allEvents": "Alle Ereignisse →"
+    }
+  },
+  "volume": {
+    "mute": "Stummschalten",
+    "unmute": "Stummschaltung aufheben",
+    "label": "Lautstärke von {name}"
+  },
+  "bluetooth": {
+    "scan": {
+      "scanning": "Suche…",
+      "pair": "Koppeln",
+      "unknown": "Unbekanntes Gerät",
+      "noDevices": "Keine Geräte gefunden",
+      "adapter": "Adapter",
+      "add": "Hinzufügen",
+      "added": "Auf dieser Bridge",
+      "pairFailed": "Kopplung fehlgeschlagen: {reason}",
+      "quiesce": "Andere Lautsprecher an diesem Adapter während der Kopplung vorübergehend trennen",
+      "noIo": "Ohne PIN-Abfrage koppeln (Just Works) – für Lautsprecher, die die Kopplung abbrechen",
+      "hfp": "Auch das Freisprechprofil (Anrufe) erlauben"
+    },
+    "audioOnly": "Nur Audio",
+    "release": "Lautsprecher freigeben",
+    "reclaim": "Lautsprecher zurückholen",
+    "released": "Freigegeben"
+  },
+  "common": {
+    "loading": "Wird geladen…",
+    "error": "Fehler",
+    "retry": "Erneut versuchen",
+    "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "close": "Schließen",
+    "search": "Suchen",
+    "noResults": "Keine Ergebnisse",
+    "no": "Nein"
+  },
+  "update": {
+    "title": "Software-Aktualisierung",
+    "available": "Aktualisierung verfügbar",
+    "badge": "Aktualisierung v{version}",
+    "checkNow": "Nach Aktualisierungen suchen",
+    "upToDate": "Du verwendest die neueste Version",
+    "versionCompare": "Versionsaktualisierung",
+    "instructions": "Anleitung zur Aktualisierung",
+    "releaseNotes": "Versionshinweise",
+    "recheck": "Erneut prüfen",
+    "viewRelease": "Versionshinweise",
+    "applyNow": "Jetzt aktualisieren",
+    "confirmTitle": "Auf v{version} aktualisieren?",
+    "applyStarted": "Aktualisierung gestartet – die Bridge startet in Kürze neu",
+    "openHa": "In HA aktualisieren",
+    "copyCommand": "Befehl kopieren",
+    "checking": "Suche nach Aktualisierungen…",
+    "channel": "Kanal",
+    "checkChannel": "Prüfen"
+  },
+  "transport": {
+    "play": "Wiedergabe",
+    "pause": "Pause",
+    "next": "Nächster Titel",
+    "previous": "Vorheriger Titel",
+    "failed": "Transportbefehl fehlgeschlagen",
+    "position": "Titelposition",
+    "shuffleOn": "Zufallswiedergabe an – ausschalten",
+    "shuffleOff": "Zufallswiedergabe aus – einschalten",
+    "repeat": {
+      "off": "Wiederholen aus – alles wiederholen",
+      "all": "Alles wiederholen – einen Titel wiederholen",
+      "one": "Einen Titel wiederholen – ausschalten"
+    },
+    "pending": "Warten auf Bestätigung von Music Assistant",
+    "queue": "Warteschlangen-Steuerung"
+  },
+  "adapter": {
+    "turnOff": "Ausschalten",
+    "turnOn": "Einschalten",
+    "confirmOffTitle": "Adapter {adapter} ausschalten?",
+    "confirmRebootTitle": "Adapter {adapter} neu starten?",
+    "reboot": "Neu starten",
+    "powerToggled": "Adapterstrom umgeschaltet",
+    "powerFailed": "Adapterstrom konnte nicht umgeschaltet werden",
+    "rebooted": "Adapter neu gestartet",
+    "rebootFailed": "Adapter konnte nicht neu gestartet werden",
+    "confirmNone": "Derzeit verwendet ihn kein Lautsprecher.",
+    "openInHardware": "In der Hardware öffnen"
+  },
+  "hardware": {
+    "subtitle": "Die Bluetooth-Adapter, die mit ihnen gekoppelten Geräte und das Audio dieses Hosts.",
+    "refresh": "Aktualisieren",
+    "stale": "Daten sind möglicherweise veraltet",
+    "controllers": "Bluetooth-Controller",
+    "devices": "Bluetooth-Geräte",
+    "noControllers": "Keine Bluetooth-Controller gefunden",
+    "noDevices": "Keine Bluetooth-Geräte gekoppelt",
+    "deviceCount": "Geräte: {n}",
+    "powered": "An",
+    "poweredOff": "Aus",
+    "connected": "Verbunden",
+    "paired": "Gekoppelt",
+    "trusted": "Vertrauenswürdig",
+    "roleOutput": "Gibt Audio aus",
+    "roleInput": "Empfängt Audio",
+    "roleEvidence": "Hinweis: {evidence}",
+    "battery": "Akku: {pct}%",
+    "rssi": "{db} dB",
+    "signal": "Signal: {db} dB",
+    "addAsSpeaker": "Als Lautsprecher hinzufügen",
+    "addSpeakerFailed": "{name} konnte nicht als Lautsprecher hinzugefügt werden.",
+    "forgotBond": "Bluetooth-Kopplung für {name} entfernt.",
+    "forgetFailed": "Kopplung konnte nicht entfernt werden: {reason}",
+    "forgetPlayer": "Die Kopplung gehört zum Player {player}.",
+    "connect": "Verbinden",
+    "disconnect": "Trennen",
+    "pairDevice": "Gerät koppeln",
+    "connectFailed": "{name} konnte nicht verbunden werden: {reason}",
+    "disconnectFailed": "{name} konnte nicht getrennt werden: {reason}",
+    "bondInUseTitle": "Diese Kopplung gehört zu einem Player",
+    "bondInUse": "Diese Kopplung gehört zu einem Player; entferne den Player, bevor du die Kopplung entfernst.",
+    "openPlayer": "{player} auf der Startseite öffnen",
+    "btRefused": "BlueZ hat abgelehnt ({code})",
+    "btUnavailable": "der Bluetooth-Stack hat nicht geantwortet ({code})",
+    "player": "Player",
+    "controllerId": "Controller",
+    "classOfDevice": "Geräteklasse",
+    "area": "Bereich",
+    "openDetails": "Details für {name} anzeigen",
+    "yes": "Ja",
+    "no": "Nein",
+    "unknown": "Unbekannt",
+    "unavailable": {
+      "dbusTitle": "Dieser Host hat kein D-Bus",
+      "dbusBody": "D-Bus hat nicht geantwortet, daher kann die Bridge BlueZ nicht nach ihren Adaptern fragen.",
+      "bluetoothTitle": "Bluetooth ist auf diesem Host nicht lesbar",
+      "bluetoothBody": "Die Bridge findet auf diesem Host keinen Bluetooth-Adapter.",
+      "hardwareTitle": "Die Hardware dieses Hosts ist nicht lesbar",
+      "hardwareBody": "Weder D-Bus noch bluetoothctl haben geantwortet.",
+      "nextStep": "Prüfe, ob die Bridge den Bluetooth-Stack des Hosts erreicht, und lade diese Seite neu.",
+      "reason": "Grundcode: {reason}"
+    },
+    "unsupported": {
+      "title": "Diese Bridge kann keine Hardware melden",
+      "body": "Die API dieser Bridge hat keine /hardware-Route. Aktualisiere die Bridge oder nutze die Seiten Einstellungen und Diagnose."
+    },
+    "drawer": {
+      "overview": "Übersicht",
+      "technical": "Technische Details",
+      "power": "Stromversorgung",
+      "present": "Vorhanden",
+      "area": "Bereich",
+      "classOfDevice": "Geräteklasse",
+      "deviceCount": "Geräte an diesem Controller",
+      "roles": "Rollen der Verbindung",
+      "player": "Player",
+      "battery": "Akku",
+      "rssi": "Signal",
+      "bonded": "Gekoppelt",
+      "controllers": "Controller mit dieser Kopplung",
+      "synthetic": "Synthetische ID (kein sysfs-Eintrag)",
+      "observedAt": "Beobachtet um",
+      "id": "ID",
+      "mac": "MAC"
+    },
+    "audio": {
+      "title": "Audio",
+      "cards": "Audio-Karten",
+      "outputs": "Audioausgänge",
+      "inputs": "Audioeingänge",
+      "noDevices": "Keine Audiogeräte",
+      "noDevicesBody": "Der Audioserver hat geantwortet und meldet keine Karten, Ausgänge oder Eingänge.",
+      "noCards": "Keine Audio-Karten",
+      "noOutputs": "Keine Audioausgänge",
+      "noInputs": "Keine Audioeingänge",
+      "notReportedTitle": "Diese Bridge meldet kein Audio",
+      "notReportedBody": "Ihre Hardware-API stammt aus der Zeit vor der Audio-Hälfte. Aktualisiere die Bridge, um Karten, Ausgänge und Eingänge zu sehen.",
+      "unavailableTitle": "Das Audio dieses Hosts ist nicht lesbar",
+      "unavailableBody": "Kein PulseAudio-kompatibler Server hat geantwortet, daher sind Karten, Ausgänge und Eingänge unbekannt.",
+      "captureUnavailableTitle": "Der Smartphone-Eingang ist nicht verfügbar",
+      "captureUnavailableBody": "Das Smartphone über Bluetooth kann auf diesem Host nicht abgegriffen werden, daher hat die Quelle nichts zum Abspielen.",
+      "noDriver": "Kein Treiber",
+      "driver": "Treiber",
+      "activeProfile": "Aktives Profil",
+      "profileCount": "Profile",
+      "portCount": "Ports",
+      "profiles": "Profile",
+      "profileActive": "In Verwendung",
+      "profileAvailable": "Verfügbar",
+      "profileUnavailable": "Nicht verfügbar",
+      "profileUnknown": "Verfügbarkeit unbekannt",
+      "profileSwitch": "Profil wechseln",
+      "profileSelectLabel": "Profil",
+      "profileConfirmTitle": "{card} auf das Profil {profile} umschalten?",
+      "profileConsequence": "Alle Ausgänge an {card} können stumm werden, während das neue Profil startet.",
+      "profileConsequenceInUse": "Alle Ausgänge an {card} können stumm werden, während das neue Profil startet – ebenso {players}.",
+      "profileConfirm": "Profil wechseln",
+      "profileSwitched": "{card} verwendet jetzt das Profil {profile}.",
+      "detailStale": "Der Audioserver konnte diese Anzeige nicht aktualisieren; sie zeigt möglicherweise nicht den neuesten Stand.",
+      "profileManagedByConnection": "Die Bluetooth-Verbindung bestimmt das Profil dieser Karte.",
+      "profileNone": "Kein Profil",
+      "ports": "Ports",
+      "portActive": "Aktiv",
+      "portAvailable": "Verfügbar",
+      "portUnavailable": "Nicht verfügbar",
+      "portUnknown": "Verfügbarkeit unbekannt",
+      "portSwitch": "Port wechseln",
+      "portSelectLabel": "Port",
+      "portConfirmTitle": "{name} auf {port} umschalten?",
+      "portConsequence": "{name} kann stumm werden, während der neue Port übernimmt – ebenso alles, was darüber läuft.",
+      "portConsequenceInUse": "{name} kann stumm werden, während der neue Port übernimmt – ebenso {player}, der darüber läuft.",
+      "portConfirm": "Port wechseln",
+      "portSwitched": "{name} verwendet jetzt den Port {port}.",
+      "endpoints": "Endpunkte",
+      "output": "Ausgang",
+      "input": "Eingang",
+      "direction": "Richtung",
+      "state": "Status",
+      "stateRunning": "Läuft",
+      "stateIdle": "Inaktiv",
+      "stateSuspended": "Pausiert",
+      "stateUnavailable": "Nicht verfügbar",
+      "stateUnknown": "Unbekannt",
+      "activePort": "Aktiver Port",
+      "portUnavailableReason": "Sein aktiver Port ist nicht verfügbar, daher hört dieser Eingang nichts.",
+      "inputUnavailable": "Dieser Eingang ist nicht verfügbar; der Audioserver hat keinen Grund genannt.",
+      "outputPortUnavailableReason": "Sein aktiver Port ist nicht verfügbar, daher kann dieser Ausgang nichts wiedergeben.",
+      "outputUnavailable": "Dieser Ausgang ist nicht verfügbar; der Audioserver hat keinen Grund genannt.",
+      "volume": "Lautstärke",
+      "muted": "Stummgeschaltet",
+      "inUse": "Verwendet von",
+      "default": "Standard",
+      "setDefault": "Als Standard festlegen",
+      "defaultConfirmTitle": "{name} als Standardausgang festlegen?",
+      "defaultConsequence": "Jeder Ton ohne gewählten Ausgang wird auf {name} wiedergegeben.",
+      "makeDefault": "Als Standard festlegen",
+      "defaultSet": "{name} ist jetzt der Standardausgang.",
+      "suspend": "Pausieren",
+      "resume": "Fortsetzen",
+      "suspendConfirmTitle": "{name} pausieren?",
+      "suspendConsequence": "Nur {name} wird still: Er bleibt in der Liste und gibt nichts wieder, bis er fortgesetzt wird.",
+      "suspended": "{name} pausiert.",
+      "commandFailed": "{name} konnte nicht geändert werden: {reason}",
+      "kindMicrophone": "Mikrofon",
+      "kindLineIn": "Line-In",
+      "kindMonitor": "Monitor",
+      "kindPhone": "Smartphone über Bluetooth",
+      "monitorOf": "Monitort",
+      "owner": "Gehört zu",
+      "ownerUnknown": "Nicht klassifiziert",
+      "ownerCard": "Karte {card}",
+      "ownerBluetooth": "Bluetooth-Gerät {mac}",
+      "ownerInternal": "Die Bridge selbst",
+      "sampleSpec": "Abtastformat",
+      "identifierSerial": "Seriennummer",
+      "identifierBusPath": "Bus-Pfad",
+      "identifierVendorId": "Hersteller-ID",
+      "identifierProductId": "Produkt-ID",
+      "identifierAlsaLongCardName": "Langer ALSA-Kartenname"
+    },
+    "source": {
+      "title": "Quelle",
+      "stateOff": "Aus",
+      "stateWaiting": "Warten auf ein Smartphone",
+      "stateStreaming": "Streaming",
+      "stateError": "Fehler",
+      "offBody": "Die Smartphone-Quelle ist aus. Aktiviere sie hier, um das Smartphone Music Assistant anzubieten.",
+      "phone": "Smartphone",
+      "start": "Quelle starten",
+      "stop": "Quelle stoppen",
+      "stopConfirmTitle": "Quelle stoppen?",
+      "stopConsequence": "Diese Lautsprecher gehen zurück an Music Assistant: {players}.",
+      "stopped": "Quelle gestoppt.",
+      "pair": "Smartphone koppeln",
+      "stopPairing": "Kopplung beenden",
+      "pairing": "Offen für Kopplung: noch {time}.",
+      "pairingHint": "Koppel jetzt das Smartphone; wenn es meldet, die PIN sei falsch, entferne zuerst auf dem Smartphone diese Bridge (veraltete Kopplung).",
+      "errorTitle": "Die Quelle ist fehlgeschlagen",
+      "errorCapture": "Das Audio des Smartphones kann auf diesem Host nicht abgegriffen werden.",
+      "errorCaptureNext": "Die Bridge benötigt PipeWire-Aufnahmeknoten für das Smartphone; prüfe das Audio-Backend des Hosts.",
+      "errorNoAdapter": "Kein Bluetooth-Adapter hat die Sichtbarkeit akzeptiert.",
+      "errorNoAgent": "Die Bridge konnte keinen Bluetooth-Kopplungsagenten registrieren.",
+      "errorBluetoothNext": "Prüfe die Bluetooth-Controller oben und versuche die Kopplung erneut.",
+      "errorNextStep": "Prüfe die Quelleneinstellungen unter Einstellungen → Music Assistant und starte die Quelle erneut.",
+      "failureTitle": "Der letzte Quellenbefehl wurde abgelehnt",
+      "failureNextStep": "Prüfe die Quelle und versuche es erneut.",
+      "commandFailed": "Die Quelle konnte nicht geändert werden: {reason}",
+      "capture": "Aufnahme",
+      "capturePipewire": "PipeWire-Knoten",
+      "capturePulse": "PulseAudio-Quelle",
+      "captureUnavailable": "Nicht verfügbar",
+      "node": "Knoten",
+      "noNode": "Kein Aufnahmeknoten",
+      "subtitle": "Das Smartphone streamt in die Bridge; die Bridge gibt es als Quelle an Music Assistant weiter.",
+      "statePairing": "Warten auf den Kopplungscode",
+      "maTitle": "Music Assistant",
+      "maOff": "Die Quelle ist aus. Aktiviere sie, um das Smartphone Music Assistant anzubieten.",
+      "maError": "Die Verbindung zu Music Assistant ist fehlgeschlagen.",
+      "maConnected": "Verbunden. Wiedergabe und Routing werden in Music Assistant verwaltet.",
+      "maReconnecting": "Gekoppelt. Verbinde neu mit Music Assistant…",
+      "maNotPaired": "Noch nicht gekoppelt. Gib den Code unten in Music Assistant ein.",
+      "maConnectedShort": "verbunden",
+      "maPairedShort": "gekoppelt",
+      "maUnpairedShort": "nicht gekoppelt",
+      "maCodeLabel": "Kopplungscode",
+      "maCodeHint": "Gib diesen Code in Music Assistant ein. Er gilt {time} lang.",
+      "maPair": "Mit Music Assistant koppeln",
+      "maForget": "Kopplung entfernen",
+      "maForgetConfirmTitle": "Die Kopplung mit Music Assistant entfernen?",
+      "maForgetConfirmBody": "Die Bridge benötigt einen neuen Code, bevor Music Assistant das Smartphone wieder abspielen kann.",
+      "maForgetDone": "Kopplung mit Music Assistant entfernt",
+      "maRouting": "Spiele das Smartphone aus Music Assistant ab; die Bridge leitet es nicht selbst an Lautsprecher weiter.",
+      "maOpen": "Music Assistant öffnen",
+      "maUnreachable": "Music Assistant ist nicht erreichbar.",
+      "maUnreachableNext": "Prüfe, ob Music Assistant läuft und ob SENDSPIN_SERVER darauf zeigt; die Bridge versucht es weiter.",
+      "maPairingRequired": "Ein Kopplungscode ist erforderlich.",
+      "maRejected": "Music Assistant hat den Kopplungscode abgelehnt.",
+      "maUnsupported": "Dieser Music Assistant bietet keine Sendspin-Quelle an.",
+      "maUnsupportedNext": "Aktualisiere Music Assistant auf 2.10 oder neuer und aktiviere den Sendspin-Quellenanbieter.",
+      "maPairingNext": "Öffne ein Kopplungsfenster und gib den Code in Music Assistant ein.",
+      "phoneTitle": "Smartphone (Bluetooth)",
+      "phoneIdle": "kein Streaming",
+      "phoneNoPhone": "Kein Smartphone streamt in die Bridge.",
+      "phoneHint": "Das Smartphone koppelt sich per Bluetooth mit der Bridge; Music Assistant erhält das aufgenommene Audio.",
+      "phonePaired": "Smartphone gekoppelt",
+      "phonePairedHint": "Die Kopplung ist gespeichert; starte die Wiedergabe auf dem Smartphone und die Bridge nimmt sie auf.",
+      "maSettingsHint": "Kopplung und Code findest du in den Einstellungen.",
+      "maSettingsAction": "Kopplungseinstellungen öffnen",
+      "maNotPairedWhere": "Nicht gekoppelt. Koppel die Bridge in den Einstellungen mit Music Assistant.",
+      "phonePairedNeedMa": "Smartphone gekoppelt. Koppel die Bridge mit Music Assistant, um es zu hören.",
+      "phonePairedNeedMaAction": "Mit Music Assistant koppeln"
+    }
+  },
+  "kit": {
+    "closeDialog": "Dialog schließen",
+    "closeDrawer": "Detailansicht schließen",
+    "dismissNotification": "Benachrichtigung verwerfen",
+    "removeBadge": "Entfernen",
+    "signalPath": "Signalweg",
+    "selectAllRows": "Alle Zeilen auswählen",
+    "clearSearch": "Suche löschen",
+    "loading": "Wird geladen"
+  },
+  "sidebar": {
+    "collapse": "Seitenleiste einklappen",
+    "expand": "Seitenleiste ausklappen"
+  },
+  "undo": {
+    "label": "Rückgängig",
+    "handedOver": "{name} freigegeben. Verbindet sich erst wieder, wenn du ihn zurückholst.",
+    "disabled": "{name} deaktiviert.",
+    "standby": "{name} im Standby: Bluetooth getrennt, Wiedergabe gestoppt.",
+    "woke": "{name} aufgeweckt.",
+    "enabled": "{name} aktiviert.",
+    "muted": "Stummgeschaltet: {name}.",
+    "powerSave": "Energiesparen an: {name}.",
+    "btConnected": "{name} verbunden.",
+    "btDisconnected": "{name} getrennt.",
+    "audioMuted": "{name} stummgeschaltet.",
+    "audioUnmuted": "Stummschaltung für {name} aufgehoben.",
+    "audioVolume": "Lautstärke gesetzt: {name}.",
+    "audioResumed": "Fortgesetzt: {name}.",
+    "sourceStarted": "Quelle gestartet.",
+    "sourcePairingOpen": "Kopplungsfenster offen: Koppel jetzt das Smartphone.",
+    "sourcePairingClosed": "Kopplungsfenster geschlossen."
+  },
+  "restart": {
+    "stopping": "Bridge wird gestoppt…",
+    "restarting": "Bridge wird neu gestartet…",
+    "ready": "Bridge erfolgreich neu gestartet",
+    "error": "Neustart fehlgeschlagen",
+    "openLogs": "Logs öffnen",
+    "dismiss": "Verwerfen",
+    "updating": "Aktualisierung läuft… die Bridge startet neu",
+    "updated": "Aktualisiert, die Bridge ist wieder da",
+    "updateFailed": "Aktualisierung fehlgeschlagen",
+    "errorNext": "Öffne die Logs, um die Ursache zu sehen, und versuche es dann erneut.",
+    "updateTimedOut": "Die Aktualisierung wurde nicht abgeschlossen – öffne die Logs",
+    "updateTimedOutNext": "Die Bridge ist nach 3 Minuten nicht zurückgekommen. Öffne die Logs, um zu sehen, wo die Aktualisierung angehalten hat; wenn die Bridge noch die alte Version hat, versuche die Aktualisierung erneut."
+  },
+  "bugreport": {
+    "title": "Fehler melden",
+    "hints": {
+      "min": "Mindestens {n} Zeichen."
+    },
+    "submitBy": {
+      "github": "GitHub-Issue öffnen",
+      "proxy": "Bericht senden",
+      "copy": "Bericht kopieren"
+    },
+    "fileReport": "Fehler melden",
+    "fields": {
+      "title": "Titel des Problems",
+      "titlePlaceholder": "Kurze Beschreibung des Problems",
+      "description": "Beschreibung",
+      "descPlaceholder": "Was ist passiert? Was hast du erwartet?",
+      "email": "Deine E-Mail (für Rückfragen)"
+    },
+    "errors": {
+      "titleShort": "Der Titel muss mindestens 5 Zeichen lang sein",
+      "descShort": "Die Beschreibung muss mindestens 10 Zeichen lang sein",
+      "emailInvalid": "Bitte gib eine gültige E-Mail-Adresse ein"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "Senden",
+      "copy": "Kopieren"
+    },
+    "diagnosticsPreview": "Diagnosedaten",
+    "autoAttached": "automatisch angehängt",
+    "loadingDiagnostics": "Diagnose wird geladen…",
+    "loadFailed": "Diagnosedaten konnten nicht geladen werden",
+    "submit": "Bericht senden",
+    "download": "Herunterladen",
+    "submitted": "Fehlerbericht erfolgreich gesendet",
+    "submitFailed": "Fehlerbericht konnte nicht gesendet werden",
+    "copied": "Bericht in die Zwischenablage kopiert",
+    "copyFailed": "Kopieren in die Zwischenablage fehlgeschlagen"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "showAdvanced": "Technische Details anzeigen",
+    "unsaved": "Nicht gespeicherte Änderungen",
+    "save": "Speichern",
+    "discard": "Verwerfen",
+    "saved": "Einstellungen gespeichert",
+    "restartNeeded": "Starte die Bridge neu, um einige Änderungen zu übernehmen",
+    "restartNow": "Jetzt neu starten",
+    "restartConfirmTitle": "Die Bridge jetzt neu starten?",
+    "units": {
+      "ms": "ms",
+      "s": "s",
+      "min": "min",
+      "h": "h"
+    },
+    "auto": "Automatisch",
+    "embedded": {
+      "security": "Über Home Assistant angemeldet. Anmeldung und Zugriff werden dort verwaltet.",
+      "updates": "Aktualisierungen kommen aus dem Home Assistant Add-on-Store."
+    },
+    "sections": {
+      "general": {
+        "title": "Allgemein",
+        "description": "Name, Zeitzone und Protokollierung."
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "Verbindung zu deinem Music Assistant-Server und wie Player gesteuert werden."
+      },
+      "audio": {
+        "title": "Audio",
+        "description": "Pufferung und Codec-Auswahl für die Bluetooth-Wiedergabe."
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "Adapter, Neuverbindung und Wiederherstellung."
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Entitäten in Home Assistant und Raumnamen aus dessen Bereichen."
+      },
+      "security": {
+        "title": "Sicherheit",
+        "description": "Anmeldung, Sitzungen und API-Token."
+      },
+      "updates": {
+        "title": "Aktualisierungen",
+        "description": "Wie die Bridge neue Versionen findet und installiert."
+      },
+      "guidance": {
+        "title": "Hinweise",
+        "description": "Wann das Dashboard Einrichtungs- und Wiederherstellungshinweise anzeigt."
+      },
+      "backup": {
+        "title": "Sicherung",
+        "description": "Konfigurationsdatei exportieren, importieren oder bearbeiten."
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "Bridge-Name",
+        "help": "Wird in Music Assistant neben jedem Player angezeigt. Leer lassen, um den Hostnamen zu verwenden."
+      },
+      "TZ": {
+        "label": "Zeitzone",
+        "help": "IANA-Name, zum Beispiel Europe/Berlin. Wird für Log- und Ereigniszeiten verwendet."
+      },
+      "WEB_PORT": {
+        "label": "Web-Port",
+        "help": "Port dieser Weboberfläche. Leer verwendet die Umgebungsvariable WEB_PORT oder 8080. Wirkt nach einem Neustart."
+      },
+      "LOG_LEVEL": {
+        "label": "Log-Level",
+        "help": "DEBUG schreibt deutlich mehr Details; verwende es bei der Fehlersuche.",
+        "addonHelp": "Im Home Assistant Add-on setzt die Add-on-Option log_level (Tab Konfiguration) diesen Wert bei jedem Neustart. Ändere sie dort, damit die Einstellung bleibt."
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Music Assistant-Server",
+        "help": "Hostname oder IP-Adresse von Music Assistant oder auto, um ihn im Netzwerk zu finden."
+      },
+      "SENDSPIN_PORT": {
+        "label": "Sendspin-Port",
+        "help": "Der Sendspin-Port von Music Assistant, normalerweise 8927."
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "Erster Player-Port",
+        "help": "Lautsprecher lauschen auf aufeinanderfolgenden Ports ab hier. Leer wählt automatisch freie Ports."
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "Kopplung erforderlich",
+        "help": "Music Assistant muss eine PIN eingeben, bevor es auf diesen Lautsprechern wiedergeben kann."
+      },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "Nur Music Assistant dieser Bridge",
+        "help": "Weist jeden anderen Music Assistant ab, der einen Lautsprecher übernehmen will. Gilt, sobald die Bridge ihren eigenen Music Assistant kennt (eine Serveradresse oder die Music Assistant-API-URL)."
+      },
+      "VOLUME_VIA_MA": {
+        "label": "Lautstärke über Music Assistant",
+        "help": "Lautstärkeänderungen laufen über Music Assistant, damit dessen Regler synchron bleiben."
+      },
+      "MUTE_VIA_MA": {
+        "label": "Stummschalten über Music Assistant",
+        "help": "Stummschalten läuft über Music Assistant, damit dessen Player denselben Zustand zeigen."
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Live-Aktualisierungen von Music Assistant",
+        "help": "Hält eine Verbindung offen für Änderungen an Wiedergabe, Warteschlange und Gruppen."
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "Anmeldung automatisch erneuern",
+        "help": "Erneuert die Music Assistant-Anmeldung im Hintergrund, wenn sie abläuft."
+      },
+      "MA_ADDON_SLUG": {
+        "label": "Music Assistant Add-on aus einem anderen Repository",
+        "help": "Nur Home Assistant Add-on. Leer lassen für das offizielle Music Assistant Add-on oder eines im lokalen Add-on-Ordner. Für eines aus einem anderen Repository gib dessen Slug ein, damit sich die Bridge darüber anmelden kann."
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "Vor Lautsprechern auf anderen Bridges warnen",
+        "help": "Fragt Music Assistant, ob eine andere Bridge denselben Lautsprecher bereits bedient."
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "Audio-Puffer",
+        "help": "Höhere Werte überstehen ausgelastete Hosts und virtuelle Maschinen; niedrigere Werte reagieren schneller."
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "SBC-Codec bevorzugen",
+        "help": "SBC statt AAC oder aptX verwenden. Hilft Lautsprechern, die mit anderen Codecs stottern."
+      },
+      "SMOOTH_RESTART": {
+        "label": "Sanfte Neustarts",
+        "help": "Den Player eines Lautsprechers neu verbinden, statt ihn von Grund auf neu zu starten."
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "PulseAudio daran hindern, Streams zu verschieben",
+        "help": "module-rescue-streams entladen, damit ein neu verbundener Lautsprecher nie das Audio eines anderen übernimmt."
+      },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "Latenz des Audio-Puffers ausgleichen",
+        "help": "Unabhängig von der PulseAudio-Latenz im Takt wiedergeben. Aus stellt das ältere Timing wieder her, das um diese Latenz hinterherliegt."
+      },
+      "PLAYOUT_SYNC": {
+        "label": "Playout-Sync",
+        "help": "Aus behält den reinen Audioausgang. Nur messen ist experimentell: Es misst den Playout-Fehler am Lautsprecherausgang und meldet ihn, ohne ihn zu korrigieren. Messen und korrigieren korrigiert die Platzierung jedes Starts über den Luftsensor; dafür ist der experimentelle Luftsensor nötig, ohne ihn verhält es sich wie im Messmodus. Wirkt nach dem Neustart der Lautsprecher.",
+        "options": {
+          "off": "Aus",
+          "measure": "Nur messen",
+          "loop": "Messen und korrigieren"
+        }
+      },
+      "PLAYOUT_DIAG": {
+        "label": "Diagnose der Wiedergabeuhr",
+        "help": "Schreibt zusätzlich die eigene Taktrate des Lautsprecher-Sinks in die Clock-Diag-Zeile pro Minute. Die Wiedergabe bleibt unverändert."
+      },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "Audioausgänge beim Start zurücksetzen",
+        "help": "Jeden lokalen Audioausgang einmal pausieren und fortsetzen, bevor sein Player zum ersten Mal startet. Hilft einem Ausgang, der stumm hochkommt."
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "Intervall der Verbindungsprüfung",
+        "help": "Wie oft die Bridge prüft, ob jeder Lautsprecher noch verbunden ist."
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "Neuverbindungsversuche",
+        "help": "Fehlgeschlagene Neuverbindungen in Folge, bevor die Bridge aufgibt. 0 versucht es weiter."
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "Technische Details standardmäßig",
+        "help": "Zeigt Signalpegel, Sync-Zähler, Server-IDs und erweiterte Einstellungen in Browsern, die nichts anderes gewählt haben. Jeder Browser kann das über sein Einstellungsmenü ändern."
+      },
+      "RSSI_BADGE": {
+        "label": "Signalstärke",
+        "help": "Zeigt die live gemessene Signalstärke bei jedem verbundenen Lautsprecher."
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "Grenze für Verbindungsschleifen",
+        "help": "Verbinde-/Trennen-Zyklen im Zeitfenster, nach denen die Bridge einen Lautsprecher freigibt. 0 schaltet das ab."
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "Zeitfenster für Verbindungsschleifen",
+        "help": "Zeitfenster, in dem diese Zyklen gezählt werden."
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "Fehlenden Audio-Sink wiederherstellen",
+        "help": "Standardmäßig an. Fordert einen Lautsprecher, der auch Audioquelle ist (etwa einen Amazon Echo), direkt beim Verbinden auf, Audio anzunehmen, schaltet eine Soundkarte, die noch im Source-Profil steht, zurück auf das Sink-Profil (mit kurzen Wiederholungen, weil ein frischer Verbindungsaufbau „Input/output error“ liefert, bis BlueZ den Sink hat) und verbindet den Lautsprecher, falls der Audioausgang trotzdem nicht erscheint, bis zu zweimal in zehn Minuten neu."
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "PulseAudio-Bluetooth-Modul neu laden",
+        "help": "Experimentell. Letzter Ausweg, wenn PulseAudio keine Bluetooth-Ausgänge mehr anlegt."
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "Hängenden Adapter zurücksetzen",
+        "help": "Experimentell. Wenn die Neuverbindungsversuche aufgebraucht sind, den Bluetooth-Adapter aus- und einschalten oder zurücksetzen."
+      },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "Luftsensor (SBC-Lautsprecher)",
+        "help": "Experimentell, optional; erfordert einen Neustart der Bridge. Misst, wann Audio wirklich über die Luft austritt. Benötigt Playout-Sync (Nur messen oder Messen und korrigieren), einen Bluetooth-SBC-Lautsprecher und CAP_NET_RAW. Misst im Modus Nur messen; korrigiert die Platzierung im Modus Messen und korrigieren.",
+        "disabledReason": "Aktiviere zuerst den Playout-Sync (Nur messen oder Messen und korrigieren)."
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "Verbindung zu Home Assistant",
+          "help": "MQTT veröffentlicht Entitäten über deinen Broker; Integration nutzt die benutzerdefinierte Integration Sendspin Bridge.",
+          "options": {
+            "off": "Aus",
+            "mqtt": "MQTT",
+            "rest": "Integration"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "MQTT-Broker",
+            "help": "Hostname oder IP, oder auto für das Mosquitto Add-on."
+          },
+          "port": {
+            "label": "MQTT-Port",
+            "help": "Normalerweise 1883 oder 8883 mit TLS."
+          },
+          "tls": {
+            "label": "TLS verwenden",
+            "help": "Verschlüsselt die Verbindung zum Broker."
+          },
+          "username": {
+            "label": "MQTT-Benutzer",
+            "help": "Leer lassen, wenn der Broker anonyme Clients erlaubt."
+          },
+          "password": {
+            "label": "MQTT-Passwort",
+            "help": "Wird auf der Bridge gespeichert und nie wieder angezeigt."
+          },
+          "discovery_prefix": {
+            "label": "Discovery-Präfix",
+            "help": "Muss zum MQTT-Discovery-Präfix von Home Assistant passen."
+          },
+          "client_id": {
+            "label": "Client-ID",
+            "help": "Leer leitet eine aus der Bridge ab."
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "Im Netzwerk ankündigen",
+            "help": "Home Assistant kann die Bridge dann entdecken und die Integration anbieten."
+          },
+          "supervisor_pair": {
+            "label": "Über den Supervisor koppeln",
+            "help": "Auf Home Assistant OS erhält die Integration ihren Token, ohne dass du ihn von Hand kopieren musst."
+          },
+          "advertise_host": {
+            "label": "Angekündigte Adresse",
+            "help": "Die Adresse, unter der Home Assistant die Bridge erreicht. Setze sie, wenn die Bridge hinter einem Reverse Proxy oder NAT sitzt; leer erkennt sie automatisch."
+          },
+          "advertise_port": {
+            "label": "Angekündigter Port",
+            "help": "0 kündigt den Web-Port an."
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "Raumnamen aus Bereichen",
+        "help": "Schlägt Raumnamen für Lautsprecher aus den Bereichen von Home Assistant vor."
+      },
+      "AUTH_ENABLED": {
+        "label": "Anmeldung erforderlich",
+        "help": "Vor der Anzeige dieser Oberfläche wird ein Passwort oder Konto verlangt.",
+        "disabledReason": "Lege zuerst ein Passwort fest."
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "Sitzungsdauer",
+        "help": "Wie lange eine Anmeldung gilt."
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "Wiederholte Fehlversuche sperren",
+        "help": "Sperrt die Anmeldung nach zu vielen falschen Passwörtern für eine Weile."
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "Erlaubte Fehlversuche",
+        "help": "Falsche Passwörter im Zeitfenster, bevor die Sperre beginnt."
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "Zählzeitfenster",
+        "help": "Zeitraum, in dem Fehlversuche gezählt werden."
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "Sperrdauer",
+        "help": "Wie lange die Anmeldung gesperrt bleibt."
+      },
+      "TRUSTED_PROXIES": {
+        "label": "Vertrauenswürdige Proxys",
+        "help": "Eine IP-Adresse pro Zeile. Nur sie dürfen der Bridge die echte Client-Adresse nennen."
+      },
+      "CHECK_UPDATES": {
+        "label": "Nach Aktualisierungen suchen",
+        "help": "Sucht im Hintergrund nach neuen Versionen."
+      },
+      "UPDATE_CHANNEL": {
+        "label": "Aktualisierungskanal",
+        "help": "Stable für den Alltag; Release Candidates und Betas kommen früher und können Fehler enthalten.",
+        "options": {
+          "stable": "Stable",
+          "rc": "Release Candidate",
+          "beta": "Beta"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "Aktualisierungen automatisch installieren",
+        "help": "Installiert eine neue Version im gewählten Kanal, sobald sie gefunden wird."
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "Schonfrist beim Start",
+        "help": "So lange nach dem Start warten, bevor Einrichtungshinweise angezeigt werden."
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "Schonfrist für die Wiederherstellung",
+        "help": "So lange warten, bevor Korrekturvorschläge für einen abgefallenen Lautsprecher erscheinen."
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "Smartphone als Quelle akzeptieren",
+        "help": "Ein per Bluetooth mit der Bridge gekoppeltes Smartphone streamt in die Bridge, und die Bridge bietet dieses Audio als Sendspin-Quelle an, die andere Player abspielen können. Funktioniert mit PipeWire und unter Home Assistant OS mit PulseAudio."
+      }
+    },
+    "sectionsNav": "Bereiche",
+    "parts": {
+      "maConnection": {
+        "label": "Music Assistant-Konto",
+        "help": "Melde dich an, damit die Bridge Gruppen und die aktuelle Wiedergabe zeigen und die Warteschlange steuern kann.",
+        "change": "Erneut anmelden",
+        "signIn": "Anmelden"
+      },
+      "sendspinTest": {
+        "label": "Sendspin-Verbindung",
+        "help": "Prüfe, ob die Bridge Music Assistant mit dem Server und Port oben erreicht.",
+        "run": "Testen",
+        "ok": "OK",
+        "failed": "Fehlgeschlagen"
+      },
+      "adapters": {
+        "label": "Adapter",
+        "help": "Gib Adaptern einen Namen, den du wiedererkennst. Die Geräteklasse ist eine Notlösung für Lautsprecher, die unbekannte Computer ablehnen; leer lassen, außer du brauchst sie.",
+        "name": "Name",
+        "deviceClass": "Geräteklasse",
+        "deviceClassHelp": "Sechsstelliges Hex, zum Beispiel 0x00010c (Laptop). Leer behält den Systemstandard."
+      },
+      "ha": {
+        "publisher": "MQTT-Publisher",
+        "publisherHelp": "Veröffentlicht die Bridge und ihre Lautsprecher als Entitäten in Home Assistant.",
+        "publisherBroker": "Verbunden mit {broker}.",
+        "mosquitto": "Mosquitto Add-on",
+        "mosquittoMissing": "Home Assistant hat noch keinen MQTT-Broker. Installiere das Mosquitto Add-on und stelle den Broker dann auf auto.",
+        "install": "Installieren",
+        "broker": "Broker",
+        "brokerHelp": "Finde den Broker automatisch oder teste die Adresse und Zugangsdaten unten, bevor du speicherst.",
+        "detect": "Erkennen",
+        "test": "Testen",
+        "detected": "Broker gefunden und eingetragen.",
+        "notDetected": "Kein Broker gefunden; trage ihn von Hand ein.",
+        "testOk": "Der Broker hat die Verbindung akzeptiert ({ms} ms).",
+        "testFailed": "Der Broker hat die Verbindung abgelehnt.",
+        "component": "Integration Sendspin Bridge",
+        "componentSeen": "Letzter Kontakt {when}.",
+        "componentMissing": "Installiere die Integration über HACS und füge sie dann in Home Assistant hinzu.",
+        "installHacs": "In HACS öffnen",
+        "connected": "Verbunden",
+        "mdns": "Netzwerkankündigung",
+        "mdnsHelp": "Über diese Ankündigung findet Home Assistant die Bridge.",
+        "announced": "Angekündigt",
+        "notAnnounced": "Nicht angekündigt"
+      },
+      "areaMap": {
+        "label": "Räume nach Adapter",
+        "help": "Lautsprecher an einem Adapter erhalten dessen Raum. Die Bereichs-ID ist der letzte Teil der Adresse des Bereichs in Home Assistant (Einstellungen → Bereiche).",
+        "areaId": "Bereichs-ID",
+        "areaName": "Raumname"
+      },
+      "password": {
+        "label": "Passwort",
+        "set": "Für die Anmeldung an dieser Oberfläche ist ein Passwort gesetzt.",
+        "notSet": "Noch kein Passwort. Lege eines fest, bevor du die Anmeldung verlangst.",
+        "change": "Ändern",
+        "create": "Festlegen",
+        "current": "Aktuelles Passwort",
+        "new": "Neues Passwort",
+        "confirm": "Neues Passwort wiederholen",
+        "tooShort": "Mindestens 8 Zeichen.",
+        "save": "Passwort speichern",
+        "changed": "Passwort gespeichert"
+      },
+      "tokens": {
+        "label": "API-Token",
+        "help": "Für die Home Assistant-Integration und eigene Skripte: als Authorization: Bearer <token> senden.",
+        "once": "Kopiere diesen Token jetzt. Er wird nicht erneut angezeigt.",
+        "copy": "Kopieren",
+        "copied": "Token kopiert",
+        "created": "erstellt {when}",
+        "lastUsed": "zuletzt verwendet {when}",
+        "revoke": "Widerrufen",
+        "revokeConfirm": "Diesen Token widerrufen? Alles, was ihn verwendet, funktioniert danach nicht mehr.",
+        "newLabel": "Token-Name",
+        "create": "Token erstellen"
+      },
+      "updates": {
+        "label": "Version {version}",
+        "available": "Version {version} ist verfügbar.",
+        "upToDate": "In diesem Kanal wurde keine neuere Version gefunden.",
+        "check": "Jetzt prüfen",
+        "install": "Aktualisieren"
+      },
+      "backup": {
+        "export": "Exportieren",
+        "exportHelp": "Konfiguration ohne Passwörter und Token herunterladen.",
+        "download": "Herunterladen",
+        "import": "Importieren",
+        "importHelp": "Ersetzt die Konfiguration durch eine früher exportierte Datei. Bereits auf der Bridge gespeicherte Geheimnisse bleiben erhalten.",
+        "choose": "Datei wählen",
+        "imported": "Konfiguration importiert",
+        "confirmTitle": "Konfiguration ersetzen?",
+        "confirmLabel": "Ersetzen",
+        "raw": "Als JSON bearbeiten",
+        "rawHelp": "Für Schlüssel, die dieser Bildschirm nicht zeigt. Änderungen werden mit Speichern gesichert.",
+        "edit": "Bearbeiten",
+        "apply": "Übernehmen"
+      },
+      "latency": {
+        "label": "Puffer-Voreinstellungen",
+        "recommended": "empfohlen"
+      },
+      "sourceLink": {
+        "label": "Smartphone-Quelle",
+        "help": "Koppel das Smartphone per Bluetooth und sieh seinen Aufnahmestatus auf der Hardware-Seite.",
+        "action": "Hardware öffnen"
+      },
+      "maPairing": {
+        "label": "Kopplung der Smartphone-Quelle",
+        "help": "Music Assistant muss dieser Bridge vertrauen, bevor es das Audio des Smartphones abspielen kann.",
+        "off": "Die Smartphone-Quelle ist aus. Aktiviere sie auf der Hardware-Seite und koppel sie dann hier mit Music Assistant.",
+        "offAction": "Hardware öffnen",
+        "whereToEnter": "In Music Assistant: Einstellungen → Player → diese Bridge → Konfigurieren → Statischer Kopplungscode.",
+        "routing": "Wiedergabe und Routing bleiben in Music Assistant; die Bridge nimmt nur das Smartphone auf.",
+        "notPaired": "Noch nicht gekoppelt. Öffne ein Kopplungsfenster und gib den Code dann in Music Assistant ein."
+      }
+    },
+    "leaveConfirm": "Du hast nicht gespeicherte Einstellungen. Trotzdem verlassen?",
+    "device": {
+      "name": {
+        "label": "Name",
+        "help": "Wird als Player in Music Assistant angezeigt."
+      },
+      "backend": {
+        "adapter": {
+          "label": "Bluetooth-Adapter",
+          "help": "Der Adapter, der diesen Lautsprecher verbindet. Automatisch verwendet den Standardadapter."
+        },
+        "sink": {
+          "label": "Audioausgang",
+          "help": "Der Tonausgang dieses Computers, auf dem dieser Player wiedergibt. Ausgänge, die ein anderer Player nutzt, werden nicht angeboten."
+        }
+      },
+      "room_name": {
+        "label": "Raum",
+        "help": "Wird beim Player angezeigt und Home Assistant angeboten."
+      },
+      "room_id": {
+        "label": "Bereichs-ID in Home Assistant",
+        "help": "Verknüpft den Lautsprecher mit einem Bereich in Home Assistant."
+      },
+      "volume_controller": {
+        "label": "Lautstärkesteuerung",
+        "help": "PulseAudio ändert die Systemlautstärke des Lautsprechers; Sendspin skaliert stattdessen den Audiostream.",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Sendspin-Stream"
+        }
+      },
+      "listen_port": {
+        "label": "Player-Port",
+        "help": "Port, mit dem sich Music Assistant für diesen Lautsprecher verbindet. Leer wählt automatisch einen."
+      },
+      "idle_mode": {
+        "label": "Im Leerlauf",
+        "help": "Was die Bridge tut, während nichts wiedergegeben wird.",
+        "options": {
+          "default": "Verbunden bleiben",
+          "power_save": "Energiesparen",
+          "auto_disconnect": "Trennen",
+          "keep_alive": "Lautsprecher wach halten"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "Energiesparen nach",
+        "help": "Energiesparen nach dieser Zeit ohne Ton einschalten."
+      },
+      "idle_disconnect_minutes": {
+        "label": "Trennen nach",
+        "help": "Bluetooth nach dieser Zeit ohne Ton trennen. 0 trennt nie."
+      },
+      "keep_alive_method": {
+        "label": "Wachhaltesignal",
+        "help": "Ein unhörbarer 2-Hz-Ton passt zu den meisten Lautsprechern; Stille hilft den wenigen, die auf den Ton reagieren.",
+        "options": {
+          "infrasound": "Unhörbarer Ton",
+          "silence": "Stille",
+          "none": "Nichts"
+        }
+      },
+      "keepalive_interval": {
+        "label": "Signalintervall",
+        "help": "Zeit zwischen den Wachhalte-Impulsen."
+      },
+      "static_delay_ms": {
+        "label": "Latenzkompensation des Lautsprechers",
+        "help": "Wie viel später dieser Lautsprecher seinen Ton ausgibt. Die Bridge sendet Audio um diesen Betrag früher, damit er im Takt mit der Gruppe bleibt."
+      },
+      "min_buffer_ms": {
+        "label": "Mindestpuffer",
+        "help": "Audio, das der Lautsprecher während der Wiedergabe gepuffert hält."
+      },
+      "required_lead_time_ms": {
+        "label": "Vorlaufzeit beim Start",
+        "help": "Zeit, die der Lautsprecher vor dem ersten Ton benötigt."
+      },
+      "allow_hfp_profile": {
+        "label": "Headset-Profil (Anrufe) erlauben",
+        "help": "Aus hält den Lautsprecher für Musik auf A2DP und schaltet die Karte zurück, wenn der Host ein Headset-Profil wiederherstellt. An erlaubt einer anderen App, das Mikrofon des Lautsprechers für Anrufe zu nutzen; solange dieses Profil aktiv ist, fällt der Ton auf 8 kHz mono."
+      },
+      "calibration_bed": {
+        "label": "Diesen Lautsprecher während der Abstimmung wach halten",
+        "help": "Manche Verstärker schalten nach Stille für die kurzen Kalibrierklicks nicht wieder auf Ton und machen die Abstimmung unhörbar. An spielt nur während einer Gruppen-Abstimmung ein leises Rauschen auf diesen Lautsprecher; die anderen Lautsprecher behalten die sauberen Klicks."
+      }
+    },
+    "deviceGroups": {
+      "speaker": "Lautsprecher",
+      "idle": "Verhalten im Leerlauf",
+      "sync": "Timing"
+    },
+    "leave": "Ohne Speichern verlassen",
+    "search": "Einstellungen durchsuchen",
+    "nothingFound": "Nichts passt zu „{q}“.",
+    "changed": "Geändert",
+    "loadFailed": "Einstellungen konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "autosave": {
+      "saved": "Gespeichert",
+      "failed": "Nicht gespeichert: {reason}"
+    },
+    "appliesAfterRestart": "Einige Einstellungen hier wirken erst nach einem Neustart; beim Speichern wird bei Bedarf einer angeboten."
+  },
+  "timing": {
+    "suggestion": "Vorgeschlagene Latenzkompensation: {value} ms",
+    "applySuggestion": "Übernehmen",
+    "history": {
+      "title": "Letztes Timing",
+      "syncError": "Sync-Fehler {ms} ms",
+      "empty": "Noch keine Timing-Messwerte; sie erscheinen, während der Lautsprecher wiedergibt.",
+      "buffer": "Gepuffertes Audio",
+      "error": "Sync-Fehler"
+    },
+    "playout": {
+      "title": "Playout",
+      "yes": "Ja",
+      "no": "Nein",
+      "settling": "schwingt ein, höchstens {s} s",
+      "fallback": "Playout-Sync ist auf den reinen Ausgang zurückgefallen: {reason}",
+      "unknownReason": "unbekannter Grund",
+      "rows": {
+        "error": "Fehler",
+        "p95": "Fehler p95",
+        "slope": "Fehlerdrift",
+        "corrections": "Korrekturen",
+        "jumps": "Sprünge",
+        "underruns": "Aussetzer",
+        "paLatency": "PulseAudio-Latenz",
+        "hostLatency": "Host-Latenz",
+        "sinkRate": "Sink-Rate",
+        "clockSlew": "Uhr-Drift",
+        "warm": "Warm"
+      }
+    },
+    "air": {
+      "title": "Luftsensor",
+      "chip": "Luft: {state}, H {h} ms",
+      "chipNoH": "Luft: {state}",
+      "states": {
+        "off": "Aus",
+        "unavailable": "Nicht verfügbar",
+        "unsupported_codec": "Nicht unterstützter Codec",
+        "unsupported_input": "Nicht unterstützte Eingabe",
+        "no_signal": "Kein Signal",
+        "acquiring": "Wird erfasst",
+        "locked": "Synchronisiert",
+        "holding": "Hält",
+        "no_lock": "Synchronisation verloren"
+      },
+      "rows": {
+        "state": "Status",
+        "host": "Host-Platzierung",
+        "air": "Luftfehler",
+        "confidence": "Konfidenz",
+        "psr": "Peak-Verhältnis (PSR)",
+        "lock": "Zuletzt bestätigt",
+        "learnedTarget": "Luft-Ziel"
+      },
+      "needsCalibration": "Kalibrierung nötig",
+      "agoSeconds": "vor {s} s",
+      "reasons": {
+        "needs_measure": "Benötigt Playout-Sync (Nur messen oder Messen und korrigieren).",
+        "not_bluetooth": "Nur Bluetooth-Lautsprecher werden unterstützt.",
+        "cpu_budget": "Gestoppt: Der Sensor hat zu viel Prozessorzeit verbraucht.",
+        "internal_error": "Nach einem internen Fehler gestoppt; startet mit dem nächsten Stream neu.",
+        "playout_fallback": "Playout-Sync ist auf den reinen Ausgang zurückgefallen.",
+        "unsupported_input": "Das Audioformat wird nicht unterstützt (44,1 und 48 kHz, 16 bis 32 Bit).",
+        "no_cap_net_raw": "Der Bluetooth-Monitor ist nicht verfügbar (benötigt CAP_NET_RAW).",
+        "unsupported_platform": "Dieses System hat keinen Bluetooth-HCI-Monitor (nur Linux).",
+        "monitor_error": "Der Bluetooth-Monitor ist fehlgeschlagen.",
+        "sbc_params": "Die SBC-Stream-Parameter werden nicht unterstützt.",
+        "sbc_fragmented": "Der Lautsprecher verteilt SBC-Frames auf mehrere Pakete.",
+        "codec": "Der Lautsprecher verwendet {codec}; nur SBC wird unterstützt.",
+        "unknown": "Grund: {reason}"
+      },
+      "calibration": {
+        "title": "Kalibrierungen",
+        "line": "Latenz von Luft zu Ton: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "Entfernen",
+        "forgetTitle": "Diese Kalibrierung entfernen?",
+        "forgetConfirm": "{name} gilt für {codec} {rate} kHz an {adapter} als unkalibriert, bis der Sync-Assistent ihn erneut misst."
+      },
+      "correction": {
+        "target": "Luftkorrektur: {target}",
+        "calibrated": "kalibriert ({ms} ms)",
+        "learned": "gelernt ({n} Starts)",
+        "noData": "keine Daten (Lernen: {n} von {need} Starts)",
+        "inactive": "inaktiv: nicht synchronisiert",
+        "bias": "Luft-Bias {value} ms",
+        "corrections": "Luftkorrekturen {n}",
+        "trimEarly": "Kompensationsabgleich {value} ms (Ziel {ms} ms früher)",
+        "trimLate": "Kompensationsabgleich {value} ms (Ziel {ms} ms später)"
+      },
+      "learned": {
+        "title": "Gelernte Latenzen",
+        "line": "Gelernt: {latency} ms bei {delay} ms Kompensation · {codec} · {adapter} · {starts} Starts",
+        "forget": "Entfernen",
+        "forgetTitle": "Diese gelernte Latenz entfernen?",
+        "forgetConfirm": "{name} beginnt erneut, die Latenz für {codec} {rate} kHz an {adapter} zu lernen. Eine Kalibrierung dafür wird ebenfalls entfernt."
+      },
+      "learnedValue": "≈{ms} ms (gelernt)"
+    },
+    "details": "Technische Details"
+  },
+  "system": {
+    "bridge": "Bridge",
+    "uptime": "Laufzeit",
+    "memory": "Arbeitsspeicher",
+    "platform": "Plattform",
+    "python": "Python",
+    "audio": "Audioserver",
+    "bluez": "BlueZ",
+    "downloads": "Downloads",
+    "downloadAction": "Herunterladen",
+    "download": {
+      "report": {
+        "label": "Diagnosebericht",
+        "help": "Alles, was ein Fehlerbericht braucht, ohne Geheimnisse."
+      },
+      "logs": {
+        "label": "Dienst-Log",
+        "help": "Das Bridge-Log als Text."
+      },
+      "timeline": {
+        "label": "Wiederherstellungs-Zeitleiste",
+        "help": "Start- und Geräteereignisse als CSV."
+      },
+      "config": {
+        "label": "Konfiguration",
+        "help": "Ohne Passwörter und Token."
+      }
+    },
+    "players": "Player-Prozesse",
+    "noPlayers": "Keine Player-Prozesse laufen.",
+    "player": "Player",
+    "restarts": "Neustarts",
+    "state": "Status",
+    "running": "Läuft",
+    "reconnecting": "Verbinde neu",
+    "stopped": "Gestoppt",
+    "hooks": {
+      "title": "Webhooks",
+      "help": "Die Bridge sendet Geräte- und Bridge-Ereignisse per POST an diese Adressen. Sie gelten bis zum Neustart der Bridge.",
+      "allEvents": "alle Ereignisse",
+      "counts": "{ok} zugestellt, {failed} fehlgeschlagen",
+      "remove": "Entfernen",
+      "url": "Adresse",
+      "categories": "Kategorien (optional)",
+      "add": "Hinzufügen"
+    }
+  },
+  "guidance": {
+    "title": "Was Aufmerksamkeit braucht",
+    "done": "Erledigt: {action}"
+  },
+  "nav": {
+    "home": "Lautsprecher",
+    "homeShort": "Lautsprecher",
+    "groups": "Gruppen",
+    "groupsShort": "Gruppen",
+    "settings": "Einstellungen",
+    "settingsShort": "Einstellungen",
+    "diagnostics": "Diagnose",
+    "diagnosticsShort": "Status",
+    "hardware": "Hardware",
+    "hardwareShort": "Hardware",
+    "sync": "Gruppen-Sync"
+  },
+  "home": {
+    "connected": "{n} von {total} Bluetooth verbunden",
+    "playing": "{n} in Wiedergabe",
+    "source": {
+      "title": "Smartphone → Music Assistant",
+      "streaming": "Wiedergabe vom Smartphone",
+      "pairing": "Kopplung läuft",
+      "waiting": "Warten auf das Smartphone",
+      "off": "Quelle ist aus",
+      "error": "Quellenfehler",
+      "maConnected": "Music Assistant verbunden",
+      "maPaired": "Music Assistant gekoppelt, verbinde neu",
+      "maUnpaired": "Music Assistant ist nicht gekoppelt",
+      "openHardware": "Hardware öffnen",
+      "pairAction": "Mit Music Assistant koppeln"
+    },
+    "checklist": {
+      "title": "Erste Schritte",
+      "progress": "{done} von {total} erledigt",
+      "speaker": "Füge deinen ersten Lautsprecher hinzu",
+      "speakerAction": "Lautsprecher hinzufügen",
+      "ma": "Bei Music Assistant anmelden",
+      "maAction": "Einstellungen öffnen",
+      "phone": "Smartphone-Quelle aktivieren und koppeln",
+      "phoneAction": "Hardware öffnen",
+      "dismiss": "Erste Schritte ausblenden"
+    }
+  },
+  "groups": {
+    "via": "Music Assistant unter {url}",
+    "connectFirst": "Verbinde die Bridge mit Music Assistant, um dessen Gruppen zu sehen und zu steuern."
+  },
+  "addSpeaker": {
+    "title": "Lautsprecher hinzufügen",
+    "findHelp": "Setze den Lautsprecher in den Kopplungsmodus. Lautsprecher in der Nähe erscheinen unten.",
+    "scan": "Suchen",
+    "scanAgain": "Erneut suchen",
+    "scanHint": "Setze den Lautsprecher in den Kopplungsmodus und drücke dann Suchen.",
+    "looking": "Suche nach Lautsprechern…",
+    "add": "Hinzufügen",
+    "signal": {
+      "success": "Stark",
+      "warning": "Mäßig",
+      "error": "Schwach",
+      "neutral": "—"
+    },
+    "trouble": "Lautsprecher nicht gefunden oder Kopplung schlägt fehl?",
+    "alreadyPaired": "Wähle einen bereits gekoppelten Lautsprecher",
+    "backToScan": "Zurück zur Suche",
+    "paired": "Gekoppelt. Gib ihm einen Namen und einen Raum.",
+    "roomHint": "Optional. Wird beim Player angezeigt und Home Assistant angeboten.",
+    "addToBridge": "Zur Bridge hinzufügen",
+    "addedTitle": "{name} ist auf der Bridge.",
+    "testHelp": "Spiele einen kurzen Klick ab, um zu prüfen, ob du ihn hörst.",
+    "waiting": "Audio des Lautsprechers wird verbunden – das dauert ein paar Sekunden.",
+    "testSound": "Testton abspielen",
+    "done": "Fertig",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "Audioausgang"
+    },
+    "audio": {
+      "intro": "Gib auf einem Audioausgang dieses Computers wieder, etwa einem USB-DAC, einer Soundkarte oder HDMI.",
+      "none": "Keine Audioausgänge gefunden.",
+      "refresh": "Aktualisieren",
+      "inUse": "Wird bereits von einem anderen Player verwendet",
+      "named": "Wähle einen Namen und einen Raum für diesen Ausgang.",
+      "looking": "Suche nach Audioausgängen…",
+      "taken": "Ein anderer Player verwendet diesen Ausgang bereits."
+    },
+    "pairing": "Kopplung von {name}…",
+    "errorNext": "Prüfe, ob der Lautsprecher im Kopplungsmodus und nah am Adapter ist, und versuche es dann erneut."
+  },
+  "connection": {
+    "lost": "Verbindung zur Bridge verloren – verbinde neu. Was du siehst, ist möglicherweise veraltet.",
+    "reload": "Neu laden"
+  },
+  "shortcuts": {
+    "title": "Tastenkürzel",
+    "places": "Zu Lautsprecher, Gruppen, Einstellungen, Diagnose, Hardware",
+    "add": "Lautsprecher hinzufügen",
+    "search": "Auf dieser Seite suchen",
+    "help": "Diese Liste anzeigen",
+    "close": "Dialog oder Menü schließen"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "Verbindung",
+      "bridge": "Auf dieser Bridge"
+    },
+    "reconnect": "Neu verbinden",
+    "standby": "In Standby versetzen",
+    "wake": "Aufwecken",
+    "claim": "Diese Bridge als Quelle verwenden",
+    "handOver": "Lautsprecher freigeben",
+    "takeBack": "Lautsprecher zurückholen",
+    "disable": "Deaktivieren",
+    "enable": "Aktivieren",
+    "remove": "Lautsprecher entfernen",
+    "removeTitle": "{name} entfernen?",
+    "removeMessage": "Sein Player verschwindet aus Music Assistant und seine Bluetooth-Kopplung wird entfernt. Um ihn wieder zu nutzen, füge ihn als neuen Lautsprecher hinzu.",
+    "settings": "Einstellungen",
+    "repairTitle": "{name} erneut koppeln?"
+  },
+  "sync": {
+    "open": "Sync",
+    "tuneGroup": "Ganze Gruppe abstimmen",
+    "tuneGroupHelp": "Richte alle Lautsprecher der Music Assistant-Gruppe dieses Players auf einmal aus.",
+    "backToGroups": "Zurück zu den Gruppen",
+    "tabs": {
+      "group": "Gruppe",
+      "manual": "Manuell",
+      "measure": "Messen"
+    },
+    "members": "Mitglieder",
+    "delay": "{ms} ms",
+    "delayHeading": "Latenzkompensation (größer = früher)",
+    "sign": "+ spielt früher · − spielt später",
+    "noMembers": "Diese Gruppe hat keine Mitglieder.",
+    "loadError": "Die Gruppenmitglieder konnten nicht gelesen werden ({code}).",
+    "restoreFailed": "Die Gruppe konnte nicht wiederhergestellt werden",
+    "restoreFailedHelp": "Die Abstimmung wurde durch einen Neustart unterbrochen, daher sind einige Lautsprecher möglicherweise noch stummgeschaltet ({code}). Die Bridge versucht es weiter.",
+    "manualIntro": "Spiele Klicks auf der Gruppe ab und passe jeden Lautsprecher nach Gehör an.",
+    "measureIntro": "Miss jeden Lautsprecher mit einem Mikrofon und stimme dann nach Gehör fein ab.",
+    "switchToManual": "Kein Mikrofon? Stimme stattdessen nach Gehör ab.",
+    "switchToMeasure": "Hast du ein Smartphone oder Laptop mit Mikrofon? Miss stattdessen.",
+    "state": {
+      "idle": "Keine Abstimmung läuft",
+      "created": "Startet",
+      "measuring": "Wird gemessen",
+      "proposed": "Gemessen",
+      "applying": "Verzögerungen werden angewendet",
+      "tuning": "Abstimmung nach Gehör",
+      "restoring": "Gruppe wird wiederhergestellt",
+      "done": "Fertig",
+      "cancelled": "Abgebrochen",
+      "failed": "Fehlgeschlagen"
+    },
+    "status": {
+      "prepare": "Gruppe wird vorbereitet",
+      "measure": "Wird gemessen",
+      "tune": "Abstimmung nach Gehör",
+      "done": "Fertig",
+      "elsewhere": "Abstimmung auf einem anderen Gerät"
+    },
+    "groupError": "Diese Gruppe konnte nicht geöffnet werden ({code}). Prüfe, ob Music Assistant erreichbar ist und die Gruppe noch existiert.",
+    "origin": {
+      "other": "Nicht anpassbar"
+    },
+    "measuredAgo": "Gemessen {age}",
+    "noDelay": "Keine Latenz gemeldet",
+    "actions": {
+      "title": "Abstimmen",
+      "manual": "Manuelle Abstimmung",
+      "semi": "Mit Mikrofon messen",
+      "manualHelp": "Kein Mikrofon nötig. Am besten für kleine Korrekturen, die du hören kannst.",
+      "semiHelp": "Etwa eine Minute pro Lautsprecher. Du hörst und korrigierst die gemessenen Verzögerungen, bevor du abschließt."
+    },
+    "profiles": {
+      "title": "Profile",
+      "apply": "Anwenden",
+      "saveCurrent": "Aktuelles speichern als…",
+      "rename": "Umbenennen",
+      "delete": "Löschen",
+      "empty": "Noch keine Profile. Speichere die aktuellen Verzögerungen, um später dorthin zurückzukehren.",
+      "skipped": "{n} Mitglied übersprungen | {n} Mitglieder übersprungen",
+      "notInGroup": "Nicht in der Gruppe: {names}",
+      "name": "Name",
+      "notes": "Notizen (optional)",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "applyTitle": "„{name}“ anwenden",
+      "confirmApply": "Diese Verzögerungen anwenden",
+      "member": "Lautsprecher",
+      "change": "Aktuell → Profil",
+      "noChanges": "Keiner der Lautsprecher der Gruppe ist in diesem Profil.",
+      "unchanged": "unverändert",
+      "applied": "„{name}“ angewendet.",
+      "saved": "„{name}“ gespeichert.",
+      "renamed": "Umbenannt in „{name}“.",
+      "deleted": "„{name}“ gelöscht.",
+      "deleteTitle": "„{name}“ löschen?",
+      "deleteMessage": "Die Verzögerungen bleiben wie sie sind; nur das gespeicherte Profil wird entfernt.",
+      "renameLabel": "Neuer Name für „{name}“",
+      "failed": "Das hat nicht funktioniert ({code}).",
+      "kind": {
+        "device": "An den Lautsprechern",
+        "position": "Von der Hörposition"
+      },
+      "playerId": "Player-ID {id}",
+      "nameRequired": "Gib einen Namen ein."
+    },
+    "listen": {
+      "title": "Zuhören",
+      "play": "Klicks abspielen",
+      "stop": "Klicks stoppen",
+      "solo": "Nur dieser Lautsprecher",
+      "soloHelp": "Wähle einen Lautsprecher, um ihn allein zu hören (die anderen sind stumm), oder Alle.",
+      "soloMember": "Nur {name}",
+      "everyone": "Alle",
+      "ab": "Zwei vergleichen",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "Zwei Lautsprecher wechseln sich alle vier Sekunden ab.",
+      "idle": "Klicks gestoppt.",
+      "playing": "Klicks laufen auf jedem Lautsprecher.",
+      "soloed": "Klicks laufen nur auf {name}.",
+      "alternating": "{a} und {b} wechseln sich ab.",
+      "failed": "Das hat nicht funktioniert ({code}).",
+      "needsClicks": "Spiele die Klicks ab, um Lautsprecher einzeln zu hören oder zu vergleichen.",
+      "playHelp": "Spielt die Klick-Spur auf der Gruppe ab (3 Minuten; spiele sie erneut ab, sobald sie endet). Sie ersetzt die Warteschlange der Gruppe. Klicks stoppen stoppt nur die Klick-Spur."
+    },
+    "sound": {
+      "label": "Klang",
+      "clicks": "Klicks",
+      "accent": "Klicks mit Betonung",
+      "noise": "Rauschen",
+      "hint": {
+        "clicks": "Ein Klick pro Sekunde: Verschiebe die Verzögerungen, bis der Klick jedes Lautsprechers als ein einziger klingt.",
+        "accent": "Jeder 4. Klick ist lauter und höher: zeigt, wenn ein Lautsprecher um Hunderte ms danebenliegt.",
+        "noise": "Für zwei Lautsprecher: Stell dich in die Mitte; bei Ausrichtung klingt das Rauschen mittig, sonst hohl und phasig."
+      }
+    },
+    "manual": {
+      "title": "Latenzkompensation",
+      "help": "Ein größerer Wert lässt einen Lautsprecher früher wiedergeben. Änderungen sind sofort hörbar; Speichern behält sie.",
+      "reset": "Verzögerungen vom Start wiederherstellen",
+      "resetDone": "Die Verzögerungen sind wieder auf dem Stand vom Beginn dieser Abstimmung.",
+      "minus": "−{n} ms (später)",
+      "plus": "+{n} ms (früher)",
+      "valueLabel": "Latenzkompensation von {name} in ms",
+      "departed": "Hat die Gruppe verlassen",
+      "startFailed": "Die manuelle Abstimmung konnte nicht gestartet werden ({code}).",
+      "busy": "Für diese Gruppe läuft eine Messung. Beende sie zuerst auf dem Tab Messen.",
+      "saveOnLeave": "Deine Verzögerungsänderungen behalten?",
+      "saveOnLeaveHelp": "Du hast die Latenzkompensation der Lautsprecher geändert und nicht gespeichert. Behalte die Änderungen oder stelle die Werte vom Beginn dieser Abstimmung wieder her.",
+      "saveConfirm": "Änderungen behalten",
+      "saveDecline": "Änderungen verwerfen",
+      "nudges": "{name} anpassen",
+      "writeForbidden": "Music Assistant hat die Änderung von {name} abgelehnt: Dieses Konto darf keine Player-Einstellungen ändern.",
+      "writeFailed": "{name} konnte nicht geändert werden ({code}). Die angezeigte Verzögerung ist der Stand in Music Assistant.",
+      "ended": "Diese Abstimmung ist beendet (Zeitüberschreitung oder auf einem anderen Gerät geschlossen). Die Verzögerungen bleiben wie sie sind. Drücke Klicks starten, um erneut abzustimmen.",
+      "measured": "Gemessen: {ms} ms ({change})",
+      "resetMeasured": "Auf Messwert zurücksetzen",
+      "resetMeasuredMember": "{name} auf die gemessene Verzögerung zurücksetzen",
+      "endedNotice": "Manuelle Abstimmung beendet: Die Klicks wurden gestoppt, alle stummgeschalteten Lautsprecher sind wieder hörbar und die Lautstärken sind zurück.",
+      "startHelp": "Der Start stoppt, was die Gruppe gerade abspielt, und spielt eine Klick-Spur darauf ab. Erst wenn du die Taste drückst, geht es los.",
+      "startClicks": "Klicks starten",
+      "volumes": "Lautstärke",
+      "needStart": "Drücke Klicks starten zum Anpassen.",
+      "save": "Speichern",
+      "saved": "Gespeichert",
+      "discard": "Änderungen verwerfen",
+      "unsaved": "Nicht gespeicherte Änderungen",
+      "listenOne": "Einen Lautsprecher hören / zwei vergleichen",
+      "stillRestoring": "Die Gruppe wird nach der letzten Abstimmung noch wiederhergestellt. Versuche es gleich noch einmal."
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "Dieser Browser kann hier nicht aufnehmen. Das Mikrofon benötigt HTTPS (oder localhost) und einen aktuellen Browser.",
+        "permission": "Der Zugriff auf das Mikrofon wurde verweigert. Erlaube das Mikrofon für diese Seite in den Browsereinstellungen und versuche es erneut.",
+        "no_microphone": "Auf diesem Gerät wurde kein Mikrofon gefunden.",
+        "mic_busy": "Das Mikrofon wird von einer anderen App verwendet oder konnte nicht gestartet werden.",
+        "worklet": "Das Aufnahmemodul konnte nicht geladen werden. Lade die Seite neu und versuche es erneut.",
+        "not_open": "Das Mikrofon ist nicht offen.",
+        "busy": "Es läuft bereits eine Aufnahme.",
+        "interrupted": "Das Audio wurde unterbrochen (die Seite war im Hintergrund oder eine andere App hat das Audio übernommen). Tippe, um fortzufahren; die betroffenen Lautsprecher werden erneut gemessen.",
+        "timeout": "Die Aufnahme wurde nicht rechtzeitig abgeschlossen.",
+        "mic_lost": "Das Mikrofon wurde getrennt (ausgesteckt oder Zugriff entzogen). Öffne es erneut, um fortzufahren; die betroffenen Lautsprecher werden erneut gemessen.",
+        "failed": "Aufnahme fehlgeschlagen."
+      }
+    },
+    "wizard": {
+      "stageOf": "{stage} ({n}/{total}) · {name}",
+      "stages": {
+        "prepare": "Vorbereiten",
+        "measure": "Messen",
+        "tune": "Abstimmen",
+        "done": "Fertig"
+      },
+      "steps": {
+        "prepare": "Wo und wie",
+        "clicker": "Musik stoppen, Klicks starten",
+        "volume": "Lautstärke einstellen",
+        "members": "Lautsprecher für Lautsprecher",
+        "tune": "Hören und anpassen",
+        "done": "Abgeschlossen"
+      },
+      "notice": {
+        "title": "Während der Messung läuft nichts anderes.",
+        "help": "Die Klick-Spur läuft auf der Gruppe ab, sobald du die Klicks startest; wenn die Gruppe gerade wiedergibt, wird das zuerst gestoppt. Während ein Lautsprecher gemessen wird, sind die anderen stummgeschaltet. Wenn du fertig bist, werden alle Lautsprecher, die die Bridge stummgeschaltet hat, wieder hörbar, die Lautstärken gehen auf den vorherigen Wert zurück und die Klicks werden gestoppt.",
+        "queue": "Die Kalibrierung ersetzt die Warteschlange der Gruppe durch die Klick-Spur; starte deine Musik danach neu."
+      },
+      "point": {
+        "legend": "Wo willst du messen?",
+        "device": "An jedem Lautsprecher",
+        "deviceHelp": "Halte das Smartphone nacheinander nah an jeden Lautsprecher. 6 s pro Lautsprecher; richtet die Geräte selbst aneinander aus.",
+        "position": "Von der Hörposition",
+        "positionHelp": "Bleib, wo du normalerweise hörst. 12 s pro Lautsprecher; enthält den Weg des Schalls zu dir."
+      },
+      "micPermission": "Der Browser fragt nach dem Mikrofon. Aufnahmen bleiben im Speicher und werden nur an diese Bridge gesendet.",
+      "holdStill": "Tipp: Halte den Raum ruhig und das Smartphone still, während es aufnimmt.",
+      "estimate": "Dauert etwa {min} Minuten.",
+      "byEar": "Du kannst auch nach Gehör abstimmen:",
+      "start": "Mikrofon erlauben und starten",
+      "micDenied": "Das Mikrofon konnte nicht verwendet werden.",
+      "startFailed": "Die Messung konnte nicht gestartet werden ({code}).",
+      "level": {
+        "help": "Der Mikrofonpegel sollte bei jedem Klick springen.",
+        "meter": "Mikrofon",
+        "tooQuiet": "Zu leise: Dreh die Gruppe lauter oder geh näher heran.",
+        "tooLoud": "Zu laut: Dreh die Gruppe etwas leiser oder geh weiter weg.",
+        "fine": "Das Mikrofon hört die Klicks.",
+        "value": "{pct} %"
+      },
+      "members": {
+        "help": "Miss jeden Lautsprecher einzeln. Du kannst jeden Lautsprecher wiederholen.",
+        "order": "Die Reihenfolge dient nur deiner Bequemlichkeit (durch den Raum gehen); sie ändert das Ergebnis nicht.",
+        "moveUp": "{name} nach oben",
+        "moveDown": "{name} nach unten",
+        "notMeasured": "Nicht gemessen (nicht anpassbar): {names}",
+        "left": "Nimm jeden Lautsprecher auf oder überspringe ihn, um fortzufahren (noch {n}). | Nimm jeden Lautsprecher auf oder überspringe ihn, um fortzufahren (noch {n})."
+      },
+      "hint": {
+        "notHeard": "Nicht gehört: Dreh {name} lauter oder geh näher heran, dann Wiederholen – oder überspringen.",
+        "unstable": "Instabil: Halte den Raum ruhig und das Smartphone still, dann Wiederholen – oder überspringen.",
+        "reason": {
+          "clipped": "Die Aufnahme übersteuert: Das Smartphone war zu nah oder {name} zu laut. Geh weiter weg oder dreh {name} leiser, dann Wiederholen.",
+          "quiet": "Die Aufnahme ist fast still: Halte das Smartphone näher an {name}, dann Wiederholen.",
+          "lowSnr": "Die Klicks gingen im Raumgeräusch unter: Halte den Raum ruhig oder geh mit dem Smartphone näher an {name}, dann Wiederholen.",
+          "noClicks": "In der Aufnahme wurden keine Klicks von {name} gefunden: Prüfe, ob er die Klicks abspielt, und halte das Smartphone näher, dann Wiederholen.",
+          "tooFewClicks": "Von {name} wurden zu wenige Klicks gehört: Das Smartphone hat möglicherweise einen Teil des Zeitfensters verpasst – Wiederholen."
+        }
+      },
+      "holdNear": "Halte das Smartphone 30–50 cm von {name} entfernt",
+      "stayPut": "Bleib, wo du bist",
+      "record": "Aufnehmen",
+      "recordMember": "{name} aufnehmen",
+      "repeat": "Wiederholen",
+      "repeatMember": "{name} wiederholen",
+      "skip": "Überspringen",
+      "skipMember": "{name} überspringen",
+      "soloing": "{name} läuft allein…",
+      "recording": "{name} wird aufgenommen…",
+      "heard": "Gehört",
+      "notHeard": "Nicht gehört",
+      "unstable": "Instabil",
+      "skipped": "Übersprungen",
+      "departed": "Hat die Gruppe verlassen",
+      "confidence": "{pct} %",
+      "redo": "Erneut aufnehmen",
+      "result": "{name}: {result}",
+      "restartRound": "Die Mikrofonuhr wurde unterbrochen, daher nimm die mit „Erneut aufnehmen“ markierten Lautsprecher noch einmal auf.",
+      "tapToContinue": "Tippe, um fortzufahren",
+      "micLost": "Das Mikrofon wurde getrennt (ausgesteckt oder Zugriff entzogen).",
+      "reopen": "Mikrofon erneut öffnen",
+      "failed": "Das hat nicht funktioniert ({code}).",
+      "ended": "Die Messung wurde beendet (Zeitüberschreitung oder auf einem anderen Gerät geschlossen). Die dabei stummgeschalteten Lautsprecher sind wieder hörbar und die Klicks sind gestoppt.",
+      "next": "Weiter",
+      "back": "Zurück",
+      "cancel": "Abbrechen",
+      "toTune": "Gemessene Verzögerungen anwenden und hören",
+      "memberGone": "{name} hat die Gruppe verlassen; die Messung läuft ohne ihn weiter.",
+      "computing": "Verzögerungen werden berechnet…",
+      "proposalFailed": "Die Verzögerungen konnten nicht berechnet werden ({code}).",
+      "retry": "Erneut versuchen",
+      "applying": "Gemessene Verzögerungen werden angewendet…",
+      "applyFailed": "Die Verzögerungen konnten nicht angewendet werden ({code}).",
+      "capture": {
+        "legend": "Was nimmt auf?",
+        "device": "Mikrofon dieses Geräts",
+        "deviceHelp": "Trage dieses Gerät zu jedem Lautsprecher. Benötigt HTTPS (oder localhost) für das Mikrofon.",
+        "phone": "Ein Smartphone (QR-Code scannen)",
+        "phoneHelp": "Öffne die Aufnahmeseite auf einem Smartphone; sie nimmt alle Lautsprecher auf einmal auf und sendet die Aufnahme. Funktioniert auch über einfaches HTTP (mit dem Rekorder des Smartphones).",
+        "usePhone": "Stattdessen mit einem Smartphone messen"
+      },
+      "startPhone": "Starten"
+    },
+    "tune": {
+      "help": "Die gemessenen Verzögerungen werden angewendet und die Klicks laufen weiter. Höre jeden Lautsprecher einzeln oder vergleiche zwei, passe eine Verzögerung von Hand an und schließe dann ab.",
+      "spread": "Größter Abstand zwischen den Lautsprechern: {before} ms gemessen → jetzt etwa {after} ms.",
+      "kept": "Nicht gehört oder übersprungen, daher unverändert: {names}",
+      "ready": "Die gemessenen Verzögerungen sind angewendet. Höre zu und passe an.",
+      "finish": "Abschließen",
+      "finishSave": "Abschließen und als Profil speichern…",
+      "saveTitle": "Abschließen und als Profil speichern",
+      "saveConfirm": "Speichern und abschließen"
+    },
+    "air": {
+      "title": "Bluetooth-Latenz gemessen",
+      "help": "Wie lange jeder Bridge-Lautsprecher vom Empfang des Audios über Bluetooth bis zur Wiedergabe braucht, aus der Aufnahme des Smartphones. Sie wird mit einer Referenz verglichen, deren Ton im Takt ist, etwa einem Webplayer auf Kopfhörern oder einem kabelgebundenen Ausgang. Eine Referenz mit eigener Verzögerung (PC-Lautsprecher, Bluetooth-Headset) macht jeden Wert um genau diese Verzögerung falsch. Gespeicherte Werte nutzt die Bridge für sich; sie sind nicht die Verzögerungseinstellung des Lautsprechers.",
+      "reference": "Referenz",
+      "referencePick": "Referenz wählen…",
+      "referenceHint": "Wähle ein Headset, einen kabelgebundenen Ausgang oder eine andere Referenz, die im Takt wiedergibt. Sie wird auch die Referenz für die vorgeschlagenen Verzögerungen.",
+      "referenceFailed": "Die Referenz konnte nicht gesetzt werden ({code}).",
+      "value": "Bluetooth-Latenz gemessen: {ms} ms",
+      "hint": "der Lautsprecher meldet {ms} ms",
+      "save": "Diese Bluetooth-Latenz speichern",
+      "saveButton": "Speichern",
+      "saveFailed": "Speichern fehlgeschlagen ({code}).",
+      "outOfRange": "außerhalb von {min}–{max} ms, kann nicht gespeichert werden",
+      "reasons": {
+        "not_effective": "Der Luftsensor war für diesen Lautsprecher nicht an",
+        "no_reference": "Wähle zuerst eine Referenz",
+        "not_measured": "Dieser Lautsprecher oder die Referenz war nicht zu hören",
+        "not_sbc": "Der Lautsprecher spielt kein SBC",
+        "air_epoch_changed": "Sein Bluetooth-Stream wurde während seines Durchgangs neu gestartet",
+        "air_delay_changed": "Die Latenzkompensation des Lautsprechers wurde während der Aufnahme geändert.",
+        "no_air_clicks": "Seine Klicks wurden nicht über die Luft gefunden",
+        "no_written_clicks": "Seine Klicks wurden nicht in dem gefunden, was die Bridge geschrieben hat",
+        "fold_failed": "Die Luftmessung für diesen Lautsprecher konnte nicht abgeschlossen werden",
+        "no_air_frames": "Während seines Durchgangs wurde kein Bluetooth-Audio dieses Lautsprechers über die Luft gesehen"
+      },
+      "valueSaved": "Bluetooth-Latenz gemessen: {ms} ms, gespeichert"
+    },
+    "cancel": {
+      "title": "Messung stoppen?",
+      "message": "Bisherige Aufnahmen gehen verloren. Lautsprecher, die die Bridge stummgeschaltet hat, werden wieder hörbar, die Lautstärken werden zurückgesetzt und die Klicks gestoppt.",
+      "tuneTitle": "Stoppen und Verzögerungen zurücksetzen?",
+      "tuneMessage": "Die Verzögerungen gehen auf den Stand vor der Messung zurück. Von der Bridge stummgeschaltete Lautsprecher werden wieder eingeschaltet, Lautstärken zurückgesetzt und die Klicks gestoppt.",
+      "confirm": "Stoppen",
+      "keep": "Weitermachen",
+      "done": "Messung abgebrochen. Lautsprecher wieder hörbar, Lautstärken zurückgesetzt, Klicks gestoppt.",
+      "resetFailed": "Die Verzögerungen konnten nicht zurückgesetzt werden ({code}); die Abstimmung bleibt offen. Versuche es erneut."
+    },
+    "reloaded": {
+      "manual": "Die manuelle Abstimmung endete beim Neuladen der Seite. Die Verzögerungen bleiben wie sie waren.",
+      "measure": "Die Messung endete beim Neuladen der Seite."
+    },
+    "joinManual": {
+      "title": "Die manuelle Abstimmung ist auf einem anderen Gerät offen",
+      "help": "Tritt ihr bei, um von hier aus zuzuhören und anzupassen, oder beende sie. Das Verlassen dieser Seite beendet sie nie.",
+      "join": "Beitreten"
+    },
+    "readOnly": "Abstimmung auf einem anderen Gerät läuft",
+    "readOnlyHelp": "Diese Seite zeigt die Gruppe nur an, bis die Abstimmung dort endet.",
+    "restoreRetrying": "Music Assistant war nicht erreichbar ({code}), daher sind einige Lautsprecher möglicherweise noch stummgeschaltet oder spielen Klicks. Die Bridge versucht es weiter.",
+    "proposal": {
+      "name": "Profilname",
+      "nameRequired": "Gib einen Namen ein.",
+      "defaultName": "Gemessen {date}",
+      "warnings": "Warnungen",
+      "clampedWarning": "Einige Verzögerungen wurden auf 0–5000 ms begrenzt; der verbleibende Abstand beträgt etwa {ms} ms.",
+      "largeWarning": "Eine Verzögerung über 2000 ms erfordert, dass Music Assistant Audio weit im Voraus sendet; Lautsprecher mit kleinen Puffern können aussetzen.",
+      "forbidden": "Music Assistant hat die Änderung der Verzögerungen abgelehnt: Dieses Konto darf keine Player-Einstellungen ändern. Setze diese Werte von Hand in Music Assistant:",
+      "forbiddenHint": "Oder verbinde Music Assistant in den Bridge-Einstellungen erneut mit einem Administratorkonto und versuche es noch einmal.",
+      "copy": "Werte kopieren",
+      "copied": "Kopiert.",
+      "copyFailed": "Kopieren nicht möglich; markiere die Werte und kopiere sie von Hand."
+    },
+    "done": {
+      "restoring": "Gruppe wird wiederhergestellt…",
+      "restoringHelp": "Lautstärken werden zurückgesetzt, die Stummschaltung der Lautsprecher aufgehoben und die Klicks gestoppt. Die Verzögerungen bleiben wie du sie eingestellt hast.",
+      "restored": "Gruppe wiederhergestellt",
+      "restoredHelp": "Bei allen Lautsprechern ist die Stummschaltung aufgehoben, die Lautstärken sind zurück und die Klicks gestoppt. Die neuen Verzögerungen bleiben; starte deine Musik in Music Assistant neu.",
+      "spread": "Größter Abstand zwischen den Lautsprechern: {before} ms → etwa {after} ms",
+      "saved": "Als Profil „{name}“ gespeichert.",
+      "saveFailed": "Die Verzögerungen bleiben, aber das Profil konnte nicht gespeichert werden ({code}).",
+      "listen": "Kurzes Reinhören",
+      "listenHelp": "Die Klicks laufen 10 s auf der ganzen Gruppe und stoppen dann.",
+      "listening": "Klicks laufen auf der ganzen Gruppe…",
+      "listenFailed": "Die Klicks konnten nicht abgespielt werden ({code}).",
+      "again": "Erneut messen",
+      "queue": "Die Warteschlange der Gruppe enthält jetzt nur die Klick-Spur: Starte deine Musik in Music Assistant neu."
+    },
+    "endForeign": "Diese Sitzung beenden",
+    "endForeignTitle": "Die Abstimmung auf dem anderen Gerät beenden?",
+    "endForeignMessage": "Die Klicks dort stoppen und die Gruppe wird wiederhergestellt. Bereits geschriebene Verzögerungen bleiben wie sie sind.",
+    "signal": {
+      "restarted": "Die Klicks haben neu begonnen: Nimm alle Lautsprecher noch einmal auf."
+    },
+    "prep": {
+      "failed": "Das hat nicht funktioniert ({code}).",
+      "group": {
+        "playing": "Wiedergabe",
+        "idle": "Gestoppt",
+        "paused": "Pausiert",
+        "unknown": "Unbekannt"
+      },
+      "clicker": {
+        "help": "Die Klick-Spur läuft 3 Minuten über Music Assistant auf jedem Lautsprecher der Gruppe. Wenn sie endet, starte sie erneut.",
+        "start": "Klicks starten",
+        "again": "Klicks erneut starten",
+        "playing": "Klicks laufen.",
+        "stopped": "Klicks laufen nicht.",
+        "groupPlaying": "Die Gruppe spielt etwas anderes: Stoppe das zuerst.",
+        "whyDisabled": "Starte die Klicks, um fortzufahren.",
+        "left": "Klicks: noch {time}",
+        "helpStop": "Die Gruppe spielt gerade etwas. Der Start stoppt das zuerst und spielt dann 3 Minuten lang die Klick-Spur auf jedem Lautsprecher der Gruppe.",
+        "groupState": "Gruppe:",
+        "stopAndStart": "Musik stoppen und Klicks starten",
+        "confirmTitle": "Die Musik der Gruppe stoppen?",
+        "confirmMessage": "Was die Gruppe abspielt, stoppt und ihre Warteschlange wird durch die Klick-Spur ersetzt. Starte deine Musik danach neu."
+      },
+      "volume": {
+        "help": "Stelle einen Pegel ein, bei dem die Klicks dort, wo du misst, klar hörbar sind.",
+        "noVolume": "Keine Lautstärkeregelung",
+        "silent": "Stumm: Dreh lauter, um zu messen",
+        "back": "Die Lautstärken gehen beim Abschließen auf den vorherigen Wert zurück."
+      },
+      "skip": "Überspringen"
+    },
+    "mute": {
+      "unsupported": "{name} kann nicht stummgeschaltet werden, daher können die anderen Lautsprecher nicht einzeln gemessen werden, solange er in der Gruppe ist. Überspringe sie oder stimme in der manuellen Abstimmung nach Gehör ab.",
+      "unsupportedManual": "{name} kann nicht stummgeschaltet werden, daher sind die anderen Lautsprecher nicht einzeln zu hören. „Alle“ und „Nur {name}“ funktionieren weiterhin."
+    },
+    "ready": {
+      "title": "Bevor du misst",
+      "unmutable": "{name} kann nicht stummgeschaltet werden. Solange er in der Gruppe ist, können die anderen Lautsprecher nicht einzeln gemessen werden. Du kannst {name} selbst weiterhin messen oder in der manuellen Abstimmung nach Gehör abstimmen.",
+      "unavailable": "{name} ist in Music Assistant nicht verfügbar (ausgeschaltet oder getrennt), daher kann er nicht gemessen werden.",
+      "silent": "{name} steht auf 0 %: Er wird nicht zu hören sein. Dreh ihn im Lautstärkeschritt lauter oder überspringe ihn.",
+      "muted": "{name} ist in Music Assistant stummgeschaltet. Die Bridge lässt ihn stumm, daher wird er nicht zu hören sein: Hebe die Stummschaltung auf oder überspringe ihn.",
+      "skip": "{name} beim Messen überspringen",
+      "skipped": "{name} wird übersprungen (tippen, um ihn zu messen)"
+    },
+    "badge": {
+      "unmutable": "Nicht stummschaltbar",
+      "unavailable": "Nicht verfügbar",
+      "silent": "Lautstärke 0 %",
+      "muted": "Stummgeschaltet"
+    },
+    "phone": {
+      "help": "Öffne die Aufnahmeseite auf einem Smartphone. Die Bridge spielt dann die Klicks auf jedem Lautsprecher einzeln nacheinander ab, während das Smartphone einmal aufnimmt.",
+      "qr": "QR-Code des Aufnahmelinks für das Smartphone",
+      "scan": "Mit der Kamera des Smartphones scannen oder den Link darauf öffnen",
+      "copy": "Link kopieren",
+      "newLink": "Neuer Link",
+      "linkFailed": "Link konnte nicht erstellt werden ({code}).",
+      "security": "Der Link erlaubt dem Smartphone nur zu sehen, welcher Lautsprecher spielt, und seine Aufnahme für diese Messung zu senden. Er gilt {min} Minuten und endet mit der Messung.",
+      "sameNetwork": "Das Smartphone muss im selben Netzwerk wie die Bridge sein.",
+      "step1": "Drücke auf dem Smartphone Start: Es nimmt auf und die Lautsprecher spielen nacheinander.",
+      "step2": "Oder drücke hier „Ablauf abspielen“, während das Smartphone aufnimmt.",
+      "step3": "Wenn der Ablauf beendet ist, sendet das Smartphone die Aufnahme; die Ergebnisse erscheinen hier.",
+      "play": "Ablauf abspielen ({n})",
+      "measureIt": "Messen",
+      "notYet": "Noch nicht gemessen",
+      "lead": "Start: Alle Lautsprecher sind einen Moment still…",
+      "now": "Jetzt: {name} allein ({n}/{total})",
+      "pause": "Pause: Zum nächsten Lautsprecher gehen…",
+      "measured": "Die Aufnahme des Smartphones wird ausgewertet.",
+      "waitingUpload": "Der Ablauf ist beendet: Warten auf die Aufnahme des Smartphones…",
+      "failed": "Der Ablauf wurde gestoppt ({code}).",
+      "certificate": "Dein Smartphone warnt einmal wegen des Zertifikats – akzeptiere es, um direkt im Browser aufzunehmen.",
+      "httpFallback": "Ohne das Zertifikat nutze den einfachen Link (der Rekorder des Smartphones):",
+      "keepsDelay": "Nicht gemessen, sie behalten ihre aktuelle Verzögerung: {names}"
+    },
+    "tuneLink": "Mit deiner Gruppe abstimmen →",
+    "noGroupHelp": "{name} ist in keiner Sync-Gruppe. Um ihn mit anderen abzustimmen, erstelle unter Gruppen eine Sync-Gruppe und füge diesen Lautsprecher hinzu.",
+    "noGroupLink": "Gruppen öffnen →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "Latenz von {value} ms anwenden"
+      },
+      "edit_ma_server": {
+        "label": "Music Assistant-Server bearbeiten"
+      },
+      "enable_device": {
+        "label": "Aktivieren | {count} Lautsprecher aktivieren"
+      },
+      "open_adapter_settings": {
+        "label": "Adapter-Einstellungen öffnen"
+      },
+      "open_audio_diagnostics": {
+        "label": "Diagnose öffnen"
+      },
+      "open_bluetooth_settings": {
+        "label": "Bluetooth-Einstellungen öffnen"
+      },
+      "open_config": {
+        "label": "Einstellungen öffnen"
+      },
+      "open_devices_settings": {
+        "label": "Lautsprecher-Einstellungen öffnen"
+      },
+      "open_diagnostics": {
+        "label": "Diagnose öffnen"
+      },
+      "open_ma_settings": {
+        "label": "Music Assistant-Einstellungen öffnen"
+      },
+      "open_output_diagnostics": {
+        "label": "Diagnose öffnen"
+      },
+      "open_player_settings": {
+        "label": "Player-Einstellungen öffnen"
+      },
+      "open_runtime_diagnostics": {
+        "label": "Diagnose öffnen"
+      },
+      "prefer_sbc_codec": {
+        "label": "SBC-Codec bevorzugen"
+      },
+      "recheck_outputs": {
+        "label": "Audioausgänge erneut prüfen"
+      },
+      "reclaim_bluetooth": {
+        "label": "Lautsprecher zurückholen | {count} Lautsprecher zurückholen"
+      },
+      "reconnect_device": {
+        "label": "Lautsprecher neu verbinden | {count} Lautsprecher neu verbinden"
+      },
+      "release_bluetooth": {
+        "label": "Lautsprecher freigeben"
+      },
+      "repair_speaker": {
+        "label": "Lautsprecher erneut koppeln"
+      },
+      "rerun_checks": {
+        "label": "Prüfungen erneut ausführen"
+      },
+      "rerun_preflight": {
+        "label": "Host-Prüfung erneut ausführen"
+      },
+      "retry_ma_discovery": {
+        "label": "Music Assistant erneut suchen"
+      },
+      "revalidate_ma_link": {
+        "label": "Music Assistant-Verbindung erneut prüfen"
+      },
+      "review_buffer_settings": {
+        "label": "Puffereinstellungen prüfen"
+      },
+      "review_diagnostics": {
+        "label": "Diagnose prüfen"
+      },
+      "review_latency_settings": {
+        "label": "Latenzeinstellungen prüfen"
+      },
+      "review_pulse_latency": {
+        "label": "Audiolatenz prüfen"
+      },
+      "scan_devices": {
+        "label": "Nach Lautsprechern suchen"
+      },
+      "start_pairing": {
+        "label": "Kopplung starten"
+      },
+      "test_ma_connection": {
+        "label": "Music Assistant-Verbindung testen"
+      },
+      "tune_latency_compensation": {
+        "label": "Latenzkompensation abstimmen"
+      },
+      "unmute_speaker": {
+        "label": "Stummschaltung des Lautsprechers aufheben"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "Die Audiostrecke zu Music Assistant ist nicht verbunden."
+      },
+      "ma_disconnected": {
+        "message": "Die Bridge ist nicht mit der Music Assistant-API verbunden."
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant hat für diesen Lautsprecher noch keine Warteschlange."
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant verbindet neu."
+      },
+      "no_sink": {
+        "message": "Es ist kein Audioausgang konfiguriert."
+      },
+      "not_paired": {
+        "message": "Der Lautsprecher ist nicht mehr gekoppelt. Setze ihn in den Kopplungsmodus und koppel ihn erneut."
+      },
+      "reconnecting": {
+        "message": "Eine Neuverbindung läuft bereits."
+      },
+      "released": {
+        "message": "Bluetooth ist von der Bridge freigegeben. Hole den Lautsprecher zuerst zurück."
+      },
+      "stopping": {
+        "message": "Der Player wird gestoppt."
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "Der Luftsensor läuft für diesen Lautsprecher nicht (er benötigt einen Bluetooth-Lautsprecher)."
+      },
+      "air_not_locked": {
+        "text": "Der Luftsensor hat seit dem Start keine Synchronisation auf den Stream dieses Lautsprechers gefunden."
+      },
+      "air_unavailable": {
+        "text": "Der Luftsensor kann für diesen Lautsprecher nicht laufen (siehe Status des Luftsensors)."
+      },
+      "cpu_budget": {
+        "text": "Das Lesen des Bluetooth-Monitors hat mehr CPU verbraucht als vorgesehen, daher ist der Luftsensor bis zum Neustart der Bridge aus."
+      },
+      "internal_error": {
+        "text": "Der Luftsensor hat einen internen Fehler erlitten und sich selbst abgeschaltet (Details im Log)."
+      },
+      "module_suspend_on_idle": {
+        "text": "PulseAudios module-suspend-on-idle ist geladen und pausiert inaktive Ausgänge."
+      },
+      "monitor_error": {
+        "text": "Der Socket des Bluetooth-Monitors ist fehlgeschlagen; die Bridge versucht es weiter."
+      },
+      "no_cap_net_raw": {
+        "text": "Die Bridge kann den Socket des Bluetooth-Monitors nicht öffnen: Sie benötigt die Capability NET_RAW (füge NET_RAW zu cap_add des Containers hinzu)."
+      },
+      "observed_suspend": {
+        "text": "Der Host hat den Audioausgang dieses Lautsprechers pausiert, während der Lautsprecher verbunden und inaktiv war."
+      },
+      "playout_fallback": {
+        "text": "Die Playout-Engine ist auf den alten Player zurückgefallen, daher gibt es keinen Zeitplan zum Vergleichen."
+      },
+      "sink_ambiguous": {
+        "text": "Mehrere identische Ausgänge passen darauf und keiner lässt sich unterscheiden."
+      },
+      "sink_in_use": {
+        "text": "Ein anderer Player gibt bereits darauf wieder."
+      },
+      "sink_unplugged": {
+        "text": "Er ist ausgesteckt oder wurde umbenannt."
+      },
+      "unknown_suspend": {
+        "text": "Der Host hat den Audioausgang dieses Lautsprechers pausiert."
+      },
+      "unsupported_input": {
+        "text": "Das Audioformat des Streams wird nicht unterstützt (der Luftsensor benötigt 44,1 oder 48 kHz)."
+      },
+      "unsupported_platform": {
+        "text": "Dieses System hat keinen Socket für den Bluetooth-Monitor (nur Linux)."
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber pausiert inaktive Bluetooth-Knoten (session.suspend-timeout-seconds)."
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "Wiedergabe ist aktiv, aber es kommt kein Audiostream an",
+        "title": "Audio stockt"
+      },
+      "audio-streaming": {
+        "summary": "Der Audiostream ist aktiv geworden",
+        "title": "Audio-Streaming"
+      },
+      "bluetooth-connected": {
+        "summary": "Bluetooth-Lautsprecher verbunden",
+        "title": "Lautsprecher verbunden"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Bluetooth-Lautsprecher getrennt",
+        "title": "Lautsprecher getrennt"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Bluetooth-Neuverbindung fehlgeschlagen",
+        "title": "Neuverbindung fehlgeschlagen"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Bluetooth-Neuverbindung erfolgreich",
+        "title": "Lautsprecher neu verbunden"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "Der Lautsprecher ging nach {idle_minutes} Minuten ohne Ton in den Standby",
+        "title": "Standby"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "Der Lautsprecher wacht aus dem Standby auf",
+        "title": "Aufwachen"
+      },
+      "bt-management-disabled": {
+        "summary": "Die Bridge hat das Bluetooth dieses Lautsprechers freigegeben",
+        "title": "Bluetooth freigegeben"
+      },
+      "bt-management-reclaimed": {
+        "summary": "Der Lautsprecher hat sich selbst neu verbunden, daher hat die Bridge sein Bluetooth zurückgeholt",
+        "title": "Bluetooth zurückgeholt"
+      },
+      "daemon-connected": {
+        "summary": "Der Player hat sich mit Music Assistant verbunden",
+        "title": "Audiostrecke aktiv"
+      },
+      "daemon-disconnected": {
+        "summary": "Der Player hat die Verbindung zu Music Assistant getrennt",
+        "title": "Audiostrecke inaktiv"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "Der Bluetooth-Lautsprecher ist getrennt",
+        "title": "Getrennt"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Der Sendspin-Player ist nicht verbunden",
+        "title": "Audiostrecke inaktiv"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "Fehler"
+      },
+      "health-foreign_server": {
+        "summary": "Verbunden mit Music Assistant auf {host} {name}, nicht mit dem Music Assistant dieser Bridge",
+        "title": "Ein anderer Music Assistant"
+      },
+      "health-idle": {
+        "summary": "Inaktiv",
+        "title": "Inaktiv"
+      },
+      "health-ma_reconnecting": {
+        "summary": "Die Music Assistant-Verbindung wird erneuert",
+        "title": "Music Assistant-Verbindung wird erneuert"
+      },
+      "health-output_missing": {
+        "summary": "Der Audioausgang fehlt",
+        "title": "Audioausgang fehlt"
+      },
+      "health-playback_without_audio": {
+        "summary": "Wiedergabe ist aktiv, aber es kommt kein Audiostream an",
+        "title": "Audio stockt"
+      },
+      "health-reconnecting": {
+        "summary": "Eine Bluetooth-Neuverbindung läuft",
+        "title": "Verbinde neu"
+      },
+      "health-released": {
+        "summary": "Bluetooth ist von der Bridge freigegeben",
+        "title": "Freigegeben"
+      },
+      "health-resyncing": {
+        "summary": "Das Audio wird neu synchronisiert",
+        "title": "Neusynchronisierung"
+      },
+      "health-sink_muted": {
+        "summary": "Der Audioausgang ist im System stummgeschaltet",
+        "title": "Audioausgang stummgeschaltet"
+      },
+      "health-stopping": {
+        "summary": "Der Player wird gestoppt",
+        "title": "Wird gestoppt"
+      },
+      "ma-monitor-stale": {
+        "summary": "Die Verbindung zu Music Assistant ist abgebrochen: {error}",
+        "title": "Music Assistant-Verbindung verloren"
+      },
+      "ma-server-refused": {
+        "summary": "Music Assistant unter {host} abgewiesen: Diese Bridge gehört zu {owner}",
+        "title": "Music Assistant abgewiesen"
+      },
+      "playback-started": {
+        "summary": "Wiedergabe gestartet",
+        "title": "Wiedergabe gestartet"
+      },
+      "playback-stopped": {
+        "summary": "Wiedergabe gestoppt",
+        "title": "Wiedergabe gestoppt"
+      },
+      "reanchoring": {
+        "summary": "Das Stream-Timing wird neu synchronisiert",
+        "title": "Neusynchronisierung"
+      },
+      "reconnecting": {
+        "summary": "Bluetooth-Neuverbindung läuft",
+        "title": "Verbinde neu"
+      },
+      "runtime-error-cleared": {
+        "summary": "Der Fehler ist behoben",
+        "title": "Fehler behoben"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "Fehler"
+      },
+      "sink-lost": {
+        "summary": "Der Audioausgang wurde ausgesteckt; der Player wartet auf einen Platzhalter-Ausgang",
+        "title": "Audioausgang verloren"
+      },
+      "sink-muted": {
+        "summary": "Der Audioausgang ist im System stummgeschaltet",
+        "title": "Audioausgang stummgeschaltet"
+      },
+      "sink-rematched": {
+        "summary": "Der Audioausgang wurde unter einem neuen Namen gefunden: {sink}",
+        "title": "Audioausgang umbenannt"
+      },
+      "sink-restored": {
+        "summary": "Der Audioausgang ist zurück: {sink}",
+        "title": "Audioausgang zurück"
+      },
+      "sink-unmuted": {
+        "summary": "Die Stummschaltung des Audioausgangs ist aufgehoben",
+        "title": "Audioausgang nicht mehr stumm"
+      },
+      "startup-config": {
+        "summary": "Konfiguration wird geladen",
+        "title": "Konfiguration"
+      },
+      "startup-devices": {
+        "summary": "Die Lautsprecherliste ist vorbereitet",
+        "title": "Lautsprecher"
+      },
+      "startup-failed": {
+        "summary": "Start fehlgeschlagen: {message}",
+        "title": "Start fehlgeschlagen"
+      },
+      "startup-idle": {
+        "summary": "Start eingeleitet",
+        "title": "Start"
+      },
+      "startup-integrations": {
+        "summary": "Music Assistant-Integration initialisiert",
+        "title": "Integrationen"
+      },
+      "startup-ready": {
+        "summary": "Start abgeschlossen",
+        "title": "Bereit"
+      },
+      "startup-runtime": {
+        "summary": "Laufzeitkonfiguration vorbereitet",
+        "title": "Laufzeit"
+      },
+      "startup-shutdown": {
+        "summary": "Die Bridge wird beendet",
+        "title": "Herunterfahren"
+      },
+      "startup-web": {
+        "summary": "Die Weboberfläche ist bereit",
+        "title": "Weboberfläche"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "Ersten Lautsprecher hinzufügen"
+      },
+      "all_disabled": {
+        "label": "Alle Lautsprecher deaktiviert"
+      },
+      "all_released": {
+        "label": "Alle Lautsprecher freigegeben"
+      },
+      "devices_ready": {
+        "label": "{ready}/{total} aktive Lautsprecher bereit"
+      },
+      "first_run": {
+        "label": "Erster Start"
+      },
+      "issues_attention": {
+        "label": "{count} Probleme brauchen Aufmerksamkeit"
+      },
+      "no_playable_speaker": {
+        "label": "Kein abspielbarer Lautsprecher verfügbar"
+      },
+      "setup_progress": {
+        "label": "Einrichtung {percent}%"
+      },
+      "startup": {
+        "label": "Start {percent}%"
+      },
+      "startup_finalizing": {
+        "label": "Start 90%"
+      },
+      "waiting_for_setup": {
+        "label": "Warten auf die Einrichtung"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "Dieser Lautsprecher ist im Modus Messen und korrigieren, aber die Luftkorrektur läuft nicht; er spielt wie im Modus Nur messen. {cause}",
+        "title": "{device}: Die Luftkorrektur läuft nicht"
+      },
+      "air_sensor_codec": {
+        "summary": "Der Lautsprecher streamt {codec}, und der Luftsensor liest nur SBC. Aktiviere PREFER_SBC_CODEC und verbinde den Lautsprecher neu. Die Wiedergabe ist nicht betroffen.",
+        "title": "{device}: Der Luftsensor benötigt den SBC-Codec"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "Der Lautsprecher nutzt SBC-Einstellungen, die der Luftsensor nicht unterstützt ({settings}). Die Wiedergabe ist nicht betroffen.",
+        "title": "{device}: Der Luftsensor kann den SBC-Stream dieses Lautsprechers nicht lesen"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} Die Wiedergabe ist nicht betroffen. Um dies auszublenden, deaktiviere EXPERIMENTAL_AIR_SENSOR (erfordert einen Neustart).",
+        "title": "{device}: Der Luftsensor ist nicht verfügbar | Der Luftsensor ist bei {count} Lautsprechern nicht verfügbar"
+      },
+      "audio_unavailable": {
+        "summary": "Die Bridge erreicht ihr Audiosystem gerade nicht.",
+        "summary_all_disabled": "Die Bridge erreicht ihr Audiosystem gerade nicht. Stelle den Audiozugriff wieder her, bevor du einen Lautsprecher aktivierst, sonst ist die Wiedergabe weiterhin nicht verfügbar.",
+        "summary_no_server": "Es wurde kein PulseAudio- oder PipeWire-Server gefunden.",
+        "summary_no_server_env": "Es wurde kein PulseAudio- oder PipeWire-Server gefunden: PULSE_SERVER ist nicht gesetzt.",
+        "summary_socket_missing": "Der Audio-Socket {socket} ist konfiguriert, existiert aber nicht auf dem Host; kein Audioserver hat ihn je angelegt.",
+        "summary_socket_refused": "Der Audio-Socket {socket} ist eingebunden, aber der Audioserver hat die Verbindung abgelehnt ({error}).",
+        "summary_socket_unreachable": "Der Audio-Socket {socket} ist eingebunden, aber die Bridge kann ihn nicht öffnen ({error}).",
+        "title": "Audiosystem nicht verfügbar"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "Dieser Lautsprecher wurde nach wiederholten Kopplungsfehlern deaktiviert. Setze ihn in den Kopplungsmodus und klicke auf Aktivieren, um es erneut zu versuchen.",
+        "summary_error": "{error}",
+        "title": "{device} wurde automatisch deaktiviert: nie gekoppelt"
+      },
+      "auto_released": {
+        "summary": "Die Bridge hat das Bluetooth dieses Lautsprechers nach wiederholten Verbindungsproblemen freigegeben. | Hole {devices} zurück, damit die Bridge sie wieder verwaltet.",
+        "summary_error": "{error}",
+        "title": "{device} wurde automatisch freigegeben | {count} Lautsprecher wurden automatisch freigegeben"
+      },
+      "bluetooth_unavailable": {
+        "summary": "Die Bridge hat keinen Bluetooth-Adapter gefunden. Öffne die Adapter-Einstellungen und aktualisiere die Liste.",
+        "summary_all_disabled": "Die Bridge erreicht gerade keinen Bluetooth-Adapter. Stelle den Adapterzugriff wieder her, bevor du einen Lautsprecher aktivierst, sonst ist die Wiedergabe weiterhin nicht verfügbar.",
+        "summary_daemon_down": "Der Bluetooth-Dienst (bluetoothd) läuft nicht auf dem Host, daher sieht die Bridge keinen Adapter, bis er startet.",
+        "title": "Bluetooth-Adapter nicht verfügbar"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} Nach einer solchen Pause startet der Lautsprecher seinen Stream neu und kann sich um einige Dutzend Millisekunden verschieben. Die Bridge ändert niemals Audioeinstellungen des Hosts; um das zu unterbinden, hindere den Host daran, inaktive Audioausgänge zu pausieren: {docs}",
+        "title": "{device}: Der Host pausiert den Audioausgang zwischen den Titeln"
+      },
+      "config_dir_not_writable": {
+        "summary": "Der Bridge-Prozess (UID {uid}) kann nicht nach {config_dir} schreiben. Das Speichern des Music Assistant-Tokens, Passwortänderungen und Lautsprecher-Einstellungen schlagen dann alle fehl. Lösung: {remediation}",
+        "title": "{config_dir} ist für die Bridge nicht beschreibbar"
+      },
+      "config_migration_failed": {
+        "summary": "Die Bridge startete ohne Lautsprecher. config.json blieb unberührt und ist weiterhin die alte Datei. Fehler: {error}. Bitte sende einen Fehlerbericht.",
+        "title": "Die Konfiguration konnte nicht auf diese Version aktualisiert werden"
+      },
+      "disconnected": {
+        "summary": "Schalte den Lautsprecher ein oder verbinde ihn neu. | Schalte {devices} ein oder verbinde sie neu.",
+        "summary_error": "{error}",
+        "title": "{device} ist getrennt | {count} Lautsprecher sind getrennt"
+      },
+      "duplicate_device": {
+        "summary": "Dieser Lautsprecher ist in Music Assistant auch als „{other_bridge}“ registriert. Wenn er auf zwei Bridges läuft, entstehen Verbindungsschleifen. Deaktiviere ihn auf einer Bridge oder stoppe die andere. | Diese Lautsprecher sind auch auf einer anderen Bridge registriert: {devices}. Deaktiviere sie auf einer Bridge oder stoppe die andere, um Verbindungsschleifen zu vermeiden.",
+        "title": "{device} kann mit einer anderen Bridge kollidieren | {count} Lautsprecher können mit einer anderen Bridge kollidieren"
+      },
+      "latency": {
+        "summary": "Die Latenzabstimmung könnte verbessert werden.",
+        "summary_high_latency": "Die Latenzkompensation ist gesetzt, aber die globale Audiolatenz ist noch hoch.",
+        "summary_multi_no_delays": "Es gibt mehrere Lautsprecher, aber keiner hat bisher eine Latenzkompensation.",
+        "summary_repeated_resyncs": "Während der Wiedergabe wurden wiederholte Neusynchronisierungen beobachtet.",
+        "title": "Die Latenzabstimmung braucht Aufmerksamkeit"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant ist noch nicht bereit.",
+        "summary_no_credentials": "Die Anmeldedaten für Music Assistant fehlen.",
+        "summary_no_url": "Die Adresse von Music Assistant ist nicht gesetzt.",
+        "summary_not_connected": "Die Anmeldedaten für Music Assistant sind gespeichert, aber die Bridge ist nicht verbunden.",
+        "title": "Music Assistant braucht Aufmerksamkeit"
+      },
+      "missing_sink": {
+        "summary": "Der Lautsprecher ist verbunden, aber sein Bluetooth-Audioausgang ist noch nicht bereit. | Verbinde {devices} neu oder prüfe die Audioeinrichtung.",
+        "summary_error": "{error}",
+        "title": "{device} ist verbunden, hat aber noch keinen Audioausgang | {count} Lautsprecher sind verbunden, haben aber noch keinen Audioausgang"
+      },
+      "needs_attention": {
+        "summary": "Prüfe die letzten Ereignisse und die Diagnose.",
+        "summary_daemon_disconnected": "Der Sendspin-Player ist nicht verbunden.",
+        "summary_error": "{error}",
+        "summary_foreign_server": "Verbunden mit Music Assistant auf {host} {name}, nicht mit dem Music Assistant dieser Bridge.",
+        "summary_playback_without_audio": "Wiedergabe ist aktiv, aber es kommt kein Audiostream an.",
+        "summary_reconnecting": "Eine Bluetooth-Neuverbindung läuft.",
+        "summary_resyncing": "Das Audio wird neu synchronisiert.",
+        "summary_sink_muted": "Der Audioausgang ist im System stummgeschaltet.",
+        "summary_stopping": "Der Player wird gestoppt.",
+        "title": "{device} braucht Aufmerksamkeit"
+      },
+      "never_paired": {
+        "summary": "Dieser Lautsprecher wurde zur Bridge hinzugefügt, ist aber nie in Bluetooth aufgetaucht. Setze ihn in den Kopplungsmodus und klicke auf Kopplung starten. | Diese Lautsprecher wurden hinzugefügt, sind aber nie in Bluetooth aufgetaucht: {devices}. Setze sie in den Kopplungsmodus und starte die Kopplung.",
+        "summary_error": "{error}",
+        "title": "{device} wurde nie gekoppelt | {count} Lautsprecher wurden nie gekoppelt"
+      },
+      "output_missing": {
+        "summary": "Der Ausgang {sink} ist nicht verfügbar. {cause} Stecke das Gerät wieder an oder wähle in den Einstellungen des Players einen anderen Ausgang. Bis dahin bleibt der Player stumm in seinen Music Assistant-Gruppen.",
+        "title": "{device}: Der Audioausgang fehlt"
+      },
+      "output_muted": {
+        "summary": "Der Ausgang {sink} ist im Systemmischer stummgeschaltet, daher ist nichts zu hören. Die Lautstärke von Music Assistant kann ihn nicht einschalten: Hebe die Stummschaltung in den System-Audioeinstellungen auf. | Dasselbe gilt für: {others}.",
+        "title": "{device}: Der Audioausgang ist stummgeschaltet | {count} Audioausgänge brauchen Aufmerksamkeit"
+      },
+      "output_port_unavailable": {
+        "summary": "Der aktive Port {port} von {sink} meldet keine Verbindung. Prüfe das Kabel oder die Lautsprecher. | Dasselbe gilt für: {others}.",
+        "title": "{device}: Am Audioausgang ist nichts angeschlossen | {count} Audioausgänge brauchen Aufmerksamkeit"
+      },
+      "output_volume_zero": {
+        "summary": "Der Ausgang {sink} steht im Systemmischer auf 0 %. Die Lautstärke von Music Assistant kann ihn nicht erhöhen: Erhöhe sie in den System-Audioeinstellungen. | Dasselbe gilt für: {others}.",
+        "title": "{device}: Die Lautstärke des Audioausgangs ist 0 % | {count} Audioausgänge brauchen Aufmerksamkeit"
+      },
+      "pa_socket_missing": {
+        "summary": "Der Audio-Socket {socket} ist konfiguriert, existiert aber noch nicht auf dem Host; kein PipeWire- oder PulseAudio-Server hat ihn angelegt. Das ist das übliche Zeichen für einen Headless-Host ohne User-Session-Lingering.",
+        "title": "Audioserver nicht erreichbar: User-Lingering aktivieren"
+      },
+      "pa_socket_refused": {
+        "summary": "Der Audio-Socket {socket} ist eingebunden, aber der PipeWire- oder PulseAudio-Server des Hosts hat die Verbindung abgelehnt. Das ist das übliche Zeichen für einen Headless-Host ohne User-Session-Lingering.",
+        "title": "Audioserver nicht erreichbar: User-Lingering aktivieren"
+      },
+      "repair_required": {
+        "summary": "Der Lautsprecher ist nicht mehr gekoppelt, daher schlagen Neuverbindungsversuche ständig fehl. Setze ihn in den Kopplungsmodus und koppel ihn erneut. | Diese Lautsprecher sind nicht mehr gekoppelt. Koppel {devices} erneut aus dem Kopplungsmodus.",
+        "summary_error": "{error}",
+        "title": "{device} muss erneut gekoppelt werden | {count} Lautsprecher müssen erneut gekoppelt werden"
+      },
+      "runtime_access": {
+        "summary": "Die Bridge erreicht die D-Bus-Dienste des Hosts nicht, die sie für die Bluetooth-Steuerung braucht. Öffne die Diagnose und prüfe die Mounts und Rechte des Containers.",
+        "summary_all_disabled": "Die Bridge erreicht gerade die Dienste des Hosts nicht, die sie braucht. Stelle den Hostzugriff wieder her, bevor du einen Lautsprecher aktivierst, sonst ist die Wiedergabe weiterhin nicht verfügbar.",
+        "title": "Die Bridge erreicht die benötigten Host-Dienste nicht"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} hat den Verbindungsversuch gesendet und der Lautsprecher hat ihn mit „Limited Resources“ abgelehnt. Samsung Q-Soundbars filtern eingehende Kopplungen nach der Bluetooth-Geräteklasse des Initiators. Setze in den Einstellungen unter Bluetooth die device_class von {adapter} auf 0x00010c und koppel dann erneut.",
+        "summary_no_adapter": "Der Bluetooth-Adapter hat den Verbindungsversuch gesendet und der Lautsprecher hat ihn mit „Limited Resources“ abgelehnt. Samsung Q-Soundbars filtern eingehende Kopplungen nach der Bluetooth-Geräteklasse des Initiators. Setze in den Einstellungen unter Bluetooth die device_class des Adapters auf 0x00010c und koppel dann erneut.",
+        "title": "{device}: Kopplung vom Class-of-Device-Filter des Lautsprechers abgelehnt"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "Der Player verbindet sich, wird aber nach einem festen Takt getrennt oder trennt sich selbst ({interval} s). Prüfe Music Assistant-Server und Port und führe dann Verbindung testen aus.",
+        "title": "{device}: Der Sendspin-Player beendet sich alle {interval} s | {count} Lautsprecher: Der Sendspin-Player beendet sich in festem Intervall"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} Prüfe, ob SENDSPIN_PORT in den Bridge-Einstellungen zum Sendspin-Port in Music Assistant passt.",
+        "summary_error_only": "{error}",
+        "title": "{device} erreicht den Sendspin-Server nicht"
+      },
+      "sendspin_url_malformed": {
+        "summary": "Bearbeite den Music Assistant-Server in den Einstellungen. Er muss ein reiner Hostname oder eine IP-Adresse sein, ohne http://, Port oder Pfad.",
+        "title": "{device}: Die Adresse des Music Assistant-Servers ist ungültig | Die Adresse des Music Assistant-Servers ist ungültig"
+      },
+      "setup_audio": {
+        "summary_no_server": "Es wurde kein PulseAudio- oder PipeWire-Server gefunden.",
+        "summary_no_server_env": "Es wurde kein PulseAudio- oder PipeWire-Server gefunden: PULSE_SERVER ist nicht gesetzt.",
+        "summary_no_sinks": "Der Audioserver ist erreichbar, hat aber noch keine Audioausgänge.",
+        "summary_socket_missing": "Der Audio-Socket {socket} ist konfiguriert, existiert aber nicht auf dem Host; kein Audioserver hat ihn je angelegt.",
+        "summary_socket_refused": "Der Audio-Socket {socket} ist eingebunden, aber der Audioserver hat die Verbindung abgelehnt ({error}).",
+        "summary_socket_unreachable": "Der Audio-Socket {socket} ist eingebunden, aber die Bridge kann ihn nicht öffnen ({error}).",
+        "title": "Audiosystem prüfen"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "Der Bluetooth-Dienst (bluetoothd) läuft nicht auf dem Host, daher sieht die Bridge keinen Adapter, bis er startet.",
+        "summary_no_controller": "Die Bridge hat keinen Bluetooth-Adapter gefunden.",
+        "summary_no_paired": "Der Bridge ist kein gekoppelter Bluetooth-Lautsprecher verfügbar.",
+        "summary_no_paired_disabled": "Es ist kein gekoppelter Bluetooth-Lautsprecher verfügbar, und der gespeicherte Lautsprecher ist deaktiviert.",
+        "title": "Bluetooth-Zugriff prüfen"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "Der Bridge ist kein gekoppelter Bluetooth-Lautsprecher verfügbar.",
+        "summary_no_paired_disabled": "Es ist kein gekoppelter Bluetooth-Lautsprecher verfügbar, und der gespeicherte Lautsprecher ist deaktiviert.",
+        "title": "Lautsprecher koppeln oder finden"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "Alle konfigurierten Lautsprecher sind derzeit deaktiviert.",
+        "summary_all_released": "Alle konfigurierten Lautsprecher sind derzeit von der Bridge freigegeben.",
+        "summary_all_released_auto": "Die Bridge hat nach Verbindungsfehlern alle konfigurierten Lautsprecher automatisch freigegeben.",
+        "title": "Einen Lautsprecher verfügbar machen"
+      },
+      "setup_latency": {
+        "summary_high_latency": "Die Latenzkompensation ist gesetzt, aber die globale Audiolatenz ist ziemlich hoch.",
+        "summary_multi_no_delays": "Es gibt mehrere Lautsprecher, aber keiner hat bisher eine Latenzkompensation.",
+        "title": "Latenzabstimmung prüfen"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Die Anmeldedaten für Music Assistant fehlen.",
+        "summary_no_url": "Die Adresse von Music Assistant ist nicht gesetzt.",
+        "summary_not_connected": "Die Anmeldedaten für Music Assistant sind gespeichert, aber die Bridge ist nicht verbunden.",
+        "title": "Music Assistant verbinden"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "Die Bridge erreicht die D-Bus-Dienste des Hosts nicht, die sie für die Bluetooth-Steuerung braucht.",
+        "title": "Zugriff auf den Host prüfen"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "Einige verbundene Lautsprecher haben noch keinen Bluetooth-Audioausgang.",
+        "summary_none_configured": "Es sind noch keine Player konfiguriert.",
+        "summary_none_connected_bluetooth": "Player sind konfiguriert, aber derzeit ist kein Lautsprecher über Bluetooth verbunden.",
+        "summary_none_connected_mixed": "Player sind konfiguriert, aber kein Lautsprecher ist über Bluetooth verbunden und kein Audioausgang ist vorhanden.",
+        "summary_none_connected_outputs": "Player sind konfiguriert, aber keiner ihrer Audioausgänge ist vorhanden.",
+        "title": "Ersten Lautsprecher verbinden"
+      },
+      "setup_step": {
+        "summary": "Die Einrichtungs-Checkliste hat noch einen offenen Schritt.",
+        "title": "Einrichtung abschließen"
+      },
+      "sink_system_muted": {
+        "summary": "Der Audioausgang ist stummgeschaltet. Es wird nichts abgespielt, bis die Stummschaltung aufgehoben wird. Das kann nach einem Absturz oder Neustart passieren.",
+        "summary_error": "{error}",
+        "title": "{device}: Der Audioausgang ist im System stummgeschaltet"
+      },
+      "transport_down": {
+        "summary": "Der Lautsprecher ist verbunden, aber sein Sendspin-Player läuft nicht. | Verbinde {devices} neu, um die Audiostrecke zurückzubringen.",
+        "summary_error": "{error}",
+        "title": "{device} hat seine Audiostrecke verloren | {count} Lautsprecher haben ihre Audiostrecke verloren"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "Der Lautsprecher ist bereits im Standby."
+      },
+      "bad_request": {
+        "detail": "Die Anfrage war ungültig."
+      },
+      "bluetooth_busy": {
+        "detail": "Bluetooth ist mit einer anderen Aktion beschäftigt. Versuche es gleich noch einmal."
+      },
+      "conflict": {
+        "detail": "Das steht im Konflikt mit dem aktuellen Zustand."
+      },
+      "forbidden": {
+        "detail": "Du darfst das nicht tun."
+      },
+      "http_error": {
+        "detail": "Die Anfrage ist fehlgeschlagen."
+      },
+      "internal_error": {
+        "detail": "In der Bridge ist ein interner Fehler aufgetreten."
+      },
+      "invalid_credentials": {
+        "detail": "Die Anmeldedaten sind nicht korrekt."
+      },
+      "invalid_mac": {
+        "detail": "Die Bluetooth-Adresse ist ungültig."
+      },
+      "invalid_request": {
+        "detail": "Einige Werte sind ungültig."
+      },
+      "job_in_progress": {
+        "detail": "Dieselbe Aktion läuft bereits."
+      },
+      "login_failed": {
+        "detail": "Anmeldung fehlgeschlagen."
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant ist noch nicht eingerichtet."
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant ist nicht verfügbar."
+      },
+      "ma_unreachable": {
+        "detail": "Die Bridge erreicht Music Assistant nicht."
+      },
+      "method_not_allowed": {
+        "detail": "Diese Aktion ist hier nicht verfügbar."
+      },
+      "network_error": {
+        "detail": "Die Bridge ist nicht erreichbar. Prüfe deine Verbindung."
+      },
+      "no_bluetooth": {
+        "detail": "Es ist kein Bluetooth-Adapter verfügbar."
+      },
+      "not_connected": {
+        "detail": "Der Lautsprecher ist nicht verbunden."
+      },
+      "not_found": {
+        "detail": "Nicht gefunden."
+      },
+      "not_in_standby": {
+        "detail": "Der Lautsprecher ist nicht im Standby."
+      },
+      "not_ready": {
+        "detail": "Noch nicht bereit. Versuche es gleich noch einmal."
+      },
+      "pairing_disabled": {
+        "detail": "Die Kopplung ist ausgeschaltet."
+      },
+      "pairing_failed": {
+        "detail": "Kopplung fehlgeschlagen."
+      },
+      "payload_too_large": {
+        "detail": "Die Daten sind zu groß."
+      },
+      "scan_in_progress": {
+        "detail": "Es läuft bereits eine Suche."
+      },
+      "session_expired": {
+        "detail": "Deine Sitzung ist abgelaufen. Melde dich erneut an."
+      },
+      "timeout": {
+        "detail": "Die Aktion hat zu lange gedauert."
+      },
+      "too_many_requests": {
+        "detail": "Zu viele Anfragen. Warte einen Moment und versuche es erneut."
+      },
+      "unauthorized": {
+        "detail": "Melde dich an, um fortzufahren."
+      },
+      "unavailable": {
+        "detail": "Derzeit nicht verfügbar."
+      },
+      "unknown_check": {
+        "detail": "Diese Prüfung existiert nicht."
+      },
+      "unknown_device": {
+        "detail": "Dieser Lautsprecher ist der Bridge nicht bekannt."
+      },
+      "unknown_job": {
+        "detail": "Diese Aktion ist nicht bekannt (möglicherweise abgelaufen)."
+      },
+      "upstream_error": {
+        "detail": "Ein Dienst, von dem die Bridge abhängt, hat mit einem Fehler geantwortet."
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "ein anderer Server"
+      },
+      "attempt": {
+        "open": "Neuverbindungsversuch {attempt} läuft.",
+        "with_limit": "Neuverbindungsversuch {attempt}/{max}. Es bleiben {remaining} Versuche, bevor die Bridge den Lautsprecher freigibt."
+      },
+      "list": {
+        "more": "{first}, {second} und {count} weitere"
+      },
+      "recovered": {
+        "text": "(wiederhergestellt)"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "Start der Bridge"
+      }
+    }
+  },
+  "consequence": {
+    "stopsPlayback": "Die Wiedergabe stoppt bei: {names}.",
+    "disconnects": "Bluetooth wird getrennt bei: {names}.",
+    "leavesMa": "Der Player verschwindet aus Music Assistant: {names}.",
+    "unpairs": "Die Bluetooth-Kopplung wird entfernt. Um ihn wieder zu nutzen, füge ihn als neuen Lautsprecher hinzu.",
+    "adapterDisconnects": "Alle Lautsprecher daran werden getrennt und die Wiedergabe stoppt, bis sie sich wieder verbinden: {names}.",
+    "restartMinute": "Während die Bridge neu startet, stoppt die Wiedergabe auf jedem Lautsprecher für etwa eine Minute.",
+    "playingNow": "Läuft gerade: {names}.",
+    "replacesConfig": "Alle Einstellungen und Lautsprecher werden durch den Inhalt dieser Datei ersetzt.",
+    "noUndo": "Das kann nicht rückgängig gemacht werden.",
+    "rollback": "Um zurückzugehen, installiere die vorherige Version.",
+    "noReconnect": "Die Bridge verwaltet nicht mehr: {names}. Sie verbinden sich erst wieder, wenn du sie zurückholst.",
+    "wakeFromMenu": "Wecke sie über ihr Menü.",
+    "downloadFirst": "Aktuelle Konfiguration zuerst herunterladen",
+    "repairs": "Die Bluetooth-Kopplung wird entfernt und neu angelegt; der Lautsprecher muss möglicherweise im Kopplungsmodus sein."
+  },
+  "longOp": {
+    "elapsed": "{seconds}s",
+    "cancel": "Abbrechen",
+    "cancelling": "Wird abgebrochen…",
+    "retry": "Erneut versuchen"
+  }
+}

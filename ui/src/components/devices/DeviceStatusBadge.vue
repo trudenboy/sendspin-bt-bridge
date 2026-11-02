@@ -16,7 +16,7 @@ const props = defineProps<{
   device?: Device
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 type DotStatus = 'online' | 'streaming' | 'ready' | 'connecting' | 'error' | 'offline' | 'standby'
@@ -67,7 +67,7 @@ const title = computed(() => {
   if (autoReleased.value) return t('device.status.autoReleasedTitle')
   const since = props.state === 'standby' ? props.device?.bluetooth?.standby_since : null
   const at = since ? new Date(since) : null
-  return at && !Number.isNaN(at.getTime()) ? t('device.status.standbySince', { time: at.toLocaleString() }) : undefined
+  return at && !Number.isNaN(at.getTime()) ? t('device.status.standbySince', { time: at.toLocaleString(locale.value) }) : undefined
 })
 </script>
 

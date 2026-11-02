@@ -9,7 +9,7 @@ import { useUpdateStore } from '@/stores/update'
 import { SbDropdown, SbDropdownItem } from '@/kit'
 import BugReportDialog from '@/components/BugReportDialog.vue'
 import { shortcutsOpen } from '@/composables/useKeyboardShortcuts'
-import { CircleHelp, SlidersHorizontal, ArrowUpCircle, Heart } from 'lucide-vue-next'
+import { CircleHelp, SlidersHorizontal, ArrowUpCircle, Heart, Check } from 'lucide-vue-next'
 import logoUrl from '@/assets/bridge-logo.svg'
 import { tServer, type ServerText } from '@/i18n/server'
 import { fleetSummary } from '@/utils/fleetSummary'
@@ -170,18 +170,40 @@ const iconButton =
               <SlidersHorizontal class="size-5" />
             </button>
           </template>
-          <p class="px-3 pt-1.5 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.language') }}</p>
-          <SbDropdownItem v-for="l in availableLocales()" :key="l" @click="setLocale(l)">
-            <span :class="locale === l ? 'font-medium text-primary-text' : ''">{{ languageName(l) }}</span>
-          </SbDropdownItem>
-          <p class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.theme') }}</p>
-          <SbDropdownItem v-for="m in ['auto', 'light', 'dark'] as const" :key="m" @click="mode = m">
-            <span :class="mode === m ? 'font-medium text-primary-text' : ''">{{ t(`header.themes.${m}`) }}</span>
-          </SbDropdownItem>
-          <p class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.display') }}</p>
-          <SbDropdownItem data-technical-toggle role="menuitemcheckbox" :aria-checked="technicalDetails" @click="setTechnicalDetails(!technicalDetails)">
-            <span :class="technicalDetails ? 'font-medium text-primary-text' : ''">{{ t('settings.showAdvanced') }}</span>
-          </SbDropdownItem>
+          <div role="group" :aria-label="t('header.language')">
+            <p role="presentation" class="px-3 pt-1.5 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.language') }}</p>
+            <SbDropdownItem
+              v-for="l in availableLocales()"
+              :key="l"
+              role="menuitemradio"
+              :checked="locale === l"
+              :data-language-option="l"
+              @click="setLocale(l)"
+            >
+              <span :class="locale === l ? 'font-medium text-primary-text' : ''">{{ languageName(l) }}</span>
+              <Check v-if="locale === l" class="ml-auto size-4 text-primary-text" aria-hidden="true" data-language-check />
+            </SbDropdownItem>
+          </div>
+          <div role="group" :aria-label="t('header.theme')">
+            <p role="presentation" class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.theme') }}</p>
+            <SbDropdownItem
+              v-for="m in ['auto', 'light', 'dark'] as const"
+              :key="m"
+              role="menuitemradio"
+              :checked="mode === m"
+              @click="mode = m"
+            >
+              <span :class="mode === m ? 'font-medium text-primary-text' : ''">{{ t(`header.themes.${m}`) }}</span>
+              <Check v-if="mode === m" class="ml-auto size-4 text-primary-text" aria-hidden="true" />
+            </SbDropdownItem>
+          </div>
+          <div role="group" :aria-label="t('header.display')">
+            <p role="presentation" class="px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary">{{ t('header.display') }}</p>
+            <SbDropdownItem data-technical-toggle role="menuitemcheckbox" :checked="technicalDetails" @click="setTechnicalDetails(!technicalDetails)">
+              <span :class="technicalDetails ? 'font-medium text-primary-text' : ''">{{ t('settings.showAdvanced') }}</span>
+              <Check v-if="technicalDetails" class="ml-auto size-4 text-primary-text" aria-hidden="true" />
+            </SbDropdownItem>
+          </div>
         </SbDropdown>
       </div>
     </div>

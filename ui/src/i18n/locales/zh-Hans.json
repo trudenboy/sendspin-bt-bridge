@@ -1,0 +1,2970 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "bugReport": "报告问题",
+    "docs": "文档",
+    "github": "GitHub 仓库",
+    "help": "帮助",
+    "preferences": "偏好设置",
+    "display": "显示",
+    "language": "语言",
+    "theme": "主题",
+    "themes": {
+      "auto": "自动",
+      "light": "浅色",
+      "dark": "深色"
+    },
+    "openDiagnostics": "打开诊断",
+    "sponsor": "赞助",
+    "sponsorHint": "支持本项目",
+    "bridgeName": "此桥接器",
+    "runtimeRow": "桥接器运行环境",
+    "hostname": "主机名",
+    "ipAddress": "IP 地址",
+    "upFor": "已运行 {uptime}",
+    "speakersConnected": "{n}/{total} 台 Bluetooth 已连接",
+    "runtime": {
+      "ha_addon": "Home Assistant 附加组件",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "独立运行"
+    }
+  },
+  "status": {
+    "kind": {
+      "audio_link": "音频链路",
+      "ma_account": "Music Assistant 账户",
+      "bluetooth": "Bluetooth 连接"
+    },
+    "hint": {
+      "audio_link": "音频链路是此播放器与 Music Assistant 之间的流",
+      "ma_account": "Music Assistant 账户是桥接器登录 Music Assistant API 的凭据",
+      "bluetooth": "Bluetooth 连接是桥接器与音箱之间的链路"
+    },
+    "audio_link": {
+      "streaming": "播放中",
+      "connected": "已连接",
+      "foreign": "其他服务器",
+      "disconnected": "已断开",
+      "unavailable": "不可用"
+    },
+    "ma_account": {
+      "signed_in": "已登录",
+      "signed_out": "已退出登录",
+      "not_configured": "未设置"
+    },
+    "bluetooth": {
+      "connected": "已连接",
+      "connecting": "连接中",
+      "disconnected": "已断开",
+      "standby": "待机",
+      "released": "已释放",
+      "disabled": "已禁用",
+      "not_paired": "未配对"
+    },
+    "reason": {
+      "reconnecting": "桥接器正在重新连接",
+      "user": "已手动释放",
+      "auto": "连接多次出现问题后已自动释放",
+      "foreign_server": "该播放器属于其他 Music Assistant，而非此桥接器",
+      "bluetooth_down": "正在等待 Bluetooth 连接",
+      "standby": "音箱处于待机状态",
+      "released": "音箱已释放",
+      "disabled": "播放器已禁用",
+      "unreachable_or_rejected": "无法连接 Music Assistant，或登录未被接受"
+    },
+    "bluetoothSummary": "{n}/{total} 台 Bluetooth 已连接",
+    "sectionTitle": "连接状态",
+    "accountRow": "Music Assistant 账户",
+    "speakersTitle": "音箱"
+  },
+  "device": {
+    "status": {
+      "streaming": "播放中",
+      "ready": "就绪",
+      "connecting": "连接中",
+      "error": "错误",
+      "offline": "离线",
+      "standby": "待机",
+      "idle": "空闲",
+      "degraded": "异常",
+      "recovering": "正在重新连接…",
+      "transitioning": "正在连接…",
+      "disabled": "已禁用",
+      "released": "已释放",
+      "output_missing": "输出缺失",
+      "buffering": "缓冲中",
+      "sink_muted": "已被系统静音",
+      "stopping": "正在停止",
+      "reconnecting": "正在重新连接",
+      "autoReleased": "已自动释放",
+      "autoReleasedTitle": "连接多次出现问题后，桥接器已释放此音箱。收回后可重试。",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "自 {time} 起处于待机"
+    },
+    "actions": {
+      "reconnect": "重新连接",
+      "disconnect": "断开连接",
+      "remove": "移除",
+      "wake": "唤醒",
+      "standby": "待机",
+      "enable": "启用",
+      "disable": "禁用",
+      "details": "详情",
+      "enableFailed": "无法启用或禁用播放器",
+      "volumeFailed": "无法更改 {name} 的音量",
+      "muteFailed": "无法静音或取消静音 {name}",
+      "releaseFailed": "无法释放 {name}",
+      "claimFailed": "无法收回 {name}",
+      "forget": "忘记 Bluetooth 绑定",
+      "forgetConfirm": "忘记 Bluetooth 绑定？音箱需要重新配对。",
+      "repair": "重新配对",
+      "claim": "将此桥接器用作源",
+      "reconnectFailed": "重新连接失败",
+      "forgetTitle": "忘记 {name}？",
+      "more": "{name} 的更多操作"
+    },
+    "battery": "电量 {level}%",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "本地音频",
+      "usb_audio": "USB 音频",
+      "virtual_sink": "虚拟输出",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "select": "选择 {name}",
+    "chips": {
+      "sync": {
+        "label": "同步",
+        "reanchoring": "重新同步中",
+        "errorMs": "{ms} 毫秒",
+        "title": "播放与组保持同步",
+        "reanchoringTitle": "正在重新同步流时序",
+        "count": "×{count}",
+        "countTitle": "重新同步：本次会话 {count} 次 · 5 分钟内 {m5} 次 · 30 分钟内 {m30} 次",
+        "playout": "播放输出",
+        "playoutTitle": "音箱输出端实测的播放偏差",
+        "settling": "稳定中",
+        "settlingTitle": "同步正在稳定；显示的是实测偏差，最多 {s} 秒后视为稳定",
+        "jumpsTitle": "播放跳变：本次会话 {count} 次"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "信号 {value} Δ dB，相对适配器理想接收范围",
+        "tier": {
+          "excellent": "信号极佳",
+          "strong": "信号强",
+          "fair": "信号一般",
+          "poor": "信号弱",
+          "bad": "信号差",
+          "stale": "信号读数已过期"
+        },
+        "staleTitle": "最近一次信号读数（{value} Δ dB）已超过 30 秒未更新"
+      },
+      "group": {
+        "title": "Music Assistant 组 {name}",
+        "external": "其他桥接器上还有 {n} 个",
+        "openAction": "在 Music Assistant 中打开"
+      },
+      "adapter": {
+        "title": "适配器 {name}（{hci}）· {state}",
+        "open": "在配置中打开适配器 {name}",
+        "state": {
+          "connected": "Bluetooth 已连接",
+          "disconnected": "Bluetooth 已断开",
+          "reconnecting": "Bluetooth 正在重新连接",
+          "released": "Bluetooth 已释放",
+          "autoReleased": "连接出现问题后 Bluetooth 已自动释放",
+          "disabled": "音箱已禁用"
+        }
+      },
+      "output": {
+        "title": "音频输出 {name}"
+      },
+      "transfer": {
+        "ready": "房间切换",
+        "notReady": "未就绪",
+        "readyTitle": "可以切换房间",
+        "notReadyTitle": "暂不能切换房间：{reason}",
+        "reasons": {
+          "ready": "已就绪",
+          "disabled": "音箱已禁用",
+          "bt_management_disabled": "Bluetooth 已释放",
+          "stopping": "正在停止",
+          "reconnecting": "正在重新连接",
+          "music_assistant_reconnecting": "Music Assistant 正在重新连接",
+          "reanchoring": "正在重新同步",
+          "output_missing": "输出缺失",
+          "daemon_unavailable": "播放器未运行",
+          "bluetooth_disconnected": "Bluetooth 已断开",
+          "music_assistant_disconnected": "Music Assistant 已断开",
+          "sink_missing": "没有音频输出"
+        }
+      },
+      "blocked": {
+        "why": "为什么？",
+        "needs": "需要：{list}",
+        "openDiagnostics": "打开诊断",
+        "sinkMutedReason": "音频输出已在系统层面静音，因此不会播放声音。请在音量控制中取消静音。",
+        "title": {
+          "sink_muted": "已被系统静音",
+          "reconnect": "无法重新连接",
+          "toggle_bt_management": "无法释放",
+          "play_pause": "无法播放",
+          "volume": "无法调节音量",
+          "queue_control": "无法控制队列"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth 由此桥接器管理",
+          "bluetooth_paired": "Bluetooth 配对",
+          "reconnect_idle": "等待重新连接完成",
+          "device_not_stopping": "等待播放器停止完成",
+          "sendspin_connected": "Sendspin 链路",
+          "audio_sink": "音频输出设备",
+          "ma_connected": "Music Assistant 链路",
+          "ma_player_registered": "播放器已在 Music Assistant 中注册"
+        },
+        "summary": "部分控制不可用"
+      },
+      "backend": {
+        "bluetooth": "Bluetooth 音箱",
+        "output": "音频输出"
+      },
+      "server": {
+        "title": "指向 Music Assistant {where} 的音频链路",
+        "foreign": "音频链路指向 {where}，并非此桥接器的 Music Assistant"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 分钟",
+      "minutes": "{n} 分钟",
+      "hours": "{h} 小时 {m} 分钟"
+    }
+  },
+  "config": {
+    "ma": "Music Assistant",
+    "save": "保存",
+    "adapterPowered": "已开启",
+    "adapterOff": "关闭",
+    "noAdapters": "未检测到适配器",
+    "passwordMismatch": "密码不一致",
+    "invalidJson": "JSON 无效"
+  },
+  "diagnostics": {
+    "tabs": {
+      "logs": "日志",
+      "system": "系统",
+      "overview": "概览"
+    },
+    "health": {
+      "title": "桥接器健康状况",
+      "healthy": "正常",
+      "degraded": "降级",
+      "error": "错误",
+      "unknown": "未知",
+      "audio": "音频后端",
+      "bluetooth": "Bluetooth 控制器",
+      "dbus": "D-Bus",
+      "memory": "内存",
+      "check": {
+        "ok": "正常",
+        "warning": "注意",
+        "error": "异常",
+        "unknown": "未知"
+      }
+    },
+    "events": {
+      "loadMore": "加载更多",
+      "empty": "无事件",
+      "emptyDesc": "尚未记录任何事件。"
+    },
+    "recovery": {
+      "title": "恢复指引",
+      "runChecks": "运行检查",
+      "noIssues": "一切正常",
+      "noIssuesDesc": "未检测到问题，所有系统运行正常。"
+    },
+    "copy": "复制",
+    "copied": "已复制！",
+    "copyFailed": "复制失败",
+    "downloadCsv": "下载 CSV",
+    "audioSink": "音频输出",
+    "codec": "编解码器",
+    "sampleRate": "采样率",
+    "reanchorCount": "重新同步次数",
+    "logs": {
+      "title": "应用日志",
+      "logLevel": "日志级别",
+      "autoScroll": "自动滚动",
+      "refresh": "刷新",
+      "download": "下载",
+      "apply": "应用",
+      "search": "搜索日志…",
+      "showingLines": "显示 {shown}/{total} 行",
+      "noLogs": "无日志条目",
+      "loadFailed": "无法加载日志。",
+      "levelApplied": "日志级别已设为 {level}",
+      "levelFailed": "无法更改日志级别",
+      "copyLine": "复制此行"
+    },
+    "timeline": {
+      "title": "近期事件"
+    }
+  },
+  "ma": {
+    "login": {
+      "title": "连接 Music Assistant",
+      "step1": "第 1 步：服务器地址",
+      "step2": "第 2 步：使用 Music Assistant 账户登录",
+      "serverUrl": "服务器 URL",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "自动发现",
+      "token": "令牌",
+      "submit": "连接",
+      "failed": "连接失败，请检查凭据。",
+      "username": "用户名",
+      "password": "密码",
+      "withHa": "使用 Home Assistant 登录",
+      "connected": "已登录 {url} 上的 Music Assistant",
+      "useToken": "改用令牌",
+      "maToken": "Music Assistant 令牌",
+      "maTokenHint": "在 Music Assistant → 设置 → 个人资料 中创建长期令牌，然后粘贴到此处。",
+      "tokenSubmit": "使用令牌连接",
+      "tokenFailed": "Music Assistant 未接受该令牌。",
+      "noServers": "网络上未找到 Music Assistant 服务器。请在上方输入其地址。"
+    },
+    "groups": {
+      "members": "成员",
+      "empty": "无同步组",
+      "emptyDesc": "未找到 Music Assistant 同步组。发现组即可开始。",
+      "discover": "发现组",
+      "create": "在 Music Assistant 中创建组"
+    },
+    "nowPlaying": {
+      "artwork": "专辑封面",
+      "artworkPreview": "封面预览",
+      "artworkClose": "关闭",
+      "noTrack": "无播放内容",
+      "prev": "上一首",
+      "playPause": "播放 / 暂停",
+      "next": "下一首",
+      "notPlaying": "未在播放 — 上次播放"
+    },
+    "autoConnecting": "正在连接 Music Assistant…",
+    "openInMA": "在 Music Assistant 中打开",
+    "silentAuthFailed": "自动连接失败，请手动登录"
+  },
+  "login": {
+    "title": "登录",
+    "password": "密码",
+    "passwordPlaceholder": "输入密码",
+    "submit": "登录",
+    "failed": "密码无效，请重试。",
+    "username": "用户名",
+    "code": "认证码",
+    "codePrompt": "输入 {module} 中的代码",
+    "codeSubmit": "验证",
+    "method": {
+      "password": "桥接器密码",
+      "ma": "Music Assistant 账户",
+      "ha_via_ma": "Home Assistant 账户",
+      "ha": "Home Assistant 账户"
+    }
+  },
+  "devices": {
+    "addDevice": "添加音箱",
+    "empty": {
+      "title": "尚无播放器",
+      "description": "扫描 Bluetooth 音箱，或手动添加播放器。"
+    },
+    "viewGrid": "网格视图",
+    "viewList": "列表视图",
+    "allAdapters": "所有适配器",
+    "allGroups": "所有组",
+    "selected": "已选择 {count}/{total}",
+    "noneSelected": "已选择 0 个",
+    "selectAll": "全选",
+    "groupVolume": "组音量",
+    "muteAll": "全部静音",
+    "pauseAll": "全部暂停",
+    "reconnectAll": "全部重新连接",
+    "list": {
+      "name": "名称",
+      "status": "状态",
+      "volume": "音量",
+      "transport": "播放控制",
+      "adapter": "适配器",
+      "actions": "操作",
+      "expand": "显示 {name} 的详情",
+      "collapse": "隐藏 {name} 的详情",
+      "quickActions": "快捷操作"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "节能",
+        "title": "为已选 {total} 个中的 {count} 个开启节能（Bluetooth 保持连接）"
+      },
+      "standby": {
+        "label": "待机",
+        "title": "断开已选 {total} 个中 {count} 个的 Bluetooth，以节省音箱电量",
+        "confirmTitle": "将 {count} 个音箱切换到待机？",
+        "confirmMessage": "以下音箱将断开 Bluetooth 并停止播放：{names}。可从其菜单唤醒。"
+      },
+      "release": {
+        "label": "释放",
+        "title": "释放已选 {total} 个中的 {count} 个，以便其他设备使用",
+        "confirmTitle": "释放 {count} 个音箱？",
+        "confirmMessage": "桥接器将停止管理：{names}。在收回之前，它们不会重新连接。"
+      },
+      "failed": "{action}失败：{names}",
+      "enable": {
+        "label": "启用",
+        "title": "启用已选 {total} 个中的 {count} 个（已禁用的播放器）"
+      },
+      "remove": {
+        "label": "移除",
+        "title": "移除已选 {total} 个中的 {count} 个（已禁用的播放器）",
+        "confirmTitle": "移除 {count} 个播放器？",
+        "confirmMessage": "对应播放器将从 Music Assistant 中消失，Bluetooth 配对也会被移除：{names}。"
+      }
+    },
+    "sort": {
+      "label": "排序方式",
+      "activity": "活动",
+      "name": "名称",
+      "status": "状态"
+    },
+    "backendFilter": {
+      "label": "播放器类型",
+      "all": "所有播放器",
+      "bluetooth": "Bluetooth 音箱",
+      "output": "音频输出"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "overview": "概览",
+      "config": "设置",
+      "timing": "时序",
+      "history": "历史"
+    },
+    "status": {
+      "playerState": "状态",
+      "audioSink": "音频输出",
+      "codec": "编解码器",
+      "reportedDelay": "报告的延迟",
+      "reportedDelayHint": "音箱通过 Bluetooth 报告的延迟（A2DP 延迟报告）。仅供参考：由音箱报告，并非实测。",
+      "sampleRate": "采样率"
+    },
+    "config": {
+      "name": "名称",
+      "mac": "MAC 地址",
+      "adapter": "适配器",
+      "port": "监听端口",
+      "delay": "音箱延迟补偿",
+      "enabled": "已启用",
+      "save": "保存",
+      "saveFailed": "保存配置失败",
+      "enabledHelp": "已禁用的音箱会保留设置，但不会创建播放器。",
+      "playoutSync": "播放输出同步",
+      "playoutSyncHelp": "关闭后，此音箱将按播放输出同步之前的方式运行：使用普通音频输出，不进行播放输出测量。",
+      "notConfigured": "此音箱不在配置中。"
+    },
+    "events": {
+      "empty": "无已记录事件"
+    },
+    "signal": {
+      "port": "端口 {port}",
+      "corrections": "{n} 次校正 | {n} 次校正",
+      "subprocess": "播放器进程"
+    },
+    "actions": {
+      "more": "更多操作",
+      "reconnect": "重新连接",
+      "reconnectDone": "正在重新连接",
+      "repair": "重新配对",
+      "repairDone": "正在重新配对",
+      "pairing": "允许 Music Assistant 配对",
+      "pairingDone": "Music Assistant 可暂时进行配对",
+      "unmute": "取消音频输出静音",
+      "unmuteDone": "音频输出已取消静音",
+      "release": "开启节能",
+      "releaseDone": "节能已开启",
+      "resume": "关闭节能",
+      "resumeDone": "节能已关闭"
+    },
+    "server": {
+      "title": "Music Assistant 服务器",
+      "name": "名称",
+      "host": "地址",
+      "id": "服务器 ID",
+      "url": "URL",
+      "foreign": "音频链路指向 {where} 上的 Music Assistant，而非此桥接器的 Music Assistant。另一台服务器先接管了此播放器；请重新连接播放器，以便此桥接器的 Music Assistant 接管。",
+      "refusedTitle": "被拒绝",
+      "refusedCount": "{n} 次尝试"
+    },
+    "troubleshoot": {
+      "label": "故障排查"
+    },
+    "overview": {
+      "audioPath": "音频路径",
+      "events": "最新事件",
+      "allEvents": "所有事件 →"
+    }
+  },
+  "volume": {
+    "mute": "静音",
+    "unmute": "取消静音",
+    "label": "{name} 的音量"
+  },
+  "bluetooth": {
+    "scan": {
+      "scanning": "正在扫描…",
+      "pair": "配对",
+      "unknown": "未知设备",
+      "noDevices": "未找到设备",
+      "adapter": "适配器",
+      "add": "添加",
+      "added": "已在此桥接器",
+      "pairFailed": "配对失败：{reason}",
+      "quiesce": "配对时暂时断开此适配器上的其他音箱",
+      "noIo": "不弹出 PIN 提示直接配对（Just Works）— 适用于会取消配对的音箱",
+      "hfp": "同时允许免提配置文件（通话）"
+    },
+    "audioOnly": "仅音频",
+    "release": "释放音箱",
+    "reclaim": "收回音箱",
+    "released": "已释放"
+  },
+  "common": {
+    "loading": "加载中…",
+    "error": "错误",
+    "retry": "重试",
+    "cancel": "取消",
+    "confirm": "确认",
+    "close": "关闭",
+    "search": "搜索",
+    "noResults": "无结果",
+    "no": "否"
+  },
+  "update": {
+    "title": "软件更新",
+    "available": "有可用更新",
+    "badge": "更新 v{version}",
+    "checkNow": "检查更新",
+    "upToDate": "当前已是最新版本",
+    "versionCompare": "版本更新",
+    "instructions": "更新说明",
+    "releaseNotes": "发行说明",
+    "recheck": "重新检查",
+    "viewRelease": "发行说明",
+    "applyNow": "立即更新",
+    "confirmTitle": "更新到 v{version}？",
+    "applyStarted": "更新已开始 — 桥接器即将重启",
+    "openHa": "在 HA 中更新",
+    "copyCommand": "复制命令",
+    "checking": "正在检查更新…",
+    "channel": "通道",
+    "checkChannel": "检查"
+  },
+  "transport": {
+    "play": "播放",
+    "pause": "暂停",
+    "next": "下一首",
+    "previous": "上一首",
+    "failed": "播放控制命令失败",
+    "position": "曲目位置",
+    "shuffleOn": "随机播放已开 — 关闭",
+    "shuffleOff": "随机播放已关 — 开启",
+    "repeat": {
+      "off": "循环已关 — 全部循环",
+      "all": "全部循环 — 单曲循环",
+      "one": "单曲循环 — 关闭"
+    },
+    "pending": "正在等待 Music Assistant 确认",
+    "queue": "队列控制"
+  },
+  "adapter": {
+    "turnOff": "关闭",
+    "turnOn": "开启",
+    "confirmOffTitle": "关闭适配器 {adapter}？",
+    "confirmRebootTitle": "重启适配器 {adapter}？",
+    "reboot": "重启",
+    "powerToggled": "已切换适配器电源",
+    "powerFailed": "切换适配器电源失败",
+    "rebooted": "适配器已重启",
+    "rebootFailed": "重启适配器失败",
+    "confirmNone": "当前没有音箱在使用它。",
+    "openInHardware": "在硬件中打开"
+  },
+  "hardware": {
+    "subtitle": "Bluetooth 适配器、与其绑定的设备，以及此主机的音频。",
+    "refresh": "刷新",
+    "stale": "数据可能已过期",
+    "controllers": "Bluetooth 控制器",
+    "devices": "Bluetooth 设备",
+    "noControllers": "未找到 Bluetooth 控制器",
+    "noDevices": "未配对任何 Bluetooth 设备",
+    "deviceCount": "设备：{n}",
+    "powered": "开",
+    "poweredOff": "关",
+    "connected": "已连接",
+    "paired": "已配对",
+    "trusted": "已信任",
+    "roleOutput": "播放音频",
+    "roleInput": "接收音频",
+    "roleEvidence": "依据：{evidence}",
+    "battery": "电量：{pct}%",
+    "rssi": "{db} dB",
+    "signal": "信号：{db} dB",
+    "addAsSpeaker": "添加为音箱",
+    "addSpeakerFailed": "无法将 {name} 添加为音箱。",
+    "forgotBond": "已忘记 {name} 的 Bluetooth 绑定。",
+    "forgetFailed": "无法忘记绑定：{reason}",
+    "forgetPlayer": "此绑定关联播放器 {player}。",
+    "connect": "连接",
+    "disconnect": "断开连接",
+    "pairDevice": "配对新设备",
+    "connectFailed": "无法连接 {name}：{reason}",
+    "disconnectFailed": "无法断开 {name}：{reason}",
+    "bondInUseTitle": "此绑定关联着播放器",
+    "bondInUse": "此绑定关联着播放器；请先移除该播放器，再忘记绑定。",
+    "openPlayer": "在首页打开 {player}",
+    "btRefused": "BlueZ 拒绝（{code}）",
+    "btUnavailable": "Bluetooth 协议栈无响应（{code}）",
+    "player": "播放器",
+    "controllerId": "控制器",
+    "classOfDevice": "设备类别",
+    "area": "区域",
+    "openDetails": "显示 {name} 的详情",
+    "yes": "是",
+    "no": "否",
+    "unknown": "未知",
+    "unavailable": {
+      "dbusTitle": "此主机没有 D-Bus",
+      "dbusBody": "D-Bus 无响应，桥接器无法向 BlueZ 查询适配器。",
+      "bluetoothTitle": "无法读取此主机的 Bluetooth",
+      "bluetoothBody": "桥接器在此主机上看不到 Bluetooth 适配器。",
+      "hardwareTitle": "无法读取此主机的硬件",
+      "hardwareBody": "D-Bus 和 bluetoothctl 均无响应。",
+      "nextStep": "请确认桥接器可以访问主机的 Bluetooth 协议栈，然后重新加载此页面。",
+      "reason": "原因代码：{reason}"
+    },
+    "unsupported": {
+      "title": "此桥接器无法报告硬件信息",
+      "body": "其 API 没有 /hardware 路由。请更新桥接器，或使用设置和诊断页面。"
+    },
+    "drawer": {
+      "overview": "概览",
+      "technical": "技术详情",
+      "power": "电源",
+      "present": "存在",
+      "area": "区域",
+      "classOfDevice": "设备类别",
+      "deviceCount": "此控制器上的设备数",
+      "roles": "链路角色",
+      "player": "播放器",
+      "battery": "电量",
+      "rssi": "信号",
+      "bonded": "已绑定",
+      "controllers": "持有绑定的控制器",
+      "synthetic": "合成 ID（无 sysfs 条目）",
+      "observedAt": "观测时间",
+      "id": "ID",
+      "mac": "MAC"
+    },
+    "audio": {
+      "title": "音频",
+      "cards": "声卡",
+      "outputs": "音频输出",
+      "inputs": "音频输入",
+      "noDevices": "无音频设备",
+      "noDevicesBody": "音频服务器已响应，且未报告任何声卡、输出或输入。",
+      "noCards": "无声卡",
+      "noOutputs": "无音频输出",
+      "noInputs": "无音频输入",
+      "notReportedTitle": "此桥接器不报告音频信息",
+      "notReportedBody": "其硬件 API 早于音频部分。请更新桥接器以查看声卡、输出和输入。",
+      "unavailableTitle": "无法读取此主机的音频",
+      "unavailableBody": "没有 PulseAudio 兼容服务器响应，因此声卡、输出和输入未知。",
+      "captureUnavailableTitle": "手机输入不可用",
+      "captureUnavailableBody": "此主机无法采集通过 Bluetooth 连接的手机，因此源输入没有可播放的内容。",
+      "noDriver": "无驱动",
+      "driver": "驱动",
+      "activeProfile": "当前模式",
+      "profileCount": "模式",
+      "portCount": "端口",
+      "profiles": "模式",
+      "profileActive": "使用中",
+      "profileAvailable": "可用",
+      "profileUnavailable": "不可用",
+      "profileUnknown": "可用性未知",
+      "profileSwitch": "切换模式",
+      "profileSelectLabel": "模式",
+      "profileConfirmTitle": "将 {card} 切换到模式 {profile}？",
+      "profileConsequence": "新模式启动期间，{card} 上的所有输出都可能静音。",
+      "profileConsequenceInUse": "新模式启动期间，{card} 上的所有输出都可能静音，{players} 也可能如此。",
+      "profileConfirm": "切换模式",
+      "profileSwitched": "{card} 现在使用模式 {profile}。",
+      "detailStale": "音频服务器无法刷新此次读取，可能未显示最新状态。",
+      "profileManagedByConnection": "此声卡的模式由 Bluetooth 连接决定。",
+      "profileNone": "无模式",
+      "ports": "端口",
+      "portActive": "活动",
+      "portAvailable": "可用",
+      "portUnavailable": "不可用",
+      "portUnknown": "可用性未知",
+      "portSwitch": "切换端口",
+      "portSelectLabel": "端口",
+      "portConfirmTitle": "将 {name} 切换到 {port}？",
+      "portConsequence": "新端口接管期间，{name} 可能静音，通过它播放的任何内容也可能如此。",
+      "portConsequenceInUse": "新端口接管期间，{name} 可能静音，正在通过它播放的 {player} 也可能如此。",
+      "portConfirm": "切换端口",
+      "portSwitched": "{name} 现在使用端口 {port}。",
+      "endpoints": "端点",
+      "output": "输出",
+      "input": "输入",
+      "direction": "方向",
+      "state": "状态",
+      "stateRunning": "运行中",
+      "stateIdle": "空闲",
+      "stateSuspended": "已暂停",
+      "stateUnavailable": "不可用",
+      "stateUnknown": "未知",
+      "activePort": "活动端口",
+      "portUnavailableReason": "其活动端口不可用，因此此输入收不到声音。",
+      "inputUnavailable": "此输入不可用；音频服务器未说明原因。",
+      "outputPortUnavailableReason": "其活动端口不可用，因此此输出无法播放。",
+      "outputUnavailable": "此输出不可用；音频服务器未说明原因。",
+      "volume": "音量",
+      "muted": "已静音",
+      "inUse": "使用者",
+      "default": "默认",
+      "setDefault": "设为默认",
+      "defaultConfirmTitle": "将 {name} 设为默认输出？",
+      "defaultConsequence": "所有未指定输出的声音都会在 {name} 上播放。",
+      "makeDefault": "设为默认",
+      "defaultSet": "{name} 现在是默认输出。",
+      "suspend": "暂停",
+      "resume": "恢复",
+      "suspendConfirmTitle": "暂停 {name}？",
+      "suspendConsequence": "只有 {name} 静音：它仍留在列表中，在恢复之前不播放任何内容。",
+      "suspended": "{name} 已暂停。",
+      "commandFailed": "无法更改 {name}：{reason}",
+      "kindMicrophone": "麦克风",
+      "kindLineIn": "线路输入",
+      "kindMonitor": "监听",
+      "kindPhone": "Bluetooth 手机",
+      "monitorOf": "监听来源",
+      "owner": "所属",
+      "ownerUnknown": "未分类",
+      "ownerCard": "声卡 {card}",
+      "ownerBluetooth": "Bluetooth 设备 {mac}",
+      "ownerInternal": "桥接器本身",
+      "sampleSpec": "采样格式",
+      "identifierSerial": "序列号",
+      "identifierBusPath": "总线路径",
+      "identifierVendorId": "厂商 ID",
+      "identifierProductId": "产品 ID",
+      "identifierAlsaLongCardName": "ALSA 长声卡名"
+    },
+    "source": {
+      "title": "源",
+      "stateOff": "关闭",
+      "stateWaiting": "等待手机",
+      "stateStreaming": "串流中",
+      "stateError": "错误",
+      "offBody": "手机源已关闭。在此启用后即可将手机提供给 Music Assistant。",
+      "phone": "手机",
+      "start": "启动源",
+      "stop": "停止源",
+      "stopConfirmTitle": "停止源？",
+      "stopConsequence": "以下音箱将交回 Music Assistant：{players}。",
+      "stopped": "源已停止。",
+      "pair": "配对手机",
+      "stopPairing": "停止配对",
+      "pairing": "已开放配对：剩余 {time}。",
+      "pairingHint": "现在配对手机；若提示 PIN 错误，请先在手机上忘记此桥接器（残留配对）。",
+      "errorTitle": "源出错",
+      "errorCapture": "此主机无法采集手机的音频。",
+      "errorCaptureNext": "桥接器需要手机的 PipeWire 采集节点；请检查主机的音频后端。",
+      "errorNoAdapter": "没有 Bluetooth 适配器可进入可被发现状态。",
+      "errorNoAgent": "桥接器无法注册 Bluetooth 配对代理。",
+      "errorBluetoothNext": "请检查上方的 Bluetooth 控制器，然后再次尝试配对。",
+      "errorNextStep": "请在 设置 → Music Assistant 中检查源设置，然后重新启动源。",
+      "failureTitle": "上一条源命令被拒绝",
+      "failureNextStep": "请检查源后重试。",
+      "commandFailed": "无法更改源：{reason}",
+      "capture": "采集",
+      "capturePipewire": "PipeWire 节点",
+      "capturePulse": "PulseAudio 源",
+      "captureUnavailable": "不可用",
+      "node": "节点",
+      "noNode": "无采集节点",
+      "subtitle": "手机串流到桥接器；桥接器将其作为源发送给 Music Assistant。",
+      "statePairing": "等待配对码",
+      "maTitle": "Music Assistant",
+      "maOff": "源已关闭。启用后即可将手机提供给 Music Assistant。",
+      "maError": "连接 Music Assistant 失败。",
+      "maConnected": "已连接。播放和路由在 Music Assistant 中管理。",
+      "maReconnecting": "已配对。正在重新连接 Music Assistant…",
+      "maNotPaired": "尚未配对。请在 Music Assistant 中输入下方代码。",
+      "maConnectedShort": "已连接",
+      "maPairedShort": "已配对",
+      "maUnpairedShort": "未配对",
+      "maCodeLabel": "配对码",
+      "maCodeHint": "请在 Music Assistant 中输入此代码。有效期剩余 {time}。",
+      "maPair": "与 Music Assistant 配对",
+      "maForget": "忘记配对",
+      "maForgetConfirmTitle": "忘记与 Music Assistant 的配对？",
+      "maForgetConfirmBody": "需要新的配对码，Music Assistant 才能再次播放该手机。",
+      "maForgetDone": "已忘记 Music Assistant 配对",
+      "maRouting": "请从 Music Assistant 播放手机；桥接器不会自行将其路由到音箱。",
+      "maOpen": "打开 Music Assistant",
+      "maUnreachable": "无法连接 Music Assistant。",
+      "maUnreachableNext": "请确认 Music Assistant 正在运行且 SENDSPIN_SERVER 指向它；桥接器会持续重试。",
+      "maPairingRequired": "需要配对码。",
+      "maRejected": "Music Assistant 拒绝了该配对码。",
+      "maUnsupported": "此 Music Assistant 未提供 Sendspin 源。",
+      "maUnsupportedNext": "请将 Music Assistant 更新到 2.10 或更高版本，并启用其 Sendspin 源提供程序。",
+      "maPairingNext": "请打开配对窗口，并在 Music Assistant 中输入配对码。",
+      "phoneTitle": "手机（Bluetooth）",
+      "phoneIdle": "未串流",
+      "phoneNoPhone": "没有手机正在向桥接器串流。",
+      "phoneHint": "手机通过 Bluetooth 与桥接器配对；Music Assistant 接收采集到的音频。",
+      "phonePaired": "手机已配对",
+      "phonePairedHint": "绑定已保存；在手机上开始播放，桥接器即会采集。",
+      "maSettingsHint": "配对和配对码位于设置中。",
+      "maSettingsAction": "打开配对设置",
+      "maNotPairedWhere": "未配对。请在设置中将桥接器与 Music Assistant 配对。",
+      "phonePairedNeedMa": "手机已配对。将桥接器与 Music Assistant 配对后即可收听。",
+      "phonePairedNeedMaAction": "与 Music Assistant 配对"
+    }
+  },
+  "kit": {
+    "closeDialog": "关闭对话框",
+    "closeDrawer": "关闭抽屉",
+    "dismissNotification": "关闭通知",
+    "removeBadge": "移除",
+    "signalPath": "信号路径",
+    "selectAllRows": "选择所有行",
+    "clearSearch": "清除搜索",
+    "loading": "加载中"
+  },
+  "sidebar": {
+    "collapse": "收起侧边栏",
+    "expand": "展开侧边栏"
+  },
+  "undo": {
+    "label": "撤销",
+    "handedOver": "{name} 已释放。在收回之前不会重新连接。",
+    "disabled": "{name} 已禁用。",
+    "standby": "{name} 已待机：Bluetooth 已断开，播放已停止。",
+    "woke": "已唤醒 {name}。",
+    "enabled": "{name} 已启用。",
+    "muted": "已静音：{name}。",
+    "powerSave": "已开启节能：{name}。",
+    "btConnected": "{name} 已连接。",
+    "btDisconnected": "{name} 已断开。",
+    "audioMuted": "{name} 已静音。",
+    "audioUnmuted": "{name} 已取消静音。",
+    "audioVolume": "已设置音量：{name}。",
+    "audioResumed": "已恢复：{name}。",
+    "sourceStarted": "源已启动。",
+    "sourcePairingOpen": "配对窗口已打开：现在配对手机。",
+    "sourcePairingClosed": "配对窗口已关闭。"
+  },
+  "restart": {
+    "stopping": "正在停止桥接器…",
+    "restarting": "正在重启桥接器…",
+    "ready": "桥接器已成功重启",
+    "error": "重启失败",
+    "openLogs": "打开日志",
+    "dismiss": "关闭",
+    "updating": "正在更新…桥接器将重启",
+    "updated": "更新完成，桥接器已恢复",
+    "updateFailed": "更新失败",
+    "errorNext": "请打开日志查看原因，然后重试。",
+    "updateTimedOut": "更新未完成 — 请打开日志",
+    "updateTimedOutNext": "桥接器在 3 分钟后仍未恢复。请打开日志查看更新停在哪里；若桥接器仍是旧版本，请再次尝试更新。"
+  },
+  "bugreport": {
+    "title": "提交问题报告",
+    "hints": {
+      "min": "至少 {n} 个字符。"
+    },
+    "submitBy": {
+      "github": "在 GitHub 上提交 issue",
+      "proxy": "发送报告",
+      "copy": "复制报告"
+    },
+    "fileReport": "提交问题报告",
+    "fields": {
+      "title": "问题标题",
+      "titlePlaceholder": "简要描述问题",
+      "description": "描述",
+      "descPlaceholder": "发生了什么？原本期望什么结果？",
+      "email": "电子邮箱（用于跟进）"
+    },
+    "errors": {
+      "titleShort": "标题至少需要 5 个字符",
+      "descShort": "描述至少需要 10 个字符",
+      "emailInvalid": "请输入有效的电子邮箱地址"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "提交",
+      "copy": "复制"
+    },
+    "diagnosticsPreview": "诊断数据",
+    "autoAttached": "自动附加",
+    "loadingDiagnostics": "正在加载诊断…",
+    "loadFailed": "加载诊断数据失败",
+    "submit": "提交报告",
+    "download": "下载",
+    "submitted": "问题报告已提交",
+    "submitFailed": "提交问题报告失败",
+    "copied": "报告已复制到剪贴板",
+    "copyFailed": "复制到剪贴板失败"
+  },
+  "settings": {
+    "title": "设置",
+    "showAdvanced": "显示技术详情",
+    "unsaved": "未保存的更改",
+    "save": "保存",
+    "discard": "放弃",
+    "saved": "设置已保存",
+    "restartNeeded": "重启桥接器以应用部分更改",
+    "restartNow": "立即重启",
+    "restartConfirmTitle": "立即重启桥接器？",
+    "units": {
+      "ms": "毫秒",
+      "s": "秒",
+      "min": "分钟",
+      "h": "小时"
+    },
+    "auto": "自动",
+    "embedded": {
+      "security": "已通过 Home Assistant 登录。登录和访问权限在那里管理。",
+      "updates": "更新来自 Home Assistant 附加组件商店。"
+    },
+    "sections": {
+      "general": {
+        "title": "常规",
+        "description": "名称、时区和日志。"
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "连接 Music Assistant 服务器以及播放器的控制方式。"
+      },
+      "audio": {
+        "title": "音频",
+        "description": "Bluetooth 播放的缓冲和编解码器选择。"
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "适配器、重新连接和恢复。"
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Home Assistant 中的实体，以及由其区域得出的房间名称。"
+      },
+      "security": {
+        "title": "安全",
+        "description": "登录、会话和 API 令牌。"
+      },
+      "updates": {
+        "title": "更新",
+        "description": "桥接器如何查找并安装新版本。"
+      },
+      "guidance": {
+        "title": "指引",
+        "description": "仪表板何时开始显示设置和恢复提示。"
+      },
+      "backup": {
+        "title": "备份",
+        "description": "导出、导入或编辑配置文件。"
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "桥接器名称",
+        "help": "显示在 Music Assistant 中每个播放器旁。留空则使用主机名。"
+      },
+      "TZ": {
+        "label": "时区",
+        "help": "IANA 名称，例如 Europe/Berlin。用于日志和事件时间。"
+      },
+      "WEB_PORT": {
+        "label": "Web 端口",
+        "help": "此 Web 界面的端口。留空则使用 WEB_PORT 环境变量或 8080。重启后生效。"
+      },
+      "LOG_LEVEL": {
+        "label": "日志级别",
+        "help": "DEBUG 会记录更多细节；排查问题时使用。",
+        "addonHelp": "在 Home Assistant 附加组件中，附加组件自身的 log_level 选项（配置选项卡）会在每次重启时设置此项。若要保留更改，请在那里修改。"
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Music Assistant 服务器",
+        "help": "Music Assistant 的主机名或 IP 地址，或填 auto 以在网络上自动查找。"
+      },
+      "SENDSPIN_PORT": {
+        "label": "Sendspin 端口",
+        "help": "Music Assistant 的 Sendspin 端口，通常为 8927。"
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "首个播放器端口",
+        "help": "音箱从此端口开始按顺序监听。留空则自动选择空闲端口。"
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "要求配对",
+        "help": "Music Assistant 必须先输入 PIN 才能向这些音箱播放。"
+      },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "仅限此桥接器的 Music Assistant",
+        "help": "拒绝任何其他试图接管音箱的 Music Assistant。在桥接器确定自己的 Music Assistant（服务器地址或 Music Assistant API URL）后生效。"
+      },
+      "VOLUME_VIA_MA": {
+        "label": "通过 Music Assistant 调节音量",
+        "help": "音量更改经由 Music Assistant 处理，使其滑块保持同步。"
+      },
+      "MUTE_VIA_MA": {
+        "label": "通过 Music Assistant 静音",
+        "help": "静音经由 Music Assistant 处理，使其播放器显示相同状态。"
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Music Assistant 的实时更新",
+        "help": "保持连接以获取正在播放、队列和组的变化。"
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "自动续期登录",
+        "help": "登录过期时在后台刷新 Music Assistant 登录。"
+      },
+      "MA_ADDON_SLUG": {
+        "label": "来自其他仓库的 Music Assistant 附加组件",
+        "help": "仅限 Home Assistant 附加组件。使用官方 Music Assistant 附加组件或本地附加组件文件夹中的组件时留空。若来自其他仓库，请输入其 slug，以便桥接器通过它登录。"
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "提示其他桥接器上的音箱",
+        "help": "向 Music Assistant 查询是否已有其他桥接器在使用同一音箱。"
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "音频缓冲",
+        "help": "数值越高，越能应对繁忙的主机和虚拟机；数值越低，响应越快。"
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "优先使用 SBC 编解码器",
+        "help": "使用 SBC 而非 AAC 或 aptX。适用于使用其他编解码器时卡顿的音箱。"
+      },
+      "SMOOTH_RESTART": {
+        "label": "平滑重启",
+        "help": "重新连接音箱的播放器，而不是从头重启。"
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "阻止 PulseAudio 移动流",
+        "help": "卸载 module-rescue-streams，使重新连接的音箱不会占用其他音箱的音频。"
+      },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "补偿音频缓冲延迟",
+        "help": "无论 PulseAudio 延迟如何，都按计划播放。关闭后恢复旧时序，会落后相应延迟。"
+      },
+      "PLAYOUT_SYNC": {
+        "label": "播放输出同步",
+        "help": "关闭则保持普通音频输出。“仅测量”为实验性功能：测量音箱输出端的播放偏差并报告，但不予校正。“测量并校正”使用空中传感器校正每次开始的定位；需要实验性的空中传感器，没有时行为等同于“仅测量”。音箱重启后生效。",
+        "options": {
+          "off": "关闭",
+          "measure": "仅测量",
+          "loop": "测量并校正"
+        }
+      },
+      "PLAYOUT_DIAG": {
+        "label": "播放时钟诊断",
+        "help": "同时将音箱输出设备自身的时钟速率记录到每分钟的 Clock diag 行中。播放不受影响。"
+      },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "启动时重置音频输出",
+        "help": "在每个播放器首次启动前，将本地音频输出暂停再恢复一次。有助于解决输出启动后无声的问题。"
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "连接检查间隔",
+        "help": "桥接器检查每个音箱是否仍连接的频率。"
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "重新连接尝试次数",
+        "help": "连续失败多少次后桥接器停止尝试。0 表示一直尝试。"
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "默认显示技术详情",
+        "help": "在尚未选择的浏览器中显示信号强度、同步计数器、服务器 ID 和高级设置。每个浏览器可在其偏好设置菜单中更改。"
+      },
+      "RSSI_BADGE": {
+        "label": "信号强度",
+        "help": "在每个已连接的音箱上显示实时信号强度。"
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "重连循环上限",
+        "help": "窗口内多少次连接/断开循环后桥接器释放音箱。0 表示关闭。"
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "重连循环窗口",
+        "help": "统计这些循环的时间窗口。"
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "恢复缺失的音频输出",
+        "help": "默认开启。对于同时作为音频源的音箱（如 Amazon Echo），连接后立即请求其接受音频；将仍停留在源模式的声卡切回输出模式（会短暂重试，因为刚连接时在 BlueZ 就绪前会返回“输入/输出错误”）；若音频输出仍未出现，则在十分钟内最多重新连接音箱两次。"
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "重新加载 PulseAudio Bluetooth 模块",
+        "help": "实验性。当 PulseAudio 不再创建 Bluetooth 输出时的最后手段。"
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "重置卡住的适配器",
+        "help": "实验性。重新连接尝试用尽后，对 Bluetooth 适配器断电重启或复位。"
+      },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "空中传感器（SBC 音箱）",
+        "help": "实验性，需手动开启；需要重启桥接器。测量音频真正通过空中离开的时刻。需要播放输出同步处于“仅测量”或“测量并校正”模式、Bluetooth SBC 音箱以及 CAP_NET_RAW。在“仅测量”模式下测量；在“测量并校正”模式下校正定位。",
+        "disabledReason": "请先开启播放输出同步（仅测量或测量并校正模式）。"
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "与 Home Assistant 的连接",
+          "help": "MQTT 通过 broker 发布实体；“集成”使用 Sendspin Bridge 自定义集成。",
+          "options": {
+            "off": "关闭",
+            "mqtt": "MQTT",
+            "rest": "集成"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "MQTT broker",
+            "help": "主机名或 IP，或填 auto 以使用 Mosquitto 附加组件。"
+          },
+          "port": {
+            "label": "MQTT 端口",
+            "help": "通常为 1883，使用 TLS 时为 8883。"
+          },
+          "tls": {
+            "label": "使用 TLS",
+            "help": "加密与 broker 的连接。"
+          },
+          "username": {
+            "label": "MQTT 用户",
+            "help": "Broker 允许匿名客户端时留空。"
+          },
+          "password": {
+            "label": "MQTT 密码",
+            "help": "保存在桥接器上，之后不再显示。"
+          },
+          "discovery_prefix": {
+            "label": "发现前缀",
+            "help": "必须与 Home Assistant 的 MQTT 发现前缀一致。"
+          },
+          "client_id": {
+            "label": "客户端 ID",
+            "help": "留空则根据桥接器自动生成。"
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "在网络上广播",
+            "help": "让 Home Assistant 发现桥接器并提供集成。"
+          },
+          "supervisor_pair": {
+            "label": "通过 Supervisor 配对",
+            "help": "在 Home Assistant OS 上，集成无需手动复制即可获得令牌。"
+          },
+          "advertise_host": {
+            "label": "广播地址",
+            "help": "Home Assistant 访问桥接器所用的地址。桥接器位于反向代理或 NAT 之后时请设置；留空则自动检测。"
+          },
+          "advertise_port": {
+            "label": "广播端口",
+            "help": "0 表示广播 Web 端口。"
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "由区域得出房间名",
+        "help": "根据 Home Assistant 区域为音箱建议房间名称。"
+      },
+      "AUTH_ENABLED": {
+        "label": "要求登录",
+        "help": "显示此界面前要求输入密码或账户。",
+        "disabledReason": "请先设置密码。"
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "会话时长",
+        "help": "登录保持有效的时间。"
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "锁定重复失败",
+        "help": "密码错误次数过多后暂时禁止登录。"
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "允许的失败次数",
+        "help": "锁定开始前窗口内允许的错误密码次数。"
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "统计窗口",
+        "help": "统计失败尝试的时间范围。"
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "锁定时长",
+        "help": "登录被禁止的时长。"
+      },
+      "TRUSTED_PROXIES": {
+        "label": "受信任的代理",
+        "help": "每行一个 IP 地址。只有这些可以告知桥接器真实的客户端地址。"
+      },
+      "CHECK_UPDATES": {
+        "label": "检查更新",
+        "help": "在后台查找新版本。"
+      },
+      "UPDATE_CHANNEL": {
+        "label": "更新通道",
+        "help": "稳定版适合日常使用；候选版和测试版更早发布，但可能出问题。",
+        "options": {
+          "stable": "稳定版",
+          "rc": "候选版",
+          "beta": "测试版"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "自动安装更新",
+        "help": "在所选通道发现新版本后立即安装。"
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "启动宽限期",
+        "help": "启动后等待这么久再显示设置提示。"
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "恢复宽限期",
+        "help": "等待这么久再为掉线的音箱建议修复方法。"
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "接受手机作为源",
+        "help": "通过 Bluetooth 与桥接器配对的手机可向其串流，桥接器将该音频作为 Sendspin 源提供给其他播放器播放。支持 PipeWire，在 Home Assistant OS 上支持 PulseAudio。"
+      }
+    },
+    "sectionsNav": "分区",
+    "parts": {
+      "maConnection": {
+        "label": "Music Assistant 账户",
+        "help": "登录后桥接器可显示组和正在播放内容，并控制队列。",
+        "change": "重新登录",
+        "signIn": "登录"
+      },
+      "sendspinTest": {
+        "label": "Sendspin 连接",
+        "help": "检查桥接器能否使用上方的服务器和端口访问 Music Assistant。",
+        "run": "测试",
+        "ok": "正常",
+        "failed": "失败"
+      },
+      "adapters": {
+        "label": "适配器",
+        "help": "为适配器起一个容易识别的名字。设备类别是应对拒绝未知计算机的音箱的变通方法；除非需要，否则留空。",
+        "name": "名称",
+        "deviceClass": "设备类别",
+        "deviceClassHelp": "六位十六进制，例如 0x00010c（笔记本电脑）。留空则沿用系统默认值。"
+      },
+      "ha": {
+        "publisher": "MQTT 发布器",
+        "publisherHelp": "将桥接器及其音箱发布为 Home Assistant 实体。",
+        "publisherBroker": "已连接到 {broker}。",
+        "mosquitto": "Mosquitto 附加组件",
+        "mosquittoMissing": "Home Assistant 尚无 MQTT broker。请安装 Mosquitto 附加组件，然后将 broker 设为 auto。",
+        "install": "安装",
+        "broker": "Broker",
+        "brokerHelp": "自动查找 broker，或在保存前测试下方的地址和凭据。",
+        "detect": "检测",
+        "test": "测试",
+        "detected": "已找到 broker 并填入。",
+        "notDetected": "未找到 broker；请手动输入。",
+        "testOk": "Broker 已接受连接（{ms} 毫秒）。",
+        "testFailed": "Broker 拒绝了连接。",
+        "component": "Sendspin Bridge 集成",
+        "componentSeen": "最近联系：{when}。",
+        "componentMissing": "请从 HACS 安装该集成，然后在 Home Assistant 中添加。",
+        "installHacs": "在 HACS 中打开",
+        "connected": "已连接",
+        "mdns": "网络广播",
+        "mdnsHelp": "Home Assistant 通过此广播找到桥接器。",
+        "announced": "已广播",
+        "notAnnounced": "未广播"
+      },
+      "areaMap": {
+        "label": "按适配器划分房间",
+        "help": "适配器上的音箱会使用其房间。区域 ID 是 Home Assistant 中区域地址的最后一部分（设置 → 区域）。",
+        "areaId": "区域 ID",
+        "areaName": "房间名称"
+      },
+      "password": {
+        "label": "密码",
+        "set": "已设置用于登录此界面的密码。",
+        "notSet": "尚未设置密码。在要求登录前请先创建。",
+        "change": "更改",
+        "create": "创建",
+        "current": "当前密码",
+        "new": "新密码",
+        "confirm": "重复输入新密码",
+        "tooShort": "至少 8 个字符。",
+        "save": "保存密码",
+        "changed": "密码已保存"
+      },
+      "tokens": {
+        "label": "API 令牌",
+        "help": "用于 Home Assistant 集成和自建脚本：以 Authorization: Bearer <token> 发送。",
+        "once": "请立即复制此令牌，之后不再显示。",
+        "copy": "复制",
+        "copied": "令牌已复制",
+        "created": "创建于 {when}",
+        "lastUsed": "最近使用 {when}",
+        "revoke": "撤销",
+        "revokeConfirm": "撤销此令牌？所有使用它的功能将停止工作。",
+        "newLabel": "令牌名称",
+        "create": "创建令牌"
+      },
+      "updates": {
+        "label": "版本 {version}",
+        "available": "有可用版本 {version}。",
+        "upToDate": "此通道上没有更新的版本。",
+        "check": "立即检查",
+        "install": "更新"
+      },
+      "backup": {
+        "export": "导出",
+        "exportHelp": "下载已移除密码和令牌的配置。",
+        "download": "下载",
+        "import": "导入",
+        "importHelp": "用之前导出的文件替换配置。桥接器上已有的密钥会保留。",
+        "choose": "选择文件",
+        "imported": "配置已导入",
+        "confirmTitle": "替换配置？",
+        "confirmLabel": "替换",
+        "raw": "以 JSON 编辑",
+        "rawHelp": "用于此界面未显示的键。更改通过“保存”按钮保存。",
+        "edit": "编辑",
+        "apply": "应用"
+      },
+      "latency": {
+        "label": "缓冲预设",
+        "recommended": "推荐"
+      },
+      "sourceLink": {
+        "label": "手机源",
+        "help": "通过 Bluetooth 配对手机，并在硬件页面查看其采集状态。",
+        "action": "打开硬件"
+      },
+      "maPairing": {
+        "label": "手机源配对",
+        "help": "Music Assistant 必须信任此桥接器，才能播放手机音频。",
+        "off": "手机源已关闭。请在硬件页面启用，然后在此与 Music Assistant 配对。",
+        "offAction": "打开硬件",
+        "whereToEnter": "在 Music Assistant 中：设置 → 播放器 → 此桥接器 → 配置 → 静态配对码。",
+        "routing": "播放和路由仍在 Music Assistant 中进行；桥接器仅采集手机音频。",
+        "notPaired": "尚未配对。请打开配对窗口，然后在 Music Assistant 中输入配对码。"
+      }
+    },
+    "leaveConfirm": "有未保存的设置。仍要离开吗？",
+    "device": {
+      "name": {
+        "label": "名称",
+        "help": "在 Music Assistant 中作为播放器名称显示。"
+      },
+      "backend": {
+        "adapter": {
+          "label": "Bluetooth 适配器",
+          "help": "连接此音箱的适配器。“自动”表示使用默认适配器。"
+        },
+        "sink": {
+          "label": "音频输出",
+          "help": "此播放器所使用的本机声音输出。已被其他播放器使用的输出不会列出。"
+        }
+      },
+      "room_name": {
+        "label": "房间",
+        "help": "与播放器一同显示，并提供给 Home Assistant。"
+      },
+      "room_id": {
+        "label": "Home Assistant 区域 ID",
+        "help": "将音箱关联到 Home Assistant 中的区域。"
+      },
+      "volume_controller": {
+        "label": "音量控制",
+        "help": "PulseAudio 会更改音箱的系统音量；Sendspin 则改为调整音频流的增益。",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Sendspin 流"
+        }
+      },
+      "listen_port": {
+        "label": "播放器端口",
+        "help": "Music Assistant 连接此音箱所用的端口。留空则自动选择。"
+      },
+      "idle_mode": {
+        "label": "空闲时",
+        "help": "没有播放内容时桥接器的行为。",
+        "options": {
+          "default": "保持连接",
+          "power_save": "节能",
+          "auto_disconnect": "断开连接",
+          "keep_alive": "保持音箱唤醒"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "节能延迟",
+        "help": "无声音达到此时长后开启节能。"
+      },
+      "idle_disconnect_minutes": {
+        "label": "断开延迟",
+        "help": "无声音达到此时长后断开 Bluetooth。0 表示不断开。"
+      },
+      "keep_alive_method": {
+        "label": "唤醒信号",
+        "help": "不可闻的 2 Hz 音调适用于大多数音箱；少数会对该音调有反应的音箱可用静音。",
+        "options": {
+          "infrasound": "不可闻音调",
+          "silence": "静音",
+          "none": "无"
+        }
+      },
+      "keepalive_interval": {
+        "label": "信号间隔",
+        "help": "唤醒脉冲之间的时间。"
+      },
+      "static_delay_ms": {
+        "label": "音箱延迟补偿",
+        "help": "此音箱播放声音的延迟程度。桥接器会提前相应时间发送音频，使其与组保持同步。"
+      },
+      "min_buffer_ms": {
+        "label": "最小缓冲",
+        "help": "音箱播放时保持排队的音频。"
+      },
+      "required_lead_time_ms": {
+        "label": "启动提前量",
+        "help": "音箱在首次发声前所需的时间。"
+      },
+      "allow_hfp_profile": {
+        "label": "允许耳机配置文件（通话）",
+        "help": "关闭时，音箱保持 A2DP 播放音乐；若主机恢复耳机配置文件，会将声卡切回。开启后，其他应用可使用音箱麦克风通话；该配置文件启用期间声音会降为 8 kHz 单声道。"
+      },
+      "calibration_bed": {
+        "label": "调音期间保持此音箱唤醒",
+        "help": "部分功放在静音后收到短暂的校准咔嗒声时不会解除静音，导致调音听不到。开启后，仅在组调音会话运行期间向此音箱播放轻微噪声；其他音箱仍使用干净的咔嗒声。"
+      }
+    },
+    "deviceGroups": {
+      "speaker": "音箱",
+      "idle": "空闲行为",
+      "sync": "时序"
+    },
+    "leave": "不保存并离开",
+    "search": "搜索设置",
+    "nothingFound": "没有与“{q}”匹配的内容。",
+    "changed": "已更改",
+    "loadFailed": "无法加载设置。",
+    "retry": "重试",
+    "autosave": {
+      "saved": "已保存",
+      "failed": "未保存：{reason}"
+    },
+    "appliesAfterRestart": "这里的部分设置需重启后生效；需要时保存会提示重启。"
+  },
+  "timing": {
+    "suggestion": "建议的延迟补偿：{value} 毫秒",
+    "applySuggestion": "应用",
+    "history": {
+      "title": "近期时序",
+      "syncError": "同步误差 {ms} 毫秒",
+      "empty": "尚无时序采样；音箱播放时会出现。",
+      "buffer": "已缓冲音频",
+      "error": "同步误差"
+    },
+    "playout": {
+      "title": "播放输出",
+      "yes": "是",
+      "no": "否",
+      "settling": "稳定中，最多 {s} 秒",
+      "fallback": "播放输出同步已回退到普通输出：{reason}",
+      "unknownReason": "未知原因",
+      "rows": {
+        "error": "误差",
+        "p95": "误差 p95",
+        "slope": "误差漂移",
+        "corrections": "校正次数",
+        "jumps": "跳变",
+        "underruns": "欠载",
+        "paLatency": "PulseAudio 延迟",
+        "hostLatency": "主机延迟",
+        "sinkRate": "输出设备速率",
+        "clockSlew": "时钟微调",
+        "warm": "预热"
+      }
+    },
+    "air": {
+      "title": "空中传感器",
+      "chip": "空中：{state}，H {h} 毫秒",
+      "chipNoH": "空中：{state}",
+      "states": {
+        "off": "关闭",
+        "unavailable": "不可用",
+        "unsupported_codec": "不支持的编解码器",
+        "unsupported_input": "不支持的输入",
+        "no_signal": "无信号",
+        "acquiring": "正在捕获",
+        "locked": "已锁定",
+        "holding": "保持中",
+        "no_lock": "锁定丢失"
+      },
+      "rows": {
+        "state": "状态",
+        "host": "主机定位",
+        "air": "空中误差",
+        "confidence": "置信度",
+        "psr": "峰值比（PSR）",
+        "lock": "上次确认",
+        "learnedTarget": "空中目标"
+      },
+      "needsCalibration": "需要校准",
+      "agoSeconds": "{s} 秒前",
+      "reasons": {
+        "needs_measure": "需要播放输出同步处于仅测量或测量并校正模式。",
+        "not_bluetooth": "仅支持 Bluetooth 音箱。",
+        "cpu_budget": "已停止：传感器占用了过多处理器时间。",
+        "internal_error": "内部错误后已停止；将在下一个流开始时重启。",
+        "playout_fallback": "播放输出同步已回退到普通输出。",
+        "unsupported_input": "不支持该音频格式（44.1 和 48 kHz，16 至 32 位）。",
+        "no_cap_net_raw": "Bluetooth 监视器不可用（需要 CAP_NET_RAW）。",
+        "unsupported_platform": "此系统没有 Bluetooth HCI 监视器（仅限 Linux）。",
+        "monitor_error": "Bluetooth 监视器出错。",
+        "sbc_params": "不支持该 SBC 流参数。",
+        "sbc_fragmented": "音箱将 SBC 帧拆分到多个数据包中。",
+        "codec": "音箱使用 {codec}；仅支持 SBC。",
+        "unknown": "原因：{reason}"
+      },
+      "calibration": {
+        "title": "校准",
+        "line": "空中到出声延迟：{latency} 毫秒 · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "忘记",
+        "forgetTitle": "忘记此校准？",
+        "forgetConfirm": "{name} 在 {adapter} 上的 {codec} {rate} kHz 将显示为未校准，直到同步向导再次测量。"
+      },
+      "correction": {
+        "target": "空中校正：{target}",
+        "calibrated": "已校准（{ms} 毫秒）",
+        "learned": "已学习（{n} 次开始）",
+        "noData": "无数据（学习中：{n}/{need} 次开始）",
+        "inactive": "未生效：未锁定",
+        "bias": "空中偏差 {value} 毫秒",
+        "corrections": "空中校正 {n}",
+        "trimEarly": "补偿微调 {value} 毫秒（目标提前 {ms} 毫秒）",
+        "trimLate": "补偿微调 {value} 毫秒（目标延后 {ms} 毫秒）"
+      },
+      "learned": {
+        "title": "已学习的延迟",
+        "line": "已学习：{latency} 毫秒，补偿 {delay} 毫秒 · {codec} · {adapter} · {starts} 次开始",
+        "forget": "忘记",
+        "forgetTitle": "忘记此已学习的延迟？",
+        "forgetConfirm": "{name} 将重新学习其在 {adapter} 上 {codec} {rate} kHz 的延迟。对应的校准也会被忘记。"
+      },
+      "learnedValue": "≈{ms} 毫秒（已学习）"
+    },
+    "details": "技术详情"
+  },
+  "system": {
+    "bridge": "桥接器",
+    "uptime": "运行时长",
+    "memory": "内存",
+    "platform": "平台",
+    "python": "Python",
+    "audio": "音频服务器",
+    "bluez": "BlueZ",
+    "downloads": "下载",
+    "downloadAction": "下载",
+    "download": {
+      "report": {
+        "label": "诊断报告",
+        "help": "问题报告所需的全部信息，已移除密钥。"
+      },
+      "logs": {
+        "label": "服务日志",
+        "help": "文本格式的桥接器日志。"
+      },
+      "timeline": {
+        "label": "恢复时间线",
+        "help": "启动和设备事件的 CSV 文件。"
+      },
+      "config": {
+        "label": "配置",
+        "help": "不含密码和令牌。"
+      }
+    },
+    "players": "播放器进程",
+    "noPlayers": "没有正在运行的播放器进程。",
+    "player": "播放器",
+    "restarts": "重启次数",
+    "state": "状态",
+    "running": "运行中",
+    "reconnecting": "正在重新连接",
+    "stopped": "已停止",
+    "hooks": {
+      "title": "Webhook",
+      "help": "桥接器将设备和桥接器事件 POST 到这些地址。它们持续到桥接器重启。",
+      "allEvents": "所有事件",
+      "counts": "已投递 {ok} 次，失败 {failed} 次",
+      "remove": "移除",
+      "url": "地址",
+      "categories": "类别（可选）",
+      "add": "添加"
+    }
+  },
+  "guidance": {
+    "title": "需要注意的事项",
+    "done": "已完成：{action}"
+  },
+  "nav": {
+    "home": "音箱",
+    "homeShort": "音箱",
+    "groups": "组",
+    "groupsShort": "组",
+    "settings": "设置",
+    "settingsShort": "设置",
+    "diagnostics": "诊断",
+    "diagnosticsShort": "健康",
+    "hardware": "硬件",
+    "hardwareShort": "硬件",
+    "sync": "组同步"
+  },
+  "home": {
+    "connected": "{n}/{total} 台 Bluetooth 已连接",
+    "playing": "{n} 个播放中",
+    "source": {
+      "title": "手机 → Music Assistant",
+      "streaming": "正在播放手机音频",
+      "pairing": "配对进行中",
+      "waiting": "等待手机",
+      "off": "源已关闭",
+      "error": "源错误",
+      "maConnected": "Music Assistant 已连接",
+      "maPaired": "Music Assistant 已配对，正在重新连接",
+      "maUnpaired": "Music Assistant 未配对",
+      "openHardware": "打开硬件",
+      "pairAction": "与 Music Assistant 配对"
+    },
+    "checklist": {
+      "title": "初始步骤",
+      "progress": "已完成 {done}/{total}",
+      "speaker": "添加第一个音箱",
+      "speakerAction": "添加音箱",
+      "ma": "登录 Music Assistant",
+      "maAction": "打开设置",
+      "phone": "启用手机源并配对",
+      "phoneAction": "打开硬件",
+      "dismiss": "隐藏初始步骤"
+    }
+  },
+  "groups": {
+    "via": "Music Assistant 位于 {url}",
+    "connectFirst": "将桥接器连接到 Music Assistant 后即可查看并控制其组。"
+  },
+  "addSpeaker": {
+    "title": "添加音箱",
+    "findHelp": "将音箱置于配对模式。附近的音箱会显示在下方。",
+    "scan": "搜索",
+    "scanAgain": "重新搜索",
+    "scanHint": "将音箱置于配对模式，然后按“搜索”。",
+    "looking": "正在查找音箱…",
+    "add": "添加",
+    "signal": {
+      "success": "强",
+      "warning": "一般",
+      "error": "弱",
+      "neutral": "—"
+    },
+    "trouble": "找不到音箱或配对失败？",
+    "alreadyPaired": "选择已配对的音箱",
+    "backToScan": "返回搜索",
+    "paired": "已配对。为其命名并指定房间。",
+    "roomHint": "可选。与播放器一同显示，并提供给 Home Assistant。",
+    "addToBridge": "添加到桥接器",
+    "addedTitle": "{name} 已在此桥接器上。",
+    "testHelp": "播放一段短促的咔嗒声，确认能听到。",
+    "waiting": "正在连接音箱音频 — 需要几秒钟。",
+    "testSound": "播放测试声音",
+    "done": "完成",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "音频输出"
+    },
+    "audio": {
+      "intro": "播放到本机的音频输出，例如 USB DAC、声卡或 HDMI。",
+      "none": "未找到音频输出。",
+      "refresh": "刷新",
+      "inUse": "已被其他播放器使用",
+      "named": "为此输出选择名称和房间。",
+      "looking": "正在查找音频输出…",
+      "taken": "其他播放器已在使用此输出。"
+    },
+    "pairing": "正在配对 {name}…",
+    "errorNext": "请确认音箱处于配对模式并靠近适配器，然后重试。"
+  },
+  "connection": {
+    "lost": "与桥接器的连接已断开 — 正在重新连接。显示内容可能已过期。",
+    "reload": "重新加载"
+  },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "places": "前往音箱、组、设置、诊断、硬件",
+    "add": "添加音箱",
+    "search": "在此页面搜索",
+    "help": "显示此列表",
+    "close": "关闭对话框或菜单"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "连接",
+      "bridge": "此桥接器上"
+    },
+    "reconnect": "重新连接",
+    "standby": "切换到待机",
+    "wake": "唤醒",
+    "claim": "将此桥接器用作源",
+    "handOver": "释放音箱",
+    "takeBack": "收回音箱",
+    "disable": "禁用",
+    "enable": "启用",
+    "remove": "移除音箱",
+    "removeTitle": "移除 {name}？",
+    "removeMessage": "其播放器将从 Music Assistant 中消失，Bluetooth 配对也会被移除。若要再次使用，请将其作为新音箱添加。",
+    "settings": "设置",
+    "repairTitle": "重新配对 {name}？"
+  },
+  "sync": {
+    "open": "同步",
+    "tuneGroup": "调整整个组",
+    "tuneGroupHelp": "一次性对齐此播放器在 Music Assistant 组中的所有音箱。",
+    "backToGroups": "返回组",
+    "tabs": {
+      "group": "组",
+      "manual": "手动",
+      "measure": "测量"
+    },
+    "members": "成员",
+    "delay": "{ms} 毫秒",
+    "delayHeading": "延迟补偿（数值越大越早）",
+    "sign": "+ 更早播放 · − 更晚播放",
+    "noMembers": "此组没有成员。",
+    "loadError": "无法读取组成员（{code}）。",
+    "restoreFailed": "无法恢复组",
+    "restoreFailedHelp": "调音因重启中断，部分音箱可能仍处于静音（{code}）。桥接器会继续尝试。",
+    "manualIntro": "在组上播放咔嗒声，逐个用耳朵调整音箱。",
+    "measureIntro": "用麦克风测量每个音箱，再用耳朵微调。",
+    "switchToManual": "没有麦克风？改用耳朵调整。",
+    "switchToMeasure": "有带麦克风的手机或笔记本电脑？改用测量。",
+    "state": {
+      "idle": "当前没有调音",
+      "created": "正在开始",
+      "measuring": "测量中",
+      "proposed": "已测量",
+      "applying": "正在应用延迟",
+      "tuning": "正在用耳朵调整",
+      "restoring": "正在恢复组",
+      "done": "完成",
+      "cancelled": "已取消",
+      "failed": "失败"
+    },
+    "status": {
+      "prepare": "正在准备组",
+      "measure": "测量中",
+      "tune": "正在用耳朵调整",
+      "done": "完成",
+      "elsewhere": "正在其他设备上调整"
+    },
+    "groupError": "无法打开此组（{code}）。请确认 Music Assistant 可访问且该组仍然存在。",
+    "origin": {
+      "other": "无法调整"
+    },
+    "measuredAgo": "测量于 {age}",
+    "noDelay": "未报告延迟",
+    "actions": {
+      "title": "调整",
+      "manual": "手动调整",
+      "semi": "用麦克风测量",
+      "manualHelp": "无需麦克风。适合可通过听感完成的小幅修正。",
+      "semiHelp": "每个音箱约一分钟。完成前可试听并调整测得的延迟。"
+    },
+    "profiles": {
+      "title": "方案",
+      "apply": "应用",
+      "saveCurrent": "将当前保存为…",
+      "rename": "重命名",
+      "delete": "删除",
+      "empty": "尚无方案。保存当前延迟，以便日后恢复。",
+      "skipped": "{n} 个成员已跳过 | {n} 个成员已跳过",
+      "notInGroup": "不在组中：{names}",
+      "name": "名称",
+      "notes": "备注（可选）",
+      "save": "保存",
+      "cancel": "取消",
+      "applyTitle": "应用“{name}”",
+      "confirmApply": "应用这些延迟",
+      "member": "音箱",
+      "change": "当前 → 方案",
+      "noChanges": "此组中没有音箱包含在此方案中。",
+      "unchanged": "未更改",
+      "applied": "已应用“{name}”。",
+      "saved": "已保存“{name}”。",
+      "renamed": "已重命名为“{name}”。",
+      "deleted": "已删除“{name}”。",
+      "deleteTitle": "删除“{name}”？",
+      "deleteMessage": "延迟保持不变；仅移除已保存的方案。",
+      "renameLabel": "“{name}”的新名称",
+      "failed": "操作未成功（{code}）。",
+      "kind": {
+        "device": "在音箱处",
+        "position": "从聆听位置"
+      },
+      "playerId": "播放器 ID {id}",
+      "nameRequired": "请输入名称。"
+    },
+    "listen": {
+      "title": "试听",
+      "play": "播放咔嗒声",
+      "stop": "停止咔嗒声",
+      "solo": "仅此音箱",
+      "soloHelp": "选择音箱单独试听（其他音箱静音），或选择“全部”。",
+      "soloMember": "仅 {name}",
+      "everyone": "全部",
+      "ab": "对比两个",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "两个音箱每四秒轮流播放。",
+      "idle": "咔嗒声已停止。",
+      "playing": "咔嗒声正在所有音箱上播放。",
+      "soloed": "咔嗒声仅在 {name} 上播放。",
+      "alternating": "正在交替播放 {a} 和 {b}。",
+      "failed": "操作未成功（{code}）。",
+      "needsClicks": "播放咔嗒声后即可单独试听或对比音箱。",
+      "playHelp": "在组上播放咔嗒声轨道（3 分钟；停止后可再次播放）。它会替换组的队列。“停止咔嗒声”仅停止咔嗒声轨道。"
+    },
+    "sound": {
+      "label": "声音",
+      "clicks": "咔嗒声",
+      "accent": "带重音的咔嗒声",
+      "noise": "噪声",
+      "hint": {
+        "clicks": "每秒一次咔嗒声：调整延迟，直到所有音箱的咔嗒声听起来重合为一。",
+        "accent": "每第 4 次咔嗒声更响更高：可显示音箱偏差达到数百毫秒。",
+        "noise": "适用于两个音箱：站在中间；对齐时噪声听起来居中，否则空洞且有相位感。"
+      }
+    },
+    "manual": {
+      "title": "延迟补偿",
+      "help": "数值越大，音箱播放越早。更改可立即听到；“保存”可保留更改。",
+      "reset": "恢复调音开始时的延迟",
+      "resetDone": "延迟已恢复到本次调音开始时的状态。",
+      "minus": "−{n} 毫秒（更晚）",
+      "plus": "+{n} 毫秒（更早）",
+      "valueLabel": "{name} 的延迟补偿（毫秒）",
+      "departed": "已离开组",
+      "startFailed": "无法启动手动调整（{code}）。",
+      "busy": "此组正在测量。请先在“测量”选项卡中完成。",
+      "saveOnLeave": "保留延迟更改？",
+      "saveOnLeaveHelp": "音箱延迟补偿已更改但尚未保存。可保留更改，或恢复本次调音开始时的数值。",
+      "saveConfirm": "保留更改",
+      "saveDecline": "放弃更改",
+      "nudges": "调整 {name}",
+      "writeForbidden": "Music Assistant 拒绝更改 {name}：此账户无权修改播放器设置。",
+      "writeFailed": "无法更改 {name}（{code}）。显示的延迟是 Music Assistant 当前保存的值。",
+      "ended": "本次调音已结束（超时或在其他设备上关闭）。延迟保持不变。按“开始咔嗒声”可再次调音。",
+      "measured": "已测量：{ms} 毫秒（{change}）",
+      "resetMeasured": "恢复为测量值",
+      "resetMeasuredMember": "将 {name} 恢复为测量延迟",
+      "endedNotice": "手动调整已结束：咔嗒声已停止，所有音箱已取消静音，音量已恢复。",
+      "startHelp": "开始后会停止组当前播放的内容，并播放咔嗒声轨道。按下按钮前不会开始。",
+      "startClicks": "开始咔嗒声",
+      "volumes": "音量",
+      "needStart": "按“开始咔嗒声”以进行调整。",
+      "save": "保存",
+      "saved": "已保存",
+      "discard": "放弃更改",
+      "unsaved": "未保存的更改",
+      "listenOne": "单独试听一个音箱 / 对比两个",
+      "stillRestoring": "上次调音后组仍在恢复中。请稍后重试。"
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "此浏览器无法在此录音。麦克风需要 HTTPS（或 localhost）以及较新的浏览器。",
+        "permission": "麦克风访问被拒绝。请在浏览器设置中允许此页面使用麦克风，然后重试。",
+        "no_microphone": "此设备上未找到麦克风。",
+        "mic_busy": "麦克风正被其他应用占用，或无法启动。",
+        "worklet": "无法加载录音模块。请重新加载页面后重试。",
+        "not_open": "麦克风未打开。",
+        "busy": "已有录音正在进行。",
+        "interrupted": "音频被中断（页面位于后台，或其他应用占用了音频）。点击继续；受影响的音箱会重新测量。",
+        "timeout": "录音未能及时完成。",
+        "mic_lost": "麦克风已停止（被拔出或访问权限被撤销）。重新打开即可继续；受影响的音箱会重新测量。",
+        "failed": "录音失败。"
+      }
+    },
+    "wizard": {
+      "stageOf": "{stage}（{n}/{total}）· {name}",
+      "stages": {
+        "prepare": "准备",
+        "measure": "测量",
+        "tune": "调整",
+        "done": "完成"
+      },
+      "steps": {
+        "prepare": "在哪里、如何测量",
+        "clicker": "停止音乐，开始咔嗒声",
+        "volume": "设置音量",
+        "members": "逐个音箱",
+        "tune": "听并调整",
+        "done": "完成"
+      },
+      "notice": {
+        "title": "测量期间不播放其他内容。",
+        "help": "开始咔嗒声后，组上会播放咔嗒声轨道；若组正在播放，会先停止。测量某个音箱时，其他音箱静音。完成后，桥接器静音的所有音箱会取消静音，音量恢复原状，咔嗒声停止。",
+        "queue": "校准会用咔嗒声轨道替换组的队列；之后请重新开始播放音乐。"
+      },
+      "point": {
+        "legend": "在哪里测量？",
+        "device": "在每个音箱处",
+        "deviceHelp": "依次将手机靠近每个音箱。每个音箱 6 秒；对齐的是设备本身。",
+        "position": "从聆听位置",
+        "positionHelp": "停留在平时聆听的位置。每个音箱 12 秒；包含声音传播到该位置的时间。"
+      },
+      "micPermission": "浏览器会请求麦克风权限。录音只保存在内存中，且仅发送到此桥接器。",
+      "holdStill": "提示：录音时保持房间安静，并握稳手机。",
+      "estimate": "约需 {min} 分钟。",
+      "byEar": "仍可用耳朵调整：",
+      "start": "允许麦克风并开始",
+      "micDenied": "无法使用麦克风。",
+      "startFailed": "无法启动测量（{code}）。",
+      "level": {
+        "help": "每次咔嗒声时，麦克风电平表应跳动。",
+        "meter": "麦克风",
+        "tooQuiet": "声音太小：调高组音量或靠近一些。",
+        "tooLoud": "声音太大：略微调低组音量或远一些。",
+        "fine": "麦克风能听到咔嗒声。",
+        "value": "{pct}%"
+      },
+      "members": {
+        "help": "逐个测量每个音箱。可重复测量任意音箱。",
+        "order": "顺序只是为了方便（在房间中走动）；不影响结果。",
+        "moveUp": "将 {name} 上移",
+        "moveDown": "将 {name} 下移",
+        "notMeasured": "未测量（无法调整）：{names}",
+        "left": "录制或跳过每个音箱以继续（还剩 {n} 个）。 | 录制或跳过每个音箱以继续（还剩 {n} 个）。"
+      },
+      "hint": {
+        "notHeard": "未听到：调高 {name} 或靠近一些，然后重试 — 或跳过。",
+        "unstable": "不稳定：保持房间安静并握稳手机，然后重试 — 或跳过。",
+        "reason": {
+          "clipped": "录音削波：手机太近或 {name} 太响。请移远或调低 {name}，然后重试。",
+          "quiet": "录音几乎无声：请将手机靠近 {name}，然后重试。",
+          "lowSnr": "咔嗒声被房间噪声淹没：请保持房间安静或将手机靠近 {name}，然后重试。",
+          "noClicks": "录音中未找到 {name} 的咔嗒声：请确认其正在播放咔嗒声，并将手机靠近，然后重试。",
+          "tooFewClicks": "听到的 {name} 咔嗒声太少：手机可能错过了部分时间窗 — 请重试。"
+        }
+      },
+      "holdNear": "将手机置于距 {name} 30–50 厘米处",
+      "stayPut": "留在原地",
+      "record": "录制",
+      "recordMember": "录制 {name}",
+      "repeat": "重试",
+      "repeatMember": "重试 {name}",
+      "skip": "跳过",
+      "skipMember": "跳过 {name}",
+      "soloing": "正在单独播放 {name}…",
+      "recording": "正在录制 {name}…",
+      "heard": "已听到",
+      "notHeard": "未听到",
+      "unstable": "不稳定",
+      "skipped": "已跳过",
+      "departed": "已离开组",
+      "confidence": "{pct}%",
+      "redo": "重新录制",
+      "result": "{name}：{result}",
+      "restartRound": "麦克风时钟被中断，请重新录制标记为“重新录制”的音箱。",
+      "tapToContinue": "点按以继续",
+      "micLost": "麦克风已停止（被拔出或访问权限被撤销）。",
+      "reopen": "重新打开麦克风",
+      "failed": "操作未成功（{code}）。",
+      "ended": "测量已结束（超时或在其他设备上关闭）。它静音的音箱已取消静音，咔嗒声已停止。",
+      "next": "下一步",
+      "back": "上一步",
+      "cancel": "取消",
+      "toTune": "应用测量延迟并试听",
+      "memberGone": "{name} 已离开组；测量将在没有它的情况下继续。",
+      "computing": "正在计算延迟…",
+      "proposalFailed": "无法计算延迟（{code}）。",
+      "retry": "重试",
+      "applying": "正在应用测量延迟…",
+      "applyFailed": "无法应用延迟（{code}）。",
+      "capture": {
+        "legend": "用什么录音？",
+        "device": "此设备的麦克风",
+        "deviceHelp": "将此设备带到每个音箱旁。麦克风需要 HTTPS（或 localhost）。",
+        "phone": "手机（扫描二维码）",
+        "phoneHelp": "在手机上打开采集页面；它会一次性录制所有音箱并发送录音。使用普通 HTTP 也可以（通过手机的录音器）。",
+        "usePhone": "改用手机测量"
+      },
+      "startPhone": "开始"
+    },
+    "tune": {
+      "help": "测量延迟已应用，咔嗒声继续播放。可单独试听每个音箱或对比两个，手动调整任意延迟，然后完成。",
+      "spread": "音箱之间的最大差距：测量值 {before} 毫秒 → 现在约 {after} 毫秒。",
+      "kept": "未听到或已跳过，因此延迟未变：{names}",
+      "ready": "测量延迟已应用。请试听并调整。",
+      "finish": "完成",
+      "finishSave": "完成并保存为方案…",
+      "saveTitle": "完成并保存为方案",
+      "saveConfirm": "保存并完成"
+    },
+    "air": {
+      "title": "已测量的 Bluetooth 延迟",
+      "help": "根据手机录音得出的每个桥接器音箱从通过 Bluetooth 接收音频到实际发声所需的时间。会与一个声音准时的参考对象比较，例如耳机上的网页播放器或有线输出。若参考对象自身有延迟（电脑音箱、Bluetooth 耳机），所有数值都会相应偏差。保存的值仅供桥接器自身使用；它们不是音箱的延迟设置。",
+      "reference": "参考",
+      "referencePick": "选择参考…",
+      "referenceHint": "选择耳机、有线输出或其他准时播放的参考对象。它也会成为建议延迟的参考。",
+      "referenceFailed": "无法设置参考（{code}）。",
+      "value": "已测量的 Bluetooth 延迟：{ms} 毫秒",
+      "hint": "音箱报告 {ms} 毫秒",
+      "save": "保存此 Bluetooth 延迟",
+      "saveButton": "保存",
+      "saveFailed": "无法保存（{code}）。",
+      "outOfRange": "超出 {min}–{max} 毫秒范围，无法保存",
+      "reasons": {
+        "not_effective": "此音箱未启用空中传感器",
+        "no_reference": "请先选择参考",
+        "not_measured": "未听到此音箱或参考对象",
+        "not_sbc": "音箱未使用 SBC 播放",
+        "air_epoch_changed": "其 Bluetooth 流在轮到它时重新启动",
+        "air_delay_changed": "录音期间音箱的延迟补偿发生了变化。",
+        "no_air_clicks": "空中未检测到其咔嗒声",
+        "no_written_clicks": "桥接器写入的音频中未找到其咔嗒声",
+        "fold_failed": "无法完成此音箱的空中测量",
+        "no_air_frames": "轮到它时，空中未检测到来自此音箱的 Bluetooth 音频"
+      },
+      "valueSaved": "已测量的 Bluetooth 延迟：{ms} 毫秒，已保存"
+    },
+    "cancel": {
+      "title": "停止测量？",
+      "message": "目前的录音将丢失。桥接器静音的音箱会取消静音，音量恢复，咔嗒声停止。",
+      "tuneTitle": "停止并恢复延迟？",
+      "tuneMessage": "延迟将恢复到测量前的值。桥接器静音的音箱会取消静音，音量恢复，咔嗒声停止。",
+      "confirm": "停止",
+      "keep": "继续",
+      "done": "测量已取消。音箱已取消静音，音量已恢复，咔嗒声已停止。",
+      "resetFailed": "无法恢复延迟（{code}）；调音仍保持打开。请重试。"
+    },
+    "reloaded": {
+      "manual": "页面重新加载后，手动调整已结束。延迟保持不变。",
+      "measure": "页面重新加载后，测量已结束。"
+    },
+    "joinManual": {
+      "title": "手动调整已在其他设备上打开",
+      "help": "可加入以在此试听并调整，或结束。离开此页面不会结束它。",
+      "join": "加入"
+    },
+    "readOnly": "另一台设备上正在调音",
+    "readOnlyHelp": "在调音结束前，此页面仅显示组。",
+    "restoreRetrying": "无法连接 Music Assistant（{code}），部分音箱可能仍处于静音或仍在播放咔嗒声。桥接器会继续尝试。",
+    "proposal": {
+      "name": "方案名称",
+      "nameRequired": "请输入名称。",
+      "defaultName": "测量于 {date}",
+      "warnings": "警告",
+      "clampedWarning": "部分延迟被限制在 0–5000 毫秒；剩余差距约为 {ms} 毫秒。",
+      "largeWarning": "超过 2000 毫秒的延迟需要 Music Assistant 提前很多发送音频；缓冲区较小的音箱可能会断音。",
+      "forbidden": "Music Assistant 拒绝更改延迟：此账户无权修改播放器设置。请在 Music Assistant 中手动设置以下值：",
+      "forbiddenHint": "或在桥接器设置中使用管理员账户重新连接 Music Assistant，然后重试。",
+      "copy": "复制数值",
+      "copied": "已复制。",
+      "copyFailed": "无法复制；请选择数值并手动复制。"
+    },
+    "done": {
+      "restoring": "正在恢复组…",
+      "restoringHelp": "正在恢复音量、取消音箱静音并停止咔嗒声。延迟保持不变。",
+      "restored": "组已恢复",
+      "restoredHelp": "所有音箱已取消静音，音量已恢复，咔嗒声已停止。新延迟保留；请在 Music Assistant 中重新开始播放音乐。",
+      "spread": "音箱之间的最大差距：{before} 毫秒 → 约 {after} 毫秒",
+      "saved": "已保存为方案“{name}”。",
+      "saveFailed": "延迟已保留，但无法保存方案（{code}）。",
+      "listen": "快速试听",
+      "listenHelp": "咔嗒声会在整个组上播放 10 秒后停止。",
+      "listening": "咔嗒声正在整个组上播放…",
+      "listenFailed": "无法播放咔嗒声（{code}）。",
+      "again": "重新测量",
+      "queue": "组的队列现在只有咔嗒声轨道：请在 Music Assistant 中重新开始播放音乐。"
+    },
+    "endForeign": "结束该会话",
+    "endForeignTitle": "结束另一台设备上的调音？",
+    "endForeignMessage": "其咔嗒声将停止，组会恢复。已写入的延迟保持不变。",
+    "signal": {
+      "restarted": "咔嗒声已重新开始：请再次录制每个音箱。"
+    },
+    "prep": {
+      "failed": "操作未成功（{code}）。",
+      "group": {
+        "playing": "播放中",
+        "idle": "已停止",
+        "paused": "已暂停",
+        "unknown": "未知"
+      },
+      "clicker": {
+        "help": "咔嗒声轨道会通过 Music Assistant 在组内每个音箱上播放 3 分钟。若停止，请再次启动。",
+        "start": "开始咔嗒声",
+        "again": "再次开始咔嗒声",
+        "playing": "咔嗒声正在播放。",
+        "stopped": "咔嗒声未在播放。",
+        "groupPlaying": "组正在播放其他内容：请先停止。",
+        "whyDisabled": "开始咔嗒声以继续。",
+        "left": "咔嗒声：剩余 {time}",
+        "helpStop": "组正在播放内容。开始咔嗒声会先停止它，然后在组内每个音箱上播放咔嗒声轨道 3 分钟。",
+        "groupState": "组：",
+        "stopAndStart": "停止音乐并开始咔嗒声",
+        "confirmTitle": "停止组的音乐？",
+        "confirmMessage": "组正在播放的内容会停止，其队列将被咔嗒声轨道替换。之后请重新开始播放音乐。"
+      },
+      "volume": {
+        "help": "将音量调到在测量位置能清晰听到咔嗒声的程度。",
+        "noVolume": "无音量控制",
+        "silent": "无声：调高音量后再测量",
+        "back": "完成后音量会恢复原状。"
+      },
+      "skip": "跳过"
+    },
+    "mute": {
+      "unsupported": "{name} 无法静音，因此它在组内时无法逐个测量其他音箱。可跳过它们，或在“手动”调整中用耳朵调整。",
+      "unsupportedManual": "{name} 无法静音，因此无法单独试听其他音箱。“全部”和仅 {name} 仍然可用。"
+    },
+    "ready": {
+      "title": "测量之前",
+      "unmutable": "{name} 无法静音。它在组内时无法逐个测量其他音箱。仍可测量 {name} 本身，或在“手动”调整中用耳朵调整。",
+      "unavailable": "{name} 在 Music Assistant 中不可用（已关闭或断开连接），因此无法测量。",
+      "silent": "{name} 的音量为 0%：不会被听到。请在音量步骤中调高，或跳过。",
+      "muted": "{name} 在 Music Assistant 中已静音。桥接器会保持其静音，因此不会被听到：请取消静音或跳过。",
+      "skip": "测量时跳过 {name}",
+      "skipped": "将跳过 {name}（点按以测量）"
+    },
+    "badge": {
+      "unmutable": "无法静音",
+      "unavailable": "不可用",
+      "silent": "音量 0%",
+      "muted": "已静音"
+    },
+    "phone": {
+      "help": "在手机上打开采集页面。桥接器随后依次单独在每个音箱上播放咔嗒声，手机会一次性录制。",
+      "qr": "手机采集链接的二维码",
+      "scan": "用手机相机扫描，或在手机上打开链接",
+      "copy": "复制链接",
+      "newLink": "新链接",
+      "linkFailed": "无法生成链接（{code}）。",
+      "security": "该链接仅允许手机查看哪个音箱在播放，并为此测量发送录音。有效期为 {min} 分钟，测量结束后失效。",
+      "sameNetwork": "手机必须与桥接器位于同一网络。",
+      "step1": "在手机上按“开始”：开始录音，音箱会依次播放。",
+      "step2": "或在手机录音时在此按“播放序列”。",
+      "step3": "序列结束后，手机会发送录音；结果显示在此处。",
+      "play": "播放序列（{n}）",
+      "measureIt": "测量",
+      "notYet": "尚未测量",
+      "lead": "开始：所有音箱短暂静音…",
+      "now": "当前：仅 {name}（{n}/{total}）",
+      "pause": "暂停：移动到下一个音箱…",
+      "measured": "手机录音已测量。",
+      "waitingUpload": "序列已结束：正在等待手机录音…",
+      "failed": "序列已停止（{code}）。",
+      "certificate": "手机会就证书提示一次 — 接受后即可直接在浏览器中录音。",
+      "httpFallback": "若没有证书，请使用普通链接（手机录音器）：",
+      "keepsDelay": "未测量的音箱保留当前延迟：{names}"
+    },
+    "tuneLink": "与组一起调整 →",
+    "noGroupHelp": "{name} 不在同步组中。要与其他音箱一起调整，请在“组”中创建同步组并将此音箱加入。",
+    "noGroupLink": "打开组 →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "应用 {value} 毫秒延迟"
+      },
+      "edit_ma_server": {
+        "label": "编辑 Music Assistant 服务器"
+      },
+      "enable_device": {
+        "label": "启用 | 启用 {count} 个音箱"
+      },
+      "open_adapter_settings": {
+        "label": "打开适配器设置"
+      },
+      "open_audio_diagnostics": {
+        "label": "打开诊断"
+      },
+      "open_bluetooth_settings": {
+        "label": "打开 Bluetooth 设置"
+      },
+      "open_config": {
+        "label": "打开设置"
+      },
+      "open_devices_settings": {
+        "label": "打开音箱设置"
+      },
+      "open_diagnostics": {
+        "label": "打开诊断"
+      },
+      "open_ma_settings": {
+        "label": "打开 Music Assistant 设置"
+      },
+      "open_output_diagnostics": {
+        "label": "打开诊断"
+      },
+      "open_player_settings": {
+        "label": "打开播放器设置"
+      },
+      "open_runtime_diagnostics": {
+        "label": "打开诊断"
+      },
+      "prefer_sbc_codec": {
+        "label": "优先使用 SBC 编解码器"
+      },
+      "recheck_outputs": {
+        "label": "重新检查音频输出"
+      },
+      "reclaim_bluetooth": {
+        "label": "收回音箱 | 收回 {count} 个音箱"
+      },
+      "reconnect_device": {
+        "label": "重新连接音箱 | 重新连接 {count} 个音箱"
+      },
+      "release_bluetooth": {
+        "label": "释放音箱"
+      },
+      "repair_speaker": {
+        "label": "重新配对音箱"
+      },
+      "rerun_checks": {
+        "label": "再次运行检查"
+      },
+      "rerun_preflight": {
+        "label": "再次运行主机检查"
+      },
+      "retry_ma_discovery": {
+        "label": "重新查找 Music Assistant"
+      },
+      "revalidate_ma_link": {
+        "label": "再次检查 Music Assistant 链路"
+      },
+      "review_buffer_settings": {
+        "label": "查看缓冲设置"
+      },
+      "review_diagnostics": {
+        "label": "查看诊断"
+      },
+      "review_latency_settings": {
+        "label": "查看延迟设置"
+      },
+      "review_pulse_latency": {
+        "label": "查看音频延迟"
+      },
+      "scan_devices": {
+        "label": "扫描音箱"
+      },
+      "start_pairing": {
+        "label": "开始配对"
+      },
+      "test_ma_connection": {
+        "label": "测试 Music Assistant 连接"
+      },
+      "tune_latency_compensation": {
+        "label": "调整延迟补偿"
+      },
+      "unmute_speaker": {
+        "label": "取消音箱静音"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "与 Music Assistant 的音频链路未连接。"
+      },
+      "ma_disconnected": {
+        "message": "桥接器未连接到 Music Assistant API。"
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant 尚未为此音箱提供队列。"
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant 正在重新连接。"
+      },
+      "no_sink": {
+        "message": "未配置音频输出。"
+      },
+      "not_paired": {
+        "message": "音箱已不再配对。请将其置于配对模式并重新配对。"
+      },
+      "reconnecting": {
+        "message": "已在重新连接中。"
+      },
+      "released": {
+        "message": "Bluetooth 已从此桥接器释放。请先收回音箱。"
+      },
+      "stopping": {
+        "message": "播放器正在停止。"
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "此音箱的空中传感器未运行（需要 Bluetooth 音箱）。"
+      },
+      "air_not_locked": {
+        "text": "空中传感器自启动以来尚未锁定此音箱的流。"
+      },
+      "air_unavailable": {
+        "text": "此音箱的空中传感器无法运行（见其空中传感器状态）。"
+      },
+      "cpu_budget": {
+        "text": "读取 Bluetooth 监视器所用 CPU 超出预算，因此空中传感器已关闭，直到桥接器重启。"
+      },
+      "internal_error": {
+        "text": "空中传感器发生内部错误并自行关闭（详情见日志）。"
+      },
+      "module_suspend_on_idle": {
+        "text": "已加载 PulseAudio 的 module-suspend-on-idle，它会暂停空闲输出。"
+      },
+      "monitor_error": {
+        "text": "Bluetooth 监视器套接字出错；桥接器会持续重试。"
+      },
+      "no_cap_net_raw": {
+        "text": "桥接器无法打开 Bluetooth 监视器套接字：需要 NET_RAW 能力（在容器的 cap_add 中添加 NET_RAW）。"
+      },
+      "observed_suspend": {
+        "text": "音箱已连接且空闲时，主机暂停了其音频输出。"
+      },
+      "playout_fallback": {
+        "text": "播放输出引擎已回退到旧版播放器，因此没有可对比的时间表。"
+      },
+      "sink_ambiguous": {
+        "text": "有多个相同输出与之匹配，且无法区分。"
+      },
+      "sink_in_use": {
+        "text": "其他播放器已在向其播放。"
+      },
+      "sink_unplugged": {
+        "text": "它已被拔出或重命名。"
+      },
+      "unknown_suspend": {
+        "text": "主机暂停了此音箱的音频输出。"
+      },
+      "unsupported_input": {
+        "text": "不支持该流的音频格式（空中传感器需要 44.1 或 48 kHz）。"
+      },
+      "unsupported_platform": {
+        "text": "此系统没有 Bluetooth 监视器套接字（仅限 Linux）。"
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber 会暂停空闲的 Bluetooth 节点（session.suspend-timeout-seconds）。"
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "播放已激活，但未收到音频流",
+        "title": "音频停滞"
+      },
+      "audio-streaming": {
+        "summary": "音频流已激活",
+        "title": "音频串流中"
+      },
+      "bluetooth-connected": {
+        "summary": "Bluetooth 音箱已连接",
+        "title": "音箱已连接"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Bluetooth 音箱已断开",
+        "title": "音箱已断开"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Bluetooth 重新连接失败",
+        "title": "重新连接失败"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Bluetooth 重新连接成功",
+        "title": "音箱已重新连接"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "无声 {idle_minutes} 分钟后音箱进入待机",
+        "title": "待机"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "音箱正在从待机唤醒",
+        "title": "正在唤醒"
+      },
+      "bt-management-disabled": {
+        "summary": "桥接器已释放此音箱的 Bluetooth",
+        "title": "Bluetooth 已释放"
+      },
+      "bt-management-reclaimed": {
+        "summary": "音箱自行重新连接，桥接器已收回其 Bluetooth",
+        "title": "Bluetooth 已收回"
+      },
+      "daemon-connected": {
+        "summary": "播放器已连接到 Music Assistant",
+        "title": "音频链路已连通"
+      },
+      "daemon-disconnected": {
+        "summary": "播放器已断开与 Music Assistant 的连接",
+        "title": "音频链路已断开"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "Bluetooth 音箱已断开",
+        "title": "已断开"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Sendspin 播放器未连接",
+        "title": "音频链路已断开"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "错误"
+      },
+      "health-foreign_server": {
+        "summary": "已连接到 {host} 上的 Music Assistant {name}，而非此桥接器的 Music Assistant",
+        "title": "其他 Music Assistant"
+      },
+      "health-idle": {
+        "summary": "空闲",
+        "title": "空闲"
+      },
+      "health-ma_reconnecting": {
+        "summary": "正在刷新 Music Assistant 连接",
+        "title": "正在刷新 Music Assistant 链路"
+      },
+      "health-output_missing": {
+        "summary": "音频输出缺失",
+        "title": "音频输出缺失"
+      },
+      "health-playback_without_audio": {
+        "summary": "播放已激活，但未收到音频流",
+        "title": "音频停滞"
+      },
+      "health-reconnecting": {
+        "summary": "Bluetooth 正在重新连接",
+        "title": "正在重新连接"
+      },
+      "health-released": {
+        "summary": "Bluetooth 已从此桥接器释放",
+        "title": "已释放"
+      },
+      "health-resyncing": {
+        "summary": "音频正在重新同步",
+        "title": "正在重新同步"
+      },
+      "health-sink_muted": {
+        "summary": "音频输出已在系统中静音",
+        "title": "音频输出已静音"
+      },
+      "health-stopping": {
+        "summary": "播放器正在停止",
+        "title": "正在停止"
+      },
+      "ma-monitor-stale": {
+        "summary": "Music Assistant 连接已断开：{error}",
+        "title": "Music Assistant 链路已丢失"
+      },
+      "ma-server-refused": {
+        "summary": "拒绝了 {host} 上的 Music Assistant：此桥接器属于 {owner}",
+        "title": "Music Assistant 被拒绝"
+      },
+      "playback-started": {
+        "summary": "播放已开始",
+        "title": "播放已开始"
+      },
+      "playback-stopped": {
+        "summary": "播放已停止",
+        "title": "播放已停止"
+      },
+      "reanchoring": {
+        "summary": "流时序正在重新同步",
+        "title": "正在重新同步"
+      },
+      "reconnecting": {
+        "summary": "Bluetooth 正在重新连接",
+        "title": "正在重新连接"
+      },
+      "runtime-error-cleared": {
+        "summary": "错误已消失",
+        "title": "错误已清除"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "错误"
+      },
+      "sink-lost": {
+        "summary": "音频输出已被拔出；播放器等待在占位输出上",
+        "title": "音频输出已丢失"
+      },
+      "sink-muted": {
+        "summary": "音频输出已在系统中静音",
+        "title": "音频输出已静音"
+      },
+      "sink-rematched": {
+        "summary": "音频输出已以新名称找到：{sink}",
+        "title": "音频输出已重命名"
+      },
+      "sink-restored": {
+        "summary": "音频输出已恢复：{sink}",
+        "title": "音频输出已恢复"
+      },
+      "sink-unmuted": {
+        "summary": "音频输出已取消静音",
+        "title": "音频输出已取消静音"
+      },
+      "startup-config": {
+        "summary": "正在加载配置",
+        "title": "配置"
+      },
+      "startup-devices": {
+        "summary": "音箱列表已准备",
+        "title": "音箱"
+      },
+      "startup-failed": {
+        "summary": "启动失败：{message}",
+        "title": "启动失败"
+      },
+      "startup-idle": {
+        "summary": "已启动",
+        "title": "启动"
+      },
+      "startup-integrations": {
+        "summary": "Music Assistant 集成已初始化",
+        "title": "集成"
+      },
+      "startup-ready": {
+        "summary": "启动完成",
+        "title": "就绪"
+      },
+      "startup-runtime": {
+        "summary": "运行时配置已准备",
+        "title": "运行时"
+      },
+      "startup-shutdown": {
+        "summary": "桥接器正在关闭",
+        "title": "关闭"
+      },
+      "startup-web": {
+        "summary": "Web 界面已就绪",
+        "title": "Web 界面"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "添加第一个音箱"
+      },
+      "all_disabled": {
+        "label": "所有音箱已禁用"
+      },
+      "all_released": {
+        "label": "所有音箱已释放"
+      },
+      "devices_ready": {
+        "label": "{ready}/{total} 个活动音箱已就绪"
+      },
+      "first_run": {
+        "label": "首次运行"
+      },
+      "issues_attention": {
+        "label": "{count} 个问题需要注意"
+      },
+      "no_playable_speaker": {
+        "label": "没有可播放的音箱"
+      },
+      "setup_progress": {
+        "label": "设置 {percent}%"
+      },
+      "startup": {
+        "label": "启动 {percent}%"
+      },
+      "startup_finalizing": {
+        "label": "启动 90%"
+      },
+      "waiting_for_setup": {
+        "label": "等待设置"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "此音箱处于“测量并校正”模式，但空中校正未运行；其播放等同于“仅测量”模式。{cause}",
+        "title": "{device}：空中校正未运行"
+      },
+      "air_sensor_codec": {
+        "summary": "音箱以 {codec} 串流，而空中传感器仅支持 SBC。请开启 PREFER_SBC_CODEC 并重新连接音箱。播放不受影响。",
+        "title": "{device}：空中传感器需要 SBC 编解码器"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "音箱使用的 SBC 设置不受空中传感器支持（{settings}）。播放不受影响。",
+        "title": "{device}：空中传感器无法读取此音箱的 SBC 流"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} 播放不受影响。要隐藏此提示，请关闭 EXPERIMENTAL_AIR_SENSOR（需重启）。",
+        "title": "{device}：空中传感器不可用 | {count} 个音箱的空中传感器不可用"
+      },
+      "audio_unavailable": {
+        "summary": "桥接器目前无法访问其音频系统。",
+        "summary_all_disabled": "桥接器目前无法访问其音频系统。请在启用音箱前恢复音频访问，否则播放将一直不可用。",
+        "summary_no_server": "未找到 PulseAudio 或 PipeWire 服务器。",
+        "summary_no_server_env": "未找到 PulseAudio 或 PipeWire 服务器：未设置 PULSE_SERVER。",
+        "summary_socket_missing": "已配置音频套接字 {socket}，但主机上不存在；从未有音频服务器创建它。",
+        "summary_socket_refused": "音频套接字 {socket} 已挂载，但音频服务器拒绝了连接（{error}）。",
+        "summary_socket_unreachable": "音频套接字 {socket} 已挂载，但桥接器无法打开（{error}）。",
+        "title": "音频系统不可用"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "此音箱因多次配对失败已被禁用。请将其置于配对模式，并点击“启用”重试。",
+        "summary_error": "{error}",
+        "title": "{device} 已被自动禁用：从未配对"
+      },
+      "auto_released": {
+        "summary": "连接多次出现问题后，桥接器已释放此音箱的 Bluetooth。 | 收回 {devices}，让桥接器重新管理它们。",
+        "summary_error": "{error}",
+        "title": "{device} 已被自动释放 | {count} 个音箱已被自动释放"
+      },
+      "bluetooth_unavailable": {
+        "summary": "桥接器未找到 Bluetooth 适配器。请打开适配器设置并刷新列表。",
+        "summary_all_disabled": "桥接器目前无法访问 Bluetooth 适配器。请在启用音箱前恢复适配器访问，否则播放将一直不可用。",
+        "summary_daemon_down": "主机上未运行 Bluetooth 服务（bluetoothd），因此在它启动前桥接器看不到适配器。",
+        "title": "Bluetooth 适配器不可用"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} 此类暂停后，音箱会重启其流，并可能偏移数十毫秒。桥接器从不更改主机音频设置；如需停止，请让主机不再暂停空闲音频输出：{docs}",
+        "title": "{device}：主机在歌曲之间暂停音频输出"
+      },
+      "config_dir_not_writable": {
+        "summary": "桥接器进程（UID {uid}）无法写入 {config_dir}。保存 Music Assistant 令牌、修改密码和音箱设置都将失败。修复方法：{remediation}",
+        "title": "桥接器无法写入 {config_dir}"
+      },
+      "config_migration_failed": {
+        "summary": "桥接器启动时没有音箱。config.json 未被改动，仍是旧文件。错误：{error}。请提交问题报告。",
+        "title": "配置无法更新到此版本"
+      },
+      "disconnected": {
+        "summary": "请开启音箱或重新连接。 | 请开启或重新连接 {devices}。",
+        "summary_error": "{error}",
+        "title": "{device} 已断开 | {count} 个音箱已断开"
+      },
+      "duplicate_device": {
+        "summary": "此音箱在 Music Assistant 中还注册为“{other_bridge}”。在两个桥接器上运行会导致重连循环。请在一个桥接器上禁用它，或停止另一个。 | 以下音箱也注册在其他桥接器上：{devices}。请在一个桥接器上禁用它们，或停止另一个，以避免重连循环。",
+        "title": "{device} 可能与其他桥接器冲突 | {count} 个音箱可能与其他桥接器冲突"
+      },
+      "latency": {
+        "summary": "延迟调校还有改进空间。",
+        "summary_high_latency": "已设置延迟补偿，但全局音频延迟仍然偏高。",
+        "summary_multi_no_delays": "有多个音箱，但尚未设置任何延迟补偿。",
+        "summary_repeated_resyncs": "播放期间出现了多次重新同步。",
+        "title": "延迟调校需要注意"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant 尚未就绪。",
+        "summary_no_credentials": "缺少 Music Assistant 登录信息。",
+        "summary_no_url": "未设置 Music Assistant 地址。",
+        "summary_not_connected": "已保存 Music Assistant 登录信息，但桥接器未连接。",
+        "title": "Music Assistant 需要注意"
+      },
+      "missing_sink": {
+        "summary": "音箱已连接，但其 Bluetooth 音频输出尚未就绪。 | 请重新连接或检查 {devices} 的音频设置。",
+        "summary_error": "{error}",
+        "title": "{device} 已连接，但没有就绪的音频输出 | {count} 个音箱已连接，但没有就绪的音频输出"
+      },
+      "needs_attention": {
+        "summary": "请查看近期事件和诊断。",
+        "summary_daemon_disconnected": "Sendspin 播放器未连接。",
+        "summary_error": "{error}",
+        "summary_foreign_server": "已连接到 {host} 上的 Music Assistant {name}，而非此桥接器的 Music Assistant。",
+        "summary_playback_without_audio": "播放已激活，但未收到音频流。",
+        "summary_reconnecting": "Bluetooth 正在重新连接。",
+        "summary_resyncing": "音频正在重新同步。",
+        "summary_sink_muted": "音频输出已在系统中静音。",
+        "summary_stopping": "播放器正在停止。",
+        "title": "{device} 需要注意"
+      },
+      "never_paired": {
+        "summary": "此音箱已添加到桥接器，但从未在 Bluetooth 中出现。请将其置于配对模式，并点击“开始配对”。 | 以下音箱已添加，但从未在 Bluetooth 中出现：{devices}。请将它们置于配对模式并开始配对。",
+        "summary_error": "{error}",
+        "title": "{device} 从未配对 | {count} 个音箱从未配对"
+      },
+      "output_missing": {
+        "summary": "输出 {sink} 不可用。{cause} 请重新插上设备，或在播放器设置中选择其他输出。在此之前，播放器会留在其 Music Assistant 组中，但保持静音。",
+        "title": "{device}：音频输出缺失"
+      },
+      "output_muted": {
+        "summary": "输出 {sink} 已在系统混音器中静音，因此没有声音。Music Assistant 的音量无法将其取消静音：请在系统声音设置中取消静音。 | 以下同样如此：{others}。",
+        "title": "{device}：音频输出已静音 | {count} 个音频输出需要注意"
+      },
+      "output_port_unavailable": {
+        "summary": "{sink} 的活动端口 {port} 报告无连接。请检查线缆或音箱。 | 以下同样如此：{others}。",
+        "title": "{device}：音频输出未连接设备 | {count} 个音频输出需要注意"
+      },
+      "output_volume_zero": {
+        "summary": "输出 {sink} 在系统混音器中被设为 0%。Music Assistant 的音量无法提高它：请在系统声音设置中调高。 | 以下同样如此：{others}。",
+        "title": "{device}：音频输出音量为 0% | {count} 个音频输出需要注意"
+      },
+      "pa_socket_missing": {
+        "summary": "已配置音频套接字 {socket}，但主机上尚不存在；没有 PipeWire 或 PulseAudio 服务器创建它。这通常是无用户会话驻留的无头主机特征。",
+        "title": "音频服务器不可达：请启用用户驻留"
+      },
+      "pa_socket_refused": {
+        "summary": "音频套接字 {socket} 已挂载，但主机的 PipeWire 或 PulseAudio 服务器拒绝了连接。这通常是无用户会话驻留的无头主机特征。",
+        "title": "音频服务器不可达：请启用用户驻留"
+      },
+      "repair_required": {
+        "summary": "音箱已不再配对，因此重新连接持续失败。请将其置于配对模式并重新配对。 | 以下音箱已不再配对。请从配对模式重新配对 {devices}。",
+        "summary_error": "{error}",
+        "title": "{device} 需要重新配对 | {count} 个音箱需要重新配对"
+      },
+      "runtime_access": {
+        "summary": "桥接器无法访问其 Bluetooth 控制所需的主机 D-Bus 服务。请打开诊断并检查容器的挂载和权限。",
+        "summary_all_disabled": "桥接器目前无法访问所需的主机服务。请在启用音箱前恢复主机访问，否则播放将一直不可用。",
+        "title": "桥接器无法访问所需的主机服务"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} 发起了连接尝试，但音箱以“资源有限”（Limited Resources）拒绝。Samsung Q 系列条形音箱会根据发起方的 Bluetooth 设备类别过滤传入配对。请在 设置 → Bluetooth 中为 {adapter} 将 device_class 设为 0x00010c，然后重新配对。",
+        "summary_no_adapter": "Bluetooth 适配器发起了连接尝试，但音箱以“资源有限”（Limited Resources）拒绝。Samsung Q 系列条形音箱会根据发起方的 Bluetooth 设备类别过滤传入配对。请在 设置 → Bluetooth 中为适配器将 device_class 设为 0x00010c，然后重新配对。",
+        "title": "{device}：配对被音箱的设备类别过滤器拒绝"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "播放器会连接，但会按固定间隔（{interval} 秒）被断开或自行断开。请检查 Music Assistant 服务器和端口，然后运行“测试连接”。",
+        "title": "{device}：Sendspin 播放器每 {interval} 秒退出 | {count} 个音箱：Sendspin 播放器按固定间隔退出"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} 请确认桥接器设置中的 SENDSPIN_PORT 与 Music Assistant 中的 Sendspin 端口一致。",
+        "summary_error_only": "{error}",
+        "title": "{device} 无法连接 Sendspin 服务器"
+      },
+      "sendspin_url_malformed": {
+        "summary": "请在设置中编辑 Music Assistant 服务器。它必须是纯主机名或 IP 地址，不能包含 http://、端口或路径。",
+        "title": "{device}：Music Assistant 服务器地址无效 | Music Assistant 服务器地址无效"
+      },
+      "setup_audio": {
+        "summary_no_server": "未找到 PulseAudio 或 PipeWire 服务器。",
+        "summary_no_server_env": "未找到 PulseAudio 或 PipeWire 服务器：未设置 PULSE_SERVER。",
+        "summary_no_sinks": "音频服务器可访问，但尚无音频输出。",
+        "summary_socket_missing": "已配置音频套接字 {socket}，但主机上不存在；从未有音频服务器创建它。",
+        "summary_socket_refused": "音频套接字 {socket} 已挂载，但音频服务器拒绝了连接（{error}）。",
+        "summary_socket_unreachable": "音频套接字 {socket} 已挂载，但桥接器无法打开（{error}）。",
+        "title": "检查音频系统"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "主机上未运行 Bluetooth 服务（bluetoothd），因此在它启动前桥接器看不到适配器。",
+        "summary_no_controller": "桥接器未找到 Bluetooth 适配器。",
+        "summary_no_paired": "桥接器没有可用的已配对 Bluetooth 音箱。",
+        "summary_no_paired_disabled": "没有可用的已配对 Bluetooth 音箱，且已保存的音箱处于禁用状态。",
+        "title": "检查 Bluetooth 访问"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "桥接器没有可用的已配对 Bluetooth 音箱。",
+        "summary_no_paired_disabled": "没有可用的已配对 Bluetooth 音箱，且已保存的音箱处于禁用状态。",
+        "title": "配对或查找音箱"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "所有已配置的音箱当前均已禁用。",
+        "summary_all_released": "所有已配置的音箱当前均已从此桥接器释放。",
+        "summary_all_released_auto": "连接失败后，桥接器已自动释放所有已配置的音箱。",
+        "title": "使音箱可用"
+      },
+      "setup_latency": {
+        "summary_high_latency": "已设置延迟补偿，但全局音频延迟相当高。",
+        "summary_multi_no_delays": "有多个音箱，但尚未设置任何延迟补偿。",
+        "title": "查看延迟调校"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "缺少 Music Assistant 登录信息。",
+        "summary_no_url": "未设置 Music Assistant 地址。",
+        "summary_not_connected": "已保存 Music Assistant 登录信息，但桥接器未连接。",
+        "title": "连接 Music Assistant"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "桥接器无法访问其 Bluetooth 控制所需的主机 D-Bus 服务。",
+        "title": "检查对主机的访问"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "部分已连接的音箱没有就绪的 Bluetooth 音频输出。",
+        "summary_none_configured": "尚未配置任何播放器。",
+        "summary_none_connected_bluetooth": "已配置播放器，但当前没有音箱通过 Bluetooth 连接。",
+        "summary_none_connected_mixed": "已配置播放器，但没有音箱通过 Bluetooth 连接，也没有音频输出。",
+        "summary_none_connected_outputs": "已配置播放器，但其音频输出均不存在。",
+        "title": "连接第一个音箱"
+      },
+      "setup_step": {
+        "summary": "设置清单中仍有未完成的步骤。",
+        "title": "完成设置"
+      },
+      "sink_system_muted": {
+        "summary": "音频输出已静音。取消静音前不会播放任何内容。崩溃或重启后可能出现此情况。",
+        "summary_error": "{error}",
+        "title": "{device}：音频输出在系统中已静音"
+      },
+      "transport_down": {
+        "summary": "音箱已连接，但其 Sendspin 播放器未运行。 | 请重新连接 {devices} 以恢复音频链路。",
+        "summary_error": "{error}",
+        "title": "{device} 的音频链路已丢失 | {count} 个音箱的音频链路已丢失"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "音箱已处于待机状态。"
+      },
+      "bad_request": {
+        "detail": "请求无效。"
+      },
+      "bluetooth_busy": {
+        "detail": "Bluetooth 正在执行其他操作。请稍后重试。"
+      },
+      "conflict": {
+        "detail": "这与当前状态冲突。"
+      },
+      "forbidden": {
+        "detail": "没有权限执行此操作。"
+      },
+      "http_error": {
+        "detail": "请求失败。"
+      },
+      "internal_error": {
+        "detail": "桥接器发生内部错误。"
+      },
+      "invalid_credentials": {
+        "detail": "登录信息不正确。"
+      },
+      "invalid_mac": {
+        "detail": "Bluetooth 地址无效。"
+      },
+      "invalid_request": {
+        "detail": "部分数值无效。"
+      },
+      "job_in_progress": {
+        "detail": "同一操作已在运行。"
+      },
+      "login_failed": {
+        "detail": "登录失败。"
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant 尚未设置。"
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant 不可用。"
+      },
+      "ma_unreachable": {
+        "detail": "桥接器无法连接 Music Assistant。"
+      },
+      "method_not_allowed": {
+        "detail": "此操作在此处不可用。"
+      },
+      "network_error": {
+        "detail": "无法连接桥接器。请检查网络连接。"
+      },
+      "no_bluetooth": {
+        "detail": "没有可用的 Bluetooth 适配器。"
+      },
+      "not_connected": {
+        "detail": "音箱未连接。"
+      },
+      "not_found": {
+        "detail": "未找到。"
+      },
+      "not_in_standby": {
+        "detail": "音箱未处于待机状态。"
+      },
+      "not_ready": {
+        "detail": "尚未就绪。请稍后重试。"
+      },
+      "pairing_disabled": {
+        "detail": "配对已关闭。"
+      },
+      "pairing_failed": {
+        "detail": "配对失败。"
+      },
+      "payload_too_large": {
+        "detail": "数据过大。"
+      },
+      "scan_in_progress": {
+        "detail": "扫描已在运行。"
+      },
+      "session_expired": {
+        "detail": "会话已过期。请重新登录。"
+      },
+      "timeout": {
+        "detail": "操作超时。"
+      },
+      "too_many_requests": {
+        "detail": "请求过多。请稍后重试。"
+      },
+      "unauthorized": {
+        "detail": "请登录以继续。"
+      },
+      "unavailable": {
+        "detail": "目前不可用。"
+      },
+      "unknown_check": {
+        "detail": "该检查不存在。"
+      },
+      "unknown_device": {
+        "detail": "桥接器不认识该音箱。"
+      },
+      "unknown_job": {
+        "detail": "未知操作（可能已过期）。"
+      },
+      "upstream_error": {
+        "detail": "桥接器依赖的某个服务返回了错误。"
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "另一台服务器"
+      },
+      "attempt": {
+        "open": "正在进行第 {attempt} 次重新连接。",
+        "with_limit": "重新连接尝试 {attempt}/{max}。桥接器将在剩余 {remaining} 次尝试后释放音箱。"
+      },
+      "list": {
+        "more": "{first}、{second} 以及另外 {count} 个"
+      },
+      "recovered": {
+        "text": "（已恢复）"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "桥接器启动"
+      }
+    }
+  },
+  "consequence": {
+    "stopsPlayback": "以下音箱将停止播放：{names}。",
+    "disconnects": "以下音箱将断开 Bluetooth：{names}。",
+    "leavesMa": "以下播放器将从 Music Assistant 中消失：{names}。",
+    "unpairs": "Bluetooth 配对将被移除。若要再次使用，请将其作为新音箱添加。",
+    "adapterDisconnects": "其上的所有音箱都会断开，并在重新连接前停止播放：{names}。",
+    "restartMinute": "桥接器重启期间，所有音箱将停止播放约一分钟。",
+    "playingNow": "正在播放：{names}。",
+    "replacesConfig": "所有设置和音箱都将被此文件的内容替换。",
+    "noUndo": "此操作无法撤销。",
+    "rollback": "如需回退，请安装之前的版本。",
+    "noReconnect": "桥接器将停止管理：{names}。在收回之前，它们不会重新连接。",
+    "wakeFromMenu": "可从其菜单唤醒。",
+    "downloadFirst": "先下载当前配置",
+    "repairs": "Bluetooth 配对将被移除并重新创建；音箱可能需要处于配对模式。"
+  },
+  "longOp": {
+    "elapsed": "{seconds} 秒",
+    "cancel": "取消",
+    "cancelling": "正在取消…",
+    "retry": "重试"
+  }
+}

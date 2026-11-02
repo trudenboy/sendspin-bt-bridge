@@ -1,0 +1,2970 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "bugReport": "Signaler un bug",
+    "docs": "Documentation",
+    "github": "Dépôt GitHub",
+    "help": "Aide",
+    "preferences": "Préférences",
+    "display": "Affichage",
+    "language": "Langue",
+    "theme": "Thème",
+    "themes": {
+      "auto": "Automatique",
+      "light": "Clair",
+      "dark": "Sombre"
+    },
+    "openDiagnostics": "Ouvrir le diagnostic",
+    "sponsor": "Soutenir",
+    "sponsorHint": "Soutenez le projet",
+    "bridgeName": "Ce pont",
+    "runtimeRow": "Durée de fonctionnement du pont",
+    "hostname": "Nom d’hôte",
+    "ipAddress": "Adresse IP",
+    "upFor": "actif depuis {uptime}",
+    "speakersConnected": "{n}/{total} connectées en Bluetooth",
+    "runtime": {
+      "ha_addon": "Module complémentaire Home Assistant",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Autonome"
+    }
+  },
+  "status": {
+    "kind": {
+      "audio_link": "Lien audio",
+      "ma_account": "Compte Music Assistant",
+      "bluetooth": "Connexion Bluetooth"
+    },
+    "hint": {
+      "audio_link": "Le lien audio est le flux entre ce lecteur et Music Assistant",
+      "ma_account": "Le compte Music Assistant correspond à l’identification du pont auprès de l’API Music Assistant",
+      "bluetooth": "La connexion Bluetooth relie le pont à l’enceinte"
+    },
+    "audio_link": {
+      "streaming": "Lecture en cours",
+      "connected": "Actif",
+      "foreign": "Autre serveur",
+      "disconnected": "Inactif",
+      "unavailable": "Indisponible"
+    },
+    "ma_account": {
+      "signed_in": "Connecté",
+      "signed_out": "Déconnecté",
+      "not_configured": "Non configuré"
+    },
+    "bluetooth": {
+      "connected": "Connectée",
+      "connecting": "Connexion…",
+      "disconnected": "Déconnectée",
+      "standby": "En veille",
+      "released": "Libérée",
+      "disabled": "Désactivée",
+      "not_paired": "Non appairée"
+    },
+    "reason": {
+      "reconnecting": "Le pont se reconnecte",
+      "user": "Libérée par vous",
+      "auto": "Libérée automatiquement après des problèmes de connexion répétés",
+      "foreign_server": "Le lecteur est rattaché à un Music Assistant qui n’est pas celui de ce pont",
+      "bluetooth_down": "En attente de la connexion Bluetooth",
+      "standby": "L’enceinte est en veille",
+      "released": "L’enceinte est libérée",
+      "disabled": "Le lecteur est désactivé",
+      "unreachable_or_rejected": "Music Assistant est injoignable ou n’a pas accepté l’identification"
+    },
+    "bluetoothSummary": "{n}/{total} connectées en Bluetooth",
+    "sectionTitle": "États des connexions",
+    "accountRow": "Compte Music Assistant",
+    "speakersTitle": "Enceintes"
+  },
+  "device": {
+    "status": {
+      "streaming": "Lecture en cours",
+      "ready": "Prête",
+      "connecting": "Connexion…",
+      "error": "Erreur",
+      "offline": "Hors ligne",
+      "standby": "En veille",
+      "idle": "Au repos",
+      "degraded": "Problème",
+      "recovering": "Reconnexion…",
+      "transitioning": "Connexion…",
+      "disabled": "Désactivée",
+      "released": "Libérée",
+      "output_missing": "Sortie absente",
+      "buffering": "Mise en tampon",
+      "sink_muted": "Sortie en muet",
+      "stopping": "Arrêt…",
+      "reconnecting": "Reconnexion",
+      "autoReleased": "Libérée automatiquement",
+      "autoReleasedTitle": "Le pont a libéré cette enceinte après des problèmes de connexion répétés. Récupérez-la pour réessayer.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "En veille depuis {time}"
+    },
+    "actions": {
+      "reconnect": "Reconnecter",
+      "disconnect": "Déconnecter",
+      "remove": "Retirer",
+      "wake": "Réveiller",
+      "standby": "Mettre en veille",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "details": "Détails",
+      "enableFailed": "Impossible d’activer ou de désactiver le lecteur",
+      "volumeFailed": "Impossible de modifier le volume de {name}",
+      "muteFailed": "Impossible de mettre {name} en muet ou de rétablir le son",
+      "releaseFailed": "Impossible de libérer {name}",
+      "claimFailed": "Impossible de récupérer {name}",
+      "forget": "Oublier l’appairage Bluetooth",
+      "forgetConfirm": "Oublier l’appairage Bluetooth ? L’enceinte devra être appairée à nouveau.",
+      "repair": "Réappairer",
+      "claim": "Utiliser ce pont comme source",
+      "reconnectFailed": "Échec de la reconnexion",
+      "forgetTitle": "Oublier {name} ?",
+      "more": "Autres actions pour {name}"
+    },
+    "battery": "Batterie {level} %",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Audio local",
+      "usb_audio": "Audio USB",
+      "virtual_sink": "Sortie virtuelle",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "select": "Sélectionner {name}",
+    "chips": {
+      "sync": {
+        "label": "Synchro",
+        "reanchoring": "Resynchronisation",
+        "errorMs": "{ms} ms",
+        "title": "Lecture synchronisée avec le groupe",
+        "reanchoringTitle": "Resynchronisation du calage temporel du flux",
+        "count": "×{count}",
+        "countTitle": "Resynchronisations : {count} cette session · {m5} en 5 min · {m30} en 30 min",
+        "playout": "Restitution",
+        "playoutTitle": "Erreur de restitution mesurée à la sortie de l’enceinte",
+        "settling": "Stabilisation",
+        "settlingTitle": "La synchronisation se stabilise ; l’erreur est affichée telle que mesurée et est considérée comme stable en {s} s au plus",
+        "jumpsTitle": "Sauts de restitution : {count} cette session"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "Signal {value} Δ dB par rapport à la plage de réception idéale de l’adaptateur",
+        "tier": {
+          "excellent": "Excellent signal",
+          "strong": "Signal fort",
+          "fair": "Signal moyen",
+          "poor": "Signal faible",
+          "bad": "Signal mauvais",
+          "stale": "Relevé du signal obsolète"
+        },
+        "staleTitle": "Le dernier relevé du signal ({value} Δ dB) date de plus de 30 s"
+      },
+      "group": {
+        "title": "Groupe Music Assistant {name}",
+        "external": "{n} de plus sur d’autres ponts",
+        "openAction": "Ouvrir dans Music Assistant"
+      },
+      "adapter": {
+        "title": "Adaptateur {name} ({hci}) · {state}",
+        "open": "Ouvrir l’adaptateur {name} dans la configuration",
+        "state": {
+          "connected": "Bluetooth connecté",
+          "disconnected": "Bluetooth déconnecté",
+          "reconnecting": "Reconnexion Bluetooth",
+          "released": "Bluetooth libéré",
+          "autoReleased": "Bluetooth libéré automatiquement après des problèmes de connexion",
+          "disabled": "Enceinte désactivée"
+        }
+      },
+      "output": {
+        "title": "Sortie audio {name}"
+      },
+      "transfer": {
+        "ready": "Changement de pièce",
+        "notReady": "Non disponible",
+        "readyTitle": "Prêt à changer de pièce",
+        "notReadyTitle": "Changement de pièce impossible : {reason}",
+        "reasons": {
+          "ready": "prêt",
+          "disabled": "enceinte désactivée",
+          "bt_management_disabled": "Bluetooth libéré",
+          "stopping": "arrêt en cours",
+          "reconnecting": "reconnexion en cours",
+          "music_assistant_reconnecting": "reconnexion à Music Assistant",
+          "reanchoring": "resynchronisation en cours",
+          "output_missing": "sortie absente",
+          "daemon_unavailable": "lecteur non démarré",
+          "bluetooth_disconnected": "Bluetooth déconnecté",
+          "music_assistant_disconnected": "Music Assistant déconnecté",
+          "sink_missing": "aucune sortie audio"
+        }
+      },
+      "blocked": {
+        "why": "Pourquoi ?",
+        "needs": "Nécessite : {list}",
+        "openDiagnostics": "Ouvrir le diagnostic",
+        "sinkMutedReason": "La sortie audio est en muet au niveau du système : aucun son ne sera émis. Rétablissez le son dans le contrôle du volume.",
+        "title": {
+          "sink_muted": "Muet par le système",
+          "reconnect": "Reconnexion indisponible",
+          "toggle_bt_management": "Libération indisponible",
+          "play_pause": "Lecture indisponible",
+          "volume": "Volume indisponible",
+          "queue_control": "Commandes de file d’attente indisponibles"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth géré par ce pont",
+          "bluetooth_paired": "Appairage Bluetooth",
+          "reconnect_idle": "Reconnexion à terminer",
+          "device_not_stopping": "Arrêt du lecteur à terminer",
+          "sendspin_connected": "Liaison Sendspin",
+          "audio_sink": "Une sortie audio",
+          "ma_connected": "Liaison Music Assistant",
+          "ma_player_registered": "Lecteur enregistré dans Music Assistant"
+        },
+        "summary": "Certaines commandes sont indisponibles"
+      },
+      "backend": {
+        "bluetooth": "Enceinte Bluetooth",
+        "output": "Sortie audio"
+      },
+      "server": {
+        "title": "Lien audio vers Music Assistant {where}",
+        "foreign": "Le lien audio pointe vers {where} — et non vers le Music Assistant de ce pont"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 min",
+      "minutes": "{n} min",
+      "hours": "{h} h {m} min"
+    }
+  },
+  "config": {
+    "ma": "Music Assistant",
+    "save": "Enregistrer",
+    "adapterPowered": "Alimenté",
+    "adapterOff": "Hors tension",
+    "noAdapters": "Aucun adaptateur détecté",
+    "passwordMismatch": "Les mots de passe ne correspondent pas",
+    "invalidJson": "JSON non valide"
+  },
+  "diagnostics": {
+    "tabs": {
+      "logs": "Journaux",
+      "system": "Système",
+      "overview": "Vue d’ensemble"
+    },
+    "health": {
+      "title": "Santé du pont",
+      "healthy": "Sain",
+      "degraded": "Dégradé",
+      "error": "Erreur",
+      "unknown": "Inconnu",
+      "audio": "Moteur audio",
+      "bluetooth": "Contrôleur Bluetooth",
+      "dbus": "D-Bus",
+      "memory": "Mémoire",
+      "check": {
+        "ok": "OK",
+        "warning": "Attention",
+        "error": "Problème",
+        "unknown": "Inconnu"
+      }
+    },
+    "events": {
+      "loadMore": "Charger plus",
+      "empty": "Aucun événement",
+      "emptyDesc": "Aucun événement n’a encore été enregistré."
+    },
+    "recovery": {
+      "title": "Aide à la récupération",
+      "runChecks": "Lancer les vérifications",
+      "noIssues": "Tout est normal",
+      "noIssuesDesc": "Aucun problème détecté. Tous les systèmes fonctionnent normalement."
+    },
+    "copy": "Copier",
+    "copied": "Copié !",
+    "copyFailed": "Échec de la copie",
+    "downloadCsv": "Télécharger le CSV",
+    "audioSink": "Sortie audio",
+    "codec": "Codec",
+    "sampleRate": "Fréquence d’échantillonnage",
+    "reanchorCount": "Resynchronisations",
+    "logs": {
+      "title": "Journaux de l’application",
+      "logLevel": "Niveau de journalisation",
+      "autoScroll": "Défilement automatique",
+      "refresh": "Actualiser",
+      "download": "Télécharger",
+      "apply": "Appliquer",
+      "search": "Rechercher dans les journaux…",
+      "showingLines": "Affichage de {shown} sur {total} lignes",
+      "noLogs": "Aucune entrée de journal",
+      "loadFailed": "Impossible de charger les journaux.",
+      "levelApplied": "Journalisation au niveau {level}",
+      "levelFailed": "Impossible de modifier le niveau de journalisation",
+      "copyLine": "Copier la ligne"
+    },
+    "timeline": {
+      "title": "Événements récents"
+    }
+  },
+  "ma": {
+    "login": {
+      "title": "Se connecter à Music Assistant",
+      "step1": "Étape 1 : adresse du serveur",
+      "step2": "Étape 2 : connectez-vous avec votre compte Music Assistant",
+      "serverUrl": "URL du serveur",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Découverte automatique",
+      "token": "Jeton",
+      "submit": "Se connecter",
+      "failed": "Échec de la connexion. Vérifiez vos identifiants.",
+      "username": "Nom d’utilisateur",
+      "password": "Mot de passe",
+      "withHa": "Se connecter avec Home Assistant",
+      "connected": "Connecté à Music Assistant sur {url}",
+      "useToken": "Utiliser plutôt un jeton",
+      "maToken": "Jeton Music Assistant",
+      "maTokenHint": "Créez un jeton de longue durée dans Music Assistant → Paramètres → Profil, puis collez-le ici.",
+      "tokenSubmit": "Se connecter avec un jeton",
+      "tokenFailed": "Music Assistant n’a pas accepté le jeton.",
+      "noServers": "Aucun serveur Music Assistant n’a été trouvé sur le réseau. Saisissez son adresse ci-dessus."
+    },
+    "groups": {
+      "members": "membres",
+      "empty": "Aucun groupe de synchronisation",
+      "emptyDesc": "Aucun groupe de synchronisation Music Assistant n’a été trouvé. Lancez une découverte des groupes pour commencer.",
+      "discover": "Découvrir les groupes",
+      "create": "Créer un groupe dans Music Assistant"
+    },
+    "nowPlaying": {
+      "artwork": "Pochette d’album",
+      "artworkPreview": "Aperçu de la pochette",
+      "artworkClose": "Fermer",
+      "noTrack": "Aucune lecture en cours",
+      "prev": "Piste précédente",
+      "playPause": "Lecture / Pause",
+      "next": "Piste suivante",
+      "notPlaying": "Pas en lecture — dernière lecture"
+    },
+    "autoConnecting": "Connexion à Music Assistant…",
+    "openInMA": "Ouvrir dans Music Assistant",
+    "silentAuthFailed": "Échec de la connexion automatique, connectez-vous manuellement"
+  },
+  "login": {
+    "title": "Connexion",
+    "password": "Mot de passe",
+    "passwordPlaceholder": "Saisissez votre mot de passe",
+    "submit": "Se connecter",
+    "failed": "Mot de passe incorrect. Réessayez.",
+    "username": "Nom d’utilisateur",
+    "code": "Code d’authentification",
+    "codePrompt": "Saisissez le code fourni par {module}",
+    "codeSubmit": "Vérifier",
+    "method": {
+      "password": "Mot de passe du pont",
+      "ma": "Compte Music Assistant",
+      "ha_via_ma": "Compte Home Assistant",
+      "ha": "Compte Home Assistant"
+    }
+  },
+  "devices": {
+    "addDevice": "Ajouter une enceinte",
+    "empty": {
+      "title": "Aucun lecteur pour l’instant",
+      "description": "Lancez une recherche d’enceintes Bluetooth ou ajoutez un lecteur manuellement."
+    },
+    "viewGrid": "Vue en grille",
+    "viewList": "Vue en liste",
+    "allAdapters": "Tous les adaptateurs",
+    "allGroups": "Tous les groupes",
+    "selected": "{count} sur {total} sélectionnés",
+    "noneSelected": "0 sélectionné",
+    "selectAll": "Tout sélectionner",
+    "groupVolume": "Volume du groupe",
+    "muteAll": "Tout mettre en muet",
+    "pauseAll": "Tout mettre en pause",
+    "reconnectAll": "Tout reconnecter",
+    "list": {
+      "name": "Nom",
+      "status": "État",
+      "volume": "Volume",
+      "transport": "Lecture",
+      "adapter": "Adaptateur",
+      "actions": "Actions",
+      "expand": "Afficher les détails de {name}",
+      "collapse": "Masquer les détails de {name}",
+      "quickActions": "Actions rapides"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Économie d’énergie",
+        "title": "Activer l’économie d’énergie pour {count} des {total} éléments sélectionnés (la connexion Bluetooth reste active)"
+      },
+      "standby": {
+        "label": "Veille",
+        "title": "Déconnecter le Bluetooth sur {count} des {total} sélectionnés pour économiser la batterie des enceintes",
+        "confirmTitle": "Mettre {count} enceinte(s) en veille ?",
+        "confirmMessage": "Le Bluetooth est déconnecté et la lecture s’arrête sur : {names}. Réveillez-les depuis leur menu."
+      },
+      "release": {
+        "label": "Libérer",
+        "title": "Libérer {count} des {total} sélectionnés pour que d’autres appareils puissent les utiliser",
+        "confirmTitle": "Libérer {count} enceinte(s) ?",
+        "confirmMessage": "Le pont cesse de gérer : {names}. Elles ne se reconnecteront pas tant que vous ne les aurez pas récupérées."
+      },
+      "failed": "L’action « {action} » a échoué pour : {names}",
+      "enable": {
+        "label": "Activer",
+        "title": "Activer {count} des {total} sélectionnés (lecteurs désactivés)"
+      },
+      "remove": {
+        "label": "Retirer",
+        "title": "Retirer {count} des {total} sélectionnés (lecteurs désactivés)",
+        "confirmTitle": "Retirer {count} lecteur(s) ?",
+        "confirmMessage": "Leurs lecteurs disparaissent de Music Assistant et les appairages Bluetooth sont supprimés : {names}."
+      }
+    },
+    "sort": {
+      "label": "Trier par",
+      "activity": "Activité",
+      "name": "Nom",
+      "status": "État"
+    },
+    "backendFilter": {
+      "label": "Type de lecteur",
+      "all": "Tous les lecteurs",
+      "bluetooth": "Enceintes Bluetooth",
+      "output": "Sorties audio"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "overview": "Vue d’ensemble",
+      "config": "Paramètres",
+      "timing": "Calage temporel",
+      "history": "Historique"
+    },
+    "status": {
+      "playerState": "État",
+      "audioSink": "Sortie audio",
+      "codec": "Codec",
+      "reportedDelay": "Latence signalée",
+      "reportedDelayHint": "Latence que l’enceinte signale via Bluetooth (A2DP Delay Reporting). Valeur indicative : rapportée par l’enceinte, non mesurée.",
+      "sampleRate": "Fréquence d’échantillonnage"
+    },
+    "config": {
+      "name": "Nom",
+      "mac": "Adresse MAC",
+      "adapter": "Adaptateur",
+      "port": "Port d’écoute",
+      "delay": "Compensation de latence de l’enceinte",
+      "enabled": "Activé",
+      "save": "Enregistrer",
+      "saveFailed": "Échec de l’enregistrement de la configuration",
+      "enabledHelp": "Une enceinte désactivée conserve ses paramètres mais n’obtient aucun lecteur.",
+      "playoutSync": "Synchronisation de restitution",
+      "playoutSyncHelp": "Désactivez cette option pour faire fonctionner cette enceinte comme avant la synchronisation de restitution : la sortie audio simple, sans mesure de restitution.",
+      "notConfigured": "Cette enceinte ne figure pas dans la configuration."
+    },
+    "events": {
+      "empty": "Aucun événement enregistré"
+    },
+    "signal": {
+      "port": "port {port}",
+      "corrections": "{n} correction | {n} corrections",
+      "subprocess": "Processus du lecteur"
+    },
+    "actions": {
+      "more": "Autres actions",
+      "reconnect": "Reconnecter",
+      "reconnectDone": "Reconnexion en cours",
+      "repair": "Réappairer",
+      "repairDone": "Réappairage en cours",
+      "pairing": "Laisser Music Assistant appairer",
+      "pairingDone": "Music Assistant peut appairer pendant un moment",
+      "unmute": "Rétablir le son de la sortie audio",
+      "unmuteDone": "Son de la sortie audio rétabli",
+      "release": "Activer l’économie d’énergie",
+      "releaseDone": "L’économie d’énergie est activée",
+      "resume": "Désactiver l’économie d’énergie",
+      "resumeDone": "L’économie d’énergie est désactivée"
+    },
+    "server": {
+      "title": "Serveur Music Assistant",
+      "name": "Nom",
+      "host": "Adresse",
+      "id": "ID du serveur",
+      "url": "URL",
+      "foreign": "Le lien audio pointe vers Music Assistant sur {where}, et non vers celui de ce pont. Un autre serveur a pris ce lecteur en premier ; reconnectez le lecteur pour que le Music Assistant de ce pont puisse le prendre.",
+      "refusedTitle": "Refusé",
+      "refusedCount": "Tentatives : {n}"
+    },
+    "troubleshoot": {
+      "label": "Dépannage"
+    },
+    "overview": {
+      "audioPath": "Chemin audio",
+      "events": "Derniers événements",
+      "allEvents": "Tous les événements →"
+    }
+  },
+  "volume": {
+    "mute": "Muet",
+    "unmute": "Rétablir le son",
+    "label": "Volume de {name}"
+  },
+  "bluetooth": {
+    "scan": {
+      "scanning": "Recherche…",
+      "pair": "Appairer",
+      "unknown": "Appareil inconnu",
+      "noDevices": "Aucun appareil trouvé",
+      "adapter": "Adaptateur",
+      "add": "Ajouter",
+      "added": "Sur ce pont",
+      "pairFailed": "Échec de l’appairage : {reason}",
+      "quiesce": "Déconnecter temporairement les autres enceintes de cet adaptateur pendant l’appairage",
+      "noIo": "Appairer sans invite de code PIN (Just Works) — pour les enceintes qui annulent l’appairage",
+      "hfp": "Autoriser aussi le profil mains libres (appels)"
+    },
+    "audioOnly": "Audio uniquement",
+    "release": "Libérer l’enceinte",
+    "reclaim": "Récupérer l’enceinte",
+    "released": "Libérée"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "error": "Erreur",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "close": "Fermer",
+    "search": "Rechercher",
+    "noResults": "Aucun résultat",
+    "no": "Non"
+  },
+  "update": {
+    "title": "Mise à jour logicielle",
+    "available": "Mise à jour disponible",
+    "badge": "Mise à jour v{version}",
+    "checkNow": "Rechercher des mises à jour",
+    "upToDate": "Vous utilisez la dernière version",
+    "versionCompare": "Mise à jour de version",
+    "instructions": "Instructions de mise à jour",
+    "releaseNotes": "Notes de version",
+    "recheck": "Revérifier",
+    "viewRelease": "Notes de version",
+    "applyNow": "Mettre à jour maintenant",
+    "confirmTitle": "Mettre à jour vers la v{version} ?",
+    "applyStarted": "Mise à jour lancée — le pont redémarrera sous peu",
+    "openHa": "Mettre à jour dans HA",
+    "copyCommand": "Copier la commande",
+    "checking": "Recherche de mises à jour…",
+    "channel": "Canal",
+    "checkChannel": "Vérifier"
+  },
+  "transport": {
+    "play": "Lecture",
+    "pause": "Pause",
+    "next": "Piste suivante",
+    "previous": "Piste précédente",
+    "failed": "Échec de la commande de lecture",
+    "position": "Position de la piste",
+    "shuffleOn": "Aléatoire activé — désactiver",
+    "shuffleOff": "Aléatoire désactivé — activer",
+    "repeat": {
+      "off": "Répétition désactivée — répéter tout",
+      "all": "Répéter tout — répéter une piste",
+      "one": "Répéter une piste — désactiver"
+    },
+    "pending": "En attente de confirmation de Music Assistant",
+    "queue": "Commandes de file d’attente"
+  },
+  "adapter": {
+    "turnOff": "Éteindre",
+    "turnOn": "Allumer",
+    "confirmOffTitle": "Éteindre l’adaptateur {adapter} ?",
+    "confirmRebootTitle": "Redémarrer l’adaptateur {adapter} ?",
+    "reboot": "Redémarrer",
+    "powerToggled": "Alimentation de l’adaptateur basculée",
+    "powerFailed": "Échec du basculement de l’alimentation de l’adaptateur",
+    "rebooted": "Adaptateur redémarré",
+    "rebootFailed": "Échec du redémarrage de l’adaptateur",
+    "confirmNone": "Aucune enceinte ne l’utilise pour l’instant.",
+    "openInHardware": "Ouvrir dans Matériel"
+  },
+  "hardware": {
+    "subtitle": "Les adaptateurs Bluetooth, les appareils qui leur sont associés et l’audio de cet hôte.",
+    "refresh": "Actualiser",
+    "stale": "Les données peuvent être obsolètes",
+    "controllers": "Contrôleurs Bluetooth",
+    "devices": "Appareils Bluetooth",
+    "noControllers": "Aucun contrôleur Bluetooth trouvé",
+    "noDevices": "Aucun appareil Bluetooth appairé",
+    "deviceCount": "Appareils : {n}",
+    "powered": "Allumé",
+    "poweredOff": "Éteint",
+    "connected": "Connecté",
+    "paired": "Appairé",
+    "trusted": "Approuvé",
+    "roleOutput": "Émet de l’audio",
+    "roleInput": "Reçoit de l’audio",
+    "roleEvidence": "Indice : {evidence}",
+    "battery": "Batterie : {pct} %",
+    "rssi": "{db} dB",
+    "signal": "Signal : {db} dB",
+    "addAsSpeaker": "Ajouter comme enceinte",
+    "addSpeakerFailed": "Impossible d’ajouter {name} comme enceinte.",
+    "forgotBond": "Appairage Bluetooth de {name} oublié.",
+    "forgetFailed": "Impossible d’oublier l’appairage : {reason}",
+    "forgetPlayer": "L’appairage prend en charge le lecteur {player}.",
+    "connect": "Connecter",
+    "disconnect": "Déconnecter",
+    "pairDevice": "Appairer un appareil",
+    "connectFailed": "Impossible de connecter {name} : {reason}",
+    "disconnectFailed": "Impossible de déconnecter {name} : {reason}",
+    "bondInUseTitle": "Cet appairage prend en charge un lecteur",
+    "bondInUse": "Cet appairage prend en charge un lecteur ; retirez ce lecteur avant d’oublier l’appairage.",
+    "openPlayer": "Ouvrir {player} sur l’accueil",
+    "btRefused": "BlueZ a refusé ({code})",
+    "btUnavailable": "la pile Bluetooth n’a pas répondu ({code})",
+    "player": "Lecteur",
+    "controllerId": "Contrôleur",
+    "classOfDevice": "Classe d’appareil",
+    "area": "Zone",
+    "openDetails": "Afficher les détails de {name}",
+    "yes": "Oui",
+    "no": "Non",
+    "unknown": "Inconnu",
+    "unavailable": {
+      "dbusTitle": "Cet hôte n’a pas de D-Bus",
+      "dbusBody": "D-Bus n’a pas répondu ; le pont ne peut donc pas interroger BlueZ sur ses adaptateurs.",
+      "bluetoothTitle": "Le Bluetooth de cet hôte est illisible",
+      "bluetoothBody": "Le pont ne détecte aucun adaptateur Bluetooth sur cet hôte.",
+      "hardwareTitle": "Le matériel de cet hôte est illisible",
+      "hardwareBody": "Ni D-Bus ni bluetoothctl n’ont pu répondre.",
+      "nextStep": "Vérifiez que le pont peut joindre la pile Bluetooth de l’hôte, puis rechargez cette page.",
+      "reason": "Code de raison : {reason}"
+    },
+    "unsupported": {
+      "title": "Ce pont ne peut pas rapporter le matériel",
+      "body": "Son API n’a pas de route /hardware. Mettez le pont à jour ou utilisez les pages Paramètres et Diagnostic."
+    },
+    "drawer": {
+      "overview": "Vue d’ensemble",
+      "technical": "Détails techniques",
+      "power": "Alimentation",
+      "present": "Présent",
+      "area": "Zone",
+      "classOfDevice": "Classe d’appareil",
+      "deviceCount": "Appareils sur ce contrôleur",
+      "roles": "Rôles du lien",
+      "player": "Lecteur",
+      "battery": "Batterie",
+      "rssi": "Signal",
+      "bonded": "Appairé",
+      "controllers": "Contrôleurs portant l’appairage",
+      "synthetic": "ID synthétique (aucune entrée sysfs)",
+      "observedAt": "Observé à",
+      "id": "ID",
+      "mac": "MAC"
+    },
+    "audio": {
+      "title": "Audio",
+      "cards": "Cartes audio",
+      "outputs": "Sorties audio",
+      "inputs": "Entrées audio",
+      "noDevices": "Aucun appareil audio",
+      "noDevicesBody": "Le serveur audio a répondu et ne signale aucune carte, sortie ou entrée.",
+      "noCards": "Aucune carte audio",
+      "noOutputs": "Aucune sortie audio",
+      "noInputs": "Aucune entrée audio",
+      "notReportedTitle": "Ce pont ne rapporte pas l’audio",
+      "notReportedBody": "Son API matérielle est antérieure à la partie audio. Mettez le pont à jour pour voir les cartes, sorties et entrées.",
+      "unavailableTitle": "L’audio de cet hôte est illisible",
+      "unavailableBody": "Aucun serveur compatible PulseAudio n’a répondu ; les cartes, sorties et entrées sont donc inconnues.",
+      "captureUnavailableTitle": "L’entrée du téléphone est indisponible",
+      "captureUnavailableBody": "Le téléphone via Bluetooth ne peut pas être capturé sur cet hôte ; la source n’a donc rien à lire.",
+      "noDriver": "Aucun pilote",
+      "driver": "Pilote",
+      "activeProfile": "Profil actif",
+      "profileCount": "Profils",
+      "portCount": "Ports",
+      "profiles": "Profils",
+      "profileActive": "Utilisé",
+      "profileAvailable": "Disponible",
+      "profileUnavailable": "Indisponible",
+      "profileUnknown": "Disponibilité inconnue",
+      "profileSwitch": "Changer de profil",
+      "profileSelectLabel": "Profil",
+      "profileConfirmTitle": "Basculer {card} vers le profil {profile} ?",
+      "profileConsequence": "Toutes les sorties de {card} peuvent se couper pendant le démarrage du nouveau profil.",
+      "profileConsequenceInUse": "Toutes les sorties de {card} peuvent se couper pendant le démarrage du nouveau profil, et {players} aussi.",
+      "profileConfirm": "Changer de profil",
+      "profileSwitched": "{card} utilise désormais le profil {profile}.",
+      "detailStale": "Le serveur audio n’a pas pu actualiser cette lecture ; elle peut ne pas refléter l’état le plus récent.",
+      "profileManagedByConnection": "La connexion Bluetooth choisit le profil de cette carte.",
+      "profileNone": "Aucun profil",
+      "ports": "Ports",
+      "portActive": "Actif",
+      "portAvailable": "Disponible",
+      "portUnavailable": "Indisponible",
+      "portUnknown": "Disponibilité inconnue",
+      "portSwitch": "Changer de port",
+      "portSelectLabel": "Port",
+      "portConfirmTitle": "Basculer {name} vers {port} ?",
+      "portConsequence": "{name} peut se couper pendant que le nouveau port prend le relais, tout comme ce qui y est lu.",
+      "portConsequenceInUse": "{name} peut se couper pendant que le nouveau port prend le relais, et {player} aussi, qui joue via ce port.",
+      "portConfirm": "Changer de port",
+      "portSwitched": "{name} utilise désormais le port {port}.",
+      "endpoints": "Points de terminaison",
+      "output": "Sortie",
+      "input": "Entrée",
+      "direction": "Sens",
+      "state": "État",
+      "stateRunning": "En cours",
+      "stateIdle": "Au repos",
+      "stateSuspended": "En pause",
+      "stateUnavailable": "Indisponible",
+      "stateUnknown": "Inconnu",
+      "activePort": "Port actif",
+      "portUnavailableReason": "Son port actif est indisponible ; cette entrée ne capte donc rien.",
+      "inputUnavailable": "Cette entrée est indisponible ; le serveur audio n’en a pas donné la raison.",
+      "outputPortUnavailableReason": "Son port actif est indisponible ; cette sortie ne peut donc rien lire.",
+      "outputUnavailable": "Cette sortie est indisponible ; le serveur audio n’en a pas donné la raison.",
+      "volume": "Volume",
+      "muted": "Muet",
+      "inUse": "Utilisé par",
+      "default": "Par défaut",
+      "setDefault": "Définir par défaut",
+      "defaultConfirmTitle": "Définir {name} comme sortie par défaut ?",
+      "defaultConsequence": "Tout son sans sortie choisie est lu sur {name}.",
+      "makeDefault": "Définir par défaut",
+      "defaultSet": "{name} est désormais la sortie par défaut.",
+      "suspend": "Mettre en pause",
+      "resume": "Reprendre",
+      "suspendConfirmTitle": "Mettre {name} en pause ?",
+      "suspendConsequence": "Seule {name} se tait : elle reste dans la liste et ne lit rien jusqu’à sa reprise.",
+      "suspended": "{name} mise en pause.",
+      "commandFailed": "Impossible de modifier {name} : {reason}",
+      "kindMicrophone": "Microphone",
+      "kindLineIn": "Entrée ligne",
+      "kindMonitor": "Moniteur",
+      "kindPhone": "Téléphone via Bluetooth",
+      "monitorOf": "Surveille",
+      "owner": "Appartient à",
+      "ownerUnknown": "Non classé",
+      "ownerCard": "Carte {card}",
+      "ownerBluetooth": "Appareil Bluetooth {mac}",
+      "ownerInternal": "Le pont lui-même",
+      "sampleSpec": "Format d’échantillonnage",
+      "identifierSerial": "Numéro de série",
+      "identifierBusPath": "Chemin de bus",
+      "identifierVendorId": "ID fabricant",
+      "identifierProductId": "ID produit",
+      "identifierAlsaLongCardName": "Nom long de carte ALSA"
+    },
+    "source": {
+      "title": "Source",
+      "stateOff": "Désactivée",
+      "stateWaiting": "En attente d’un téléphone",
+      "stateStreaming": "Diffusion en cours",
+      "stateError": "Erreur",
+      "offBody": "La source est désactivée. Activez-la ici pour proposer le téléphone à Music Assistant.",
+      "phone": "Téléphone",
+      "start": "Démarrer la source",
+      "stop": "Arrêter la source",
+      "stopConfirmTitle": "Arrêter la source ?",
+      "stopConsequence": "Ces enceintes reviennent à Music Assistant : {players}.",
+      "stopped": "Source arrêtée.",
+      "pair": "Appairer un téléphone",
+      "stopPairing": "Arrêter l’appairage",
+      "pairing": "Ouvert à l’appairage : {time} restant.",
+      "pairingHint": "Appairez le téléphone maintenant ; s’il considère le code PIN comme erroné, oubliez d’abord ce pont sur le téléphone (appairage obsolète).",
+      "errorTitle": "La source a échoué",
+      "errorCapture": "L’audio du téléphone ne peut pas être capturé sur cet hôte.",
+      "errorCaptureNext": "Le pont a besoin de nœuds de capture PipeWire pour le téléphone ; vérifiez le moteur audio de l’hôte.",
+      "errorNoAdapter": "Aucun adaptateur Bluetooth n’a accepté le mode découvrable.",
+      "errorNoAgent": "Le pont n’a pas pu enregistrer d’agent d’appairage Bluetooth.",
+      "errorBluetoothNext": "Vérifiez les contrôleurs Bluetooth ci-dessus, puis réessayez l’appairage.",
+      "errorNextStep": "Vérifiez les paramètres de la source dans Paramètres → Music Assistant, puis redémarrez la source.",
+      "failureTitle": "La dernière commande sur la source a été refusée",
+      "failureNextStep": "Vérifiez la source et réessayez.",
+      "commandFailed": "Impossible de modifier la source : {reason}",
+      "capture": "Capture",
+      "capturePipewire": "Nœud PipeWire",
+      "capturePulse": "Source PulseAudio",
+      "captureUnavailable": "Indisponible",
+      "node": "Nœud",
+      "noNode": "Aucun nœud de capture",
+      "subtitle": "Le téléphone diffuse vers le pont ; le pont l’envoie à Music Assistant comme source.",
+      "statePairing": "En attente du code d’appairage",
+      "maTitle": "Music Assistant",
+      "maOff": "La source est désactivée. Activez-la pour proposer le téléphone à Music Assistant.",
+      "maError": "La connexion à Music Assistant a échoué.",
+      "maConnected": "Connecté. La lecture et le routage sont gérés dans Music Assistant.",
+      "maReconnecting": "Appairé. Reconnexion à Music Assistant…",
+      "maNotPaired": "Pas encore appairé. Saisissez le code ci-dessous dans Music Assistant.",
+      "maConnectedShort": "connecté",
+      "maPairedShort": "appairé",
+      "maUnpairedShort": "non appairé",
+      "maCodeLabel": "Code d’appairage",
+      "maCodeHint": "Saisissez ce code dans Music Assistant. Il reste valable {time}.",
+      "maPair": "Appairer avec Music Assistant",
+      "maForget": "Oublier l’appairage",
+      "maForgetConfirmTitle": "Oublier l’appairage Music Assistant ?",
+      "maForgetConfirmBody": "Le pont aura besoin d’un nouveau code pour que Music Assistant puisse relire le téléphone.",
+      "maForgetDone": "Appairage Music Assistant oublié",
+      "maRouting": "Lisez le téléphone depuis Music Assistant ; le pont ne le route pas lui-même vers les enceintes.",
+      "maOpen": "Ouvrir Music Assistant",
+      "maUnreachable": "Music Assistant est injoignable.",
+      "maUnreachableNext": "Vérifiez que Music Assistant est démarré et que SENDSPIN_SERVER pointe vers lui ; le pont continue de réessayer.",
+      "maPairingRequired": "Un code d’appairage est requis.",
+      "maRejected": "Music Assistant a refusé le code d’appairage.",
+      "maUnsupported": "Ce Music Assistant ne propose pas de source Sendspin.",
+      "maUnsupportedNext": "Mettez Music Assistant à jour vers 2.10 ou une version ultérieure et activez son fournisseur de source Sendspin.",
+      "maPairingNext": "Ouvrez une fenêtre d’appairage et saisissez le code dans Music Assistant.",
+      "phoneTitle": "Téléphone (Bluetooth)",
+      "phoneIdle": "aucun flux",
+      "phoneNoPhone": "Aucun téléphone ne diffuse vers le pont.",
+      "phoneHint": "Le téléphone s’appaire avec le pont via Bluetooth ; Music Assistant reçoit l’audio capturé.",
+      "phonePaired": "Téléphone appairé",
+      "phonePairedHint": "L’appairage est enregistré ; lancez la lecture sur le téléphone et le pont la capturera.",
+      "maSettingsHint": "L’appairage et le code se trouvent dans les paramètres.",
+      "maSettingsAction": "Ouvrir les paramètres d’appairage",
+      "maNotPairedWhere": "Non appairé. Appairez le pont avec Music Assistant dans les paramètres.",
+      "phonePairedNeedMa": "Téléphone appairé. Appairez le pont avec Music Assistant pour l’entendre.",
+      "phonePairedNeedMaAction": "Appairer avec Music Assistant"
+    }
+  },
+  "kit": {
+    "closeDialog": "Fermer la boîte de dialogue",
+    "closeDrawer": "Fermer le panneau",
+    "dismissNotification": "Masquer la notification",
+    "removeBadge": "Retirer",
+    "signalPath": "Chemin du signal",
+    "selectAllRows": "Sélectionner toutes les lignes",
+    "clearSearch": "Effacer la recherche",
+    "loading": "Chargement"
+  },
+  "sidebar": {
+    "collapse": "Réduire la barre latérale",
+    "expand": "Développer la barre latérale"
+  },
+  "undo": {
+    "label": "Annuler",
+    "handedOver": "{name} libérée. Elle ne se reconnectera pas tant que vous ne l’aurez pas récupérée.",
+    "disabled": "{name} désactivée.",
+    "standby": "{name} en veille : Bluetooth déconnecté, lecture arrêtée.",
+    "woke": "{name} réveillée.",
+    "enabled": "{name} activée.",
+    "muted": "Muet : {name}.",
+    "powerSave": "Économie d’énergie activée : {name}.",
+    "btConnected": "{name} connectée.",
+    "btDisconnected": "{name} déconnectée.",
+    "audioMuted": "{name} en muet.",
+    "audioUnmuted": "Son rétabli : {name}.",
+    "audioVolume": "Volume réglé : {name}.",
+    "audioResumed": "Reprise : {name}.",
+    "sourceStarted": "Source démarrée.",
+    "sourcePairingOpen": "Fenêtre d’appairage ouverte : appairez le téléphone maintenant.",
+    "sourcePairingClosed": "Fenêtre d’appairage fermée."
+  },
+  "restart": {
+    "stopping": "Arrêt du pont…",
+    "restarting": "Redémarrage du pont…",
+    "ready": "Pont redémarré avec succès",
+    "error": "Échec du redémarrage",
+    "openLogs": "Ouvrir les journaux",
+    "dismiss": "Masquer",
+    "updating": "Mise à jour… le pont redémarre",
+    "updated": "Mise à jour effectuée, le pont est de retour",
+    "updateFailed": "Échec de la mise à jour",
+    "errorNext": "Ouvrez les journaux pour en voir la raison, puis réessayez.",
+    "updateTimedOut": "La mise à jour ne s’est pas terminée — ouvrez les journaux",
+    "updateTimedOutNext": "Le pont n’est pas revenu après 3 minutes. Ouvrez les journaux pour voir où la mise à jour s’est arrêtée ; si le pont est encore dans l’ancienne version, relancez la mise à jour."
+  },
+  "bugreport": {
+    "title": "Signaler un bug",
+    "hints": {
+      "min": "Au moins {n} caractères."
+    },
+    "submitBy": {
+      "github": "Ouvrir un ticket GitHub",
+      "proxy": "Envoyer le rapport",
+      "copy": "Copier le rapport"
+    },
+    "fileReport": "Signaler un bug",
+    "fields": {
+      "title": "Titre du problème",
+      "titlePlaceholder": "Brève description du problème",
+      "description": "Description",
+      "descPlaceholder": "Que s’est-il passé ? Qu’attendiez-vous à la place ?",
+      "email": "Votre e-mail (pour un suivi)"
+    },
+    "errors": {
+      "titleShort": "Le titre doit contenir au moins 5 caractères",
+      "descShort": "La description doit contenir au moins 10 caractères",
+      "emailInvalid": "Saisissez une adresse e-mail valide"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "Envoyer",
+      "copy": "Copier"
+    },
+    "diagnosticsPreview": "Données de diagnostic",
+    "autoAttached": "jointes automatiquement",
+    "loadingDiagnostics": "Chargement du diagnostic…",
+    "loadFailed": "Échec du chargement des données de diagnostic",
+    "submit": "Envoyer le rapport",
+    "download": "Télécharger",
+    "submitted": "Rapport de bug envoyé avec succès",
+    "submitFailed": "Échec de l’envoi du rapport de bug",
+    "copied": "Rapport copié dans le presse-papiers",
+    "copyFailed": "Échec de la copie dans le presse-papiers"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "showAdvanced": "Afficher les détails techniques",
+    "unsaved": "Modifications non enregistrées",
+    "save": "Enregistrer",
+    "discard": "Ignorer",
+    "saved": "Paramètres enregistrés",
+    "restartNeeded": "Redémarrez le pont pour appliquer certaines modifications",
+    "restartNow": "Redémarrer maintenant",
+    "restartConfirmTitle": "Redémarrer le pont maintenant ?",
+    "units": {
+      "ms": "ms",
+      "s": "s",
+      "min": "min",
+      "h": "h"
+    },
+    "auto": "Automatique",
+    "embedded": {
+      "security": "Connecté via Home Assistant. La connexion et l’accès y sont gérés.",
+      "updates": "Les mises à jour proviennent du magasin de modules complémentaires Home Assistant."
+    },
+    "sections": {
+      "general": {
+        "title": "Général",
+        "description": "Nom, fuseau horaire et journalisation."
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "Connexion à votre serveur Music Assistant et mode de contrôle des lecteurs."
+      },
+      "audio": {
+        "title": "Audio",
+        "description": "Mise en mémoire tampon et choix de codec pour la lecture Bluetooth."
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "Adaptateurs, reconnexion et récupération."
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Entités dans Home Assistant et noms de pièces issus de ses zones."
+      },
+      "security": {
+        "title": "Sécurité",
+        "description": "Connexion, sessions et jetons API."
+      },
+      "updates": {
+        "title": "Mises à jour",
+        "description": "Comment le pont trouve et installe les nouvelles versions."
+      },
+      "guidance": {
+        "title": "Assistance",
+        "description": "Quand le tableau de bord commence à afficher des conseils d’installation et de récupération."
+      },
+      "backup": {
+        "title": "Sauvegarde",
+        "description": "Exporter, importer ou modifier le fichier de configuration."
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "Nom du pont",
+        "help": "Affiché dans Music Assistant à côté de chaque lecteur. Laissez vide pour utiliser le nom de l’hôte."
+      },
+      "TZ": {
+        "label": "Fuseau horaire",
+        "help": "Nom IANA, par exemple Europe/Berlin. Utilisé pour l’horodatage des journaux et des événements."
+      },
+      "WEB_PORT": {
+        "label": "Port web",
+        "help": "Port de cette interface web. Vide : utilise la variable d’environnement WEB_PORT ou 8080. Prend effet après un redémarrage."
+      },
+      "LOG_LEVEL": {
+        "label": "Niveau de journalisation",
+        "help": "DEBUG écrit beaucoup plus de détails ; utilisez-le pendant l’analyse d’un problème.",
+        "addonHelp": "Dans le module complémentaire Home Assistant, l’option log_level du module (onglet Configuration) définit ce niveau à chaque redémarrage. Modifiez-la là-bas pour le conserver."
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Serveur Music Assistant",
+        "help": "Nom d’hôte ou adresse IP de Music Assistant, ou auto pour le trouver sur le réseau."
+      },
+      "SENDSPIN_PORT": {
+        "label": "Port Sendspin",
+        "help": "Port Sendspin de Music Assistant, normalement 8927."
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "Premier port de lecteur",
+        "help": "Les enceintes écoutent sur des ports consécutifs à partir de celui-ci. Vide : choisit automatiquement des ports libres."
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "Exiger l’appairage",
+        "help": "Music Assistant doit saisir un code PIN avant de pouvoir lire sur ces enceintes."
+      },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "Uniquement le Music Assistant de ce pont",
+        "help": "Refuser tout autre Music Assistant qui tente de prendre une enceinte. S’applique dès que le pont connaît son propre Music Assistant (une adresse de serveur ou l’URL de l’API Music Assistant)."
+      },
+      "VOLUME_VIA_MA": {
+        "label": "Volume via Music Assistant",
+        "help": "Les changements de volume passent par Music Assistant pour que ses curseurs restent synchronisés."
+      },
+      "MUTE_VIA_MA": {
+        "label": "Muet via Music Assistant",
+        "help": "La mise en muet passe par Music Assistant pour que ses lecteurs affichent le même état."
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Mises à jour en direct depuis Music Assistant",
+        "help": "Maintient une connexion ouverte pour la lecture en cours, la file d’attente et les changements de groupe."
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "Renouveler la connexion automatiquement",
+        "help": "Actualise en arrière-plan la session Music Assistant lorsqu’elle expire."
+      },
+      "MA_ADDON_SLUG": {
+        "label": "Module complémentaire Music Assistant d’un autre dépôt",
+        "help": "Module complémentaire Home Assistant uniquement. Laissez vide pour le module complémentaire Music Assistant officiel ou un module du dossier local. Pour un module d’un autre dépôt, saisissez son slug afin que le pont puisse s’identifier via lui."
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "Avertir des enceintes sur d’autres ponts",
+        "help": "Demande à Music Assistant si un autre pont sert déjà la même enceinte."
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "Tampon audio",
+        "help": "Des valeurs élevées résistent aux hôtes chargés et aux machines virtuelles ; des valeurs faibles réagissent plus vite."
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "Préférer le codec SBC",
+        "help": "Utiliser SBC au lieu de AAC ou aptX. Aide les enceintes qui saccadent avec d’autres codecs."
+      },
+      "SMOOTH_RESTART": {
+        "label": "Redémarrages en douceur",
+        "help": "Reconnecte le lecteur d’une enceinte au lieu de le redémarrer complètement."
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "Empêcher PulseAudio de déplacer les flux",
+        "help": "Décharge module-rescue-streams pour qu’une enceinte en reconnexion n’emprunte jamais l’audio d’une autre."
+      },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "Compenser la latence du tampon audio",
+        "help": "Lit à l’heure quelle que soit la latence PulseAudio. Désactivé : rétablit l’ancien calage, en retard de cette latence."
+      },
+      "PLAYOUT_SYNC": {
+        "label": "Synchronisation de restitution",
+        "help": "Désactivé : conserve la sortie audio simple. « Mesurer » est expérimental : mesure l’erreur de restitution à la sortie de l’enceinte et la signale, sans la corriger. « Mesurer et corriger » corrige le placement de chaque démarrage via le capteur radio ; cela nécessite le capteur radio expérimental, sans quoi le comportement équivaut à « Mesurer ». Prend effet après le redémarrage des enceintes.",
+        "options": {
+          "off": "Désactivé",
+          "measure": "Mesurer uniquement",
+          "loop": "Mesurer et corriger"
+        }
+      },
+      "PLAYOUT_DIAG": {
+        "label": "Diagnostic de l’horloge de lecture",
+        "help": "Ajoute aussi la fréquence propre de l’horloge de la sortie de l’enceinte dans la ligne Clock diag minute par minute. La lecture reste inchangée."
+      },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "Réinitialiser les sorties audio au démarrage",
+        "help": "Met en pause puis reprend chaque sortie audio locale une fois avant le premier démarrage de son lecteur. Aide une sortie qui démarre sans son."
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "Intervalle de vérification de la connexion",
+        "help": "Fréquence à laquelle le pont vérifie que chaque enceinte est toujours connectée."
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "Tentatives de reconnexion",
+        "help": "Nombre d’échecs consécutifs avant que le pont cesse d’essayer. 0 : continue indéfiniment."
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "Détails techniques par défaut",
+        "help": "Affiche les niveaux de signal, les compteurs de synchronisation, les ID de serveur et les paramètres avancés dans les navigateurs qui n’ont pas fait de choix. Chaque navigateur peut modifier cela depuis son menu de préférences."
+      },
+      "RSSI_BADGE": {
+        "label": "Puissance du signal",
+        "help": "Affiche la puissance du signal en direct sur chaque enceinte connectée."
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "Limite de boucle de reconnexion",
+        "help": "Nombre de cycles connexion/déconnexion dans la fenêtre qui poussent le pont à libérer une enceinte. 0 désactive ce comportement."
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "Fenêtre de la boucle de reconnexion",
+        "help": "Fenêtre temporelle pour compter ces cycles."
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "Récupérer une sortie audio manquante",
+        "help": "Activé par défaut. Demande à une enceinte qui est aussi une source audio (comme un Amazon Echo) d’accepter l’audio dès sa connexion, remet une carte son restée sur le profil source sur le profil de sortie (avec de brèves tentatives, car une connexion récente répond « Input/output error » tant que BlueZ n’a pas la sortie), et si la sortie audio n’apparaît toujours pas, reconnecte l’enceinte jusqu’à deux fois en dix minutes."
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "Recharger le module Bluetooth de PulseAudio",
+        "help": "Expérimental. Dernier recours lorsque PulseAudio cesse de créer des sorties Bluetooth."
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "Réinitialiser un adaptateur bloqué",
+        "help": "Expérimental. Une fois les tentatives de reconnexion épuisées, coupe et rétablit l’alimentation ou réinitialise l’adaptateur Bluetooth."
+      },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "Capteur radio (enceintes SBC)",
+        "help": "Expérimental, sur activation explicite ; nécessite un redémarrage du pont. Mesure le moment où l’audio quitte réellement les ondes. Nécessite la synchronisation de restitution en mode mesure ou boucle, une enceinte Bluetooth SBC et CAP_NET_RAW. Mesure en mode mesure ; corrige le placement en mode boucle.",
+        "disabledReason": "Activez d’abord la synchronisation de restitution (mode mesure ou boucle)."
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "Connexion à Home Assistant",
+          "help": "MQTT publie les entités via votre broker ; Intégration utilise l’intégration personnalisée Sendspin Bridge.",
+          "options": {
+            "off": "Désactivé",
+            "mqtt": "MQTT",
+            "rest": "Intégration"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "Broker MQTT",
+            "help": "Nom d’hôte ou IP, ou auto pour utiliser le module complémentaire Mosquitto."
+          },
+          "port": {
+            "label": "Port MQTT",
+            "help": "Généralement 1883, ou 8883 avec TLS."
+          },
+          "tls": {
+            "label": "Utiliser TLS",
+            "help": "Chiffre la connexion au broker."
+          },
+          "username": {
+            "label": "Utilisateur MQTT",
+            "help": "Laissez vide si le broker autorise les clients anonymes."
+          },
+          "password": {
+            "label": "Mot de passe MQTT",
+            "help": "Stocké sur le pont et plus jamais affiché."
+          },
+          "discovery_prefix": {
+            "label": "Préfixe de découverte",
+            "help": "Doit correspondre au préfixe de découverte MQTT de Home Assistant."
+          },
+          "client_id": {
+            "label": "ID client",
+            "help": "Vide : en dérive un à partir du pont."
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "Annoncer sur le réseau",
+            "help": "Permet à Home Assistant de découvrir le pont et de proposer l’intégration."
+          },
+          "supervisor_pair": {
+            "label": "Appairer via le Supervisor",
+            "help": "Sur Home Assistant OS, l’intégration obtient son jeton sans copie manuelle."
+          },
+          "advertise_host": {
+            "label": "Adresse annoncée",
+            "help": "Adresse que Home Assistant utilise pour joindre le pont. À définir si le pont se trouve derrière un proxy inverse ou un NAT ; vide : détection automatique."
+          },
+          "advertise_port": {
+            "label": "Port annoncé",
+            "help": "0 annonce le port web."
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "Noms de pièces issus des zones",
+        "help": "Suggère des noms de pièces pour les enceintes à partir des zones de Home Assistant."
+      },
+      "AUTH_ENABLED": {
+        "label": "Exiger la connexion",
+        "help": "Demande un mot de passe ou un compte avant d’afficher cette interface.",
+        "disabledReason": "Définissez d’abord un mot de passe."
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "Durée de session",
+        "help": "Durée pendant laquelle une connexion reste valide."
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "Verrouiller après des échecs répétés",
+        "help": "Bloque la connexion pendant un moment après trop de mots de passe erronés."
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "Échecs autorisés",
+        "help": "Nombre de mots de passe erronés dans la fenêtre avant le début du verrouillage."
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "Fenêtre de comptage",
+        "help": "Durée sur laquelle les échecs sont comptés."
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "Durée du verrouillage",
+        "help": "Durée pendant laquelle la connexion reste bloquée."
+      },
+      "TRUSTED_PROXIES": {
+        "label": "Proxys de confiance",
+        "help": "Une adresse IP par ligne. Seuls ceux-ci peuvent indiquer au pont la véritable adresse du client."
+      },
+      "CHECK_UPDATES": {
+        "label": "Rechercher les mises à jour",
+        "help": "Recherche de nouvelles versions en arrière-plan."
+      },
+      "UPDATE_CHANNEL": {
+        "label": "Canal de mise à jour",
+        "help": "Stable pour un usage quotidien ; les release candidates et les bêtas arrivent plus tôt et peuvent casser.",
+        "options": {
+          "stable": "Stable",
+          "rc": "Release candidate",
+          "beta": "Bêta"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "Installer les mises à jour automatiquement",
+        "help": "Installe une nouvelle version du canal choisi dès qu’elle est trouvée."
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "Délai de grâce au démarrage",
+        "help": "Attend ce délai après le démarrage avant d’afficher les conseils d’installation."
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "Délai de grâce pour la récupération",
+        "help": "Attend ce délai avant de proposer des correctifs pour une enceinte qui s’est déconnectée."
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "Accepter un téléphone comme source",
+        "help": "Un téléphone appairé au pont via Bluetooth diffuse vers lui, et le pont propose cet audio comme source Sendspin que d’autres lecteurs peuvent lire. Fonctionne avec PipeWire et, sur Home Assistant OS, avec PulseAudio."
+      }
+    },
+    "sectionsNav": "Sections",
+    "parts": {
+      "maConnection": {
+        "label": "Compte Music Assistant",
+        "help": "Connectez-vous pour que le pont puisse afficher les groupes et la lecture en cours et contrôler la file d’attente.",
+        "change": "Se reconnecter",
+        "signIn": "Se connecter"
+      },
+      "sendspinTest": {
+        "label": "Connexion Sendspin",
+        "help": "Vérifie que le pont joint Music Assistant avec le serveur et le port ci-dessus.",
+        "run": "Tester",
+        "ok": "OK",
+        "failed": "Échec"
+      },
+      "adapters": {
+        "label": "Adaptateurs",
+        "help": "Donnez aux adaptateurs un nom que vous reconnaissez. La classe d’appareil est un contournement pour les enceintes qui refusent les ordinateurs inconnus ; laissez-la vide sauf si vous en avez besoin.",
+        "name": "Nom",
+        "deviceClass": "Classe d’appareil",
+        "deviceClassHelp": "Hexadécimal à six chiffres, par exemple 0x00010c (ordinateur portable). Vide : garde la valeur par défaut du système."
+      },
+      "ha": {
+        "publisher": "Publication MQTT",
+        "publisherHelp": "Publie le pont et ses enceintes comme entités Home Assistant.",
+        "publisherBroker": "Connecté à {broker}.",
+        "mosquitto": "Module complémentaire Mosquitto",
+        "mosquittoMissing": "Home Assistant n’a pas encore de broker MQTT. Installez le module complémentaire Mosquitto, puis réglez le broker sur auto.",
+        "install": "Installer",
+        "broker": "Broker",
+        "brokerHelp": "Trouvez le broker automatiquement, ou testez l’adresse et les identifiants ci-dessous avant d’enregistrer.",
+        "detect": "Détecter",
+        "test": "Tester",
+        "detected": "Broker trouvé et renseigné.",
+        "notDetected": "Aucun broker trouvé ; saisissez-le manuellement.",
+        "testOk": "Le broker a accepté la connexion ({ms} ms).",
+        "testFailed": "Le broker a refusé la connexion.",
+        "component": "Intégration Sendspin Bridge",
+        "componentSeen": "Dernier contact {when}.",
+        "componentMissing": "Installez l’intégration depuis HACS, puis ajoutez-la dans Home Assistant.",
+        "installHacs": "Ouvrir dans HACS",
+        "connected": "Connecté",
+        "mdns": "Annonce réseau",
+        "mdnsHelp": "Home Assistant trouve le pont grâce à cette annonce.",
+        "announced": "Annoncé",
+        "notAnnounced": "Non annoncé"
+      },
+      "areaMap": {
+        "label": "Pièces par adaptateur",
+        "help": "Les enceintes d’un adaptateur reçoivent sa pièce. L’ID de zone est la dernière partie de l’adresse de la zone dans Home Assistant (Paramètres → Zones).",
+        "areaId": "ID de zone",
+        "areaName": "Nom de la pièce"
+      },
+      "password": {
+        "label": "Mot de passe",
+        "set": "Un mot de passe est défini pour accéder à cette interface.",
+        "notSet": "Aucun mot de passe pour l’instant. Créez-en un avant d’exiger la connexion.",
+        "change": "Modifier",
+        "create": "Créer",
+        "current": "Mot de passe actuel",
+        "new": "Nouveau mot de passe",
+        "confirm": "Répétez le nouveau mot de passe",
+        "tooShort": "Au moins 8 caractères.",
+        "save": "Enregistrer le mot de passe",
+        "changed": "Mot de passe enregistré"
+      },
+      "tokens": {
+        "label": "Jetons API",
+        "help": "Pour l’intégration Home Assistant et vos propres scripts : à envoyer sous la forme Authorization: Bearer <token>.",
+        "once": "Copiez ce jeton maintenant. Il ne sera plus affiché.",
+        "copy": "Copier",
+        "copied": "Jeton copié",
+        "created": "créé {when}",
+        "lastUsed": "dernière utilisation {when}",
+        "revoke": "Révoquer",
+        "revokeConfirm": "Révoquer ce jeton ? Tout ce qui l’utilise cessera de fonctionner.",
+        "newLabel": "Nom du jeton",
+        "create": "Créer un jeton"
+      },
+      "updates": {
+        "label": "Version {version}",
+        "available": "La version {version} est disponible.",
+        "upToDate": "Aucune version plus récente trouvée sur ce canal.",
+        "check": "Vérifier maintenant",
+        "install": "Mettre à jour"
+      },
+      "backup": {
+        "export": "Exporter",
+        "exportHelp": "Télécharge la configuration avec les mots de passe et jetons retirés.",
+        "download": "Télécharger",
+        "import": "Importer",
+        "importHelp": "Remplace la configuration par un fichier exporté précédemment. Les secrets déjà présents sur le pont sont conservés.",
+        "choose": "Choisir un fichier",
+        "imported": "Configuration importée",
+        "confirmTitle": "Remplacer la configuration ?",
+        "confirmLabel": "Remplacer",
+        "raw": "Modifier en JSON",
+        "rawHelp": "Pour les clés que cet écran n’affiche pas. Les modifications sont enregistrées avec le bouton Enregistrer.",
+        "edit": "Modifier",
+        "apply": "Appliquer"
+      },
+      "latency": {
+        "label": "Préréglages de tampon",
+        "recommended": "recommandé"
+      },
+      "sourceLink": {
+        "label": "Source téléphone",
+        "help": "Appairez le téléphone en Bluetooth et consultez son état de capture sur la page Matériel.",
+        "action": "Ouvrir Matériel"
+      },
+      "maPairing": {
+        "label": "Appairage de la source téléphone",
+        "help": "Music Assistant doit faire confiance à ce pont avant de pouvoir lire l’audio du téléphone.",
+        "off": "La source téléphone est désactivée. Activez-la sur la page Matériel, puis appairez-la avec Music Assistant ici.",
+        "offAction": "Ouvrir Matériel",
+        "whereToEnter": "Dans Music Assistant : Paramètres → Lecteurs → ce pont → Configurer → Code d’appairage statique.",
+        "routing": "La lecture et le routage restent dans Music Assistant ; le pont ne fait que capturer le téléphone.",
+        "notPaired": "Pas encore appairé. Ouvrez une fenêtre d’appairage, puis saisissez le code dans Music Assistant."
+      }
+    },
+    "leaveConfirm": "Des paramètres ne sont pas enregistrés. Quitter quand même ?",
+    "device": {
+      "name": {
+        "label": "Nom",
+        "help": "Affiché comme lecteur dans Music Assistant."
+      },
+      "backend": {
+        "adapter": {
+          "label": "Adaptateur Bluetooth",
+          "help": "L’adaptateur qui connecte cette enceinte. Automatique utilise l’adaptateur par défaut."
+        },
+        "sink": {
+          "label": "Sortie audio",
+          "help": "La sortie audio de cet ordinateur vers laquelle ce lecteur joue. Les sorties utilisées par un autre lecteur ne sont pas proposées."
+        }
+      },
+      "room_name": {
+        "label": "Pièce",
+        "help": "Affiché avec le lecteur et proposé à Home Assistant."
+      },
+      "room_id": {
+        "label": "ID de zone Home Assistant",
+        "help": "Relie l’enceinte à une zone de Home Assistant."
+      },
+      "volume_controller": {
+        "label": "Contrôle du volume",
+        "help": "PulseAudio modifie le volume système de l’enceinte ; Sendspin met plutôt le flux audio à l’échelle.",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Flux Sendspin"
+        }
+      },
+      "listen_port": {
+        "label": "Port du lecteur",
+        "help": "Port auquel Music Assistant se connecte pour cette enceinte. Vide : en choisit un automatiquement."
+      },
+      "idle_mode": {
+        "label": "Au repos",
+        "help": "Ce que fait le pont quand rien ne joue.",
+        "options": {
+          "default": "Rester connecté",
+          "power_save": "Économie d’énergie",
+          "auto_disconnect": "Déconnecter",
+          "keep_alive": "Maintenir l’enceinte éveillée"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "Économie d’énergie après",
+        "help": "Active l’économie d’énergie après cette durée sans son."
+      },
+      "idle_disconnect_minutes": {
+        "label": "Déconnecter après",
+        "help": "Déconnecte le Bluetooth après cette durée sans son. 0 : ne déconnecte jamais."
+      },
+      "keep_alive_method": {
+        "label": "Signal de maintien en éveil",
+        "help": "Un ton inaudible de 2 Hz convient à la plupart des enceintes ; le silence aide les rares qui réagissent au ton.",
+        "options": {
+          "infrasound": "Ton inaudible",
+          "silence": "Silence",
+          "none": "Rien"
+        }
+      },
+      "keepalive_interval": {
+        "label": "Intervalle du signal",
+        "help": "Temps entre deux impulsions de maintien en éveil."
+      },
+      "static_delay_ms": {
+        "label": "Compensation de latence de l’enceinte",
+        "help": "Retard avec lequel cette enceinte joue son son. Le pont envoie l’audio d’autant plus tôt pour qu’elle reste dans le temps du groupe."
+      },
+      "min_buffer_ms": {
+        "label": "Tampon minimal",
+        "help": "Audio que l’enceinte garde en file d’attente pendant la lecture."
+      },
+      "required_lead_time_ms": {
+        "label": "Délai de démarrage",
+        "help": "Temps dont l’enceinte a besoin avant le premier son."
+      },
+      "allow_hfp_profile": {
+        "label": "Autoriser le profil casque (appels)",
+        "help": "Désactivé : garde l’enceinte en A2DP pour la musique et rebascule la carte si l’hôte rétablit un profil casque. Activé : permet à une autre application d’utiliser le micro de l’enceinte pour les appels ; le son passe en 8 kHz mono tant que ce profil est actif."
+      },
+      "calibration_bed": {
+        "label": "Maintenir cette enceinte éveillée pendant le réglage",
+        "help": "Certains amplificateurs ne rétablissent jamais le son pour les brefs clics d’étalonnage après le silence, ce qui rend le réglage inaudible. Activé : émet un bruit doux vers cette enceinte uniquement pendant une session de réglage de groupe ; les autres enceintes conservent les clics nets."
+      }
+    },
+    "deviceGroups": {
+      "speaker": "Enceinte",
+      "idle": "Comportement au repos",
+      "sync": "Calage temporel"
+    },
+    "leave": "Quitter sans enregistrer",
+    "search": "Rechercher dans les paramètres",
+    "nothingFound": "Rien ne correspond à « {q} ».",
+    "changed": "Modifié",
+    "loadFailed": "Impossible de charger les paramètres.",
+    "retry": "Réessayer",
+    "autosave": {
+      "saved": "Enregistré",
+      "failed": "Non enregistré : {reason}"
+    },
+    "appliesAfterRestart": "Certains paramètres s’appliquent après un redémarrage ; l’enregistrement en propose un si nécessaire."
+  },
+  "timing": {
+    "suggestion": "Compensation de latence suggérée : {value} ms",
+    "applySuggestion": "Appliquer",
+    "history": {
+      "title": "Calage récent",
+      "syncError": "Erreur de synchronisation {ms} ms",
+      "empty": "Aucun échantillon de calage pour l’instant ; ils apparaissent pendant la lecture de l’enceinte.",
+      "buffer": "Audio en tampon",
+      "error": "Erreur de synchronisation"
+    },
+    "playout": {
+      "title": "Restitution",
+      "yes": "Oui",
+      "no": "Non",
+      "settling": "stabilisation, {s} s au plus",
+      "fallback": "La synchronisation de restitution est revenue à la sortie simple : {reason}",
+      "unknownReason": "raison inconnue",
+      "rows": {
+        "error": "Erreur",
+        "p95": "Erreur p95",
+        "slope": "Dérive de l’erreur",
+        "corrections": "Corrections",
+        "jumps": "Sauts",
+        "underruns": "Coupures de tampon",
+        "paLatency": "Latence PulseAudio",
+        "hostLatency": "Latence de l’hôte",
+        "sinkRate": "Fréquence de la sortie",
+        "clockSlew": "Dérive d’horloge",
+        "warm": "Préchauffage"
+      }
+    },
+    "air": {
+      "title": "Capteur radio",
+      "chip": "radio : {state}, H {h} ms",
+      "chipNoH": "radio : {state}",
+      "states": {
+        "off": "Désactivé",
+        "unavailable": "Indisponible",
+        "unsupported_codec": "Codec non pris en charge",
+        "unsupported_input": "Entrée non prise en charge",
+        "no_signal": "Aucun signal",
+        "acquiring": "Acquisition",
+        "locked": "Verrouillé",
+        "holding": "Maintien",
+        "no_lock": "Verrou perdu"
+      },
+      "rows": {
+        "state": "État",
+        "host": "Placement hôte",
+        "air": "Erreur radio",
+        "confidence": "Confiance",
+        "psr": "Rapport de crête (PSR)",
+        "lock": "Dernière confirmation",
+        "learnedTarget": "Cible radio"
+      },
+      "needsCalibration": "Étalonnage nécessaire",
+      "agoSeconds": "il y a {s} s",
+      "reasons": {
+        "needs_measure": "Nécessite la synchronisation de restitution en mode mesure ou boucle.",
+        "not_bluetooth": "Seules les enceintes Bluetooth sont prises en charge.",
+        "cpu_budget": "Arrêté : le capteur a consommé trop de temps processeur.",
+        "internal_error": "Arrêté après une erreur interne ; il redémarre avec le flux suivant.",
+        "playout_fallback": "La synchronisation de restitution est revenue à la sortie simple.",
+        "unsupported_input": "Le format audio n’est pas pris en charge (44,1 et 48 kHz, 16 à 32 bits).",
+        "no_cap_net_raw": "Le moniteur Bluetooth est indisponible (nécessite CAP_NET_RAW).",
+        "unsupported_platform": "Ce système n’a pas de moniteur HCI Bluetooth (Linux uniquement).",
+        "monitor_error": "Le moniteur Bluetooth a échoué.",
+        "sbc_params": "Les paramètres du flux SBC ne sont pas pris en charge.",
+        "sbc_fragmented": "L’enceinte répartit les trames SBC sur plusieurs paquets.",
+        "codec": "L’enceinte utilise {codec} ; seul SBC est pris en charge.",
+        "unknown": "Raison : {reason}"
+      },
+      "calibration": {
+        "title": "Étalonnages",
+        "line": "Latence air-son : {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "Oublier",
+        "forgetTitle": "Oublier cet étalonnage ?",
+        "forgetConfirm": "{name} est signalée comme non étalonnée pour {codec} {rate} kHz sur {adapter} jusqu’à ce que l’assistant de synchronisation la mesure à nouveau."
+      },
+      "correction": {
+        "target": "Correction radio : {target}",
+        "calibrated": "étalonné ({ms} ms)",
+        "learned": "appris ({n} démarrages)",
+        "noData": "aucune donnée (apprentissage : {n} sur {need} démarrages)",
+        "inactive": "inactif : non verrouillé",
+        "bias": "Biais radio {value} ms",
+        "corrections": "Corrections radio {n}",
+        "trimEarly": "Ajustement de compensation {value} ms (cible {ms} ms en avance)",
+        "trimLate": "Ajustement de compensation {value} ms (cible {ms} ms en retard)"
+      },
+      "learned": {
+        "title": "Latences apprises",
+        "line": "Apprise : {latency} ms avec {delay} ms de compensation · {codec} · {adapter} · {starts} démarrages",
+        "forget": "Oublier",
+        "forgetTitle": "Oublier cette latence apprise ?",
+        "forgetConfirm": "{name} recommence l’apprentissage de sa latence pour {codec} {rate} kHz sur {adapter}. Un étalonnage associé est également oublié."
+      },
+      "learnedValue": "≈{ms} ms (apprise)"
+    },
+    "details": "Détails techniques"
+  },
+  "system": {
+    "bridge": "Pont",
+    "uptime": "Durée de fonctionnement",
+    "memory": "Mémoire",
+    "platform": "Plateforme",
+    "python": "Python",
+    "audio": "Serveur audio",
+    "bluez": "BlueZ",
+    "downloads": "Téléchargements",
+    "downloadAction": "Télécharger",
+    "download": {
+      "report": {
+        "label": "Rapport de diagnostic",
+        "help": "Tout ce qu’il faut pour un rapport de bug, sans les secrets."
+      },
+      "logs": {
+        "label": "Journal du service",
+        "help": "Le journal du pont au format texte."
+      },
+      "timeline": {
+        "label": "Chronologie de récupération",
+        "help": "Événements de démarrage et d’appareil au format CSV."
+      },
+      "config": {
+        "label": "Configuration",
+        "help": "Sans les mots de passe ni les jetons."
+      }
+    },
+    "players": "Processus des lecteurs",
+    "noPlayers": "Aucun processus de lecteur en cours.",
+    "player": "Lecteur",
+    "restarts": "Redémarrages",
+    "state": "État",
+    "running": "En cours",
+    "reconnecting": "Reconnexion",
+    "stopped": "Arrêté",
+    "hooks": {
+      "title": "Webhooks",
+      "help": "Le pont envoie en POST les événements d’appareil et de pont à ces adresses. Ils persistent jusqu’au redémarrage du pont.",
+      "allEvents": "tous les événements",
+      "counts": "{ok} en succès, {failed} en échec",
+      "remove": "Retirer",
+      "url": "Adresse",
+      "categories": "Catégories (facultatif)",
+      "add": "Ajouter"
+    }
+  },
+  "guidance": {
+    "title": "Points à surveiller",
+    "done": "Terminé : {action}"
+  },
+  "nav": {
+    "home": "Enceintes",
+    "homeShort": "Enceintes",
+    "groups": "Groupes",
+    "groupsShort": "Groupes",
+    "settings": "Paramètres",
+    "settingsShort": "Paramètres",
+    "diagnostics": "Diagnostic",
+    "diagnosticsShort": "Santé",
+    "hardware": "Matériel",
+    "hardwareShort": "Matériel",
+    "sync": "Synchro du groupe"
+  },
+  "home": {
+    "connected": "{n} sur {total} connectées en Bluetooth",
+    "playing": "{n} en lecture",
+    "source": {
+      "title": "Téléphone → Music Assistant",
+      "streaming": "Lecture depuis le téléphone",
+      "pairing": "Appairage en cours",
+      "waiting": "En attente du téléphone",
+      "off": "Source désactivée",
+      "error": "Erreur de la source",
+      "maConnected": "Music Assistant connecté",
+      "maPaired": "Music Assistant appairé, reconnexion",
+      "maUnpaired": "Music Assistant n’est pas appairé",
+      "openHardware": "Ouvrir Matériel",
+      "pairAction": "Appairer avec Music Assistant"
+    },
+    "checklist": {
+      "title": "Premiers pas",
+      "progress": "{done} sur {total} terminés",
+      "speaker": "Ajoutez votre première enceinte",
+      "speakerAction": "Ajouter une enceinte",
+      "ma": "Connectez-vous à Music Assistant",
+      "maAction": "Ouvrir les paramètres",
+      "phone": "Activez la source téléphone et appairez-la",
+      "phoneAction": "Ouvrir Matériel",
+      "dismiss": "Masquer les premiers pas"
+    }
+  },
+  "groups": {
+    "via": "Music Assistant sur {url}",
+    "connectFirst": "Connectez le pont à Music Assistant pour voir et contrôler ses groupes."
+  },
+  "addSpeaker": {
+    "title": "Ajouter une enceinte",
+    "findHelp": "Mettez l’enceinte en mode appairage. Les enceintes à proximité apparaissent ci-dessous.",
+    "scan": "Rechercher",
+    "scanAgain": "Rechercher à nouveau",
+    "scanHint": "Mettez l’enceinte en mode appairage, puis appuyez sur Rechercher.",
+    "looking": "Recherche d’enceintes…",
+    "add": "Ajouter",
+    "signal": {
+      "success": "Fort",
+      "warning": "Moyen",
+      "error": "Faible",
+      "neutral": "—"
+    },
+    "trouble": "Enceinte introuvable ou échec de l’appairage ?",
+    "alreadyPaired": "Choisir une enceinte déjà appairée",
+    "backToScan": "Retour à la recherche",
+    "paired": "Appairée. Donnez-lui un nom et une pièce.",
+    "roomHint": "Facultatif. Affiché avec le lecteur et proposé à Home Assistant.",
+    "addToBridge": "Ajouter au pont",
+    "addedTitle": "{name} est sur le pont.",
+    "testHelp": "Lisez un bref clic pour vérifier que vous l’entendez.",
+    "waiting": "Connexion de l’audio de l’enceinte — cela prend quelques secondes.",
+    "testSound": "Lire le son de test",
+    "done": "Terminé",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "Sortie audio"
+    },
+    "audio": {
+      "intro": "Lisez vers une sortie audio de cet ordinateur, comme un DAC USB, une carte son ou HDMI.",
+      "none": "Aucune sortie audio trouvée.",
+      "refresh": "Actualiser",
+      "inUse": "Déjà utilisée par un autre lecteur",
+      "named": "Choisissez un nom et une pièce pour cette sortie.",
+      "looking": "Recherche de sorties audio…",
+      "taken": "Un autre lecteur utilise déjà cette sortie."
+    },
+    "pairing": "Appairage de {name}…",
+    "errorNext": "Vérifiez que l’enceinte est en mode appairage et proche de l’adaptateur, puis réessayez."
+  },
+  "connection": {
+    "lost": "Connexion au pont perdue — reconnexion en cours. Ce que vous voyez peut être obsolète.",
+    "reload": "Recharger"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "places": "Aller à Enceintes, Groupes, Paramètres, Diagnostic, Matériel",
+    "add": "Ajouter une enceinte",
+    "search": "Rechercher sur cette page",
+    "help": "Afficher cette liste",
+    "close": "Fermer une boîte de dialogue ou un menu"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "Connexion",
+      "bridge": "Sur ce pont"
+    },
+    "reconnect": "Reconnecter",
+    "standby": "Mettre en veille",
+    "wake": "Réveiller",
+    "claim": "Utiliser ce pont comme source",
+    "handOver": "Libérer l’enceinte",
+    "takeBack": "Récupérer l’enceinte",
+    "disable": "Désactiver",
+    "enable": "Activer",
+    "remove": "Retirer l’enceinte",
+    "removeTitle": "Retirer {name} ?",
+    "removeMessage": "Son lecteur disparaît de Music Assistant et son appairage Bluetooth est supprimé. Pour la réutiliser, ajoutez-la comme nouvelle enceinte.",
+    "settings": "Paramètres",
+    "repairTitle": "Réappairer {name} ?"
+  },
+  "sync": {
+    "open": "Synchro",
+    "tuneGroup": "Accorder tout le groupe",
+    "tuneGroupHelp": "Aligne d’un coup toutes les enceintes du groupe Music Assistant de ce lecteur.",
+    "backToGroups": "Retour aux groupes",
+    "tabs": {
+      "group": "Groupe",
+      "manual": "Manuel",
+      "measure": "Mesure"
+    },
+    "members": "Membres",
+    "delay": "{ms} ms",
+    "delayHeading": "Compensation de latence (plus grand = plus tôt)",
+    "sign": "+ joue plus tôt · − joue plus tard",
+    "noMembers": "Ce groupe n’a aucun membre.",
+    "loadError": "Impossible de lire les membres du groupe ({code}).",
+    "restoreFailed": "Impossible de restaurer le groupe",
+    "restoreFailedHelp": "Le réglage a été interrompu par un redémarrage ; certaines enceintes peuvent encore être en muet ({code}). Le pont continue d’essayer.",
+    "manualIntro": "Jouez des clics sur le groupe et ajustez chaque enceinte à l’oreille.",
+    "measureIntro": "Mesurez chaque enceinte avec un microphone, puis affinez à l’oreille.",
+    "switchToManual": "Pas de microphone ? Accordez à l’oreille.",
+    "switchToMeasure": "Vous avez un téléphone ou un ordinateur portable avec microphone ? Mesurez plutôt.",
+    "state": {
+      "idle": "Aucun réglage en cours",
+      "created": "Démarrage",
+      "measuring": "Mesure",
+      "proposed": "Mesuré",
+      "applying": "Application des délais",
+      "tuning": "Réglage à l’oreille",
+      "restoring": "Restauration du groupe",
+      "done": "Terminé",
+      "cancelled": "Annulé",
+      "failed": "Échec"
+    },
+    "status": {
+      "prepare": "Préparation du groupe",
+      "measure": "Mesure",
+      "tune": "Réglage à l’oreille",
+      "done": "Terminé",
+      "elsewhere": "Réglage sur un autre appareil"
+    },
+    "groupError": "Impossible d’ouvrir ce groupe ({code}). Vérifiez que Music Assistant est joignable et que le groupe existe toujours.",
+    "origin": {
+      "other": "Non ajustable"
+    },
+    "measuredAgo": "Mesuré {age}",
+    "noDelay": "Aucune latence signalée",
+    "actions": {
+      "title": "Accorder",
+      "manual": "Réglage manuel",
+      "semi": "Mesurer avec un microphone",
+      "manualHelp": "Aucun microphone nécessaire. Idéal pour les petits écarts audibles.",
+      "semiHelp": "Environ une minute par enceinte. Vous entendez et ajustez les délais mesurés avant de terminer."
+    },
+    "profiles": {
+      "title": "Profils",
+      "apply": "Appliquer",
+      "saveCurrent": "Enregistrer l’état actuel sous…",
+      "rename": "Renommer",
+      "delete": "Supprimer",
+      "empty": "Aucun profil pour l’instant. Enregistrez les délais actuels pour y revenir plus tard.",
+      "skipped": "{n} membre ignoré | {n} membres ignorés",
+      "notInGroup": "Absents du groupe : {names}",
+      "name": "Nom",
+      "notes": "Notes (facultatif)",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "applyTitle": "Appliquer « {name} »",
+      "confirmApply": "Appliquer ces délais",
+      "member": "Enceinte",
+      "change": "Actuel → profil",
+      "noChanges": "Aucune enceinte du groupe ne figure dans ce profil.",
+      "unchanged": "inchangé",
+      "applied": "« {name} » appliqué.",
+      "saved": "« {name} » enregistré.",
+      "renamed": "Renommé en « {name} ».",
+      "deleted": "« {name} » supprimé.",
+      "deleteTitle": "Supprimer « {name} » ?",
+      "deleteMessage": "Les délais restent tels quels ; seul le profil enregistré est supprimé.",
+      "renameLabel": "Nouveau nom pour « {name} »",
+      "failed": "Cela n’a pas fonctionné ({code}).",
+      "kind": {
+        "device": "Sur les enceintes",
+        "position": "Depuis une position d’écoute"
+      },
+      "playerId": "ID du lecteur {id}",
+      "nameRequired": "Saisissez un nom."
+    },
+    "listen": {
+      "title": "Écoute",
+      "play": "Lire les clics",
+      "stop": "Arrêter les clics",
+      "solo": "Seulement cette enceinte",
+      "soloHelp": "Choisissez une enceinte pour l’entendre seule (les autres sont en muet), ou Tout le monde.",
+      "soloMember": "Seulement {name}",
+      "everyone": "Tout le monde",
+      "ab": "Comparer deux",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "Deux enceintes alternent toutes les quatre secondes.",
+      "idle": "Clics arrêtés.",
+      "playing": "Clics lus sur toutes les enceintes.",
+      "soloed": "Clics lus sur {name} uniquement.",
+      "alternating": "Alternance entre {a} et {b}.",
+      "failed": "Cela n’a pas fonctionné ({code}).",
+      "needsClicks": "Lancez les clics pour entendre une enceinte seule ou en comparer deux.",
+      "playHelp": "Lit la piste de clics sur le groupe (3 minutes ; relancez-la quand elle s’arrête). Elle remplace la file d’attente du groupe. Arrêter les clics n’arrête que la piste de clics."
+    },
+    "sound": {
+      "label": "Son",
+      "clicks": "Clics",
+      "accent": "Clics avec accent",
+      "noise": "Bruit",
+      "hint": {
+        "clicks": "Un clic par seconde : décalez les délais jusqu’à ce que le clic de chaque enceinte sonne comme un seul.",
+        "accent": "Un clic sur quatre est plus fort et plus aigu : indique qu’une enceinte est décalée de plusieurs centaines de ms.",
+        "noise": "Pour deux enceintes : placez-vous à mi-chemin ; alignées, le bruit semble centré, sinon creux et déphasé."
+      }
+    },
+    "manual": {
+      "title": "Compensation de latence",
+      "help": "Une valeur plus grande fait jouer une enceinte plus tôt. Les changements s’entendent immédiatement ; Enregistrer les conserve.",
+      "reset": "Rétablir les délais du début",
+      "resetDone": "Les délais sont revenus à l’état du début de ce réglage.",
+      "minus": "−{n} ms (plus tard)",
+      "plus": "+{n} ms (plus tôt)",
+      "valueLabel": "Compensation de latence de {name} en ms",
+      "departed": "A quitté le groupe",
+      "startFailed": "Impossible de démarrer le réglage manuel ({code}).",
+      "busy": "Une mesure est en cours pour ce groupe. Terminez-la d’abord dans l’onglet Mesure.",
+      "saveOnLeave": "Conserver vos modifications de délai ?",
+      "saveOnLeaveHelp": "Vous avez modifié la compensation de latence des enceintes sans l’enregistrer. Conservez les modifications ou rétablissez les valeurs du début de ce réglage.",
+      "saveConfirm": "Conserver les modifications",
+      "saveDecline": "Ignorer les modifications",
+      "nudges": "Ajuster {name}",
+      "writeForbidden": "Music Assistant a refusé de modifier {name} : ce compte n’a pas l’autorisation de changer les paramètres des lecteurs.",
+      "writeFailed": "Impossible de modifier {name} ({code}). Le délai affiché est celui que Music Assistant détient.",
+      "ended": "Ce réglage est terminé (expiration ou fermeture sur un autre appareil). Les délais restent tels quels. Appuyez sur Lancer les clics pour régler à nouveau.",
+      "measured": "Mesuré : {ms} ms ({change})",
+      "resetMeasured": "Revenir au délai mesuré",
+      "resetMeasuredMember": "Rétablir {name} sur le délai mesuré",
+      "endedNotice": "Le réglage manuel est terminé : les clics se sont arrêtés, toutes les enceintes sont rétablies et les volumes sont revenus.",
+      "startHelp": "Le démarrage arrête ce que joue le groupe et y lance une piste de clics. Rien ne démarre avant que vous appuyiez sur le bouton.",
+      "startClicks": "Lancer les clics",
+      "volumes": "Volume",
+      "needStart": "Appuyez sur Lancer les clics pour ajuster.",
+      "save": "Enregistrer",
+      "saved": "Enregistré",
+      "discard": "Ignorer les modifications",
+      "unsaved": "Modifications non enregistrées",
+      "listenOne": "Écouter une enceinte / en comparer deux",
+      "stillRestoring": "Le groupe est encore en cours de restauration après le dernier réglage. Réessayez dans un instant."
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "Ce navigateur ne peut pas enregistrer ici. Le microphone nécessite HTTPS (ou localhost) et un navigateur à jour.",
+        "permission": "L’accès au microphone a été refusé. Autorisez le microphone pour cette page dans les paramètres du navigateur, puis réessayez.",
+        "no_microphone": "Aucun microphone n’a été trouvé sur cet appareil.",
+        "mic_busy": "Le microphone est utilisé par une autre application ou n’a pas pu démarrer.",
+        "worklet": "Le module d’enregistrement n’a pas pu être chargé. Rechargez la page et réessayez.",
+        "not_open": "Le microphone n’est pas ouvert.",
+        "busy": "Un enregistrement est déjà en cours.",
+        "interrupted": "L’audio a été interrompu (page en arrière-plan ou autre application ayant pris l’audio). Touchez pour continuer ; les enceintes concernées sont mesurées à nouveau.",
+        "timeout": "L’enregistrement ne s’est pas terminé à temps.",
+        "mic_lost": "Le microphone s’est arrêté (débranché ou accès retiré). Ouvrez-le à nouveau pour continuer ; les enceintes concernées sont mesurées à nouveau.",
+        "failed": "Échec de l’enregistrement."
+      }
+    },
+    "wizard": {
+      "stageOf": "{stage} ({n}/{total}) · {name}",
+      "stages": {
+        "prepare": "Préparer",
+        "measure": "Mesurer",
+        "tune": "Accorder",
+        "done": "Terminé"
+      },
+      "steps": {
+        "prepare": "Où et comment",
+        "clicker": "Arrêter la musique, lancer les clics",
+        "volume": "Régler le volume",
+        "members": "Enceinte par enceinte",
+        "tune": "Écouter et ajuster",
+        "done": "Terminé"
+      },
+      "notice": {
+        "title": "Rien d’autre ne joue pendant la mesure.",
+        "help": "La piste de clics est lue sur le groupe dès que vous lancez les clics ; si le groupe joue, cela l’arrête d’abord. Pendant la mesure d’une enceinte, les autres sont en muet. À la fin, chaque enceinte mise en muet par le pont est rétablie, les volumes reviennent à leur niveau précédent et les clics s’arrêtent.",
+        "queue": "L’étalonnage remplace la file d’attente du groupe par la piste de clics ; relancez votre musique ensuite."
+      },
+      "point": {
+        "legend": "Où allez-vous mesurer ?",
+        "device": "Près de chaque enceinte",
+        "deviceHelp": "Tenez le téléphone près de chaque enceinte à tour de rôle. 6 s par enceinte ; aligne les appareils entre eux.",
+        "position": "Depuis la position d’écoute",
+        "positionHelp": "Restez là où vous écoutez habituellement. 12 s par enceinte ; inclut le trajet du son jusqu’à vous."
+      },
+      "micPermission": "Le navigateur demandera le microphone. Les enregistrements restent en mémoire et ne sont envoyés qu’à ce pont.",
+      "holdStill": "Conseil : gardez la pièce silencieuse et le téléphone immobile pendant l’enregistrement.",
+      "estimate": "Durée : environ {min} min.",
+      "byEar": "Vous pouvez aussi accorder à l’oreille :",
+      "start": "Autoriser le microphone et démarrer",
+      "micDenied": "Impossible d’utiliser le microphone.",
+      "startFailed": "Impossible de démarrer la mesure ({code}).",
+      "level": {
+        "help": "Le vumètre du microphone doit réagir à chaque clic.",
+        "meter": "Microphone",
+        "tooQuiet": "Trop faible : montez le volume du groupe ou rapprochez-vous.",
+        "tooLoud": "Trop fort : baissez un peu le volume du groupe ou éloignez-vous.",
+        "fine": "Le microphone entend les clics.",
+        "value": "{pct} %"
+      },
+      "members": {
+        "help": "Mesurez chaque enceinte séparément. Vous pouvez répéter n’importe quelle enceinte.",
+        "order": "L’ordre ne sert qu’à votre confort (parcours de la pièce) ; il ne change pas le résultat.",
+        "moveUp": "Déplacer {name} vers le haut",
+        "moveDown": "Déplacer {name} vers le bas",
+        "notMeasured": "Non mesurées (non ajustables) : {names}",
+        "left": "Enregistrez ou passez chaque enceinte pour continuer ({n} à traiter). | Enregistrez ou passez chaque enceinte pour continuer ({n} à traiter)."
+      },
+      "hint": {
+        "notHeard": "Non entendue : montez {name} ou rapprochez-vous, puis Répétez — ou Passez.",
+        "unstable": "Instable : gardez la pièce silencieuse et le téléphone immobile, puis Répétez — ou Passez.",
+        "reason": {
+          "clipped": "L’enregistrement est saturé : le téléphone était trop près ou {name} trop forte. Éloignez-le ou baissez {name}, puis Répétez.",
+          "quiet": "L’enregistrement est presque silencieux : rapprochez le téléphone de {name}, puis Répétez.",
+          "lowSnr": "Les clics se sont perdus dans le bruit de la pièce : gardez la pièce silencieuse ou rapprochez le téléphone de {name}, puis Répétez.",
+          "noClicks": "Aucun clic de {name} n’a été trouvé dans l’enregistrement : vérifiez qu’elle joue les clics et rapprochez le téléphone, puis Répétez.",
+          "tooFewClicks": "Trop peu de clics de {name} ont été entendus : le téléphone a peut-être manqué une partie de la fenêtre — Répétez."
+        }
+      },
+      "holdNear": "Tenez le téléphone à 30–50 cm de {name}",
+      "stayPut": "Restez où vous êtes",
+      "record": "Enregistrer",
+      "recordMember": "Enregistrer {name}",
+      "repeat": "Répéter",
+      "repeatMember": "Répéter {name}",
+      "skip": "Passer",
+      "skipMember": "Passer {name}",
+      "soloing": "Lecture de {name} seule…",
+      "recording": "Enregistrement de {name}…",
+      "heard": "Entendue",
+      "notHeard": "Non entendue",
+      "unstable": "Instable",
+      "skipped": "Passée",
+      "departed": "A quitté le groupe",
+      "confidence": "{pct} %",
+      "redo": "Enregistrer à nouveau",
+      "result": "{name} : {result}",
+      "restartRound": "L’horloge du microphone a été interrompue ; enregistrez encore une fois les enceintes marquées « Enregistrer à nouveau ».",
+      "tapToContinue": "Touchez pour continuer",
+      "micLost": "Le microphone s’est arrêté (débranché ou accès retiré).",
+      "reopen": "Ouvrir à nouveau le microphone",
+      "failed": "Cela n’a pas fonctionné ({code}).",
+      "ended": "La mesure est terminée (expiration ou fermeture sur un autre appareil). Les enceintes mises en muet sont rétablies et ses clics se sont arrêtés.",
+      "next": "Suivant",
+      "back": "Retour",
+      "cancel": "Annuler",
+      "toTune": "Appliquer les délais mesurés et écouter",
+      "memberGone": "{name} a quitté le groupe ; la mesure continue sans elle.",
+      "computing": "Calcul des délais…",
+      "proposalFailed": "Impossible de calculer les délais ({code}).",
+      "retry": "Réessayer",
+      "applying": "Application des délais mesurés…",
+      "applyFailed": "Impossible d’appliquer les délais ({code}).",
+      "capture": {
+        "legend": "Qu’est-ce qui va enregistrer ?",
+        "device": "Le microphone de cet appareil",
+        "deviceHelp": "Transportez cet appareil vers chaque enceinte. Nécessite HTTPS (ou localhost) pour le microphone.",
+        "phone": "Un téléphone (scannez un QR code)",
+        "phoneHelp": "Ouvrez la page de capture sur un téléphone ; elle enregistre toutes les enceintes d’un coup et envoie l’enregistrement. Fonctionne aussi en HTTP simple (avec l’enregistreur du téléphone).",
+        "usePhone": "Mesurer plutôt avec un téléphone"
+      },
+      "startPhone": "Démarrer"
+    },
+    "tune": {
+      "help": "Les délais mesurés sont appliqués et les clics continuent. Écoutez chaque enceinte seule ou comparez-en deux, ajustez un délai à la main, puis terminez.",
+      "spread": "Écart maximal entre enceintes : {before} ms mesurés → environ {after} ms maintenant.",
+      "kept": "Non entendues ou passées, leur délai est inchangé : {names}",
+      "ready": "Les délais mesurés sont appliqués. Écoutez et ajustez.",
+      "finish": "Terminer",
+      "finishSave": "Terminer et enregistrer comme profil…",
+      "saveTitle": "Terminer et enregistrer comme profil",
+      "saveConfirm": "Enregistrer et terminer"
+    },
+    "air": {
+      "title": "Latence Bluetooth mesurée",
+      "help": "Temps que met chaque enceinte du pont entre la réception de l’audio en Bluetooth et sa lecture, d’après l’enregistrement du téléphone. Il est comparé à une référence dont le son est à l’heure, comme un lecteur web sur casque ou une sortie filaire. Une référence qui a son propre retard (enceintes de PC, casque Bluetooth) fausse toutes les valeurs d’autant. Les valeurs enregistrées sont utilisées par le pont pour lui-même ; ce n’est pas le réglage de délai de l’enceinte.",
+      "reference": "Référence",
+      "referencePick": "Choisir une référence…",
+      "referenceHint": "Choisissez un casque, une sortie filaire ou une autre référence qui joue à l’heure. Elle devient aussi la référence des délais proposés.",
+      "referenceFailed": "Impossible de définir la référence ({code}).",
+      "value": "Latence Bluetooth mesurée : {ms} ms",
+      "hint": "l’enceinte signale {ms} ms",
+      "save": "Enregistrer cette latence Bluetooth",
+      "saveButton": "Enregistrer",
+      "saveFailed": "Impossible d’enregistrer ({code}).",
+      "outOfRange": "hors de {min}–{max} ms, impossible à enregistrer",
+      "reasons": {
+        "not_effective": "Le capteur radio n’était pas actif pour cette enceinte",
+        "no_reference": "Choisissez d’abord une référence",
+        "not_measured": "Cette enceinte ou la référence n’a pas été entendue",
+        "not_sbc": "L’enceinte ne joue pas en SBC",
+        "air_epoch_changed": "Son flux Bluetooth a redémarré pendant son tour",
+        "air_delay_changed": "La compensation de latence de l’enceinte a changé pendant l’enregistrement.",
+        "no_air_clicks": "Ses clics n’ont pas été trouvés dans l’air",
+        "no_written_clicks": "Ses clics n’ont pas été trouvés dans ce que le pont a écrit",
+        "fold_failed": "La mesure radio de cette enceinte n’a pas pu être terminée",
+        "no_air_frames": "Aucun audio Bluetooth de cette enceinte n’a été vu dans l’air pendant son tour"
+      },
+      "valueSaved": "Latence Bluetooth mesurée : {ms} ms, enregistrée"
+    },
+    "cancel": {
+      "title": "Arrêter la mesure ?",
+      "message": "Les enregistrements effectués seront perdus. Les enceintes mises en muet par le pont sont rétablies, les volumes reviennent et les clics s’arrêtent.",
+      "tuneTitle": "Arrêter et rétablir les délais ?",
+      "tuneMessage": "Les délais reviennent à leur valeur d’avant la mesure. Les enceintes mises en muet par le pont sont rétablies, les volumes reviennent et les clics s’arrêtent.",
+      "confirm": "Arrêter",
+      "keep": "Continuer",
+      "done": "Mesure annulée. Enceintes rétablies, volumes remis, clics arrêtés.",
+      "resetFailed": "Les délais n’ont pas pu être rétablis ({code}) ; le réglage reste ouvert. Réessayez."
+    },
+    "reloaded": {
+      "manual": "Le réglage manuel s’est terminé au rechargement de la page. Les délais restent tels quels.",
+      "measure": "La mesure s’est terminée au rechargement de la page."
+    },
+    "joinManual": {
+      "title": "Le réglage manuel est ouvert sur un autre appareil",
+      "help": "Rejoignez-la pour écouter et ajuster depuis ici, ou terminez-la. Quitter cette page ne l’arrête jamais.",
+      "join": "Rejoindre"
+    },
+    "readOnly": "Réglage en cours sur un autre appareil",
+    "readOnlyHelp": "Cette page ne fait qu’afficher le groupe jusqu’à la fin de ce réglage.",
+    "restoreRetrying": "Music Assistant n’a pas pu être joint ({code}) ; certaines enceintes peuvent encore être en muet ou jouer les clics. Le pont continue d’essayer.",
+    "proposal": {
+      "name": "Nom du profil",
+      "nameRequired": "Saisissez un nom.",
+      "defaultName": "Mesuré le {date}",
+      "warnings": "Avertissements",
+      "clampedWarning": "Certains délais ont été ramenés à 0–5000 ms ; l’écart restant est d’environ {ms} ms.",
+      "largeWarning": "Un délai supérieur à 2000 ms oblige Music Assistant à envoyer l’audio bien en avance ; les enceintes à petit tampon peuvent décrocher.",
+      "forbidden": "Music Assistant a refusé de modifier les délais : ce compte ne peut pas changer les paramètres des lecteurs. Définissez ces valeurs à la main dans Music Assistant :",
+      "forbiddenHint": "Ou reconnectez Music Assistant avec un compte administrateur dans les paramètres du pont, puis réessayez.",
+      "copy": "Copier les valeurs",
+      "copied": "Copié.",
+      "copyFailed": "Impossible de copier ; sélectionnez les valeurs et copiez-les à la main."
+    },
+    "done": {
+      "restoring": "Restauration du groupe…",
+      "restoringHelp": "Remise des volumes, rétablissement du son des enceintes et arrêt des clics. Les délais restent tels que vous les avez laissés.",
+      "restored": "Groupe restauré",
+      "restoredHelp": "Chaque enceinte est rétablie, les volumes sont revenus et les clics se sont arrêtés. Les nouveaux délais restent ; relancez votre musique dans Music Assistant.",
+      "spread": "Écart maximal entre enceintes : {before} ms → environ {after} ms",
+      "saved": "Enregistré comme profil « {name} ».",
+      "saveFailed": "Les délais sont conservés, mais le profil n’a pas pu être enregistré ({code}).",
+      "listen": "Écoute rapide",
+      "listenHelp": "Les clics sont lus sur tout le groupe pendant 10 s, puis s’arrêtent.",
+      "listening": "Clics lus sur tout le groupe…",
+      "listenFailed": "Impossible de lire les clics ({code}).",
+      "again": "Mesurer à nouveau",
+      "queue": "La file d’attente du groupe ne contient plus que la piste de clics : relancez votre musique dans Music Assistant."
+    },
+    "endForeign": "Terminer cette session",
+    "endForeignTitle": "Terminer le réglage sur l’autre appareil ?",
+    "endForeignMessage": "Ses clics s’arrêtent et le groupe est restauré. Les délais déjà écrits restent tels quels.",
+    "signal": {
+      "restarted": "Les clics ont redémarré : enregistrez chaque enceinte une fois de plus."
+    },
+    "prep": {
+      "failed": "Cela n’a pas fonctionné ({code}).",
+      "group": {
+        "playing": "Lecture",
+        "idle": "Arrêté",
+        "paused": "En pause",
+        "unknown": "Inconnu"
+      },
+      "clicker": {
+        "help": "La piste de clics est lue sur chaque enceinte du groupe via Music Assistant pendant 3 minutes. Si elle s’arrête, relancez-la.",
+        "start": "Lancer les clics",
+        "again": "Relancer les clics",
+        "playing": "Les clics sont en cours.",
+        "stopped": "Les clics ne sont pas en cours.",
+        "groupPlaying": "Le groupe joue autre chose : arrêtez-le d’abord.",
+        "whyDisabled": "Lancez les clics pour continuer.",
+        "left": "Clics : {time} restantes",
+        "helpStop": "Le groupe joue quelque chose. Lancer les clics l’arrête d’abord, puis lit la piste de clics sur chaque enceinte du groupe pendant 3 minutes.",
+        "groupState": "Groupe :",
+        "stopAndStart": "Arrêter la musique et lancer les clics",
+        "confirmTitle": "Arrêter la musique du groupe ?",
+        "confirmMessage": "Ce que joue le groupe s’arrête et sa file d’attente est remplacée par la piste de clics. Relancez votre musique ensuite."
+      },
+      "volume": {
+        "help": "Choisissez un niveau où les clics sont clairement audibles là où vous mesurez.",
+        "noVolume": "Aucun contrôle de volume",
+        "silent": "Silencieux : montez le volume pour mesurer",
+        "back": "Les volumes reviennent à leur valeur à la fin."
+      },
+      "skip": "Passer"
+    },
+    "mute": {
+      "unsupported": "{name} ne peut pas être mise en muet ; les autres enceintes ne peuvent donc pas être mesurées une par une tant qu’elle est dans le groupe. Passez-les, ou accordez à l’oreille dans le réglage manuel.",
+      "unsupportedManual": "{name} ne peut pas être mise en muet ; les autres enceintes ne peuvent donc pas être entendues seules. Tout le monde et {name} seule fonctionnent encore."
+    },
+    "ready": {
+      "title": "Avant de mesurer",
+      "unmutable": "{name} ne peut pas être mise en muet. Tant qu’elle est dans le groupe, les autres enceintes ne peuvent pas être mesurées une par une. Vous pouvez tout de même mesurer {name}, ou accorder à l’oreille dans le réglage manuel.",
+      "unavailable": "{name} est indisponible dans Music Assistant (éteinte ou déconnectée), elle ne peut donc pas être mesurée.",
+      "silent": "{name} est à 0 % : elle ne sera pas entendue. Montez son volume à l’étape volume, ou passez-la.",
+      "muted": "{name} est en muet dans Music Assistant. Le pont la laisse en muet, elle ne sera donc pas entendue : rétablissez le son, ou passez-la.",
+      "skip": "Passer {name} pendant la mesure",
+      "skipped": "{name} sera passée (touchez pour la mesurer)"
+    },
+    "badge": {
+      "unmutable": "Ne peut pas être mise en muet",
+      "unavailable": "Indisponible",
+      "silent": "Volume 0 %",
+      "muted": "Muet"
+    },
+    "phone": {
+      "help": "Ouvrez la page de capture sur un téléphone. Le pont lit alors les clics sur chaque enceinte seule, l’une après l’autre, pendant que le téléphone enregistre une seule fois.",
+      "qr": "QR code du lien de capture téléphone",
+      "scan": "Scannez avec l’appareil photo du téléphone, ou ouvrez le lien dessus",
+      "copy": "Copier le lien",
+      "newLink": "Nouveau lien",
+      "linkFailed": "Impossible de créer un lien ({code}).",
+      "security": "Le lien permet uniquement au téléphone de voir quelle enceinte joue et d’envoyer son enregistrement pour cette mesure. Il fonctionne {min} min et s’arrête à la fin de la mesure.",
+      "sameNetwork": "Le téléphone doit être sur le même réseau que le pont.",
+      "step1": "Sur le téléphone, appuyez sur Démarrer : il enregistre et les enceintes jouent une par une.",
+      "step2": "Ou appuyez ici sur « Lire la séquence » pendant que le téléphone enregistre.",
+      "step3": "Une fois la séquence terminée, le téléphone envoie l’enregistrement ; les résultats apparaissent ici.",
+      "play": "Lire la séquence ({n})",
+      "measureIt": "La mesurer",
+      "notYet": "Pas encore mesurée",
+      "lead": "Démarrage : chaque enceinte est silencieuse un instant…",
+      "now": "Maintenant : {name} seule ({n}/{total})",
+      "pause": "Pause : passez à l’enceinte suivante…",
+      "measured": "L’enregistrement du téléphone est mesuré.",
+      "waitingUpload": "La séquence est terminée : en attente de l’enregistrement du téléphone…",
+      "failed": "La séquence s’est arrêtée ({code}).",
+      "certificate": "Votre téléphone signalera une fois le certificat — acceptez-le pour enregistrer directement dans le navigateur.",
+      "httpFallback": "Sans le certificat, utilisez le lien simple (l’enregistreur du téléphone) :",
+      "keepsDelay": "Non mesurées, elles gardent leur délai actuel : {names}"
+    },
+    "tuneLink": "Accorder avec votre groupe →",
+    "noGroupHelp": "{name} ne fait partie d’aucun groupe de synchronisation. Pour l’accorder avec d’autres, créez un groupe de synchronisation dans Groupes et ajoutez-y cette enceinte.",
+    "noGroupLink": "Ouvrir Groupes →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "Appliquer une latence de {value} ms"
+      },
+      "edit_ma_server": {
+        "label": "Modifier le serveur Music Assistant"
+      },
+      "enable_device": {
+        "label": "Activer | Activer {count} enceintes"
+      },
+      "open_adapter_settings": {
+        "label": "Ouvrir les paramètres de l’adaptateur"
+      },
+      "open_audio_diagnostics": {
+        "label": "Ouvrir le diagnostic"
+      },
+      "open_bluetooth_settings": {
+        "label": "Ouvrir les paramètres Bluetooth"
+      },
+      "open_config": {
+        "label": "Ouvrir les paramètres"
+      },
+      "open_devices_settings": {
+        "label": "Ouvrir les paramètres des enceintes"
+      },
+      "open_diagnostics": {
+        "label": "Ouvrir le diagnostic"
+      },
+      "open_ma_settings": {
+        "label": "Ouvrir les paramètres Music Assistant"
+      },
+      "open_output_diagnostics": {
+        "label": "Ouvrir le diagnostic"
+      },
+      "open_player_settings": {
+        "label": "Ouvrir les paramètres du lecteur"
+      },
+      "open_runtime_diagnostics": {
+        "label": "Ouvrir le diagnostic"
+      },
+      "prefer_sbc_codec": {
+        "label": "Préférer le codec SBC"
+      },
+      "recheck_outputs": {
+        "label": "Revérifier les sorties audio"
+      },
+      "reclaim_bluetooth": {
+        "label": "Récupérer l’enceinte | Récupérer {count} enceintes"
+      },
+      "reconnect_device": {
+        "label": "Reconnecter l’enceinte | Reconnecter {count} enceintes"
+      },
+      "release_bluetooth": {
+        "label": "Libérer l’enceinte"
+      },
+      "repair_speaker": {
+        "label": "Réappairer l’enceinte"
+      },
+      "rerun_checks": {
+        "label": "Relancer les vérifications"
+      },
+      "rerun_preflight": {
+        "label": "Relancer la vérification de l’hôte"
+      },
+      "retry_ma_discovery": {
+        "label": "Retrouver Music Assistant"
+      },
+      "revalidate_ma_link": {
+        "label": "Vérifier à nouveau le lien Music Assistant"
+      },
+      "review_buffer_settings": {
+        "label": "Revoir les paramètres du tampon"
+      },
+      "review_diagnostics": {
+        "label": "Examiner le diagnostic"
+      },
+      "review_latency_settings": {
+        "label": "Revoir les paramètres de latence"
+      },
+      "review_pulse_latency": {
+        "label": "Revoir la latence audio"
+      },
+      "scan_devices": {
+        "label": "Rechercher des enceintes"
+      },
+      "start_pairing": {
+        "label": "Démarrer l’appairage"
+      },
+      "test_ma_connection": {
+        "label": "Tester la connexion Music Assistant"
+      },
+      "tune_latency_compensation": {
+        "label": "Régler la compensation de latence"
+      },
+      "unmute_speaker": {
+        "label": "Rétablir le son de l’enceinte"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "Le lien audio vers Music Assistant n’est pas connecté."
+      },
+      "ma_disconnected": {
+        "message": "Le pont n’est pas connecté à l’API Music Assistant."
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant n’a pas encore de file d’attente pour cette enceinte."
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant est en cours de reconnexion."
+      },
+      "no_sink": {
+        "message": "Aucune sortie audio n’est configurée."
+      },
+      "not_paired": {
+        "message": "L’enceinte n’est plus appairée. Mettez-la en mode appairage et appairez-la à nouveau."
+      },
+      "reconnecting": {
+        "message": "Une reconnexion est déjà en cours."
+      },
+      "released": {
+        "message": "Le Bluetooth est libéré du pont. Récupérez d’abord l’enceinte."
+      },
+      "stopping": {
+        "message": "Le lecteur est en cours d’arrêt."
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "Le capteur radio ne fonctionne pas pour cette enceinte (il faut une enceinte Bluetooth)."
+      },
+      "air_not_locked": {
+        "text": "Le capteur radio ne s’est pas verrouillé sur le flux de cette enceinte depuis son démarrage."
+      },
+      "air_unavailable": {
+        "text": "Le capteur radio ne peut pas fonctionner pour cette enceinte (voir l’état de son capteur radio)."
+      },
+      "cpu_budget": {
+        "text": "La lecture du moniteur Bluetooth a consommé plus de processeur que son budget ; le capteur radio est donc désactivé jusqu’au redémarrage du pont."
+      },
+      "internal_error": {
+        "text": "Le capteur radio a rencontré une erreur interne et s’est arrêté (détails dans le journal)."
+      },
+      "module_suspend_on_idle": {
+        "text": "Le module-suspend-on-idle de PulseAudio est chargé et met en pause les sorties inactives."
+      },
+      "monitor_error": {
+        "text": "La socket du moniteur Bluetooth a échoué ; le pont continue de réessayer."
+      },
+      "no_cap_net_raw": {
+        "text": "Le pont ne peut pas ouvrir la socket du moniteur Bluetooth : il faut la capacité NET_RAW (ajoutez NET_RAW à cap_add du conteneur)."
+      },
+      "observed_suspend": {
+        "text": "L’hôte a mis en pause la sortie audio de cette enceinte alors qu’elle était connectée et inactive."
+      },
+      "playout_fallback": {
+        "text": "Le moteur de restitution est revenu au lecteur hérité, il n’y a donc pas de planification à comparer."
+      },
+      "sink_ambiguous": {
+        "text": "Plusieurs sorties identiques correspondent et aucune ne peut être distinguée."
+      },
+      "sink_in_use": {
+        "text": "Un autre lecteur y joue déjà."
+      },
+      "sink_unplugged": {
+        "text": "Elle est débranchée ou a été renommée."
+      },
+      "unknown_suspend": {
+        "text": "L’hôte a mis en pause la sortie audio de cette enceinte."
+      },
+      "unsupported_input": {
+        "text": "Le format audio du flux n’est pas pris en charge (le capteur radio nécessite 44,1 ou 48 kHz)."
+      },
+      "unsupported_platform": {
+        "text": "Ce système n’a pas de socket de moniteur Bluetooth (Linux uniquement)."
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber met en pause les nœuds Bluetooth inactifs (session.suspend-timeout-seconds)."
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "La lecture est active mais aucun flux audio n’arrive",
+        "title": "Audio bloqué"
+      },
+      "audio-streaming": {
+        "summary": "Le flux audio est devenu actif",
+        "title": "Flux audio actif"
+      },
+      "bluetooth-connected": {
+        "summary": "Enceinte Bluetooth connectée",
+        "title": "Enceinte connectée"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Enceinte Bluetooth déconnectée",
+        "title": "Enceinte déconnectée"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Échec de la reconnexion Bluetooth",
+        "title": "Échec de la reconnexion"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Reconnexion Bluetooth réussie",
+        "title": "Enceinte reconnectée"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "L’enceinte est passée en veille après {idle_minutes} minutes sans son",
+        "title": "Veille"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "L’enceinte sort de veille",
+        "title": "Réveil"
+      },
+      "bt-management-disabled": {
+        "summary": "Le pont a libéré le Bluetooth de cette enceinte",
+        "title": "Bluetooth libéré"
+      },
+      "bt-management-reclaimed": {
+        "summary": "L’enceinte s’est reconnectée d’elle-même ; le pont a récupéré son Bluetooth",
+        "title": "Bluetooth récupéré"
+      },
+      "daemon-connected": {
+        "summary": "Le lecteur s’est connecté à Music Assistant",
+        "title": "Lien audio actif"
+      },
+      "daemon-disconnected": {
+        "summary": "Le lecteur s’est déconnecté de Music Assistant",
+        "title": "Lien audio inactif"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "L’enceinte Bluetooth est déconnectée",
+        "title": "Déconnectée"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Le lecteur Sendspin n’est pas connecté",
+        "title": "Lien audio inactif"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "Erreur"
+      },
+      "health-foreign_server": {
+        "summary": "Connecté à Music Assistant sur {host} {name}, et non à celui de ce pont",
+        "title": "Un autre Music Assistant"
+      },
+      "health-idle": {
+        "summary": "Au repos",
+        "title": "Au repos"
+      },
+      "health-ma_reconnecting": {
+        "summary": "La connexion à Music Assistant est en cours d’actualisation",
+        "title": "Actualisation du lien Music Assistant"
+      },
+      "health-output_missing": {
+        "summary": "La sortie audio est absente",
+        "title": "Sortie audio absente"
+      },
+      "health-playback_without_audio": {
+        "summary": "La lecture est active mais aucun flux audio n’arrive",
+        "title": "Audio bloqué"
+      },
+      "health-reconnecting": {
+        "summary": "Une reconnexion Bluetooth est en cours",
+        "title": "Reconnexion"
+      },
+      "health-released": {
+        "summary": "Le Bluetooth est libéré du pont",
+        "title": "Libéré"
+      },
+      "health-resyncing": {
+        "summary": "L’audio est en cours de resynchronisation",
+        "title": "Resynchronisation"
+      },
+      "health-sink_muted": {
+        "summary": "La sortie audio est en muet dans le système",
+        "title": "Sortie audio en muet"
+      },
+      "health-stopping": {
+        "summary": "Le lecteur est en cours d’arrêt",
+        "title": "Arrêt"
+      },
+      "ma-monitor-stale": {
+        "summary": "La connexion à Music Assistant a été perdue : {error}",
+        "title": "Lien Music Assistant perdu"
+      },
+      "ma-server-refused": {
+        "summary": "Music Assistant refusé sur {host} : ce pont appartient à {owner}",
+        "title": "Music Assistant refusé"
+      },
+      "playback-started": {
+        "summary": "Lecture démarrée",
+        "title": "Lecture démarrée"
+      },
+      "playback-stopped": {
+        "summary": "Lecture arrêtée",
+        "title": "Lecture arrêtée"
+      },
+      "reanchoring": {
+        "summary": "Le calage temporel du flux est en cours de resynchronisation",
+        "title": "Resynchronisation"
+      },
+      "reconnecting": {
+        "summary": "Reconnexion Bluetooth en cours",
+        "title": "Reconnexion"
+      },
+      "runtime-error-cleared": {
+        "summary": "L’erreur a disparu",
+        "title": "Erreur dissipée"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "Erreur"
+      },
+      "sink-lost": {
+        "summary": "La sortie audio a été débranchée ; le lecteur attend sur une sortie de remplacement",
+        "title": "Sortie audio perdue"
+      },
+      "sink-muted": {
+        "summary": "La sortie audio est en muet dans le système",
+        "title": "Sortie audio en muet"
+      },
+      "sink-rematched": {
+        "summary": "La sortie audio a été retrouvée sous un nouveau nom : {sink}",
+        "title": "Sortie audio renommée"
+      },
+      "sink-restored": {
+        "summary": "La sortie audio est de retour : {sink}",
+        "title": "Sortie audio rétablie"
+      },
+      "sink-unmuted": {
+        "summary": "Le son de la sortie audio est rétabli",
+        "title": "Sortie audio rétablie"
+      },
+      "startup-config": {
+        "summary": "Chargement de la configuration",
+        "title": "Configuration"
+      },
+      "startup-devices": {
+        "summary": "La liste des enceintes est prête",
+        "title": "Enceintes"
+      },
+      "startup-failed": {
+        "summary": "Échec du démarrage : {message}",
+        "title": "Échec du démarrage"
+      },
+      "startup-idle": {
+        "summary": "Démarrage lancé",
+        "title": "Démarrage"
+      },
+      "startup-integrations": {
+        "summary": "Intégration Music Assistant initialisée",
+        "title": "Intégrations"
+      },
+      "startup-ready": {
+        "summary": "Démarrage terminé",
+        "title": "Prêt"
+      },
+      "startup-runtime": {
+        "summary": "Configuration d’exécution préparée",
+        "title": "Exécution"
+      },
+      "startup-shutdown": {
+        "summary": "Le pont s’arrête",
+        "title": "Arrêt"
+      },
+      "startup-web": {
+        "summary": "L’interface web est prête",
+        "title": "Interface web"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "Ajouter la première enceinte"
+      },
+      "all_disabled": {
+        "label": "Toutes les enceintes désactivées"
+      },
+      "all_released": {
+        "label": "Toutes les enceintes libérées"
+      },
+      "devices_ready": {
+        "label": "{ready}/{total} enceintes actives prêtes"
+      },
+      "first_run": {
+        "label": "Premier démarrage"
+      },
+      "issues_attention": {
+        "label": "{count} problèmes à examiner"
+      },
+      "no_playable_speaker": {
+        "label": "Aucune enceinte utilisable"
+      },
+      "setup_progress": {
+        "label": "Installation {percent} %"
+      },
+      "startup": {
+        "label": "Démarrage {percent} %"
+      },
+      "startup_finalizing": {
+        "label": "Démarrage 90 %"
+      },
+      "waiting_for_setup": {
+        "label": "En attente de l’installation"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "Cette enceinte est en mode boucle mais la correction radio ne fonctionne pas ; elle joue comme en mode mesure. {cause}",
+        "title": "{device} : la correction radio ne fonctionne pas"
+      },
+      "air_sensor_codec": {
+        "summary": "L’enceinte diffuse en {codec}, et le capteur radio ne lit que le SBC. Activez PREFER_SBC_CODEC et reconnectez l’enceinte. La lecture n’est pas affectée.",
+        "title": "{device} : le capteur radio nécessite le codec SBC"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "L’enceinte utilise des réglages SBC que le capteur radio ne prend pas en charge ({settings}). La lecture n’est pas affectée.",
+        "title": "{device} : le capteur radio ne peut pas lire le flux SBC de cette enceinte"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} La lecture n’est pas affectée. Pour masquer cela, désactivez EXPERIMENTAL_AIR_SENSOR (redémarrage nécessaire).",
+        "title": "{device} : le capteur radio est indisponible | Le capteur radio est indisponible sur {count} enceintes"
+      },
+      "audio_unavailable": {
+        "summary": "Le pont ne peut pas joindre son système audio pour l’instant.",
+        "summary_all_disabled": "Le pont ne peut pas joindre son système audio pour l’instant. Rétablissez l’accès audio avant d’activer une enceinte, sinon la lecture reste indisponible.",
+        "summary_no_server": "Aucun serveur PulseAudio ou PipeWire n’a été trouvé.",
+        "summary_no_server_env": "Aucun serveur PulseAudio ou PipeWire n’a été trouvé : PULSE_SERVER n’est pas défini.",
+        "summary_socket_missing": "La socket audio {socket} est configurée mais n’existe pas sur l’hôte ; aucun serveur audio ne l’a jamais créée.",
+        "summary_socket_refused": "La socket audio {socket} est montée, mais le serveur audio a refusé la connexion ({error}).",
+        "summary_socket_unreachable": "La socket audio {socket} est montée, mais le pont ne peut pas l’ouvrir ({error}).",
+        "title": "Système audio indisponible"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "Cette enceinte a été désactivée après des échecs d’appairage répétés. Mettez-la en mode appairage et cliquez sur Activer pour réessayer.",
+        "summary_error": "{error}",
+        "title": "{device} a été désactivée automatiquement : jamais appairée"
+      },
+      "auto_released": {
+        "summary": "Le pont a libéré le Bluetooth de cette enceinte après des problèmes de connexion répétés. | Récupérez {devices} pour que le pont les gère à nouveau.",
+        "summary_error": "{error}",
+        "title": "{device} a été libérée automatiquement | {count} enceintes ont été libérées automatiquement"
+      },
+      "bluetooth_unavailable": {
+        "summary": "Le pont n’a trouvé aucun adaptateur Bluetooth. Ouvrez les paramètres des adaptateurs et actualisez la liste.",
+        "summary_all_disabled": "Le pont ne joint aucun adaptateur Bluetooth pour l’instant. Rétablissez l’accès aux adaptateurs avant d’activer une enceinte, sinon la lecture reste indisponible.",
+        "summary_daemon_down": "Le service Bluetooth (bluetoothd) n’est pas démarré sur l’hôte ; le pont ne voit donc aucun adaptateur tant qu’il n’a pas démarré.",
+        "title": "Adaptateur Bluetooth indisponible"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} Après une telle pause, l’enceinte redémarre son flux et peut se décaler de plusieurs dizaines de millisecondes. Le pont ne modifie jamais les réglages audio de l’hôte ; pour l’éviter, empêchez l’hôte de suspendre les sorties audio inactives : {docs}",
+        "title": "{device} : l’hôte met la sortie audio en pause entre les morceaux"
+      },
+      "config_dir_not_writable": {
+        "summary": "Le processus du pont (UID {uid}) ne peut pas écrire dans {config_dir}. L’enregistrement du jeton Music Assistant, les changements de mot de passe et les paramètres des enceintes échoueront tous. Correction : {remediation}",
+        "title": "{config_dir} n’est pas accessible en écriture au pont"
+      },
+      "config_migration_failed": {
+        "summary": "Le pont a démarré sans enceintes. config.json n’a pas été touché et reste l’ancien fichier. Erreur : {error}. Merci d’envoyer un rapport de bug.",
+        "title": "La configuration n’a pas pu être mise à jour vers cette version"
+      },
+      "disconnected": {
+        "summary": "Allumez l’enceinte ou reconnectez-la. | Allumez ou reconnectez {devices}.",
+        "summary_error": "{error}",
+        "title": "{device} est déconnectée | {count} enceintes sont déconnectées"
+      },
+      "duplicate_device": {
+        "summary": "Cette enceinte est aussi enregistrée comme « {other_bridge} » dans Music Assistant. La faire tourner sur deux ponts provoque des boucles de reconnexion. Désactivez-la sur un pont ou arrêtez l’autre. | Ces enceintes sont aussi enregistrées sur un autre pont : {devices}. Désactivez-les sur un pont ou arrêtez l’autre pour éviter les boucles de reconnexion.",
+        "title": "{device} peut entrer en conflit avec un autre pont | {count} enceintes peuvent entrer en conflit avec un autre pont"
+      },
+      "latency": {
+        "summary": "Le réglage de la latence peut être amélioré.",
+        "summary_high_latency": "Une compensation de latence est définie, mais la latence audio globale reste élevée.",
+        "summary_multi_no_delays": "Il y a plusieurs enceintes mais aucune n’a encore de compensation de latence.",
+        "summary_repeated_resyncs": "Des resynchronisations répétées ont été observées pendant la lecture.",
+        "title": "Le réglage de la latence demande votre attention"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant n’est pas encore prêt.",
+        "summary_no_credentials": "Les identifiants Music Assistant sont manquants.",
+        "summary_no_url": "L’adresse de Music Assistant n’est pas définie.",
+        "summary_not_connected": "Les identifiants Music Assistant sont enregistrés, mais le pont n’est pas connecté.",
+        "title": "Music Assistant demande votre attention"
+      },
+      "missing_sink": {
+        "summary": "L’enceinte est connectée, mais sa sortie audio Bluetooth n’est pas encore prête. | Reconnectez ou vérifiez la configuration audio de {devices}.",
+        "summary_error": "{error}",
+        "title": "{device} est connectée mais n’a aucune sortie audio prête | {count} enceintes sont connectées mais n’ont aucune sortie audio prête"
+      },
+      "needs_attention": {
+        "summary": "Examinez les événements récents et le diagnostic.",
+        "summary_daemon_disconnected": "Le lecteur Sendspin n’est pas connecté.",
+        "summary_error": "{error}",
+        "summary_foreign_server": "Connecté à Music Assistant sur {host} {name}, et non à celui de ce pont.",
+        "summary_playback_without_audio": "La lecture est active mais aucun flux audio n’arrive.",
+        "summary_reconnecting": "Une reconnexion Bluetooth est en cours.",
+        "summary_resyncing": "L’audio est en cours de resynchronisation.",
+        "summary_sink_muted": "La sortie audio est en muet dans le système.",
+        "summary_stopping": "Le lecteur est en cours d’arrêt.",
+        "title": "{device} demande votre attention"
+      },
+      "never_paired": {
+        "summary": "Cette enceinte a été ajoutée au pont mais n’est jamais apparue en Bluetooth. Mettez-la en mode appairage et cliquez sur Démarrer l’appairage. | Ces enceintes ont été ajoutées mais ne sont jamais apparues en Bluetooth : {devices}. Mettez-les en mode appairage et lancez l’appairage.",
+        "summary_error": "{error}",
+        "title": "{device} n’a jamais été appairée | {count} enceintes n’ont jamais été appairées"
+      },
+      "output_missing": {
+        "summary": "La sortie {sink} n’est pas disponible. {cause} Rebranchez l’appareil, ou choisissez une autre sortie dans les paramètres du lecteur. Jusque-là, le lecteur reste dans ses groupes Music Assistant, en silence.",
+        "title": "{device} : la sortie audio est absente"
+      },
+      "output_muted": {
+        "summary": "La sortie {sink} est en muet dans le mixeur du système : rien n’est audible. Le volume de Music Assistant ne peut pas la rétablir : rétablissez le son dans les réglages sonores du système. | Il en va de même pour : {others}.",
+        "title": "{device} : la sortie audio est en muet | {count} sorties audio demandent votre attention"
+      },
+      "output_port_unavailable": {
+        "summary": "Le port actif {port} de {sink} ne signale aucune connexion. Vérifiez le câble ou les enceintes. | Il en va de même pour : {others}.",
+        "title": "{device} : rien n’est branché sur la sortie audio | {count} sorties audio demandent votre attention"
+      },
+      "output_volume_zero": {
+        "summary": "La sortie {sink} est à 0 % dans le mixeur du système. Le volume de Music Assistant ne peut pas l’augmenter : augmentez-le dans les réglages sonores du système. | Il en va de même pour : {others}.",
+        "title": "{device} : le volume de la sortie audio est à 0 % | {count} sorties audio demandent votre attention"
+      },
+      "pa_socket_missing": {
+        "summary": "La socket audio {socket} est configurée mais n’existe pas encore sur l’hôte ; aucun serveur PipeWire ou PulseAudio ne l’a créée. C’est le signe habituel d’un hôte sans session utilisateur persistante.",
+        "title": "Serveur audio injoignable : activez la persistance de session utilisateur"
+      },
+      "pa_socket_refused": {
+        "summary": "La socket audio {socket} est montée, mais le serveur PipeWire ou PulseAudio de l’hôte a refusé la connexion. C’est le signe habituel d’un hôte sans session utilisateur persistante.",
+        "title": "Serveur audio injoignable : activez la persistance de session utilisateur"
+      },
+      "repair_required": {
+        "summary": "L’enceinte n’est plus appairée ; les tentatives de reconnexion échouent donc sans cesse. Mettez-la en mode appairage et appairez-la à nouveau. | Ces enceintes ne sont plus appairées. Réappairez {devices} depuis le mode appairage.",
+        "summary_error": "{error}",
+        "title": "{device} doit être appairée à nouveau | {count} enceintes doivent être appairées à nouveau"
+      },
+      "runtime_access": {
+        "summary": "Le pont ne joint pas les services D-Bus de l’hôte dont il a besoin pour contrôler le Bluetooth. Ouvrez le diagnostic et vérifiez les montages et privilèges du conteneur.",
+        "summary_all_disabled": "Le pont ne joint pas les services de l’hôte dont il a besoin pour l’instant. Rétablissez l’accès à l’hôte avant d’activer une enceinte, sinon la lecture reste indisponible.",
+        "title": "Le pont ne joint pas les services de l’hôte dont il a besoin"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} a envoyé la tentative de connexion et l’enceinte l’a rejetée avec « Limited Resources ». Les barres de son Samsung série Q filtrent les appairages entrants selon la classe d’appareil Bluetooth de l’initiateur. Définissez device_class sur 0x00010c pour {adapter} dans Paramètres, Bluetooth, puis appairez à nouveau.",
+        "summary_no_adapter": "L’adaptateur Bluetooth a envoyé la tentative de connexion et l’enceinte l’a rejetée avec « Limited Resources ». Les barres de son Samsung série Q filtrent les appairages entrants selon la classe d’appareil Bluetooth de l’initiateur. Définissez device_class sur 0x00010c pour l’adaptateur dans Paramètres, Bluetooth, puis appairez à nouveau.",
+        "title": "{device} : appairage rejeté par le filtre de classe d’appareil de l’enceinte"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "Le lecteur se connecte mais est déconnecté, ou se déconnecte lui-même, à intervalle régulier ({interval} s). Vérifiez le serveur et le port Music Assistant, puis lancez Tester la connexion.",
+        "title": "{device} : le lecteur Sendspin s’arrête toutes les {interval} s | {count} enceintes : le lecteur Sendspin s’arrête à intervalle fixe"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} Vérifiez que SENDSPIN_PORT dans les paramètres du pont correspond au port Sendspin de Music Assistant.",
+        "summary_error_only": "{error}",
+        "title": "{device} ne joint pas le serveur Sendspin"
+      },
+      "sendspin_url_malformed": {
+        "summary": "Modifiez le serveur Music Assistant dans les paramètres. Il doit s’agir d’un simple nom d’hôte ou d’une adresse IP, sans http://, ni port, ni chemin.",
+        "title": "{device} : l’adresse du serveur Music Assistant est invalide | L’adresse du serveur Music Assistant est invalide"
+      },
+      "setup_audio": {
+        "summary_no_server": "Aucun serveur PulseAudio ou PipeWire n’a été trouvé.",
+        "summary_no_server_env": "Aucun serveur PulseAudio ou PipeWire n’a été trouvé : PULSE_SERVER n’est pas défini.",
+        "summary_no_sinks": "Le serveur audio est joignable, mais il n’a encore aucune sortie audio.",
+        "summary_socket_missing": "La socket audio {socket} est configurée mais n’existe pas sur l’hôte ; aucun serveur audio ne l’a jamais créée.",
+        "summary_socket_refused": "La socket audio {socket} est montée, mais le serveur audio a refusé la connexion ({error}).",
+        "summary_socket_unreachable": "La socket audio {socket} est montée, mais le pont ne peut pas l’ouvrir ({error}).",
+        "title": "Vérifiez le système audio"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "Le service Bluetooth (bluetoothd) n’est pas démarré sur l’hôte ; le pont ne voit donc aucun adaptateur tant qu’il n’a pas démarré.",
+        "summary_no_controller": "Le pont n’a trouvé aucun adaptateur Bluetooth.",
+        "summary_no_paired": "Aucune enceinte Bluetooth appairée n’est disponible pour le pont.",
+        "summary_no_paired_disabled": "Aucune enceinte Bluetooth appairée n’est disponible, et l’enceinte enregistrée est désactivée.",
+        "title": "Vérifiez l’accès au Bluetooth"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "Aucune enceinte Bluetooth appairée n’est disponible pour le pont.",
+        "summary_no_paired_disabled": "Aucune enceinte Bluetooth appairée n’est disponible, et l’enceinte enregistrée est désactivée.",
+        "title": "Appairez ou trouvez une enceinte"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "Toutes les enceintes configurées sont désactivées pour l’instant.",
+        "summary_all_released": "Toutes les enceintes configurées sont libérées du pont pour l’instant.",
+        "summary_all_released_auto": "Le pont a libéré automatiquement toutes les enceintes configurées après des échecs de connexion.",
+        "title": "Rendez une enceinte disponible"
+      },
+      "setup_latency": {
+        "summary_high_latency": "Une compensation de latence est définie, mais la latence audio globale est assez élevée.",
+        "summary_multi_no_delays": "Il y a plusieurs enceintes mais aucune n’a encore de compensation de latence.",
+        "title": "Revoyez le réglage de la latence"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Les identifiants Music Assistant sont manquants.",
+        "summary_no_url": "L’adresse de Music Assistant n’est pas définie.",
+        "summary_not_connected": "Les identifiants Music Assistant sont enregistrés, mais le pont n’est pas connecté.",
+        "title": "Connectez Music Assistant"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "Le pont ne joint pas les services D-Bus de l’hôte dont il a besoin pour contrôler le Bluetooth.",
+        "title": "Vérifiez l’accès à l’hôte"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "Certaines enceintes connectées n’ont aucune sortie audio Bluetooth prête.",
+        "summary_none_configured": "Aucun lecteur n’est encore configuré.",
+        "summary_none_connected_bluetooth": "Des lecteurs sont configurés, mais aucune enceinte n’est connectée en Bluetooth pour l’instant.",
+        "summary_none_connected_mixed": "Des lecteurs sont configurés, mais aucune enceinte n’est connectée en Bluetooth et aucune sortie audio n’est présente.",
+        "summary_none_connected_outputs": "Des lecteurs sont configurés, mais aucune de leurs sorties audio n’est présente.",
+        "title": "Connectez votre première enceinte"
+      },
+      "setup_step": {
+        "summary": "La liste d’installation comporte encore une étape inachevée.",
+        "title": "Terminez l’installation"
+      },
+      "sink_system_muted": {
+        "summary": "La sortie audio est en muet. Rien ne joue avant son rétablissement. Cela peut arriver après un plantage ou un redémarrage.",
+        "summary_error": "{error}",
+        "title": "{device} : la sortie audio est en muet dans le système"
+      },
+      "transport_down": {
+        "summary": "L’enceinte est connectée, mais son lecteur Sendspin ne fonctionne pas. | Reconnectez {devices} pour rétablir le lien audio.",
+        "summary_error": "{error}",
+        "title": "{device} a perdu son lien audio | {count} enceintes ont perdu leur lien audio"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "L’enceinte est déjà en veille."
+      },
+      "bad_request": {
+        "detail": "La requête n’était pas valide."
+      },
+      "bluetooth_busy": {
+        "detail": "Le Bluetooth est occupé par une autre opération. Réessayez dans un instant."
+      },
+      "conflict": {
+        "detail": "Cela entre en conflit avec l’état actuel."
+      },
+      "forbidden": {
+        "detail": "Vous n’êtes pas autorisé à faire cela."
+      },
+      "http_error": {
+        "detail": "La requête a échoué."
+      },
+      "internal_error": {
+        "detail": "Le pont a rencontré une erreur interne."
+      },
+      "invalid_credentials": {
+        "detail": "Les identifiants ne sont pas corrects."
+      },
+      "invalid_mac": {
+        "detail": "L’adresse Bluetooth n’est pas valide."
+      },
+      "invalid_request": {
+        "detail": "Certaines valeurs ne sont pas valides."
+      },
+      "job_in_progress": {
+        "detail": "La même opération est déjà en cours."
+      },
+      "login_failed": {
+        "detail": "Échec de la connexion."
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant n’est pas encore configuré."
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant n’est pas disponible."
+      },
+      "ma_unreachable": {
+        "detail": "Le pont ne joint pas Music Assistant."
+      },
+      "method_not_allowed": {
+        "detail": "Cette action n’est pas disponible ici."
+      },
+      "network_error": {
+        "detail": "Le pont est injoignable. Vérifiez votre connexion."
+      },
+      "no_bluetooth": {
+        "detail": "Aucun adaptateur Bluetooth n’est disponible."
+      },
+      "not_connected": {
+        "detail": "L’enceinte n’est pas connectée."
+      },
+      "not_found": {
+        "detail": "Introuvable."
+      },
+      "not_in_standby": {
+        "detail": "L’enceinte n’est pas en veille."
+      },
+      "not_ready": {
+        "detail": "Pas encore prêt. Réessayez dans un instant."
+      },
+      "pairing_disabled": {
+        "detail": "L’appairage est désactivé."
+      },
+      "pairing_failed": {
+        "detail": "Échec de l’appairage."
+      },
+      "payload_too_large": {
+        "detail": "Les données sont trop volumineuses."
+      },
+      "scan_in_progress": {
+        "detail": "Une recherche est déjà en cours."
+      },
+      "session_expired": {
+        "detail": "Votre session a expiré. Reconnectez-vous."
+      },
+      "timeout": {
+        "detail": "L’opération a pris trop de temps."
+      },
+      "too_many_requests": {
+        "detail": "Trop de requêtes. Attendez un instant et réessayez."
+      },
+      "unauthorized": {
+        "detail": "Connectez-vous pour continuer."
+      },
+      "unavailable": {
+        "detail": "Indisponible pour l’instant."
+      },
+      "unknown_check": {
+        "detail": "Cette vérification n’existe pas."
+      },
+      "unknown_device": {
+        "detail": "Le pont ne connaît pas cette enceinte."
+      },
+      "unknown_job": {
+        "detail": "Cette opération est inconnue (elle a peut-être expiré)."
+      },
+      "upstream_error": {
+        "detail": "Un service dont dépend le pont a répondu par une erreur."
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "un autre serveur"
+      },
+      "attempt": {
+        "open": "Tentative de reconnexion {attempt} en cours.",
+        "with_limit": "Tentative de reconnexion {attempt}/{max}. Il reste {remaining} tentatives avant que le pont libère l’enceinte."
+      },
+      "list": {
+        "more": "{first}, {second} et {count} de plus"
+      },
+      "recovered": {
+        "text": "(résolu)"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "Démarrage du pont"
+      }
+    }
+  },
+  "consequence": {
+    "stopsPlayback": "La lecture s’arrête sur : {names}.",
+    "disconnects": "Le Bluetooth se déconnecte sur : {names}.",
+    "leavesMa": "Le lecteur disparaît de Music Assistant : {names}.",
+    "unpairs": "L’appairage Bluetooth est supprimé. Pour la réutiliser, ajoutez-la comme nouvelle enceinte.",
+    "adapterDisconnects": "Chaque enceinte qui s’y trouve se déconnecte et la lecture s’arrête jusqu’à leur reconnexion : {names}.",
+    "restartMinute": "La lecture s’arrête sur toutes les enceintes pendant environ une minute, le temps que le pont redémarre.",
+    "playingNow": "En lecture actuellement : {names}.",
+    "replacesConfig": "Tous les paramètres et toutes les enceintes sont remplacés par le contenu de ce fichier.",
+    "noUndo": "Cette action est irréversible.",
+    "rollback": "Pour revenir en arrière, installez la version précédente.",
+    "noReconnect": "Le pont cesse de gérer : {names}. Elles ne se reconnecteront pas tant que vous ne les aurez pas récupérées.",
+    "wakeFromMenu": "Réveillez-les depuis leur menu.",
+    "downloadFirst": "Télécharger d’abord la configuration actuelle",
+    "repairs": "L’appairage Bluetooth est supprimé puis recréé ; l’enceinte devra peut-être être en mode appairage."
+  },
+  "longOp": {
+    "elapsed": "{seconds} s",
+    "cancel": "Annuler",
+    "cancelling": "Annulation…",
+    "retry": "Réessayer"
+  }
+}

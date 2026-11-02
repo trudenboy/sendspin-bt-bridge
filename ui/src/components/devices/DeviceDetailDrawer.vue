@@ -32,7 +32,7 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
@@ -119,7 +119,7 @@ const timelineEvents = computed(() =>
     const at = String(e.at ?? '')
     return {
       id: `${at}-${String(e.event_type ?? '')}`,
-      timestamp: at ? new Date(at).toLocaleString() : '',
+      timestamp: at ? new Date(at).toLocaleString(locale.value) : '',
       title: String(e.event_type ?? ''),
       description: e.message ? String(e.message) : undefined,
       type: (e.level === 'error' ? 'error' : 'info') as 'info' | 'error',

@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "check:locales": "node scripts/check-locales.mjs",
+    "check:locales:strict": "node scripts/check-locales.mjs --strict",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src/",

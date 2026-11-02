@@ -8,7 +8,7 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { tServer } from '@/i18n/server'
 import type { TimelineEntry } from '@/stores/events'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const eventStore = useEventStore()
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 const copyLabel = computed(() =>
@@ -68,7 +68,7 @@ const timelineEvents = computed(() =>
       const s = shown(e)
       return {
         id: `${e.at}-${e.source}-${e.label}`,
-        timestamp: new Date(e.at).toLocaleString(),
+        timestamp: new Date(e.at).toLocaleString(locale.value),
         title: s.title,
         description: `${s.source}: ${s.summary}`,
         type: levelToType(e.level),

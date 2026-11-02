@@ -16,7 +16,7 @@ const bridge = useBridgeStore()
   <div>
     <div class="mb-6 flex flex-wrap items-baseline justify-between gap-2">
       <h1 class="text-2xl font-semibold tracking-tight text-text-primary">{{ t('nav.groups') }}</h1>
-      <p v-if="bridge.maConnected" class="inline-flex items-center gap-1.5 text-sm text-text-secondary">
+      <p v-if="bridge.maConnected" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-sm break-words text-text-secondary">
         <StatusState kind="ma_account" :status="bridge.maAccount" variant="full" />
         {{ t('groups.via', { url: bridge.bridge?.ma_web_url ?? 'Music Assistant' }) }}
       </p>

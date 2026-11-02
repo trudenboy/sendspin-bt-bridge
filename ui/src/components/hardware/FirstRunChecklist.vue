@@ -48,15 +48,17 @@ function dismiss() {
     class="mb-4 rounded-(--radius-card) border border-border bg-surface-card px-4 py-3"
     :aria-label="t('home.checklist.title')"
   >
-    <div class="flex items-center gap-3">
-      <h2 class="text-sm font-semibold text-text-primary">{{ t('home.checklist.title') }}</h2>
-      <p data-first-run-progress class="text-xs text-text-secondary">
-        {{ t('home.checklist.progress', { done: doneCount, total: steps.length }) }}
-      </p>
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <h2 class="whitespace-nowrap text-sm font-semibold text-text-primary">{{ t('home.checklist.title') }}</h2>
+        <p data-first-run-progress class="whitespace-nowrap text-xs text-text-secondary">
+          {{ t('home.checklist.progress', { done: doneCount, total: steps.length }) }}
+        </p>
+      </div>
       <button
         type="button"
         data-first-run-dismiss
-        class="ml-auto rounded-(--radius-button) px-2 py-1 text-xs text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
+        class="shrink-0 rounded-(--radius-button) px-2 py-1 text-xs text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
         :aria-label="t('home.checklist.dismiss')"
         @click="dismiss"
       >
@@ -85,7 +87,7 @@ function dismiss() {
         <button
           v-if="step.id === 'speaker'"
           type="button"
-          class="inline-flex items-center gap-0.5 text-sm text-primary-text underline underline-offset-2"
+          class="inline-flex items-center gap-0.5 text-sm text-primary-text underline underline-offset-2 max-sm:basis-full max-sm:pl-8"
           @click="emit('addSpeaker')"
         >
           {{ step.action }}
@@ -94,7 +96,7 @@ function dismiss() {
         <RouterLink
           v-else
           :to="step.href!"
-          class="inline-flex items-center gap-0.5 text-sm text-primary-text underline underline-offset-2"
+          class="inline-flex items-center gap-0.5 text-sm text-primary-text underline underline-offset-2 max-sm:basis-full max-sm:pl-8"
         >
           {{ step.action }}
           <ChevronRight class="size-3.5" aria-hidden="true" />

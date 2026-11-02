@@ -12,3 +12,12 @@ export function russianPlural(choice: number, choicesLength: number): number {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1
   return 2
 }
+
+/**
+ * French counts 0 and 1 as singular ("0 correction", "1 correction"); 2 and more
+ * take the plural. Counts in the UI are whole numbers.
+ */
+export function frenchPlural(choice: number, choicesLength: number): number {
+  if (choicesLength < 2) return 0
+  return Math.abs(choice) <= 1 ? 0 : 1
+}

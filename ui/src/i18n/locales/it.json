@@ -1,0 +1,2970 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "bugReport": "Segnala un bug",
+    "docs": "Documentazione",
+    "github": "Repository GitHub",
+    "help": "Aiuto",
+    "preferences": "Preferenze",
+    "display": "Visualizzazione",
+    "language": "Lingua",
+    "theme": "Tema",
+    "themes": {
+      "auto": "Automatico",
+      "light": "Chiaro",
+      "dark": "Scuro"
+    },
+    "openDiagnostics": "Apri diagnostica",
+    "sponsor": "Sponsor",
+    "sponsorHint": "Sostieni il progetto",
+    "bridgeName": "Questo bridge",
+    "runtimeRow": "Runtime del bridge",
+    "hostname": "Nome host",
+    "ipAddress": "Indirizzo IP",
+    "upFor": "attivo da {uptime}",
+    "speakersConnected": "{n}/{total} connessi via Bluetooth",
+    "runtime": {
+      "ha_addon": "Componente aggiuntivo di Home Assistant",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Autonomo"
+    }
+  },
+  "status": {
+    "kind": {
+      "audio_link": "Collegamento audio",
+      "ma_account": "Account Music Assistant",
+      "bluetooth": "Connessione Bluetooth"
+    },
+    "hint": {
+      "audio_link": "Il collegamento audio è il flusso tra questo lettore e Music Assistant",
+      "ma_account": "L’account Music Assistant è l’accesso del bridge all’API di Music Assistant",
+      "bluetooth": "La connessione Bluetooth è il collegamento tra il bridge e l’altoparlante"
+    },
+    "audio_link": {
+      "streaming": "In riproduzione",
+      "connected": "Attivo",
+      "foreign": "Altro server",
+      "disconnected": "Inattivo",
+      "unavailable": "Non disponibile"
+    },
+    "ma_account": {
+      "signed_in": "Accesso effettuato",
+      "signed_out": "Accesso non effettuato",
+      "not_configured": "Non configurato"
+    },
+    "bluetooth": {
+      "connected": "Connesso",
+      "connecting": "Connessione in corso",
+      "disconnected": "Disconnesso",
+      "standby": "Standby",
+      "released": "Rilasciato",
+      "disabled": "Disattivato",
+      "not_paired": "Non associato"
+    },
+    "reason": {
+      "reconnecting": "Il bridge si sta riconnettendo",
+      "user": "Rilasciato da te",
+      "auto": "Rilasciato automaticamente dopo ripetuti problemi di connessione",
+      "foreign_server": "Il lettore è su un Music Assistant diverso da quello del bridge",
+      "bluetooth_down": "In attesa della connessione Bluetooth",
+      "standby": "L’altoparlante è in standby",
+      "released": "L’altoparlante è rilasciato",
+      "disabled": "Il lettore è disattivato",
+      "unreachable_or_rejected": "Music Assistant non è raggiungibile o non ha accettato l’accesso"
+    },
+    "bluetoothSummary": "{n}/{total} connessi via Bluetooth",
+    "sectionTitle": "Stati di connessione",
+    "accountRow": "Account Music Assistant",
+    "speakersTitle": "Altoparlanti"
+  },
+  "device": {
+    "status": {
+      "streaming": "In riproduzione",
+      "ready": "Pronto",
+      "connecting": "Connessione in corso",
+      "error": "Errore",
+      "offline": "Offline",
+      "standby": "Standby",
+      "idle": "Inattivo",
+      "degraded": "Problema",
+      "recovering": "Riconnessione…",
+      "transitioning": "Connessione…",
+      "disabled": "Disattivato",
+      "released": "Rilasciato",
+      "output_missing": "Uscita assente",
+      "buffering": "Buffering",
+      "sink_muted": "Audio disattivato dal sistema",
+      "stopping": "Arresto in corso",
+      "reconnecting": "Riconnessione",
+      "autoReleased": "Rilasciato automaticamente",
+      "autoReleasedTitle": "Il bridge ha rilasciato questo altoparlante dopo ripetuti problemi di connessione. Recuperalo per riprovare.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "In standby dalle {time}"
+    },
+    "actions": {
+      "reconnect": "Riconnetti",
+      "disconnect": "Disconnetti",
+      "remove": "Rimuovi",
+      "wake": "Riattiva",
+      "standby": "Standby",
+      "enable": "Attiva",
+      "disable": "Disattiva",
+      "details": "Dettagli",
+      "enableFailed": "Impossibile attivare o disattivare il lettore",
+      "volumeFailed": "Impossibile cambiare il volume di {name}",
+      "muteFailed": "Impossibile disattivare o riattivare l’audio di {name}",
+      "releaseFailed": "Impossibile rilasciare {name}",
+      "claimFailed": "Impossibile recuperare {name}",
+      "forget": "Dimentica l’associazione Bluetooth",
+      "forgetConfirm": "Dimenticare l’associazione Bluetooth? L’altoparlante deve essere associato di nuovo.",
+      "repair": "Associa di nuovo",
+      "claim": "Usa questo bridge come sorgente",
+      "reconnectFailed": "Riconnessione non riuscita",
+      "forgetTitle": "Dimenticare {name}?",
+      "more": "Altre azioni per {name}"
+    },
+    "battery": "Batteria {level}%",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Audio locale",
+      "usb_audio": "Audio USB",
+      "virtual_sink": "Sink virtuale",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "select": "Seleziona {name}",
+    "chips": {
+      "sync": {
+        "label": "Sincronia",
+        "reanchoring": "Risincronizzazione",
+        "errorMs": "{ms} ms",
+        "title": "Riproduzione sincronizzata con il gruppo",
+        "reanchoringTitle": "Risincronizzazione della temporizzazione del flusso",
+        "count": "×{count}",
+        "countTitle": "Risincronizzazioni: {count} in questa sessione · {m5} in 5 min · {m30} in 30 min",
+        "playout": "Riproduzione",
+        "playoutTitle": "Errore di riproduzione misurato all’uscita dell’altoparlante",
+        "settling": "Stabilizzazione",
+        "settlingTitle": "La sincronia si sta stabilizzando; l’errore è mostrato come misurato e conta come stabile entro {s} s al massimo",
+        "jumpsTitle": "Salti di riproduzione: {count} in questa sessione"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "Segnale a {value} Δ dB rispetto all’intervallo di ricezione ideale dell’adattatore",
+        "tier": {
+          "excellent": "Segnale eccellente",
+          "strong": "Segnale forte",
+          "fair": "Segnale discreto",
+          "poor": "Segnale scarso",
+          "bad": "Segnale pessimo",
+          "stale": "Lettura del segnale non aggiornata"
+        },
+        "staleTitle": "L’ultima lettura del segnale ({value} Δ dB) risale a più di 30 s fa"
+      },
+      "group": {
+        "title": "Gruppo Music Assistant {name}",
+        "external": "{n} altri su altri bridge",
+        "openAction": "Apri in Music Assistant"
+      },
+      "adapter": {
+        "title": "Adattatore {name} ({hci}) · {state}",
+        "open": "Apri l’adattatore {name} nella configurazione",
+        "state": {
+          "connected": "Bluetooth connesso",
+          "disconnected": "Bluetooth disconnesso",
+          "reconnecting": "Riconnessione Bluetooth",
+          "released": "Bluetooth rilasciato",
+          "autoReleased": "Bluetooth rilasciato automaticamente dopo problemi di connessione",
+          "disabled": "Altoparlante disattivato"
+        }
+      },
+      "output": {
+        "title": "Uscita audio {name}"
+      },
+      "transfer": {
+        "ready": "Cambio stanza",
+        "notReady": "Non pronto",
+        "readyTitle": "Pronto per cambiare stanza",
+        "notReadyTitle": "Non pronto per cambiare stanza: {reason}",
+        "reasons": {
+          "ready": "pronto",
+          "disabled": "altoparlante disattivato",
+          "bt_management_disabled": "Bluetooth rilasciato",
+          "stopping": "arresto in corso",
+          "reconnecting": "riconnessione in corso",
+          "music_assistant_reconnecting": "Music Assistant in riconnessione",
+          "reanchoring": "risincronizzazione in corso",
+          "output_missing": "uscita assente",
+          "daemon_unavailable": "lettore non in esecuzione",
+          "bluetooth_disconnected": "Bluetooth disconnesso",
+          "music_assistant_disconnected": "Music Assistant disconnesso",
+          "sink_missing": "nessun sink audio"
+        }
+      },
+      "blocked": {
+        "why": "Perché?",
+        "needs": "Richiede: {list}",
+        "openDiagnostics": "Apri diagnostica",
+        "sinkMutedReason": "L’uscita audio è disattivata a livello di sistema, quindi non verrà riprodotto alcun suono. Riattivala dal controllo del volume.",
+        "title": {
+          "sink_muted": "Disattivato dal sistema",
+          "reconnect": "Riconnessione non disponibile",
+          "toggle_bt_management": "Rilascio non disponibile",
+          "play_pause": "Riproduzione non disponibile",
+          "volume": "Volume non disponibile",
+          "queue_control": "Controlli della coda non disponibili"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth gestito da questo bridge",
+          "bluetooth_paired": "Associazione Bluetooth",
+          "reconnect_idle": "Riconnessione da completare",
+          "device_not_stopping": "Arresto del lettore da completare",
+          "sendspin_connected": "Collegamento Sendspin",
+          "audio_sink": "Un sink audio",
+          "ma_connected": "Collegamento a Music Assistant",
+          "ma_player_registered": "Lettore registrato in Music Assistant"
+        },
+        "summary": "Alcuni controlli non sono disponibili"
+      },
+      "backend": {
+        "bluetooth": "Altoparlante Bluetooth",
+        "output": "Uscita audio"
+      },
+      "server": {
+        "title": "Collegamento audio a Music Assistant {where}",
+        "foreign": "Il collegamento audio va a {where} — non al Music Assistant di questo bridge"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 min",
+      "minutes": "{n} min",
+      "hours": "{h} h {m} min"
+    }
+  },
+  "config": {
+    "ma": "Music Assistant",
+    "save": "Salva",
+    "adapterPowered": "Acceso",
+    "adapterOff": "Spento",
+    "noAdapters": "Nessun adattatore rilevato",
+    "passwordMismatch": "Le password non corrispondono",
+    "invalidJson": "JSON non valido"
+  },
+  "diagnostics": {
+    "tabs": {
+      "logs": "Log",
+      "system": "Sistema",
+      "overview": "Panoramica"
+    },
+    "health": {
+      "title": "Salute del bridge",
+      "healthy": "Nella norma",
+      "degraded": "Degradato",
+      "error": "Errore",
+      "unknown": "Sconosciuto",
+      "audio": "Backend audio",
+      "bluetooth": "Controller Bluetooth",
+      "dbus": "D-Bus",
+      "memory": "Memoria",
+      "check": {
+        "ok": "OK",
+        "warning": "Attenzione",
+        "error": "Problema",
+        "unknown": "Sconosciuto"
+      }
+    },
+    "events": {
+      "loadMore": "Carica altri",
+      "empty": "Nessun evento",
+      "emptyDesc": "Non è ancora stato registrato alcun evento."
+    },
+    "recovery": {
+      "title": "Guida al recupero",
+      "runChecks": "Esegui controlli",
+      "noIssues": "Tutto a posto",
+      "noIssuesDesc": "Nessun problema rilevato. Tutti i sistemi funzionano normalmente."
+    },
+    "copy": "Copia",
+    "copied": "Copiato!",
+    "copyFailed": "Copia non riuscita",
+    "downloadCsv": "Scarica CSV",
+    "audioSink": "Sink audio",
+    "codec": "Codec",
+    "sampleRate": "Frequenza di campionamento",
+    "reanchorCount": "Risincronizzazioni",
+    "logs": {
+      "title": "Log dell’applicazione",
+      "logLevel": "Livello di log",
+      "autoScroll": "Scorrimento automatico",
+      "refresh": "Aggiorna",
+      "download": "Scarica",
+      "apply": "Applica",
+      "search": "Cerca nei log…",
+      "showingLines": "Righe visualizzate: {shown} di {total}",
+      "noLogs": "Nessuna voce di log",
+      "loadFailed": "Impossibile caricare i log.",
+      "levelApplied": "Log impostati su {level}",
+      "levelFailed": "Impossibile cambiare il livello di log",
+      "copyLine": "Copia riga"
+    },
+    "timeline": {
+      "title": "Eventi recenti"
+    }
+  },
+  "ma": {
+    "login": {
+      "title": "Connetti a Music Assistant",
+      "step1": "Passaggio 1: indirizzo del server",
+      "step2": "Passaggio 2: accedi con il tuo account Music Assistant",
+      "serverUrl": "URL del server",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Rilevamento automatico",
+      "token": "Token",
+      "submit": "Connetti",
+      "failed": "Connessione non riuscita. Controlla le credenziali.",
+      "username": "Nome utente",
+      "password": "Password",
+      "withHa": "Accedi con Home Assistant",
+      "connected": "Accesso effettuato a Music Assistant all’indirizzo {url}",
+      "useToken": "Usa un token",
+      "maToken": "Token di Music Assistant",
+      "maTokenHint": "Crea un token a lunga durata in Music Assistant → Impostazioni → Profilo, poi incollalo qui.",
+      "tokenSubmit": "Connetti con token",
+      "tokenFailed": "Music Assistant non ha accettato il token.",
+      "noServers": "Nessun server Music Assistant trovato sulla rete. Inserisci il suo indirizzo qui sopra."
+    },
+    "groups": {
+      "members": "membri",
+      "empty": "Nessun gruppo di sincronizzazione",
+      "emptyDesc": "Nessun gruppo di sincronizzazione di Music Assistant trovato. Rileva i gruppi per iniziare.",
+      "discover": "Rileva gruppi",
+      "create": "Crea un gruppo in Music Assistant"
+    },
+    "nowPlaying": {
+      "artwork": "Copertina dell’album",
+      "artworkPreview": "Anteprima copertina",
+      "artworkClose": "Chiudi",
+      "noTrack": "Nessuna riproduzione",
+      "prev": "Brano precedente",
+      "playPause": "Riproduci / Pausa",
+      "next": "Brano successivo",
+      "notPlaying": "Non in riproduzione — ultimo brano"
+    },
+    "autoConnecting": "Connessione a Music Assistant...",
+    "openInMA": "Apri in Music Assistant",
+    "silentAuthFailed": "Connessione automatica non riuscita, accedi manualmente"
+  },
+  "login": {
+    "title": "Accedi",
+    "password": "Password",
+    "passwordPlaceholder": "Inserisci la password",
+    "submit": "Accedi",
+    "failed": "Password non valida. Riprova.",
+    "username": "Nome utente",
+    "code": "Codice di autenticazione",
+    "codePrompt": "Inserisci il codice da {module}",
+    "codeSubmit": "Verifica",
+    "method": {
+      "password": "Password del bridge",
+      "ma": "Account Music Assistant",
+      "ha_via_ma": "Account Home Assistant",
+      "ha": "Account Home Assistant"
+    }
+  },
+  "devices": {
+    "addDevice": "Aggiungi altoparlante",
+    "empty": {
+      "title": "Ancora nessun lettore",
+      "description": "Cerca altoparlanti Bluetooth o aggiungi un lettore manualmente."
+    },
+    "viewGrid": "Vista a griglia",
+    "viewList": "Vista a elenco",
+    "allAdapters": "Tutti gli adattatori",
+    "allGroups": "Tutti i gruppi",
+    "selected": "{count} di {total} selezionati",
+    "noneSelected": "0 selezionati",
+    "selectAll": "Seleziona tutto",
+    "groupVolume": "Volume del gruppo",
+    "muteAll": "Disattiva audio su tutti",
+    "pauseAll": "Metti in pausa tutti",
+    "reconnectAll": "Riconnetti tutti",
+    "list": {
+      "name": "Nome",
+      "status": "Stato",
+      "volume": "Volume",
+      "transport": "Riproduzione",
+      "adapter": "Adattatore",
+      "actions": "Azioni",
+      "expand": "Mostra i dettagli di {name}",
+      "collapse": "Nascondi i dettagli di {name}",
+      "quickActions": "Azioni rapide"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Risparmio energetico",
+        "title": "Attiva il risparmio energetico per {count} di {total} selezionati (il Bluetooth resta connesso)"
+      },
+      "standby": {
+        "label": "Standby",
+        "title": "Disconnetti il Bluetooth su {count} di {total} selezionati per risparmiare la batteria degli altoparlanti",
+        "confirmTitle": "Mettere in standby gli altoparlanti selezionati ({count})?",
+        "confirmMessage": "Il Bluetooth si disconnette e la riproduzione si ferma su: {names}. Riattivali dal loro menu."
+      },
+      "release": {
+        "label": "Rilascia",
+        "title": "Rilascia {count} di {total} selezionati così altri dispositivi possono usarli",
+        "confirmTitle": "Rilasciare gli altoparlanti selezionati ({count})?",
+        "confirmMessage": "Il bridge smette di gestire: {names}. Non si riconnetteranno finché non li recuperi."
+      },
+      "failed": "{action} non riuscito per: {names}",
+      "enable": {
+        "label": "Attiva",
+        "title": "Attiva {count} di {total} selezionati (lettori disattivati)"
+      },
+      "remove": {
+        "label": "Rimuovi",
+        "title": "Rimuovi {count} di {total} selezionati (lettori disattivati)",
+        "confirmTitle": "Rimuovere i lettori selezionati ({count})?",
+        "confirmMessage": "I loro lettori spariscono da Music Assistant e le associazioni Bluetooth vengono rimosse: {names}."
+      }
+    },
+    "sort": {
+      "label": "Ordina per",
+      "activity": "Attività",
+      "name": "Nome",
+      "status": "Stato"
+    },
+    "backendFilter": {
+      "label": "Tipo di lettore",
+      "all": "Tutti i lettori",
+      "bluetooth": "Altoparlanti Bluetooth",
+      "output": "Uscite audio"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "overview": "Panoramica",
+      "config": "Impostazioni",
+      "timing": "Temporizzazione",
+      "history": "Cronologia"
+    },
+    "status": {
+      "playerState": "Stato",
+      "audioSink": "Sink audio",
+      "codec": "Codec",
+      "reportedDelay": "Latenza dichiarata",
+      "reportedDelayHint": "Latenza che l’altoparlante dichiara via Bluetooth (A2DP Delay Reporting). Indicativa: dichiarata dall’altoparlante, non misurata.",
+      "sampleRate": "Frequenza di campionamento"
+    },
+    "config": {
+      "name": "Nome",
+      "mac": "Indirizzo MAC",
+      "adapter": "Adattatore",
+      "port": "Porta di ascolto",
+      "delay": "Compensazione della latenza dell’altoparlante",
+      "enabled": "Attivo",
+      "save": "Salva",
+      "saveFailed": "Impossibile salvare la configurazione",
+      "enabledHelp": "Un altoparlante disattivato mantiene le impostazioni ma non ottiene alcun lettore.",
+      "playoutSync": "Sincronia di riproduzione",
+      "playoutSyncHelp": "Disattivala per far funzionare questo altoparlante come prima della sincronia di riproduzione: la semplice uscita audio, senza misura della riproduzione.",
+      "notConfigured": "Questo altoparlante non è nella configurazione."
+    },
+    "events": {
+      "empty": "Nessun evento registrato"
+    },
+    "signal": {
+      "port": "porta {port}",
+      "corrections": "{n} correzione | {n} correzioni",
+      "subprocess": "Processo del lettore"
+    },
+    "actions": {
+      "more": "Altre azioni",
+      "reconnect": "Riconnetti",
+      "reconnectDone": "Riconnessione in corso",
+      "repair": "Associa di nuovo",
+      "repairDone": "Nuova associazione in corso",
+      "pairing": "Consenti l’associazione da Music Assistant",
+      "pairingDone": "Music Assistant può associare per un po’",
+      "unmute": "Riattiva l’uscita audio",
+      "unmuteDone": "Uscita audio riattivata",
+      "release": "Attiva il risparmio energetico",
+      "releaseDone": "Risparmio energetico attivo",
+      "resume": "Disattiva il risparmio energetico",
+      "resumeDone": "Risparmio energetico disattivato"
+    },
+    "server": {
+      "title": "Server Music Assistant",
+      "name": "Nome",
+      "host": "Indirizzo",
+      "id": "ID del server",
+      "url": "URL",
+      "foreign": "Il collegamento audio va a Music Assistant su {where}, non al Music Assistant di questo bridge. Un altro server ha preso questo lettore per primo; riconnetti il lettore così il Music Assistant di questo bridge può prenderlo.",
+      "refusedTitle": "Rifiutato",
+      "refusedCount": "{n} tentativi"
+    },
+    "troubleshoot": {
+      "label": "Risoluzione dei problemi"
+    },
+    "overview": {
+      "audioPath": "Percorso audio",
+      "events": "Ultimi eventi",
+      "allEvents": "Tutti gli eventi →"
+    }
+  },
+  "volume": {
+    "mute": "Disattiva audio",
+    "unmute": "Riattiva audio",
+    "label": "Volume di {name}"
+  },
+  "bluetooth": {
+    "scan": {
+      "scanning": "Scansione…",
+      "pair": "Associa",
+      "unknown": "Dispositivo sconosciuto",
+      "noDevices": "Nessun dispositivo trovato",
+      "adapter": "Adattatore",
+      "add": "Aggiungi",
+      "added": "Su questo bridge",
+      "pairFailed": "Associazione non riuscita: {reason}",
+      "quiesce": "Disconnetti temporaneamente gli altri altoparlanti su questo adattatore durante l’associazione",
+      "noIo": "Associa senza richiesta PIN (Just Works) — per altoparlanti che annullano l’associazione",
+      "hfp": "Consenti anche il profilo vivavoce (chiamate)"
+    },
+    "audioOnly": "Solo audio",
+    "release": "Rilascia altoparlante",
+    "reclaim": "Recupera altoparlante",
+    "released": "Rilasciato"
+  },
+  "common": {
+    "loading": "Caricamento...",
+    "error": "Errore",
+    "retry": "Riprova",
+    "cancel": "Annulla",
+    "confirm": "Conferma",
+    "close": "Chiudi",
+    "search": "Cerca",
+    "noResults": "Nessun risultato",
+    "no": "No"
+  },
+  "update": {
+    "title": "Aggiornamento software",
+    "available": "Aggiornamento disponibile",
+    "badge": "Aggiorna a v{version}",
+    "checkNow": "Controlla aggiornamenti",
+    "upToDate": "Stai usando la versione più recente",
+    "versionCompare": "Aggiornamento di versione",
+    "instructions": "Istruzioni per l’aggiornamento",
+    "releaseNotes": "Note di rilascio",
+    "recheck": "Ricontrolla",
+    "viewRelease": "Note di rilascio",
+    "applyNow": "Aggiorna ora",
+    "confirmTitle": "Aggiornare alla v{version}?",
+    "applyStarted": "Aggiornamento avviato — il bridge si riavvierà a breve",
+    "openHa": "Aggiorna in HA",
+    "copyCommand": "Copia comando",
+    "checking": "Ricerca aggiornamenti…",
+    "channel": "Canale",
+    "checkChannel": "Verifica"
+  },
+  "transport": {
+    "play": "Riproduci",
+    "pause": "Pausa",
+    "next": "Brano successivo",
+    "previous": "Brano precedente",
+    "failed": "Comando di riproduzione non riuscito",
+    "position": "Posizione del brano",
+    "shuffleOn": "Riproduzione casuale attiva — disattiva",
+    "shuffleOff": "Riproduzione casuale disattivata — attiva",
+    "repeat": {
+      "off": "Ripetizione disattivata — ripeti tutto",
+      "all": "Ripeti tutto — ripeti uno",
+      "one": "Ripeti uno — disattiva"
+    },
+    "pending": "In attesa della conferma di Music Assistant",
+    "queue": "Controlli della coda"
+  },
+  "adapter": {
+    "turnOff": "Spegni",
+    "turnOn": "Accendi",
+    "confirmOffTitle": "Spegnere l’adattatore {adapter}?",
+    "confirmRebootTitle": "Riavviare l’adattatore {adapter}?",
+    "reboot": "Riavvia",
+    "powerToggled": "Alimentazione dell’adattatore commutata",
+    "powerFailed": "Impossibile commutare l’alimentazione dell’adattatore",
+    "rebooted": "Adattatore riavviato",
+    "rebootFailed": "Impossibile riavviare l’adattatore",
+    "confirmNone": "Nessun altoparlante lo sta usando in questo momento.",
+    "openInHardware": "Apri in Hardware"
+  },
+  "hardware": {
+    "subtitle": "Gli adattatori Bluetooth, i dispositivi associati e l’audio di questo host.",
+    "refresh": "Aggiorna",
+    "stale": "I dati potrebbero non essere aggiornati",
+    "controllers": "Controller Bluetooth",
+    "devices": "Dispositivi Bluetooth",
+    "noControllers": "Nessun controller Bluetooth trovato",
+    "noDevices": "Nessun dispositivo Bluetooth associato",
+    "deviceCount": "Dispositivi: {n}",
+    "powered": "Acceso",
+    "poweredOff": "Spento",
+    "connected": "Connesso",
+    "paired": "Associato",
+    "trusted": "Affidabile",
+    "roleOutput": "Riproduce audio",
+    "roleInput": "Riceve audio",
+    "roleEvidence": "Prova: {evidence}",
+    "battery": "Batteria: {pct}%",
+    "rssi": "{db} dB",
+    "signal": "Segnale: {db} dB",
+    "addAsSpeaker": "Aggiungi come altoparlante",
+    "addSpeakerFailed": "Impossibile aggiungere {name} come altoparlante.",
+    "forgotBond": "Associazione Bluetooth di {name} dimenticata.",
+    "forgetFailed": "Impossibile dimenticare l’associazione: {reason}",
+    "forgetPlayer": "L’associazione è alla base del lettore {player}.",
+    "connect": "Connetti",
+    "disconnect": "Disconnetti",
+    "pairDevice": "Associa un dispositivo",
+    "connectFailed": "Impossibile connettere {name}: {reason}",
+    "disconnectFailed": "Impossibile disconnettere {name}: {reason}",
+    "bondInUseTitle": "Questa associazione è alla base di un lettore",
+    "bondInUse": "Questa associazione è alla base di un lettore; rimuovi quel lettore prima di dimenticare l’associazione.",
+    "openPlayer": "Apri {player} in Home",
+    "btRefused": "BlueZ ha rifiutato ({code})",
+    "btUnavailable": "lo stack Bluetooth non ha risposto ({code})",
+    "player": "Lettore",
+    "controllerId": "Controller",
+    "classOfDevice": "Classe del dispositivo",
+    "area": "Area",
+    "openDetails": "Mostra i dettagli di {name}",
+    "yes": "Sì",
+    "no": "No",
+    "unknown": "Sconosciuto",
+    "unavailable": {
+      "dbusTitle": "Questo host non ha D-Bus",
+      "dbusBody": "D-Bus non ha risposto, quindi il bridge non può chiedere a BlueZ informazioni sui suoi adattatori.",
+      "bluetoothTitle": "Questo host non ha un Bluetooth leggibile",
+      "bluetoothBody": "Il bridge non vede alcun adattatore Bluetooth su questo host.",
+      "hardwareTitle": "Impossibile leggere l’hardware di questo host",
+      "hardwareBody": "Né D-Bus né bluetoothctl hanno risposto.",
+      "nextStep": "Verifica che il bridge possa raggiungere lo stack Bluetooth dell’host, poi ricarica questa pagina.",
+      "reason": "Codice del motivo: {reason}"
+    },
+    "unsupported": {
+      "title": "Questo bridge non può riportare l’hardware",
+      "body": "La sua API non ha la rotta /hardware. Aggiorna il bridge oppure usa le pagine Impostazioni e Diagnostica."
+    },
+    "drawer": {
+      "overview": "Panoramica",
+      "technical": "Dettagli tecnici",
+      "power": "Alimentazione",
+      "present": "Presente",
+      "area": "Area",
+      "classOfDevice": "Classe del dispositivo",
+      "deviceCount": "Dispositivi su questo controller",
+      "roles": "Ruoli del collegamento",
+      "player": "Lettore",
+      "battery": "Batteria",
+      "rssi": "Segnale",
+      "bonded": "Associato",
+      "controllers": "Controller che detengono l’associazione",
+      "synthetic": "ID sintetico (nessuna voce in sysfs)",
+      "observedAt": "Osservato alle",
+      "id": "ID",
+      "mac": "MAC"
+    },
+    "audio": {
+      "title": "Audio",
+      "cards": "Schede audio",
+      "outputs": "Uscite audio",
+      "inputs": "Ingressi audio",
+      "noDevices": "Nessun dispositivo audio",
+      "noDevicesBody": "Il server audio ha risposto e non segnala schede, uscite o ingressi.",
+      "noCards": "Nessuna scheda audio",
+      "noOutputs": "Nessuna uscita audio",
+      "noInputs": "Nessun ingresso audio",
+      "notReportedTitle": "Questo bridge non riporta l’audio",
+      "notReportedBody": "La sua API hardware è precedente alla parte audio. Aggiorna il bridge per vedere schede, uscite e ingressi.",
+      "unavailableTitle": "Impossibile leggere l’audio di questo host",
+      "unavailableBody": "Nessun server compatibile con PulseAudio ha risposto, quindi schede, uscite e ingressi sono sconosciuti.",
+      "captureUnavailableTitle": "L’ingresso del telefono non è disponibile",
+      "captureUnavailableBody": "Il telefono via Bluetooth non può essere catturato su questo host, quindi la sorgente non ha nulla da riprodurre.",
+      "noDriver": "Nessun driver",
+      "driver": "Driver",
+      "activeProfile": "Profilo attivo",
+      "profileCount": "Profili",
+      "portCount": "Porte",
+      "profiles": "Profili",
+      "profileActive": "In uso",
+      "profileAvailable": "Disponibile",
+      "profileUnavailable": "Non disponibile",
+      "profileUnknown": "Disponibilità sconosciuta",
+      "profileSwitch": "Cambia profilo",
+      "profileSelectLabel": "Profilo",
+      "profileConfirmTitle": "Passare {card} al profilo {profile}?",
+      "profileConsequence": "Ogni uscita su {card} può tacere mentre il nuovo profilo si avvia.",
+      "profileConsequenceInUse": "Ogni uscita su {card} può tacere mentre il nuovo profilo si avvia, e lo stesso vale per {players}.",
+      "profileConfirm": "Cambia profilo",
+      "profileSwitched": "{card} ora usa il profilo {profile}.",
+      "detailStale": "Il server audio non ha potuto aggiornare questa lettura; potrebbe non mostrare lo stato più recente.",
+      "profileManagedByConnection": "La connessione Bluetooth sceglie il profilo di questa scheda.",
+      "profileNone": "Nessun profilo",
+      "ports": "Porte",
+      "portActive": "Attiva",
+      "portAvailable": "Disponibile",
+      "portUnavailable": "Non disponibile",
+      "portUnknown": "Disponibilità sconosciuta",
+      "portSwitch": "Cambia porta",
+      "portSelectLabel": "Porta",
+      "portConfirmTitle": "Passare {name} a {port}?",
+      "portConsequence": "{name} può tacere mentre la nuova porta subentra, e lo stesso può accadere a qualsiasi cosa vi sia riprodotta.",
+      "portConsequenceInUse": "{name} può tacere mentre la nuova porta subentra, e lo stesso può accadere a {player}, che vi sta riproducendo.",
+      "portConfirm": "Cambia porta",
+      "portSwitched": "{name} ora usa la porta {port}.",
+      "endpoints": "Endpoint",
+      "output": "Uscita",
+      "input": "Ingresso",
+      "direction": "Direzione",
+      "state": "Stato",
+      "stateRunning": "In esecuzione",
+      "stateIdle": "Inattivo",
+      "stateSuspended": "In pausa",
+      "stateUnavailable": "Non disponibile",
+      "stateUnknown": "Sconosciuto",
+      "activePort": "Porta attiva",
+      "portUnavailableReason": "La sua porta attiva non è disponibile, quindi questo ingresso non sente nulla.",
+      "inputUnavailable": "Questo ingresso non è disponibile; il server audio non ha indicato il motivo.",
+      "outputPortUnavailableReason": "La sua porta attiva non è disponibile, quindi questa uscita non può riprodurre.",
+      "outputUnavailable": "Questa uscita non è disponibile; il server audio non ha indicato il motivo.",
+      "volume": "Volume",
+      "muted": "Audio disattivato",
+      "inUse": "Usato da",
+      "default": "Predefinito",
+      "setDefault": "Imposta come predefinito",
+      "defaultConfirmTitle": "Impostare {name} come uscita predefinita?",
+      "defaultConsequence": "Ogni suono senza un’uscita scelta viene riprodotto su {name}.",
+      "makeDefault": "Imposta come predefinito",
+      "defaultSet": "{name} è ora l’uscita predefinita.",
+      "suspend": "Metti in pausa",
+      "resume": "Riprendi",
+      "suspendConfirmTitle": "Mettere in pausa {name}?",
+      "suspendConsequence": "Tace solo {name}: resta nell’elenco e non riproduce nulla finché non viene ripreso.",
+      "suspended": "{name} messo in pausa.",
+      "commandFailed": "Impossibile modificare {name}: {reason}",
+      "kindMicrophone": "Microfono",
+      "kindLineIn": "Ingresso linea",
+      "kindMonitor": "Monitor",
+      "kindPhone": "Telefono via Bluetooth",
+      "monitorOf": "Monitora",
+      "owner": "Appartiene a",
+      "ownerUnknown": "Non classificato",
+      "ownerCard": "Scheda {card}",
+      "ownerBluetooth": "Dispositivo Bluetooth {mac}",
+      "ownerInternal": "Il bridge stesso",
+      "sampleSpec": "Formato di campionamento",
+      "identifierSerial": "Seriale",
+      "identifierBusPath": "Percorso bus",
+      "identifierVendorId": "ID fornitore",
+      "identifierProductId": "ID prodotto",
+      "identifierAlsaLongCardName": "Nome lungo della scheda ALSA"
+    },
+    "source": {
+      "title": "Sorgente",
+      "stateOff": "Spenta",
+      "stateWaiting": "In attesa di un telefono",
+      "stateStreaming": "In streaming",
+      "stateError": "Errore",
+      "offBody": "La sorgente del telefono è spenta. Attivala qui per offrire il telefono a Music Assistant.",
+      "phone": "Telefono",
+      "start": "Avvia sorgente",
+      "stop": "Ferma sorgente",
+      "stopConfirmTitle": "Fermare la sorgente?",
+      "stopConsequence": "Questi altoparlanti tornano a Music Assistant: {players}.",
+      "stopped": "Sorgente fermata.",
+      "pair": "Associa un telefono",
+      "stopPairing": "Interrompi associazione",
+      "pairing": "Aperto all’associazione: {time} rimanenti.",
+      "pairingHint": "Associa il telefono ora; se dice che il PIN è errato, prima dimentica questo bridge sul telefono (un’associazione vecchia).",
+      "errorTitle": "La sorgente non è riuscita",
+      "errorCapture": "L’audio del telefono non può essere catturato su questo host.",
+      "errorCaptureNext": "Il bridge ha bisogno dei nodi di cattura PipeWire per il telefono; controlla il backend audio dell’host.",
+      "errorNoAdapter": "Nessun adattatore Bluetooth ha accettato la visibilità.",
+      "errorNoAgent": "Il bridge non è riuscito a registrare un agente di associazione Bluetooth.",
+      "errorBluetoothNext": "Controlla i controller Bluetooth qui sopra, poi prova di nuovo ad associare.",
+      "errorNextStep": "Controlla le impostazioni della sorgente in Impostazioni → Music Assistant, poi avvia di nuovo la sorgente.",
+      "failureTitle": "L’ultimo comando sulla sorgente è stato rifiutato",
+      "failureNextStep": "Controlla la sorgente e riprova.",
+      "commandFailed": "Impossibile modificare la sorgente: {reason}",
+      "capture": "Cattura",
+      "capturePipewire": "Nodo PipeWire",
+      "capturePulse": "Sorgente PulseAudio",
+      "captureUnavailable": "Non disponibile",
+      "node": "Nodo",
+      "noNode": "Nessun nodo di cattura",
+      "subtitle": "Il telefono trasmette al bridge; il bridge lo invia a Music Assistant come sorgente.",
+      "statePairing": "In attesa del codice di associazione",
+      "maTitle": "Music Assistant",
+      "maOff": "La sorgente è spenta. Attivala per offrire il telefono a Music Assistant.",
+      "maError": "La connessione a Music Assistant non è riuscita.",
+      "maConnected": "Connesso. Riproduzione e routing sono gestiti in Music Assistant.",
+      "maReconnecting": "Associato. Riconnessione a Music Assistant…",
+      "maNotPaired": "Non ancora associato. Inserisci il codice qui sotto in Music Assistant.",
+      "maConnectedShort": "connesso",
+      "maPairedShort": "associato",
+      "maUnpairedShort": "non associato",
+      "maCodeLabel": "Codice di associazione",
+      "maCodeHint": "Inserisci questo codice in Music Assistant. Resta valido per {time}.",
+      "maPair": "Associa a Music Assistant",
+      "maForget": "Dimentica associazione",
+      "maForgetConfirmTitle": "Dimenticare l’associazione con Music Assistant?",
+      "maForgetConfirmBody": "Il bridge avrà bisogno di un nuovo codice prima che Music Assistant possa riprodurre di nuovo il telefono.",
+      "maForgetDone": "Associazione con Music Assistant dimenticata",
+      "maRouting": "Riproduci il telefono da Music Assistant; il bridge non lo instrada da solo agli altoparlanti.",
+      "maOpen": "Apri Music Assistant",
+      "maUnreachable": "Music Assistant non è raggiungibile.",
+      "maUnreachableNext": "Verifica che Music Assistant sia in esecuzione e che SENDSPIN_SERVER punti a esso; il bridge continua a riprovare.",
+      "maPairingRequired": "Serve un codice di associazione.",
+      "maRejected": "Music Assistant ha rifiutato il codice di associazione.",
+      "maUnsupported": "Questo Music Assistant non offre una sorgente Sendspin.",
+      "maUnsupportedNext": "Aggiorna Music Assistant alla 2.10 o successiva e attiva il suo provider di sorgenti Sendspin.",
+      "maPairingNext": "Apri una finestra di associazione e inserisci il codice in Music Assistant.",
+      "phoneTitle": "Telefono (Bluetooth)",
+      "phoneIdle": "non in streaming",
+      "phoneNoPhone": "Nessun telefono sta trasmettendo al bridge.",
+      "phoneHint": "Il telefono si associa al bridge via Bluetooth; Music Assistant riceve l’audio catturato.",
+      "phonePaired": "Telefono associato",
+      "phonePairedHint": "L’associazione è salvata; avvia la riproduzione sul telefono e il bridge la catturerà.",
+      "maSettingsHint": "L’associazione e il codice sono nelle Impostazioni.",
+      "maSettingsAction": "Apri le impostazioni di associazione",
+      "maNotPairedWhere": "Non associato. Associa il bridge a Music Assistant nelle Impostazioni.",
+      "phonePairedNeedMa": "Telefono associato. Associa il bridge a Music Assistant per ascoltarlo.",
+      "phonePairedNeedMaAction": "Associa a Music Assistant"
+    }
+  },
+  "kit": {
+    "closeDialog": "Chiudi finestra",
+    "closeDrawer": "Chiudi pannello",
+    "dismissNotification": "Ignora notifica",
+    "removeBadge": "Rimuovi",
+    "signalPath": "Percorso del segnale",
+    "selectAllRows": "Seleziona tutte le righe",
+    "clearSearch": "Cancella ricerca",
+    "loading": "Caricamento"
+  },
+  "sidebar": {
+    "collapse": "Comprimi barra laterale",
+    "expand": "Espandi barra laterale"
+  },
+  "undo": {
+    "label": "Annulla",
+    "handedOver": "{name} rilasciato. Non si riconnetterà finché non lo recuperi.",
+    "disabled": "{name} disattivato.",
+    "standby": "{name} in standby: Bluetooth disconnesso, riproduzione fermata.",
+    "woke": "{name} riattivato.",
+    "enabled": "{name} attivato.",
+    "muted": "Audio disattivato: {name}.",
+    "powerSave": "Risparmio energetico attivo: {name}.",
+    "btConnected": "{name} connesso.",
+    "btDisconnected": "{name} disconnesso.",
+    "audioMuted": "Audio disattivato su {name}.",
+    "audioUnmuted": "Audio riattivato su {name}.",
+    "audioVolume": "Volume impostato: {name}.",
+    "audioResumed": "Riproduzione ripresa: {name}.",
+    "sourceStarted": "Sorgente avviata.",
+    "sourcePairingOpen": "Finestra di associazione aperta: associa il telefono ora.",
+    "sourcePairingClosed": "Finestra di associazione chiusa."
+  },
+  "restart": {
+    "stopping": "Arresto del bridge…",
+    "restarting": "Riavvio del bridge…",
+    "ready": "Bridge riavviato correttamente",
+    "error": "Riavvio non riuscito",
+    "openLogs": "Apri i log",
+    "dismiss": "Ignora",
+    "updating": "Aggiornamento… il bridge si riavvia",
+    "updated": "Aggiornato, il bridge è di nuovo attivo",
+    "updateFailed": "Aggiornamento non riuscito",
+    "errorNext": "Apri i log per capire il motivo, poi riprova.",
+    "updateTimedOut": "L’aggiornamento non è terminato — apri i log",
+    "updateTimedOutNext": "Il bridge non è tornato dopo 3 minuti. Apri i log per vedere dove si è fermato l’aggiornamento; se il bridge è ancora la vecchia versione, prova di nuovo l’aggiornamento."
+  },
+  "bugreport": {
+    "title": "Segnala un bug",
+    "hints": {
+      "min": "Almeno {n} caratteri."
+    },
+    "submitBy": {
+      "github": "Apri una issue su GitHub",
+      "proxy": "Invia segnalazione",
+      "copy": "Copia segnalazione"
+    },
+    "fileReport": "Segnala bug",
+    "fields": {
+      "title": "Titolo della segnalazione",
+      "titlePlaceholder": "Breve descrizione del problema",
+      "description": "Descrizione",
+      "descPlaceholder": "Cosa è successo? Cosa ti aspettavi invece?",
+      "email": "La tua email (per il seguito)"
+    },
+    "errors": {
+      "titleShort": "Il titolo deve contenere almeno 5 caratteri",
+      "descShort": "La descrizione deve contenere almeno 10 caratteri",
+      "emailInvalid": "Inserisci un indirizzo email valido"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "Invia",
+      "copy": "Copia"
+    },
+    "diagnosticsPreview": "Dati di diagnostica",
+    "autoAttached": "allegati automaticamente",
+    "loadingDiagnostics": "Caricamento diagnostica...",
+    "loadFailed": "Impossibile caricare i dati di diagnostica",
+    "submit": "Invia segnalazione",
+    "download": "Scarica",
+    "submitted": "Segnalazione inviata correttamente",
+    "submitFailed": "Invio della segnalazione non riuscito",
+    "copied": "Segnalazione copiata negli appunti",
+    "copyFailed": "Copia negli appunti non riuscita"
+  },
+  "settings": {
+    "title": "Impostazioni",
+    "showAdvanced": "Mostra dettagli tecnici",
+    "unsaved": "Modifiche non salvate",
+    "save": "Salva",
+    "discard": "Scarta",
+    "saved": "Impostazioni salvate",
+    "restartNeeded": "Riavvia il bridge per applicare alcune modifiche",
+    "restartNow": "Riavvia ora",
+    "restartConfirmTitle": "Riavviare il bridge ora?",
+    "units": {
+      "ms": "ms",
+      "s": "s",
+      "min": "min",
+      "h": "h"
+    },
+    "auto": "Automatico",
+    "embedded": {
+      "security": "Accesso effettuato tramite Home Assistant. Accesso e autorizzazioni sono gestiti lì.",
+      "updates": "Gli aggiornamenti arrivano dallo store dei componenti aggiuntivi di Home Assistant."
+    },
+    "sections": {
+      "general": {
+        "title": "Generali",
+        "description": "Nome, fuso orario e log."
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "Connessione al tuo server Music Assistant e modalità di controllo dei lettori."
+      },
+      "audio": {
+        "title": "Audio",
+        "description": "Scelte di buffering e codec per la riproduzione Bluetooth."
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "Adattatori, riconnessione e ripristino."
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Entità in Home Assistant e nomi delle stanze dalle sue aree."
+      },
+      "security": {
+        "title": "Sicurezza",
+        "description": "Accesso, sessioni e token API."
+      },
+      "updates": {
+        "title": "Aggiornamenti",
+        "description": "Come il bridge trova e installa le nuove versioni."
+      },
+      "guidance": {
+        "title": "Suggerimenti",
+        "description": "Quando la dashboard inizia a mostrare suggerimenti di configurazione e recupero."
+      },
+      "backup": {
+        "title": "Backup",
+        "description": "Esporta, importa o modifica il file di configurazione."
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "Nome del bridge",
+        "help": "Mostrato in Music Assistant accanto a ogni lettore. Lascia vuoto per usare il nome host."
+      },
+      "TZ": {
+        "label": "Fuso orario",
+        "help": "Nome IANA, ad esempio Europe/Berlin. Usato per gli orari di log ed eventi."
+      },
+      "WEB_PORT": {
+        "label": "Porta web",
+        "help": "Porta di questa interfaccia web. Se vuota usa la variabile d’ambiente WEB_PORT o 8080. Ha effetto dopo un riavvio."
+      },
+      "LOG_LEVEL": {
+        "label": "Livello di log",
+        "help": "DEBUG scrive molti più dettagli; usalo mentre indaghi su un problema.",
+        "addonHelp": "Nel componente aggiuntivo di Home Assistant, l’opzione log_level del componente (scheda Configurazione) lo imposta a ogni riavvio. Modificala lì per mantenerlo."
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Server Music Assistant",
+        "help": "Nome host o indirizzo IP di Music Assistant, oppure auto per trovarlo sulla rete."
+      },
+      "SENDSPIN_PORT": {
+        "label": "Porta Sendspin",
+        "help": "Porta Sendspin di Music Assistant, normalmente 8927."
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "Porta del primo lettore",
+        "help": "Gli altoparlanti ascoltano su porte consecutive a partire da questa. Se vuota, sceglie automaticamente porte libere."
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "Richiedi associazione",
+        "help": "Music Assistant deve inserire un PIN prima di poter riprodurre su questi altoparlanti."
+      },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "Solo il Music Assistant di questo bridge",
+        "help": "Rifiuta qualsiasi altro Music Assistant che tenti di prendere un altoparlante. Si applica quando il bridge conosce il proprio Music Assistant (un indirizzo del server o l’URL dell’API di Music Assistant)."
+      },
+      "VOLUME_VIA_MA": {
+        "label": "Volume tramite Music Assistant",
+        "help": "Le modifiche al volume passano da Music Assistant, così i suoi cursori restano allineati."
+      },
+      "MUTE_VIA_MA": {
+        "label": "Disattiva audio tramite Music Assistant",
+        "help": "La disattivazione dell’audio passa da Music Assistant, così i suoi lettori mostrano lo stesso stato."
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Aggiornamenti in tempo reale da Music Assistant",
+        "help": "Mantiene una connessione aperta per brano in riproduzione, coda e cambi di gruppo."
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "Rinnova l’accesso automaticamente",
+        "help": "Aggiorna in background l’accesso a Music Assistant quando scade."
+      },
+      "MA_ADDON_SLUG": {
+        "label": "Componente aggiuntivo Music Assistant di un altro repository",
+        "help": "Solo componente aggiuntivo di Home Assistant. Lascia vuoto per il componente aggiuntivo ufficiale di Music Assistant o uno nella cartella locale dei componenti. Per uno di un altro repository, inserisci il suo slug così il bridge può accedere tramite esso."
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "Avvisa degli altoparlanti su altri bridge",
+        "help": "Chiede a Music Assistant se un altro bridge serve già lo stesso altoparlante."
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "Buffer audio",
+        "help": "Valori più alti resistono a host occupati e macchine virtuali; valori più bassi reagiscono più in fretta."
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "Preferisci il codec SBC",
+        "help": "Usa SBC invece di AAC o aptX. Aiuta gli altoparlanti che singhiozzano con altri codec."
+      },
+      "SMOOTH_RESTART": {
+        "label": "Riavvii graduali",
+        "help": "Riconnette il lettore di un altoparlante invece di riavviarlo da zero."
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "Impedisci a PulseAudio di spostare i flussi",
+        "help": "Scarica module-rescue-streams così un altoparlante che si riconnette non prende mai in prestito l’audio di un altro."
+      },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "Compensa la latenza del buffer audio",
+        "help": "Riproduce in orario qualunque sia la latenza di PulseAudio. Disattivato ripristina la temporizzazione precedente, in ritardo di quella latenza."
+      },
+      "PLAYOUT_SYNC": {
+        "label": "Sincronia di riproduzione",
+        "help": "Disattivata mantiene la semplice uscita audio. Misura è sperimentale: misura l’errore di riproduzione all’uscita dell’altoparlante e lo riporta, senza correggerlo. Misura e correggi corregge il posizionamento di ogni avvio tramite il sensore radio; richiede il sensore radio sperimentale e senza di esso si comporta come misura. Ha effetto dopo il riavvio degli altoparlanti.",
+        "options": {
+          "off": "Disattivata",
+          "measure": "Solo misura",
+          "loop": "Misura e correggi"
+        }
+      },
+      "PLAYOUT_DIAG": {
+        "label": "Diagnostica dell’orologio di riproduzione",
+        "help": "Registra anche la frequenza dell’orologio del sink dell’altoparlante nella riga Clock diag minuto per minuto. La riproduzione non cambia."
+      },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "Reimposta le uscite audio all’avvio",
+        "help": "Mette in pausa e riprende ogni uscita audio locale una volta prima che il relativo lettore si avvii. Aiuta un’uscita che parte senza suono."
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "Intervallo di controllo della connessione",
+        "help": "Ogni quanto il bridge verifica che ogni altoparlante sia ancora connesso."
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "Tentativi di riconnessione",
+        "help": "Riconnessioni fallite di fila prima che il bridge smetta di provare. 0 continua a provare."
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "Dettagli tecnici per impostazione predefinita",
+        "help": "Mostra livelli di segnale, contatori di sincronia, ID dei server e impostazioni avanzate nei browser che non hanno scelto. Ogni browser può cambiarlo dal menu delle preferenze."
+      },
+      "RSSI_BADGE": {
+        "label": "Intensità del segnale",
+        "help": "Mostra l’intensità del segnale in tempo reale su ogni altoparlante connesso."
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "Limite dei cicli di riconnessione",
+        "help": "Cicli di connessione/disconnessione entro la finestra che portano il bridge a rilasciare un altoparlante. 0 disattiva questa funzione."
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "Finestra dei cicli di riconnessione",
+        "help": "Intervallo di tempo per contare quei cicli."
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "Recupera un sink audio mancante",
+        "help": "Attivo per impostazione predefinita. Chiede a un altoparlante che è anche una sorgente audio (come un Amazon Echo) di accettare l’audio appena si connette, riporta una scheda audio rimasta sul profilo sorgente a quello sink (ritentando brevemente, perché una connessione appena avviata risponde “Input/output error” finché BlueZ non ha il sink) e, se l’uscita audio continua a non comparire, riconnette l’altoparlante fino a due volte in dieci minuti."
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "Ricarica il modulo Bluetooth di PulseAudio",
+        "help": "Sperimentale. Ultima risorsa quando PulseAudio smette di creare uscite Bluetooth."
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "Reimposta un adattatore bloccato",
+        "help": "Sperimentale. Dopo esauriti i tentativi di riconnessione, spegne e riaccende o reimposta l’adattatore Bluetooth."
+      },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "Sensore radio (altoparlanti SBC)",
+        "help": "Sperimentale, da attivare; richiede il riavvio del bridge. Misura quando l’audio esce davvero via radio. Richiede la sincronia di riproduzione in modalità misura o correzione, un altoparlante Bluetooth SBC e CAP_NET_RAW. Misura in modalità misura; corregge il posizionamento in modalità correzione.",
+        "disabledReason": "Attiva prima la sincronia di riproduzione (modalità misura o correzione)."
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "Connessione a Home Assistant",
+          "help": "MQTT pubblica le entità tramite il tuo broker; Integrazione usa l’integrazione personalizzata Sendspin Bridge.",
+          "options": {
+            "off": "Disattivata",
+            "mqtt": "MQTT",
+            "rest": "Integrazione"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "Broker MQTT",
+            "help": "Nome host o IP, oppure auto per usare il componente aggiuntivo Mosquitto."
+          },
+          "port": {
+            "label": "Porta MQTT",
+            "help": "Di solito 1883, o 8883 con TLS."
+          },
+          "tls": {
+            "label": "Usa TLS",
+            "help": "Crittografa la connessione al broker."
+          },
+          "username": {
+            "label": "Utente MQTT",
+            "help": "Lascia vuoto quando il broker consente client anonimi."
+          },
+          "password": {
+            "label": "Password MQTT",
+            "help": "Salvata sul bridge e mai più mostrata."
+          },
+          "discovery_prefix": {
+            "label": "Prefisso di discovery",
+            "help": "Deve corrispondere al prefisso di discovery MQTT di Home Assistant."
+          },
+          "client_id": {
+            "label": "ID client",
+            "help": "Se vuoto, ne viene derivato uno dal bridge."
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "Annuncia sulla rete",
+            "help": "Consenti a Home Assistant di scoprire il bridge e di proporre l’integrazione."
+          },
+          "supervisor_pair": {
+            "label": "Associa tramite il Supervisor",
+            "help": "Su Home Assistant OS l’integrazione ottiene il token senza copiarlo a mano."
+          },
+          "advertise_host": {
+            "label": "Indirizzo annunciato",
+            "help": "L’indirizzo che Home Assistant usa per raggiungere il bridge. Impostalo quando il bridge sta dietro un reverse proxy o NAT; se vuoto viene rilevato."
+          },
+          "advertise_port": {
+            "label": "Porta annunciata",
+            "help": "0 annuncia la porta web."
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "Nomi delle stanze dalle aree",
+        "help": "Suggerisce nomi di stanza per gli altoparlanti dalle aree di Home Assistant."
+      },
+      "AUTH_ENABLED": {
+        "label": "Richiedi l’accesso",
+        "help": "Chiede una password o un account prima di mostrare questa interfaccia.",
+        "disabledReason": "Imposta prima una password."
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "Durata della sessione",
+        "help": "Quanto dura un accesso."
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "Blocca dopo ripetuti errori",
+        "help": "Blocca l’accesso per un po’ dopo troppe password errate."
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "Tentativi falliti consentiti",
+        "help": "Password errate entro la finestra prima che scatti il blocco."
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "Finestra di conteggio",
+        "help": "Tempo entro cui vengono contati i tentativi falliti."
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "Durata del blocco",
+        "help": "Quanto resta bloccato l’accesso."
+      },
+      "TRUSTED_PROXIES": {
+        "label": "Proxy fidati",
+        "help": "Un indirizzo IP per riga. Solo questi possono comunicare al bridge l’indirizzo reale del client."
+      },
+      "CHECK_UPDATES": {
+        "label": "Controlla aggiornamenti",
+        "help": "Cerca nuove versioni in background."
+      },
+      "UPDATE_CHANNEL": {
+        "label": "Canale di aggiornamento",
+        "help": "Stabile per l’uso quotidiano; le release candidate e le beta arrivano prima e possono rompere qualcosa.",
+        "options": {
+          "stable": "Stabile",
+          "rc": "Release candidate",
+          "beta": "Beta"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "Installa gli aggiornamenti automaticamente",
+        "help": "Installa una nuova versione sul canale scelto non appena viene trovata."
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "Periodo di grazia all’avvio",
+        "help": "Attendi questo tempo dopo l’avvio prima di mostrare i suggerimenti di configurazione."
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "Periodo di grazia per il recupero",
+        "help": "Attendi questo tempo prima di suggerire correzioni per un altoparlante caduto."
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "Accetta un telefono come sorgente",
+        "help": "Un telefono associato al bridge via Bluetooth trasmette al bridge, che offre quell’audio come sorgente Sendspin riproducibile da altri lettori. Funziona con PipeWire e, su Home Assistant OS, con PulseAudio."
+      }
+    },
+    "sectionsNav": "Sezioni",
+    "parts": {
+      "maConnection": {
+        "label": "Account Music Assistant",
+        "help": "Accedi così il bridge può mostrare gruppi e brano in riproduzione e controllare la coda.",
+        "change": "Accedi di nuovo",
+        "signIn": "Accedi"
+      },
+      "sendspinTest": {
+        "label": "Connessione Sendspin",
+        "help": "Verifica che il bridge raggiunga Music Assistant con il server e la porta indicati sopra.",
+        "run": "Verifica",
+        "ok": "OK",
+        "failed": "Non riuscita"
+      },
+      "adapters": {
+        "label": "Adattatori",
+        "help": "Dai agli adattatori un nome che riconosci. La classe dispositivo è un espediente per gli altoparlanti che rifiutano computer sconosciuti; lasciala vuota se non ti serve.",
+        "name": "Nome",
+        "deviceClass": "Classe dispositivo",
+        "deviceClassHelp": "Esadecimale a sei cifre, ad esempio 0x00010c (laptop). Se vuoto mantiene il valore predefinito del sistema."
+      },
+      "ha": {
+        "publisher": "Publisher MQTT",
+        "publisherHelp": "Pubblica il bridge e i suoi altoparlanti come entità di Home Assistant.",
+        "publisherBroker": "Connesso a {broker}.",
+        "mosquitto": "Componente aggiuntivo Mosquitto",
+        "mosquittoMissing": "Home Assistant non ha ancora un broker MQTT. Installa il componente aggiuntivo Mosquitto, poi imposta il broker su auto.",
+        "install": "Installa",
+        "broker": "Broker",
+        "brokerHelp": "Trova il broker automaticamente oppure verifica indirizzo e credenziali qui sotto prima di salvare.",
+        "detect": "Rileva",
+        "test": "Verifica",
+        "detected": "Broker trovato e compilato.",
+        "notDetected": "Nessun broker trovato; inseriscilo a mano.",
+        "testOk": "Il broker ha accettato la connessione ({ms} ms).",
+        "testFailed": "Il broker ha rifiutato la connessione.",
+        "component": "Integrazione Sendspin Bridge",
+        "componentSeen": "Ultimo contatto {when}.",
+        "componentMissing": "Installa l’integrazione da HACS, poi aggiungila in Home Assistant.",
+        "installHacs": "Apri in HACS",
+        "connected": "Connessa",
+        "mdns": "Annuncio di rete",
+        "mdnsHelp": "Home Assistant trova il bridge grazie a questo annuncio.",
+        "announced": "Annunciato",
+        "notAnnounced": "Non annunciato"
+      },
+      "areaMap": {
+        "label": "Stanze per adattatore",
+        "help": "Gli altoparlanti su un adattatore ricevono la sua stanza. L’ID dell’area è l’ultima parte dell’indirizzo dell’area in Home Assistant (Impostazioni → Aree).",
+        "areaId": "ID area",
+        "areaName": "Nome della stanza"
+      },
+      "password": {
+        "label": "Password",
+        "set": "È impostata una password per accedere a questa interfaccia.",
+        "notSet": "Nessuna password. Creane una prima di richiedere l’accesso.",
+        "change": "Cambia",
+        "create": "Crea",
+        "current": "Password attuale",
+        "new": "Nuova password",
+        "confirm": "Ripeti la nuova password",
+        "tooShort": "Almeno 8 caratteri.",
+        "save": "Salva password",
+        "changed": "Password salvata"
+      },
+      "tokens": {
+        "label": "Token API",
+        "help": "Per l’integrazione Home Assistant e i tuoi script: invia come Authorization: Bearer <token>.",
+        "once": "Copia subito questo token. Non verrà più mostrato.",
+        "copy": "Copia",
+        "copied": "Token copiato",
+        "created": "creato {when}",
+        "lastUsed": "ultimo uso {when}",
+        "revoke": "Revoca",
+        "revokeConfirm": "Revocare questo token? Tutto ciò che lo usa smette di funzionare.",
+        "newLabel": "Nome del token",
+        "create": "Crea token"
+      },
+      "updates": {
+        "label": "Versione {version}",
+        "available": "La versione {version} è disponibile.",
+        "upToDate": "Nessuna versione più recente su questo canale.",
+        "check": "Controlla ora",
+        "install": "Aggiorna"
+      },
+      "backup": {
+        "export": "Esporta",
+        "exportHelp": "Scarica la configurazione senza password e token.",
+        "download": "Scarica",
+        "import": "Importa",
+        "importHelp": "Sostituisce la configurazione con un file esportato in precedenza. I segreti già presenti sul bridge vengono mantenuti.",
+        "choose": "Scegli file",
+        "imported": "Configurazione importata",
+        "confirmTitle": "Sostituire la configurazione?",
+        "confirmLabel": "Sostituisci",
+        "raw": "Modifica come JSON",
+        "rawHelp": "Per le chiavi che questa schermata non mostra. Le modifiche si salvano con il pulsante Salva.",
+        "edit": "Modifica",
+        "apply": "Applica"
+      },
+      "latency": {
+        "label": "Preset del buffer",
+        "recommended": "consigliato"
+      },
+      "sourceLink": {
+        "label": "Sorgente telefono",
+        "help": "Associa il telefono via Bluetooth e controlla lo stato di cattura nella pagina Hardware.",
+        "action": "Apri Hardware"
+      },
+      "maPairing": {
+        "label": "Associazione della sorgente telefono",
+        "help": "Music Assistant deve considerare affidabile questo bridge prima di poter riprodurre l’audio del telefono.",
+        "off": "La sorgente del telefono è spenta. Attivala nella pagina Hardware, poi associala a Music Assistant qui.",
+        "offAction": "Apri Hardware",
+        "whereToEnter": "In Music Assistant: Impostazioni → Lettori → questo bridge → Configura → Codice di associazione statico.",
+        "routing": "Riproduzione e routing restano in Music Assistant; il bridge cattura solo il telefono.",
+        "notPaired": "Non ancora associato. Apri una finestra di associazione, poi inserisci il codice in Music Assistant."
+      }
+    },
+    "leaveConfirm": "Hai impostazioni non salvate. Uscire comunque?",
+    "device": {
+      "name": {
+        "label": "Nome",
+        "help": "Mostrato come lettore in Music Assistant."
+      },
+      "backend": {
+        "adapter": {
+          "label": "Adattatore Bluetooth",
+          "help": "L’adattatore che connette questo altoparlante. Automatico usa l’adattatore predefinito."
+        },
+        "sink": {
+          "label": "Uscita audio",
+          "help": "L’uscita audio di questo computer su cui riproduce il lettore. Le uscite usate da un altro lettore non vengono proposte."
+        }
+      },
+      "room_name": {
+        "label": "Stanza",
+        "help": "Mostrata accanto al lettore e proposta a Home Assistant."
+      },
+      "room_id": {
+        "label": "ID area di Home Assistant",
+        "help": "Collega l’altoparlante a un’area in Home Assistant."
+      },
+      "volume_controller": {
+        "label": "Controllo del volume",
+        "help": "PulseAudio cambia il volume di sistema dell’altoparlante; Sendspin ridimensiona invece il flusso audio.",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Flusso Sendspin"
+        }
+      },
+      "listen_port": {
+        "label": "Porta del lettore",
+        "help": "Porta a cui Music Assistant si connette per questo altoparlante. Se vuota ne sceglie una automaticamente."
+      },
+      "idle_mode": {
+        "label": "Quando è inattivo",
+        "help": "Cosa fa il bridge mentre non viene riprodotto nulla.",
+        "options": {
+          "default": "Resta connesso",
+          "power_save": "Risparmio energetico",
+          "auto_disconnect": "Disconnetti",
+          "keep_alive": "Mantieni sveglio l’altoparlante"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "Risparmio energetico dopo",
+        "help": "Attiva il risparmio energetico dopo questo tempo senza suono."
+      },
+      "idle_disconnect_minutes": {
+        "label": "Disconnetti dopo",
+        "help": "Disconnette il Bluetooth dopo questo tempo senza suono. 0 non disconnette mai."
+      },
+      "keep_alive_method": {
+        "label": "Segnale di risveglio",
+        "help": "Un tono inudibile a 2 Hz va bene per la maggior parte degli altoparlanti; il silenzio aiuta quei pochi che reagiscono al tono.",
+        "options": {
+          "infrasound": "Tono inudibile",
+          "silence": "Silenzio",
+          "none": "Niente"
+        }
+      },
+      "keepalive_interval": {
+        "label": "Intervallo del segnale",
+        "help": "Tempo tra una raffica di risveglio e l’altra."
+      },
+      "static_delay_ms": {
+        "label": "Compensazione della latenza dell’altoparlante",
+        "help": "Quanto in ritardo questo altoparlante riproduce il suono. Il bridge invia l’audio con questo anticipo così resta in tempo con il gruppo."
+      },
+      "min_buffer_ms": {
+        "label": "Buffer minimo",
+        "help": "Audio che l’altoparlante tiene in coda durante la riproduzione."
+      },
+      "required_lead_time_ms": {
+        "label": "Tempo di anticipo all’avvio",
+        "help": "Tempo necessario all’altoparlante prima che parta il primo suono."
+      },
+      "allow_hfp_profile": {
+        "label": "Consenti il profilo cuffie (chiamate)",
+        "help": "Disattivato mantiene l’altoparlante su A2DP per la musica e riporta la scheda indietro se l’host ripristina un profilo cuffie. Attivato consente a un’altra app di usare il microfono dell’altoparlante per le chiamate; il suono scende a 8 kHz mono mentre quel profilo è attivo."
+      },
+      "calibration_bed": {
+        "label": "Mantieni sveglio questo altoparlante durante la taratura",
+        "help": "Alcuni amplificatori non riattivano mai l’audio per i brevi clic di calibrazione dopo il silenzio, rendendo inudibile il suono della taratura. Attivato riproduce un rumore soffice solo su questo altoparlante mentre è in corso una sessione di taratura del gruppo; gli altri altoparlanti mantengono i clic puliti."
+      }
+    },
+    "deviceGroups": {
+      "speaker": "Altoparlante",
+      "idle": "Comportamento da inattivo",
+      "sync": "Temporizzazione"
+    },
+    "leave": "Esci senza salvare",
+    "search": "Cerca impostazioni",
+    "nothingFound": "Nessun risultato per “{q}”.",
+    "changed": "Modificata",
+    "loadFailed": "Impossibile caricare le impostazioni.",
+    "retry": "Riprova",
+    "autosave": {
+      "saved": "Salvato",
+      "failed": "Non salvato: {reason}"
+    },
+    "appliesAfterRestart": "Alcune impostazioni qui si applicano dopo un riavvio; il salvataggio ne propone uno quando serve."
+  },
+  "timing": {
+    "suggestion": "Compensazione della latenza consigliata: {value} ms",
+    "applySuggestion": "Applica",
+    "history": {
+      "title": "Temporizzazione recente",
+      "syncError": "Errore di sincronia {ms} ms",
+      "empty": "Nessun campione di temporizzazione; compaiono mentre l’altoparlante riproduce.",
+      "buffer": "Audio in buffer",
+      "error": "Errore di sincronia"
+    },
+    "playout": {
+      "title": "Riproduzione",
+      "yes": "Sì",
+      "no": "No",
+      "settling": "stabilizzazione, {s} s al massimo",
+      "fallback": "La sincronia di riproduzione è tornata alla semplice uscita: {reason}",
+      "unknownReason": "motivo sconosciuto",
+      "rows": {
+        "error": "Errore",
+        "p95": "Errore p95",
+        "slope": "Deriva dell’errore",
+        "corrections": "Correzioni",
+        "jumps": "Salti",
+        "underruns": "Underrun",
+        "paLatency": "Latenza PulseAudio",
+        "hostLatency": "Latenza host",
+        "sinkRate": "Frequenza del sink",
+        "clockSlew": "Deriva dell’orologio",
+        "warm": "Riscaldamento"
+      }
+    },
+    "air": {
+      "title": "Sensore radio",
+      "chip": "aria: {state}, H {h} ms",
+      "chipNoH": "aria: {state}",
+      "states": {
+        "off": "Spento",
+        "unavailable": "Non disponibile",
+        "unsupported_codec": "Codec non supportato",
+        "unsupported_input": "Ingresso non supportato",
+        "no_signal": "Nessun segnale",
+        "acquiring": "Acquisizione",
+        "locked": "Agganciato",
+        "holding": "Mantenimento",
+        "no_lock": "Aggancio perso"
+      },
+      "rows": {
+        "state": "Stato",
+        "host": "Posizionamento host",
+        "air": "Errore aria",
+        "confidence": "Affidabilità",
+        "psr": "Rapporto di picco (PSR)",
+        "lock": "Ultima conferma",
+        "learnedTarget": "Obiettivo aria"
+      },
+      "needsCalibration": "Richiede taratura",
+      "agoSeconds": "{s} s fa",
+      "reasons": {
+        "needs_measure": "Richiede la sincronia di riproduzione in modalità misura o correzione.",
+        "not_bluetooth": "Sono supportati solo gli altoparlanti Bluetooth.",
+        "cpu_budget": "Fermato: il sensore usava troppo tempo di CPU.",
+        "internal_error": "Fermato dopo un errore interno; si riavvia con il prossimo flusso.",
+        "playout_fallback": "La sincronia di riproduzione è tornata alla semplice uscita.",
+        "unsupported_input": "Il formato audio non è supportato (44,1 e 48 kHz, da 16 a 32 bit).",
+        "no_cap_net_raw": "Il monitor Bluetooth non è disponibile (richiede CAP_NET_RAW).",
+        "unsupported_platform": "Questo sistema non ha un monitor HCI Bluetooth (solo Linux).",
+        "monitor_error": "Il monitor Bluetooth non è riuscito.",
+        "sbc_params": "I parametri del flusso SBC non sono supportati.",
+        "sbc_fragmented": "L’altoparlante divide i frame SBC su più pacchetti.",
+        "codec": "L’altoparlante usa {codec}; è supportato solo SBC.",
+        "unknown": "Motivo: {reason}"
+      },
+      "calibration": {
+        "title": "Tarature",
+        "line": "Latenza aria-suono: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "Dimentica",
+        "forgetTitle": "Dimenticare questa taratura?",
+        "forgetConfirm": "{name} viene indicato come non tarato per {codec} {rate} kHz su {adapter} finché la procedura guidata di sincronizzazione non lo misura di nuovo."
+      },
+      "correction": {
+        "target": "Correzione aria: {target}",
+        "calibrated": "tarato ({ms} ms)",
+        "learned": "appreso ({n} avvii)",
+        "noData": "nessun dato (apprendimento: {n} di {need} avvii)",
+        "inactive": "inattivo: non agganciato",
+        "bias": "Bias aria {value} ms",
+        "corrections": "Correzioni aria {n}",
+        "trimEarly": "Ritocco di compensazione {value} ms (obiettivo {ms} ms in anticipo)",
+        "trimLate": "Ritocco di compensazione {value} ms (obiettivo {ms} ms in ritardo)"
+      },
+      "learned": {
+        "title": "Latenze apprese",
+        "line": "Appresa: {latency} ms con {delay} ms di compensazione · {codec} · {adapter} · {starts} avvii",
+        "forget": "Dimentica",
+        "forgetTitle": "Dimenticare questa latenza appresa?",
+        "forgetConfirm": "{name} ricomincia ad apprendere la sua latenza per {codec} {rate} kHz su {adapter}. Anche una taratura per essa viene dimenticata."
+      },
+      "learnedValue": "≈{ms} ms (appresa)"
+    },
+    "details": "Dettagli tecnici"
+  },
+  "system": {
+    "bridge": "Bridge",
+    "uptime": "Tempo di attività",
+    "memory": "Memoria",
+    "platform": "Piattaforma",
+    "python": "Python",
+    "audio": "Server audio",
+    "bluez": "BlueZ",
+    "downloads": "Download",
+    "downloadAction": "Scarica",
+    "download": {
+      "report": {
+        "label": "Report di diagnostica",
+        "help": "Tutto ciò che serve a una segnalazione di bug, con i segreti rimossi."
+      },
+      "logs": {
+        "label": "Log del servizio",
+        "help": "Il log del bridge come testo."
+      },
+      "timeline": {
+        "label": "Cronologia del recupero",
+        "help": "Eventi di avvio e dei dispositivi in CSV."
+      },
+      "config": {
+        "label": "Configurazione",
+        "help": "Senza password e token."
+      }
+    },
+    "players": "Processi dei lettori",
+    "noPlayers": "Nessun processo dei lettori in esecuzione.",
+    "player": "Lettore",
+    "restarts": "Riavvii",
+    "state": "Stato",
+    "running": "In esecuzione",
+    "reconnecting": "Riconnessione",
+    "stopped": "Fermato",
+    "hooks": {
+      "title": "Webhook",
+      "help": "Il bridge invia eventi dei dispositivi e del bridge a questi indirizzi. Durano finché il bridge non si riavvia.",
+      "allEvents": "tutti gli eventi",
+      "counts": "{ok} consegnati, {failed} falliti",
+      "remove": "Rimuovi",
+      "url": "Indirizzo",
+      "categories": "Categorie (facoltative)",
+      "add": "Aggiungi"
+    }
+  },
+  "guidance": {
+    "title": "Cosa richiede attenzione",
+    "done": "Fatto: {action}"
+  },
+  "nav": {
+    "home": "Altoparlanti",
+    "homeShort": "Altoparlanti",
+    "groups": "Gruppi",
+    "groupsShort": "Gruppi",
+    "settings": "Impostazioni",
+    "settingsShort": "Impostazioni",
+    "diagnostics": "Diagnostica",
+    "diagnosticsShort": "Stato",
+    "hardware": "Hardware",
+    "hardwareShort": "Hardware",
+    "sync": "Sincronia di gruppo"
+  },
+  "home": {
+    "connected": "{n} di {total} connessi via Bluetooth",
+    "playing": "{n} in riproduzione",
+    "source": {
+      "title": "Telefono → Music Assistant",
+      "streaming": "In riproduzione dal telefono",
+      "pairing": "Associazione in corso",
+      "waiting": "In attesa del telefono",
+      "off": "Sorgente spenta",
+      "error": "Errore della sorgente",
+      "maConnected": "Music Assistant connesso",
+      "maPaired": "Music Assistant associato, riconnessione",
+      "maUnpaired": "Music Assistant non è associato",
+      "openHardware": "Apri Hardware",
+      "pairAction": "Associa a Music Assistant"
+    },
+    "checklist": {
+      "title": "Primi passi",
+      "progress": "{done} di {total} completati",
+      "speaker": "Aggiungi il tuo primo altoparlante",
+      "speakerAction": "Aggiungi altoparlante",
+      "ma": "Accedi a Music Assistant",
+      "maAction": "Apri impostazioni",
+      "phone": "Attiva la sorgente telefono e associala",
+      "phoneAction": "Apri Hardware",
+      "dismiss": "Nascondi i primi passi"
+    }
+  },
+  "groups": {
+    "via": "Music Assistant su {url}",
+    "connectFirst": "Connetti il bridge a Music Assistant per vedere e controllare i suoi gruppi."
+  },
+  "addSpeaker": {
+    "title": "Aggiungi altoparlante",
+    "findHelp": "Metti l’altoparlante in modalità associazione. Gli altoparlanti vicini compaiono qui sotto.",
+    "scan": "Cerca",
+    "scanAgain": "Cerca di nuovo",
+    "scanHint": "Metti l’altoparlante in modalità associazione, poi premi Cerca.",
+    "looking": "Ricerca degli altoparlanti…",
+    "add": "Aggiungi",
+    "signal": {
+      "success": "Forte",
+      "warning": "Discreto",
+      "error": "Debole",
+      "neutral": "—"
+    },
+    "trouble": "Altoparlante non trovato o associazione non riuscita?",
+    "alreadyPaired": "Scegli un altoparlante già associato",
+    "backToScan": "Torna alla ricerca",
+    "paired": "Associato. Dagli un nome e una stanza.",
+    "roomHint": "Facoltativo. Mostrato accanto al lettore e proposto a Home Assistant.",
+    "addToBridge": "Aggiungi al bridge",
+    "addedTitle": "{name} è sul bridge.",
+    "testHelp": "Riproduci un breve clic per verificare che lo senti.",
+    "waiting": "Connessione dell’audio dell’altoparlante — ci vogliono alcuni secondi.",
+    "testSound": "Riproduci suono di prova",
+    "done": "Fatto",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "Uscita audio"
+    },
+    "audio": {
+      "intro": "Riproduci su un’uscita audio di questo computer, come un DAC USB, una scheda audio o l’HDMI.",
+      "none": "Nessuna uscita audio trovata.",
+      "refresh": "Aggiorna",
+      "inUse": "Già usata da un altro lettore",
+      "named": "Scegli un nome e una stanza per questa uscita.",
+      "looking": "Ricerca delle uscite audio…",
+      "taken": "Un altro lettore usa già questa uscita."
+    },
+    "pairing": "Associazione di {name}…",
+    "errorNext": "Verifica che l’altoparlante sia in modalità associazione e vicino all’adattatore, poi riprova."
+  },
+  "connection": {
+    "lost": "Connessione al bridge persa — riconnessione. Ciò che vedi potrebbe non essere aggiornato.",
+    "reload": "Ricarica"
+  },
+  "shortcuts": {
+    "title": "Scorciatoie da tastiera",
+    "places": "Vai a Altoparlanti, Gruppi, Impostazioni, Diagnostica, Hardware",
+    "add": "Aggiungi un altoparlante",
+    "search": "Cerca in questa pagina",
+    "help": "Mostra questo elenco",
+    "close": "Chiudi una finestra o un menu"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "Connessione",
+      "bridge": "Su questo bridge"
+    },
+    "reconnect": "Riconnetti",
+    "standby": "Metti in standby",
+    "wake": "Riattiva",
+    "claim": "Usa questo bridge come sorgente",
+    "handOver": "Rilascia altoparlante",
+    "takeBack": "Recupera altoparlante",
+    "disable": "Disattiva",
+    "enable": "Attiva",
+    "remove": "Rimuovi altoparlante",
+    "removeTitle": "Rimuovere {name}?",
+    "removeMessage": "Il suo lettore sparisce da Music Assistant e la sua associazione Bluetooth viene rimossa. Per usarlo di nuovo, aggiungilo come nuovo altoparlante.",
+    "settings": "Impostazioni",
+    "repairTitle": "Associare di nuovo {name}?"
+  },
+  "sync": {
+    "open": "Sincronia",
+    "tuneGroup": "Regola l’intero gruppo",
+    "tuneGroupHelp": "Allinea in una volta tutti gli altoparlanti del gruppo Music Assistant di questo lettore.",
+    "backToGroups": "Torna ai gruppi",
+    "tabs": {
+      "group": "Gruppo",
+      "manual": "Manuale",
+      "measure": "Misura"
+    },
+    "members": "Membri",
+    "delay": "{ms} ms",
+    "delayHeading": "Compensazione della latenza (più grande = prima)",
+    "sign": "+ suona prima · − suona dopo",
+    "noMembers": "Questo gruppo non ha membri.",
+    "loadError": "Impossibile leggere i membri del gruppo ({code}).",
+    "restoreFailed": "Impossibile ripristinare il gruppo",
+    "restoreFailedHelp": "La regolazione è stata interrotta da un riavvio, quindi alcuni altoparlanti potrebbero essere ancora disattivati ({code}). Il bridge continua a provare.",
+    "manualIntro": "Riproduci i clic sul gruppo e regola ogni altoparlante a orecchio.",
+    "measureIntro": "Misura ogni altoparlante con un microfono, poi rifinisci a orecchio.",
+    "switchToManual": "Nessun microfono? Regola a orecchio.",
+    "switchToMeasure": "Hai un telefono o un portatile con microfono? Misura invece.",
+    "state": {
+      "idle": "Nessuna regolazione in corso",
+      "created": "Avvio",
+      "measuring": "Misura",
+      "proposed": "Misurato",
+      "applying": "Applicazione dei ritardi",
+      "tuning": "Regolazione a orecchio",
+      "restoring": "Ripristino del gruppo",
+      "done": "Fatto",
+      "cancelled": "Annullata",
+      "failed": "Non riuscita"
+    },
+    "status": {
+      "prepare": "Preparazione del gruppo",
+      "measure": "Misura",
+      "tune": "Regolazione a orecchio",
+      "done": "Fatto",
+      "elsewhere": "Regolazione su un altro dispositivo"
+    },
+    "groupError": "Impossibile aprire questo gruppo ({code}). Verifica che Music Assistant sia raggiungibile e che il gruppo esista ancora.",
+    "origin": {
+      "other": "Non regolabile"
+    },
+    "measuredAgo": "Misurato {age}",
+    "noDelay": "Nessuna latenza dichiarata",
+    "actions": {
+      "title": "Regola",
+      "manual": "Regolazione manuale",
+      "semi": "Misura con un microfono",
+      "manualHelp": "Nessun microfono necessario. Ideale per piccole correzioni che riesci a sentire.",
+      "semiHelp": "Circa un minuto per altoparlante. Senti e regoli i ritardi misurati prima di concludere."
+    },
+    "profiles": {
+      "title": "Profili",
+      "apply": "Applica",
+      "saveCurrent": "Salva attuale come…",
+      "rename": "Rinomina",
+      "delete": "Elimina",
+      "empty": "Nessun profilo. Salva i ritardi attuali per ritrovarli più tardi.",
+      "skipped": "{n} membro saltato | {n} membri saltati",
+      "notInGroup": "Non nel gruppo: {names}",
+      "name": "Nome",
+      "notes": "Note (facoltative)",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "applyTitle": "Applica “{name}”",
+      "confirmApply": "Applica questi ritardi",
+      "member": "Altoparlante",
+      "change": "Attuale → profilo",
+      "noChanges": "Nessuno degli altoparlanti del gruppo è in questo profilo.",
+      "unchanged": "invariato",
+      "applied": "Applicato “{name}”.",
+      "saved": "Salvato “{name}”.",
+      "renamed": "Rinominato in “{name}”.",
+      "deleted": "Eliminato “{name}”.",
+      "deleteTitle": "Eliminare “{name}”?",
+      "deleteMessage": "I ritardi restano come sono; viene rimosso solo il profilo salvato.",
+      "renameLabel": "Nuovo nome per “{name}”",
+      "failed": "Non ha funzionato ({code}).",
+      "kind": {
+        "device": "Agli altoparlanti",
+        "position": "Da una posizione di ascolto"
+      },
+      "playerId": "ID lettore {id}",
+      "nameRequired": "Inserisci un nome."
+    },
+    "listen": {
+      "title": "Ascolta",
+      "play": "Riproduci clic",
+      "stop": "Ferma clic",
+      "solo": "Solo questo altoparlante",
+      "soloHelp": "Scegli un altoparlante per sentirlo da solo (gli altri vengono disattivati), oppure Tutti.",
+      "soloMember": "Solo {name}",
+      "everyone": "Tutti",
+      "ab": "Confronta due",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "Due altoparlanti si alternano ogni quattro secondi.",
+      "idle": "Clic fermati.",
+      "playing": "Clic in riproduzione su ogni altoparlante.",
+      "soloed": "Clic in riproduzione solo su {name}.",
+      "alternating": "Alternanza tra {a} e {b}.",
+      "failed": "Non ha funzionato ({code}).",
+      "needsClicks": "Riproduci i clic per ascoltare gli altoparlanti da soli o confrontarli.",
+      "playHelp": "Riproduce la traccia di clic sul gruppo (3 minuti; riprodurla di nuovo quando si ferma). Sostituisce la coda del gruppo. Ferma clic ferma solo la traccia di clic."
+    },
+    "sound": {
+      "label": "Suono",
+      "clicks": "Clic",
+      "accent": "Clic con accento",
+      "noise": "Rumore",
+      "hint": {
+        "clicks": "Un clic al secondo: sposta i ritardi finché il clic di ogni altoparlante non suona come uno solo.",
+        "accent": "Ogni 4° clic è più forte e più acuto: mostra quando un altoparlante è fuori di centinaia di ms.",
+        "noise": "Per due altoparlanti: mettiti a metà; allineati, il rumore suona al centro, altrimenti suona vuoto e con problemi di fase."
+      }
+    },
+    "manual": {
+      "title": "Compensazione della latenza",
+      "help": "Un valore più grande fa suonare un altoparlante prima. Le modifiche si sentono subito; Salva le mantiene.",
+      "reset": "Ripristina i ritardi iniziali",
+      "resetDone": "I ritardi sono tornati al punto di partenza di questa regolazione.",
+      "minus": "−{n} ms (dopo)",
+      "plus": "+{n} ms (prima)",
+      "valueLabel": "Compensazione della latenza di {name} in ms",
+      "departed": "Ha lasciato il gruppo",
+      "startFailed": "Impossibile avviare la regolazione manuale ({code}).",
+      "busy": "È in corso una misura per questo gruppo. Concludila prima nella scheda Misura.",
+      "saveOnLeave": "Mantenere le modifiche ai ritardi?",
+      "saveOnLeaveHelp": "Hai modificato la compensazione della latenza degli altoparlanti senza salvarla. Mantieni le modifiche oppure ripristina i valori dall’inizio di questa regolazione.",
+      "saveConfirm": "Mantieni modifiche",
+      "saveDecline": "Scarta modifiche",
+      "nudges": "Regola {name}",
+      "writeForbidden": "Music Assistant ha rifiutato di modificare {name}: questo account non ha il permesso di cambiare le impostazioni dei lettori.",
+      "writeFailed": "Impossibile modificare {name} ({code}). Il ritardo mostrato è quello che Music Assistant ha in memoria.",
+      "ended": "Questa regolazione è terminata (timeout o chiusura su un altro dispositivo). I ritardi restano come sono. Premi Avvia clic per regolare di nuovo.",
+      "measured": "Misurato: {ms} ms ({change})",
+      "resetMeasured": "Ripristina al valore misurato",
+      "resetMeasuredMember": "Riporta {name} al ritardo misurato",
+      "endedNotice": "Regolazione manuale terminata: i clic si sono fermati, ogni altoparlante è riattivato e i volumi sono tornati.",
+      "startHelp": "L’avvio interrompe ciò che il gruppo sta riproducendo e riproduce una traccia di clic. Nulla parte finché non premi il pulsante.",
+      "startClicks": "Avvia clic",
+      "volumes": "Volume",
+      "needStart": "Premi Avvia clic per regolare.",
+      "save": "Salva",
+      "saved": "Salvato",
+      "discard": "Scarta modifiche",
+      "unsaved": "Modifiche non salvate",
+      "listenOne": "Ascolta un altoparlante / confronta due",
+      "stillRestoring": "Il gruppo è ancora in fase di ripristino dopo l’ultima regolazione. Riprova tra un momento."
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "Questo browser non può registrare qui. Il microfono richiede HTTPS (o localhost) e un browser aggiornato.",
+        "permission": "Accesso al microfono negato. Consenti il microfono per questa pagina nelle impostazioni del browser e riprova.",
+        "no_microphone": "Nessun microfono trovato su questo dispositivo.",
+        "mic_busy": "Il microfono è in uso da un’altra app o non è stato possibile avviarlo.",
+        "worklet": "Impossibile caricare il modulo di registrazione. Ricarica la pagina e riprova.",
+        "not_open": "Il microfono non è aperto.",
+        "busy": "È già in corso una registrazione.",
+        "interrupted": "L’audio è stato interrotto (la pagina era in background o un’altra app ha preso l’audio). Tocca per continuare; gli altoparlanti interessati vengono misurati di nuovo.",
+        "timeout": "La registrazione non è terminata in tempo.",
+        "mic_lost": "Il microfono si è fermato (scollegato o accesso revocato). Aprilo di nuovo per continuare; gli altoparlanti interessati vengono misurati di nuovo.",
+        "failed": "Registrazione non riuscita."
+      }
+    },
+    "wizard": {
+      "stageOf": "{stage} ({n}/{total}) · {name}",
+      "stages": {
+        "prepare": "Preparazione",
+        "measure": "Misura",
+        "tune": "Regolazione",
+        "done": "Fatto"
+      },
+      "steps": {
+        "prepare": "Dove e come",
+        "clicker": "Ferma la musica, avvia i clic",
+        "volume": "Imposta il volume",
+        "members": "Altoparlante per altoparlante",
+        "tune": "Ascolta e regola",
+        "done": "Fine"
+      },
+      "notice": {
+        "title": "Durante la misura non viene riprodotto nient’altro.",
+        "help": "La traccia di clic parte sul gruppo quando avvii i clic; se il gruppo sta riproducendo, prima lo interrompe. Mentre un altoparlante viene misurato, gli altri sono disattivati. Al termine, ogni altoparlante che il bridge ha disattivato viene riattivato, i volumi tornano come prima e i clic si fermano.",
+        "queue": "La calibrazione sostituisce la coda del gruppo con la traccia di clic; riavvia la tua musica dopo."
+      },
+      "point": {
+        "legend": "Dove misurerai?",
+        "device": "A ogni altoparlante",
+        "deviceHelp": "Tieni il telefono vicino a ciascun altoparlante, uno alla volta. 6 s per altoparlante; allinea i dispositivi tra loro.",
+        "position": "Dalla posizione di ascolto",
+        "positionHelp": "Resta dove ascolti di solito. 12 s per altoparlante; include il tempo che il suono impiega ad arrivarti."
+      },
+      "micPermission": "Il browser chiederà il microfono. Le registrazioni restano in memoria e vengono inviate solo a questo bridge.",
+      "holdStill": "Suggerimento: tieni la stanza silenziosa e il telefono fermo durante la registrazione.",
+      "estimate": "Richiede circa {min} minuti.",
+      "byEar": "Puoi comunque regolare a orecchio:",
+      "start": "Consenti il microfono e avvia",
+      "micDenied": "Impossibile usare il microfono.",
+      "startFailed": "Impossibile avviare la misura ({code}).",
+      "level": {
+        "help": "Il misuratore del microfono dovrebbe saltare a ogni clic.",
+        "meter": "Microfono",
+        "tooQuiet": "Troppo piano: alza il gruppo o avvicinati.",
+        "tooLoud": "Troppo forte: abbassa un po’ il gruppo o allontanati.",
+        "fine": "Il microfono sente i clic.",
+        "value": "{pct} %"
+      },
+      "members": {
+        "help": "Misura ogni altoparlante singolarmente. Puoi ripetere qualsiasi altoparlante.",
+        "order": "L’ordine serve solo per comodità (giro della stanza); non cambia il risultato.",
+        "moveUp": "Sposta {name} su",
+        "moveDown": "Sposta {name} giù",
+        "notMeasured": "Non misurati (non regolabili): {names}",
+        "left": "Registra o salta ogni altoparlante per continuare ({n} rimanenti). | Registra o salta ogni altoparlante per continuare ({n} rimanenti)."
+      },
+      "hint": {
+        "notHeard": "Non sentito: alza {name} o avvicinati, poi Ripeti — oppure Salta.",
+        "unstable": "Instabile: tieni la stanza silenziosa e il telefono fermo, poi Ripeti — oppure Salta.",
+        "reason": {
+          "clipped": "La registrazione è saturata: il telefono era troppo vicino o {name} troppo forte. Allontanalo o abbassa {name}, poi Ripeti.",
+          "quiet": "La registrazione è quasi silenziosa: avvicina il telefono a {name}, poi Ripeti.",
+          "lowSnr": "I clic si sono persi nel rumore della stanza: mantieni la stanza silenziosa o avvicina il telefono a {name}, poi Ripeti.",
+          "noClicks": "Nella registrazione non sono stati trovati clic di {name}: verifica che li riproduca e avvicina il telefono, poi Ripeti.",
+          "tooFewClicks": "Sono stati sentiti troppo pochi clic di {name}: il telefono potrebbe aver perso parte della finestra — Ripeti."
+        }
+      },
+      "holdNear": "Tieni il telefono a 30–50 cm da {name}",
+      "stayPut": "Resta dove sei",
+      "record": "Registra",
+      "recordMember": "Registra {name}",
+      "repeat": "Ripeti",
+      "repeatMember": "Ripeti {name}",
+      "skip": "Salta",
+      "skipMember": "Salta {name}",
+      "soloing": "Riproduzione di {name} da solo…",
+      "recording": "Registrazione di {name}…",
+      "heard": "Sentito",
+      "notHeard": "Non sentito",
+      "unstable": "Instabile",
+      "skipped": "Saltato",
+      "departed": "Ha lasciato il gruppo",
+      "confidence": "{pct} %",
+      "redo": "Registra di nuovo",
+      "result": "{name}: {result}",
+      "restartRound": "L’orologio del microfono è stato interrotto, quindi registra ancora una volta gli altoparlanti contrassegnati “Registra di nuovo”.",
+      "tapToContinue": "Tocca per continuare",
+      "micLost": "Il microfono si è fermato (scollegato o accesso revocato).",
+      "reopen": "Riapri il microfono",
+      "failed": "Non ha funzionato ({code}).",
+      "ended": "La misura è terminata (timeout o chiusura su un altro dispositivo). Gli altoparlanti disattivati vengono riattivati e i suoi clic si sono fermati.",
+      "next": "Avanti",
+      "back": "Indietro",
+      "cancel": "Annulla",
+      "toTune": "Applica i ritardi misurati e ascolta",
+      "memberGone": "{name} ha lasciato il gruppo; la misura prosegue senza di esso.",
+      "computing": "Calcolo dei ritardi…",
+      "proposalFailed": "Impossibile calcolare i ritardi ({code}).",
+      "retry": "Riprova",
+      "applying": "Applicazione dei ritardi misurati…",
+      "applyFailed": "Impossibile applicare i ritardi ({code}).",
+      "capture": {
+        "legend": "Cosa registrerà?",
+        "device": "Il microfono di questo dispositivo",
+        "deviceHelp": "Porta questo dispositivo vicino a ogni altoparlante. Richiede HTTPS (o localhost) per il microfono.",
+        "phone": "Un telefono (scansiona un codice QR)",
+        "phoneHelp": "Apri la pagina di cattura su un telefono; registra tutti gli altoparlanti in una volta e invia la registrazione. Funziona anche con HTTP semplice (con il registratore del telefono).",
+        "usePhone": "Misura invece con un telefono"
+      },
+      "startPhone": "Avvia"
+    },
+    "tune": {
+      "help": "I ritardi misurati vengono applicati e i clic continuano. Ascolta ogni altoparlante da solo o confrontane due, regola a mano qualsiasi ritardo, poi concludi.",
+      "spread": "Differenza massima tra gli altoparlanti: {before} ms misurati → circa {after} ms ora.",
+      "kept": "Non sentiti o saltati, quindi il loro ritardo è invariato: {names}",
+      "ready": "I ritardi misurati sono applicati. Ascolta e regola.",
+      "finish": "Concludi",
+      "finishSave": "Concludi e salva come profilo…",
+      "saveTitle": "Concludi e salva come profilo",
+      "saveConfirm": "Salva e concludi"
+    },
+    "air": {
+      "title": "Latenza Bluetooth misurata",
+      "help": "Quanto tempo impiega ogni altoparlante del bridge dalla ricezione dell’audio via Bluetooth alla riproduzione, misurato dalla registrazione del telefono. Viene confrontato con un riferimento il cui suono è in orario, come un lettore web in cuffia o un’uscita via cavo. Un riferimento con un proprio ritardo (casse del PC, cuffie Bluetooth) rende ogni valore sbagliato di altrettanto. I valori salvati sono usati dal bridge per conto proprio; non sono l’impostazione del ritardo dell’altoparlante.",
+      "reference": "Riferimento",
+      "referencePick": "Scegli un riferimento…",
+      "referenceHint": "Scegli cuffie, un’uscita via cavo o un altro riferimento che riproduce in orario. Diventa anche il riferimento per i ritardi proposti.",
+      "referenceFailed": "Impossibile impostare il riferimento ({code}).",
+      "value": "Latenza Bluetooth misurata: {ms} ms",
+      "hint": "l’altoparlante dichiara {ms} ms",
+      "save": "Salva questa latenza Bluetooth",
+      "saveButton": "Salva",
+      "saveFailed": "Impossibile salvare ({code}).",
+      "outOfRange": "fuori da {min}–{max} ms, impossibile salvare",
+      "reasons": {
+        "not_effective": "Il sensore radio non era attivo per questo altoparlante",
+        "no_reference": "Scegli prima un riferimento",
+        "not_measured": "Questo altoparlante o il riferimento non sono stati sentiti",
+        "not_sbc": "L’altoparlante non riproduce SBC",
+        "air_epoch_changed": "Il suo flusso Bluetooth è ripartito durante il suo turno",
+        "air_delay_changed": "La compensazione della latenza dell’altoparlante è cambiata durante la registrazione.",
+        "no_air_clicks": "I suoi clic non sono stati trovati via radio",
+        "no_written_clicks": "I suoi clic non sono stati trovati in ciò che il bridge ha scritto",
+        "fold_failed": "La misura via radio per questo altoparlante non è stata completata",
+        "no_air_frames": "Durante il suo turno non è stato visto alcun audio Bluetooth da questo altoparlante via radio"
+      },
+      "valueSaved": "Latenza Bluetooth misurata: {ms} ms, salvata"
+    },
+    "cancel": {
+      "title": "Interrompere la misura?",
+      "message": "Le registrazioni finora andranno perse. Gli altoparlanti disattivati dal bridge vengono riattivati, i volumi tornano e i clic si fermano.",
+      "tuneTitle": "Interrompere e ripristinare i ritardi?",
+      "tuneMessage": "I ritardi tornano a com’erano prima della misura. Gli altoparlanti disattivati dal bridge vengono riattivati, i volumi tornano e i clic si fermano.",
+      "confirm": "Interrompi",
+      "keep": "Continua",
+      "done": "Misura annullata. Altoparlanti riattivati, volumi ripristinati, clic fermati.",
+      "resetFailed": "Impossibile ripristinare i ritardi ({code}); la regolazione resta aperta. Riprova."
+    },
+    "reloaded": {
+      "manual": "La regolazione manuale è terminata al ricaricamento della pagina. I ritardi restano come erano.",
+      "measure": "La misura è terminata al ricaricamento della pagina."
+    },
+    "joinManual": {
+      "title": "La regolazione manuale è aperta su un altro dispositivo",
+      "help": "Unisciti per ascoltare e regolare da qui, oppure concludila. Uscire da questa pagina non la termina mai.",
+      "join": "Unisciti"
+    },
+    "readOnly": "Regolazione in corso su un altro dispositivo",
+    "readOnlyHelp": "Questa pagina mostra solo il gruppo finché quella regolazione non termina.",
+    "restoreRetrying": "Impossibile raggiungere Music Assistant ({code}), quindi alcuni altoparlanti potrebbero essere ancora disattivati o riprodurre clic. Il bridge continua a provare.",
+    "proposal": {
+      "name": "Nome del profilo",
+      "nameRequired": "Inserisci un nome.",
+      "defaultName": "Misurato {date}",
+      "warnings": "Avvisi",
+      "clampedWarning": "Alcuni ritardi sono stati limitati a 0–5000 ms; la differenza rimasta è di circa {ms} ms.",
+      "largeWarning": "Un ritardo superiore a 2000 ms richiede che Music Assistant invii l’audio molto in anticipo; gli altoparlanti con buffer piccoli potrebbero saltare.",
+      "forbidden": "Music Assistant ha rifiutato di modificare i ritardi: questo account non può cambiare le impostazioni dei lettori. Imposta questi valori a mano in Music Assistant:",
+      "forbiddenHint": "Oppure riconnetti Music Assistant con un account amministratore nelle impostazioni del bridge e riprova.",
+      "copy": "Copia valori",
+      "copied": "Copiato.",
+      "copyFailed": "Impossibile copiare; seleziona i valori e copiali a mano."
+    },
+    "done": {
+      "restoring": "Ripristino del gruppo…",
+      "restoringHelp": "Riportiamo i volumi, riattiviamo gli altoparlanti e fermiamo i clic. I ritardi restano come li hai lasciati.",
+      "restored": "Gruppo ripristinato",
+      "restoredHelp": "Ogni altoparlante è riattivato, i volumi sono tornati e i clic si sono fermati. I nuovi ritardi restano; riavvia la tua musica in Music Assistant.",
+      "spread": "Differenza massima tra gli altoparlanti: {before} ms → circa {after} ms",
+      "saved": "Salvato come profilo “{name}”.",
+      "saveFailed": "I ritardi sono mantenuti, ma il profilo non è stato salvato ({code}).",
+      "listen": "Ascolto rapido",
+      "listenHelp": "I clic vengono riprodotti su tutto il gruppo per 10 s, poi si fermano.",
+      "listening": "Clic in riproduzione su tutto il gruppo…",
+      "listenFailed": "Impossibile riprodurre i clic ({code}).",
+      "again": "Misura di nuovo",
+      "queue": "La coda del gruppo ora contiene solo la traccia di clic: riavvia la tua musica in Music Assistant."
+    },
+    "endForeign": "Termina quella sessione",
+    "endForeignTitle": "Terminare la regolazione sull’altro dispositivo?",
+    "endForeignMessage": "I suoi clic si fermano e il gruppo viene ripristinato. I ritardi già scritti restano come sono.",
+    "signal": {
+      "restarted": "I clic sono ripartiti: registra di nuovo ogni altoparlante."
+    },
+    "prep": {
+      "failed": "Non ha funzionato ({code}).",
+      "group": {
+        "playing": "In riproduzione",
+        "idle": "Fermato",
+        "paused": "In pausa",
+        "unknown": "Sconosciuto"
+      },
+      "clicker": {
+        "help": "La traccia di clic viene riprodotta su ogni altoparlante del gruppo tramite Music Assistant per 3 minuti. Se si ferma, avviala di nuovo.",
+        "start": "Avvia i clic",
+        "again": "Avvia di nuovo i clic",
+        "playing": "I clic sono in riproduzione.",
+        "stopped": "I clic non sono in riproduzione.",
+        "groupPlaying": "Il gruppo sta riproducendo altro: prima fermalo.",
+        "whyDisabled": "Avvia i clic per proseguire.",
+        "left": "Clic: {time} rimanenti",
+        "helpStop": "Il gruppo sta riproducendo qualcosa. Avviare i clic prima lo interrompe, poi riproduce la traccia di clic su ogni altoparlante del gruppo per 3 minuti.",
+        "groupState": "Gruppo:",
+        "stopAndStart": "Ferma la musica e avvia i clic",
+        "confirmTitle": "Fermare la musica del gruppo?",
+        "confirmMessage": "Ciò che il gruppo sta riproducendo si ferma e la sua coda viene sostituita dalla traccia di clic. Riavvia la tua musica dopo."
+      },
+      "volume": {
+        "help": "Imposta un livello a cui i clic siano chiaramente udibili dove misuri.",
+        "noVolume": "Nessun controllo del volume",
+        "silent": "Silenzioso: alza il volume per misurarlo",
+        "back": "I volumi tornano come erano quando concludi."
+      },
+      "skip": "Salta"
+    },
+    "mute": {
+      "unsupported": "{name} non può essere disattivato, quindi gli altri altoparlanti non possono essere misurati uno alla volta mentre è nel gruppo. Saltali, oppure regola a orecchio in Regolazione manuale.",
+      "unsupportedManual": "{name} non può essere disattivato, quindi gli altri altoparlanti non possono essere ascoltati da soli. Tutti e Solo {name} funzionano comunque."
+    },
+    "ready": {
+      "title": "Prima di misurare",
+      "unmutable": "{name} non può essere disattivato. Finché è nel gruppo, gli altri altoparlanti non possono essere misurati uno alla volta. Puoi comunque misurare {name} stesso, oppure regolare a orecchio in Regolazione manuale.",
+      "unavailable": "{name} non è disponibile in Music Assistant (spento o disconnesso), quindi non può essere misurato.",
+      "silent": "{name} è allo 0 %: non verrà sentito. Alzalo nel passaggio del volume, oppure saltalo.",
+      "muted": "{name} è disattivato in Music Assistant. Il bridge lo lascia disattivato, quindi non verrà sentito: riattivalo, oppure saltalo.",
+      "skip": "Salta {name} durante la misura",
+      "skipped": "{name} verrà saltato (tocca per misurarlo)"
+    },
+    "badge": {
+      "unmutable": "Non disattivabile",
+      "unavailable": "Non disponibile",
+      "silent": "Volume 0 %",
+      "muted": "Disattivato"
+    },
+    "phone": {
+      "help": "Apri la pagina di cattura su un telefono. Il bridge poi riproduce i clic su ogni altoparlante da solo, uno dopo l’altro, mentre il telefono registra una sola volta.",
+      "qr": "Codice QR del link di cattura per il telefono",
+      "scan": "Scansiona con la fotocamera del telefono, oppure apri il link su di esso",
+      "copy": "Copia link",
+      "newLink": "Nuovo link",
+      "linkFailed": "Impossibile creare un link ({code}).",
+      "security": "Il link consente al telefono solo di vedere quale altoparlante riproduce e di inviare la sua registrazione per questa misura. Funziona per {min} minuti e si interrompe quando la misura termina.",
+      "sameNetwork": "Il telefono deve essere sulla stessa rete del bridge.",
+      "step1": "Sul telefono, premi Avvia: registra e gli altoparlanti riproducono uno alla volta.",
+      "step2": "Oppure premi “Riproduci la sequenza” qui mentre il telefono registra.",
+      "step3": "Quando la sequenza è finita, il telefono invia la registrazione; i risultati compaiono qui.",
+      "play": "Riproduci la sequenza ({n})",
+      "measureIt": "Misuralo",
+      "notYet": "Non ancora misurato",
+      "lead": "Avvio: ogni altoparlante resta in silenzio per un momento…",
+      "now": "Ora: {name} da solo ({n}/{total})",
+      "pause": "Pausa: spostati verso l’altoparlante successivo…",
+      "measured": "La registrazione del telefono è stata misurata.",
+      "waitingUpload": "La sequenza è finita: in attesa della registrazione del telefono…",
+      "failed": "La sequenza si è fermata ({code}).",
+      "certificate": "Il telefono avviserà del certificato una volta — accettalo per registrare direttamente nel browser.",
+      "httpFallback": "Senza certificato, usa il link semplice (con il registratore del telefono):",
+      "keepsDelay": "Non misurati, mantengono il ritardo attuale: {names}"
+    },
+    "tuneLink": "Regola con il tuo gruppo →",
+    "noGroupHelp": "{name} non è in un gruppo di sincronizzazione. Per regolarlo insieme ad altri, crea un gruppo di sincronizzazione in Gruppi e aggiungi questo altoparlante.",
+    "noGroupLink": "Apri Gruppi →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "Applica latenza di {value} ms"
+      },
+      "edit_ma_server": {
+        "label": "Modifica il server Music Assistant"
+      },
+      "enable_device": {
+        "label": "Attiva | Attiva {count} altoparlanti"
+      },
+      "open_adapter_settings": {
+        "label": "Apri impostazioni adattatore"
+      },
+      "open_audio_diagnostics": {
+        "label": "Apri diagnostica"
+      },
+      "open_bluetooth_settings": {
+        "label": "Apri impostazioni Bluetooth"
+      },
+      "open_config": {
+        "label": "Apri impostazioni"
+      },
+      "open_devices_settings": {
+        "label": "Apri impostazioni altoparlanti"
+      },
+      "open_diagnostics": {
+        "label": "Apri diagnostica"
+      },
+      "open_ma_settings": {
+        "label": "Apri impostazioni Music Assistant"
+      },
+      "open_output_diagnostics": {
+        "label": "Apri diagnostica"
+      },
+      "open_player_settings": {
+        "label": "Apri impostazioni lettore"
+      },
+      "open_runtime_diagnostics": {
+        "label": "Apri diagnostica"
+      },
+      "prefer_sbc_codec": {
+        "label": "Preferisci il codec SBC"
+      },
+      "recheck_outputs": {
+        "label": "Ricontrolla le uscite audio"
+      },
+      "reclaim_bluetooth": {
+        "label": "Recupera altoparlante | Recupera {count} altoparlanti"
+      },
+      "reconnect_device": {
+        "label": "Riconnetti altoparlante | Riconnetti {count} altoparlanti"
+      },
+      "release_bluetooth": {
+        "label": "Rilascia altoparlante"
+      },
+      "repair_speaker": {
+        "label": "Associa di nuovo l’altoparlante"
+      },
+      "rerun_checks": {
+        "label": "Esegui di nuovo i controlli"
+      },
+      "rerun_preflight": {
+        "label": "Esegui di nuovo il controllo dell’host"
+      },
+      "retry_ma_discovery": {
+        "label": "Trova di nuovo Music Assistant"
+      },
+      "revalidate_ma_link": {
+        "label": "Controlla di nuovo il collegamento a Music Assistant"
+      },
+      "review_buffer_settings": {
+        "label": "Rivedi le impostazioni del buffer"
+      },
+      "review_diagnostics": {
+        "label": "Rivedi la diagnostica"
+      },
+      "review_latency_settings": {
+        "label": "Rivedi le impostazioni della latenza"
+      },
+      "review_pulse_latency": {
+        "label": "Rivedi la latenza audio"
+      },
+      "scan_devices": {
+        "label": "Cerca altoparlanti"
+      },
+      "start_pairing": {
+        "label": "Avvia associazione"
+      },
+      "test_ma_connection": {
+        "label": "Verifica la connessione a Music Assistant"
+      },
+      "tune_latency_compensation": {
+        "label": "Regola la compensazione della latenza"
+      },
+      "unmute_speaker": {
+        "label": "Riattiva audio dell’altoparlante"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "Il collegamento audio a Music Assistant non è connesso."
+      },
+      "ma_disconnected": {
+        "message": "Il bridge non è connesso all’API di Music Assistant."
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant non ha ancora una coda per questo altoparlante."
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant si sta riconnettendo."
+      },
+      "no_sink": {
+        "message": "Nessuna uscita audio configurata."
+      },
+      "not_paired": {
+        "message": "L’altoparlante non è più associato. Mettilo in modalità associazione e associalo di nuovo."
+      },
+      "reconnecting": {
+        "message": "È già in corso una riconnessione."
+      },
+      "released": {
+        "message": "Il Bluetooth è rilasciato dal bridge. Recupera prima l’altoparlante."
+      },
+      "stopping": {
+        "message": "Il lettore si sta fermando."
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "Il sensore radio non è attivo per questo altoparlante (serve un altoparlante Bluetooth)."
+      },
+      "air_not_locked": {
+        "text": "Il sensore radio non si è agganciato al flusso di questo altoparlante da quando è partito."
+      },
+      "air_unavailable": {
+        "text": "Il sensore radio non può funzionare per questo altoparlante (vedi lo stato del sensore radio)."
+      },
+      "cpu_budget": {
+        "text": "Leggere il monitor Bluetooth ha usato più CPU del budget, quindi il sensore radio è spento fino al riavvio del bridge."
+      },
+      "internal_error": {
+        "text": "Il sensore radio ha incontrato un errore interno e si è spento (dettagli nel log)."
+      },
+      "module_suspend_on_idle": {
+        "text": "Il module-suspend-on-idle di PulseAudio è caricato e mette in pausa le uscite inattive."
+      },
+      "monitor_error": {
+        "text": "Il socket del monitor Bluetooth non è riuscito; il bridge continua a riprovare."
+      },
+      "no_cap_net_raw": {
+        "text": "Il bridge non può aprire il socket del monitor Bluetooth: serve la capability NET_RAW (aggiungi NET_RAW a cap_add del container)."
+      },
+      "observed_suspend": {
+        "text": "L’host ha messo in pausa l’uscita audio di questo altoparlante mentre era connesso e inattivo."
+      },
+      "playout_fallback": {
+        "text": "Il motore di riproduzione è tornato al lettore precedente, quindi non c’è una pianificazione da confrontare."
+      },
+      "sink_ambiguous": {
+        "text": "Diverse uscite identiche corrispondono e nessuna è distinguibile."
+      },
+      "sink_in_use": {
+        "text": "Un altro lettore vi sta già riproducendo."
+      },
+      "sink_unplugged": {
+        "text": "È scollegata o è stata rinominata."
+      },
+      "unknown_suspend": {
+        "text": "L’host ha messo in pausa l’uscita audio di questo altoparlante."
+      },
+      "unsupported_input": {
+        "text": "Il formato audio del flusso non è supportato (il sensore radio richiede 44,1 o 48 kHz)."
+      },
+      "unsupported_platform": {
+        "text": "Questo sistema non ha un socket del monitor Bluetooth (solo Linux)."
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber mette in pausa i nodi Bluetooth inattivi (session.suspend-timeout-seconds)."
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "La riproduzione è attiva ma non arriva alcun flusso audio",
+        "title": "Audio bloccato"
+      },
+      "audio-streaming": {
+        "summary": "Il flusso audio è diventato attivo",
+        "title": "Audio in streaming"
+      },
+      "bluetooth-connected": {
+        "summary": "Altoparlante Bluetooth connesso",
+        "title": "Altoparlante connesso"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Altoparlante Bluetooth disconnesso",
+        "title": "Altoparlante disconnesso"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Riconnessione Bluetooth non riuscita",
+        "title": "Riconnessione non riuscita"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Riconnessione Bluetooth riuscita",
+        "title": "Altoparlante riconnesso"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "L’altoparlante è andato in standby dopo {idle_minutes} minuti senza suono",
+        "title": "Standby"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "L’altoparlante si sta riattivando dallo standby",
+        "title": "Riattivazione"
+      },
+      "bt-management-disabled": {
+        "summary": "Il bridge ha rilasciato il Bluetooth di questo altoparlante",
+        "title": "Bluetooth rilasciato"
+      },
+      "bt-management-reclaimed": {
+        "summary": "L’altoparlante si è riconnesso da solo, quindi il bridge ha recuperato il suo Bluetooth",
+        "title": "Bluetooth recuperato"
+      },
+      "daemon-connected": {
+        "summary": "Il lettore si è connesso a Music Assistant",
+        "title": "Collegamento audio attivo"
+      },
+      "daemon-disconnected": {
+        "summary": "Il lettore si è disconnesso da Music Assistant",
+        "title": "Collegamento audio assente"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "L’altoparlante Bluetooth è disconnesso",
+        "title": "Disconnesso"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Il lettore Sendspin non è connesso",
+        "title": "Collegamento audio assente"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "Errore"
+      },
+      "health-foreign_server": {
+        "summary": "Connesso a Music Assistant su {host} {name}, non al Music Assistant di questo bridge",
+        "title": "Un altro Music Assistant"
+      },
+      "health-idle": {
+        "summary": "Inattivo",
+        "title": "Inattivo"
+      },
+      "health-ma_reconnecting": {
+        "summary": "La connessione a Music Assistant viene aggiornata",
+        "title": "Aggiornamento del collegamento a Music Assistant"
+      },
+      "health-output_missing": {
+        "summary": "L’uscita audio è assente",
+        "title": "Uscita audio assente"
+      },
+      "health-playback_without_audio": {
+        "summary": "La riproduzione è attiva ma non arriva alcun flusso audio",
+        "title": "Audio bloccato"
+      },
+      "health-reconnecting": {
+        "summary": "È in corso una riconnessione Bluetooth",
+        "title": "Riconnessione"
+      },
+      "health-released": {
+        "summary": "Il Bluetooth è rilasciato dal bridge",
+        "title": "Rilasciato"
+      },
+      "health-resyncing": {
+        "summary": "L’audio viene risincronizzato",
+        "title": "Risincronizzazione"
+      },
+      "health-sink_muted": {
+        "summary": "L’uscita audio è disattivata nel sistema",
+        "title": "Uscita audio disattivata"
+      },
+      "health-stopping": {
+        "summary": "Il lettore si sta fermando",
+        "title": "Arresto"
+      },
+      "ma-monitor-stale": {
+        "summary": "La connessione a Music Assistant è caduta: {error}",
+        "title": "Collegamento a Music Assistant perso"
+      },
+      "ma-server-refused": {
+        "summary": "Rifiutato Music Assistant su {host}: questo bridge appartiene a {owner}",
+        "title": "Music Assistant rifiutato"
+      },
+      "playback-started": {
+        "summary": "Riproduzione avviata",
+        "title": "Riproduzione avviata"
+      },
+      "playback-stopped": {
+        "summary": "Riproduzione fermata",
+        "title": "Riproduzione fermata"
+      },
+      "reanchoring": {
+        "summary": "La temporizzazione del flusso viene risincronizzata",
+        "title": "Risincronizzazione"
+      },
+      "reconnecting": {
+        "summary": "Riconnessione Bluetooth in corso",
+        "title": "Riconnessione"
+      },
+      "runtime-error-cleared": {
+        "summary": "L’errore è sparito",
+        "title": "Errore risolto"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "Errore"
+      },
+      "sink-lost": {
+        "summary": "L’uscita audio è stata scollegata; il lettore attende su un’uscita segnaposto",
+        "title": "Uscita audio persa"
+      },
+      "sink-muted": {
+        "summary": "L’uscita audio è disattivata nel sistema",
+        "title": "Uscita audio disattivata"
+      },
+      "sink-rematched": {
+        "summary": "L’uscita audio è stata trovata con un nuovo nome: {sink}",
+        "title": "Uscita audio rinominata"
+      },
+      "sink-restored": {
+        "summary": "L’uscita audio è tornata: {sink}",
+        "title": "Uscita audio ripristinata"
+      },
+      "sink-unmuted": {
+        "summary": "L’uscita audio è riattivata",
+        "title": "Uscita audio riattivata"
+      },
+      "startup-config": {
+        "summary": "Caricamento della configurazione",
+        "title": "Configurazione"
+      },
+      "startup-devices": {
+        "summary": "L’elenco degli altoparlanti è pronto",
+        "title": "Altoparlanti"
+      },
+      "startup-failed": {
+        "summary": "Avvio non riuscito: {message}",
+        "title": "Avvio non riuscito"
+      },
+      "startup-idle": {
+        "summary": "Avvio iniziato",
+        "title": "Avvio"
+      },
+      "startup-integrations": {
+        "summary": "Integrazione con Music Assistant inizializzata",
+        "title": "Integrazioni"
+      },
+      "startup-ready": {
+        "summary": "Avvio completato",
+        "title": "Pronto"
+      },
+      "startup-runtime": {
+        "summary": "Configurazione di runtime preparata",
+        "title": "Runtime"
+      },
+      "startup-shutdown": {
+        "summary": "Il bridge si sta arrestando",
+        "title": "Arresto"
+      },
+      "startup-web": {
+        "summary": "L’interfaccia web è pronta",
+        "title": "Interfaccia web"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "Aggiungi il primo altoparlante"
+      },
+      "all_disabled": {
+        "label": "Tutti gli altoparlanti disattivati"
+      },
+      "all_released": {
+        "label": "Tutti gli altoparlanti rilasciati"
+      },
+      "devices_ready": {
+        "label": "{ready}/{total} altoparlanti attivi pronti"
+      },
+      "first_run": {
+        "label": "Primo avvio"
+      },
+      "issues_attention": {
+        "label": "{count} problemi richiedono attenzione"
+      },
+      "no_playable_speaker": {
+        "label": "Nessun altoparlante riproducibile disponibile"
+      },
+      "setup_progress": {
+        "label": "Configurazione {percent}%"
+      },
+      "startup": {
+        "label": "Avvio {percent}%"
+      },
+      "startup_finalizing": {
+        "label": "Avvio 90%"
+      },
+      "waiting_for_setup": {
+        "label": "In attesa della configurazione"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "Questo altoparlante è in modalità correzione ma la correzione aria non è attiva; riproduce come in modalità misura. {cause}",
+        "title": "{device}: la correzione aria non è attiva"
+      },
+      "air_sensor_codec": {
+        "summary": "L’altoparlante trasmette {codec}, e il sensore radio legge solo SBC. Attiva PREFER_SBC_CODEC e riconnetti l’altoparlante. La riproduzione non è interessata.",
+        "title": "{device}: il sensore radio richiede il codec SBC"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "L’altoparlante usa impostazioni SBC non supportate dal sensore radio ({settings}). La riproduzione non è interessata.",
+        "title": "{device}: il sensore radio non può leggere il flusso SBC di questo altoparlante"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} La riproduzione non è interessata. Per nascondere questo avviso, disattiva EXPERIMENTAL_AIR_SENSOR (richiede un riavvio).",
+        "title": "{device}: il sensore radio non è disponibile | Il sensore radio non è disponibile su {count} altoparlanti"
+      },
+      "audio_unavailable": {
+        "summary": "Il bridge non riesce a raggiungere il suo sistema audio in questo momento.",
+        "summary_all_disabled": "Il bridge non riesce a raggiungere il suo sistema audio in questo momento. Ripristina l’accesso audio prima di attivare un altoparlante, altrimenti la riproduzione resta non disponibile.",
+        "summary_no_server": "Nessun server PulseAudio o PipeWire trovato.",
+        "summary_no_server_env": "Nessun server PulseAudio o PipeWire trovato: PULSE_SERVER non è impostato.",
+        "summary_socket_missing": "Il socket audio {socket} è configurato ma non esiste sull’host; nessun server audio lo ha mai creato.",
+        "summary_socket_refused": "Il socket audio {socket} è montato, ma il server audio ha rifiutato la connessione ({error}).",
+        "summary_socket_unreachable": "Il socket audio {socket} è montato, ma il bridge non riesce ad aprirlo ({error}).",
+        "title": "Sistema audio non disponibile"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "Questo altoparlante è stato disattivato dopo ripetuti errori di associazione. Mettilo in modalità associazione e fai clic su Attiva per riprovare.",
+        "summary_error": "{error}",
+        "title": "{device} è stato disattivato automaticamente: mai associato"
+      },
+      "auto_released": {
+        "summary": "Il bridge ha rilasciato il Bluetooth di questo altoparlante dopo ripetuti problemi di connessione. | Recupera {devices} così il bridge li gestisce di nuovo.",
+        "summary_error": "{error}",
+        "title": "{device} è stato rilasciato automaticamente | {count} altoparlanti sono stati rilasciati automaticamente"
+      },
+      "bluetooth_unavailable": {
+        "summary": "Il bridge non ha trovato alcun adattatore Bluetooth. Apri le impostazioni degli adattatori e aggiorna l’elenco.",
+        "summary_all_disabled": "Il bridge non riesce a raggiungere un adattatore Bluetooth in questo momento. Ripristina l’accesso all’adattatore prima di attivare un altoparlante, altrimenti la riproduzione resta non disponibile.",
+        "summary_daemon_down": "Il servizio Bluetooth (bluetoothd) non è in esecuzione sull’host, quindi il bridge non vede alcun adattatore finché non parte.",
+        "title": "Adattatore Bluetooth non disponibile"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} Dopo tale pausa l’altoparlante riavvia il flusso e può spostarsi di decine di millisecondi. Il bridge non modifica mai le impostazioni audio dell’host; per fermarlo, impedisci all’host di sospendere le uscite audio inattive: {docs}",
+        "title": "{device}: l’host mette in pausa l’uscita audio tra i brani"
+      },
+      "config_dir_not_writable": {
+        "summary": "Il processo del bridge (UID {uid}) non può scrivere in {config_dir}. Il salvataggio del token di Music Assistant, le modifiche alla password e le impostazioni degli altoparlanti falliranno tutti. Soluzione: {remediation}",
+        "title": "{config_dir} non è scrivibile dal bridge"
+      },
+      "config_migration_failed": {
+        "summary": "Il bridge è partito senza altoparlanti. config.json è rimasto intatto ed è ancora il vecchio file. Errore: {error}. Invia una segnalazione di bug.",
+        "title": "Impossibile aggiornare la configurazione a questa versione"
+      },
+      "disconnected": {
+        "summary": "Accendi l’altoparlante o riconnettilo. | Accendi o riconnetti {devices}.",
+        "summary_error": "{error}",
+        "title": "{device} è disconnesso | {count} altoparlanti sono disconnessi"
+      },
+      "duplicate_device": {
+        "summary": "Questo altoparlante è registrato anche come '{other_bridge}' in Music Assistant. Usarlo su due bridge causa cicli di riconnessione. Disattivalo su un bridge o ferma l’altro. | Questi altoparlanti sono registrati anche su un altro bridge: {devices}. Disattivali su un bridge o ferma l’altro per evitare cicli di riconnessione.",
+        "title": "{device} potrebbe entrare in conflitto con un altro bridge | {count} altoparlanti potrebbero entrare in conflitto con un altro bridge"
+      },
+      "latency": {
+        "summary": "La regolazione della latenza potrebbe migliorare.",
+        "summary_high_latency": "La compensazione della latenza è impostata, ma la latenza audio globale è ancora alta.",
+        "summary_multi_no_delays": "Ci sono più altoparlanti ma nessuno ha ancora una compensazione della latenza.",
+        "summary_repeated_resyncs": "Sono state viste risincronizzazioni ripetute durante la riproduzione.",
+        "title": "La regolazione della latenza richiede attenzione"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant non è ancora pronto.",
+        "summary_no_credentials": "Mancano i dati di accesso a Music Assistant.",
+        "summary_no_url": "L’indirizzo di Music Assistant non è impostato.",
+        "summary_not_connected": "I dati di accesso a Music Assistant sono salvati, ma il bridge non è connesso.",
+        "title": "Music Assistant richiede attenzione"
+      },
+      "missing_sink": {
+        "summary": "L’altoparlante è connesso, ma la sua uscita audio Bluetooth non è ancora pronta. | Riconnetti o controlla la configurazione audio di {devices}.",
+        "summary_error": "{error}",
+        "title": "{device} è connesso ma non ha un’uscita audio pronta | {count} altoparlanti sono connessi ma non hanno un’uscita audio pronta"
+      },
+      "needs_attention": {
+        "summary": "Rivedi gli eventi recenti e la diagnostica.",
+        "summary_daemon_disconnected": "Il lettore Sendspin non è connesso.",
+        "summary_error": "{error}",
+        "summary_foreign_server": "Connesso a Music Assistant su {host} {name}, non al Music Assistant di questo bridge.",
+        "summary_playback_without_audio": "La riproduzione è attiva ma non arriva alcun flusso audio.",
+        "summary_reconnecting": "È in corso una riconnessione Bluetooth.",
+        "summary_resyncing": "L’audio viene risincronizzato.",
+        "summary_sink_muted": "L’uscita audio è disattivata nel sistema.",
+        "summary_stopping": "Il lettore si sta fermando.",
+        "title": "{device} richiede attenzione"
+      },
+      "never_paired": {
+        "summary": "Questo altoparlante è stato aggiunto al bridge ma non è mai apparso in Bluetooth. Mettilo in modalità associazione e fai clic su Avvia associazione. | Questi altoparlanti sono stati aggiunti ma non sono mai apparsi in Bluetooth: {devices}. Mettili in modalità associazione e avvia l’associazione.",
+        "summary_error": "{error}",
+        "title": "{device} non è mai stato associato | {count} altoparlanti non sono mai stati associati"
+      },
+      "output_missing": {
+        "summary": "L’uscita {sink} non è disponibile. {cause} Ricollega il dispositivo o scegli un’altra uscita nelle impostazioni del lettore. Fino ad allora il lettore resta nei suoi gruppi Music Assistant, in silenzio.",
+        "title": "{device}: l’uscita audio è assente"
+      },
+      "output_muted": {
+        "summary": "L’uscita {sink} è disattivata nel mixer di sistema, quindi non si sente nulla. Il volume di Music Assistant non può riattivarla: riattivala nelle impostazioni audio di sistema. | Lo stesso vale per: {others}.",
+        "title": "{device}: l’uscita audio è disattivata | {count} uscite audio richiedono attenzione"
+      },
+      "output_port_unavailable": {
+        "summary": "La porta attiva {port} di {sink} non segnala alcuna connessione. Controlla il cavo o gli altoparlanti. | Lo stesso vale per: {others}.",
+        "title": "{device}: nulla è collegato all’uscita audio | {count} uscite audio richiedono attenzione"
+      },
+      "output_volume_zero": {
+        "summary": "L’uscita {sink} è allo 0 % nel mixer di sistema. Il volume di Music Assistant non può alzarlo: alzalo nelle impostazioni audio di sistema. | Lo stesso vale per: {others}.",
+        "title": "{device}: il volume dell’uscita audio è 0 % | {count} uscite audio richiedono attenzione"
+      },
+      "pa_socket_missing": {
+        "summary": "Il socket audio {socket} è configurato ma non esiste ancora sull’host; nessun server PipeWire o PulseAudio lo ha creato. È il segno tipico di un host headless senza lingering della sessione utente.",
+        "title": "Server audio irraggiungibile: attiva il lingering utente"
+      },
+      "pa_socket_refused": {
+        "summary": "Il socket audio {socket} è montato, ma il server PipeWire o PulseAudio dell’host ha rifiutato la connessione. È il segno tipico di un host headless senza lingering della sessione utente.",
+        "title": "Server audio irraggiungibile: attiva il lingering utente"
+      },
+      "repair_required": {
+        "summary": "L’altoparlante non è più associato, quindi i tentativi di riconnessione continuano a fallire. Mettilo in modalità associazione e associalo di nuovo. | Questi altoparlanti non sono più associati. Associa di nuovo {devices} dalla modalità associazione.",
+        "summary_error": "{error}",
+        "title": "{device} deve essere associato di nuovo | {count} altoparlanti devono essere associati di nuovo"
+      },
+      "runtime_access": {
+        "summary": "Il bridge non riesce a raggiungere i servizi D-Bus dell’host necessari per il controllo Bluetooth. Apri Diagnostica e controlla mount e privilegi del container.",
+        "summary_all_disabled": "Il bridge non riesce a raggiungere i servizi dell’host necessari in questo momento. Ripristina l’accesso all’host prima di attivare un altoparlante, altrimenti la riproduzione resta non disponibile.",
+        "title": "Il bridge non riesce a raggiungere i servizi dell’host necessari"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} ha inviato il tentativo di connessione e l’altoparlante l’ha rifiutato con 'Limited Resources'. Le soundbar Samsung serie Q filtrano le associazioni in base alla Class of Device dell’iniziatore. Imposta device_class su 0x00010c per {adapter} in Impostazioni, Bluetooth, poi associa di nuovo.",
+        "summary_no_adapter": "L’adattatore Bluetooth ha inviato il tentativo di connessione e l’altoparlante l’ha rifiutato con 'Limited Resources'. Le soundbar Samsung serie Q filtrano le associazioni in base alla Class of Device dell’iniziatore. Imposta device_class su 0x00010c per l’adattatore in Impostazioni, Bluetooth, poi associa di nuovo.",
+        "title": "{device}: associazione rifiutata dal filtro Class of Device dell’altoparlante"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "Il lettore si connette ma viene escluso, o si esclude da solo, a intervalli regolari ({interval} s). Controlla il server e la porta di Music Assistant, poi esegui Verifica connessione.",
+        "title": "{device}: il lettore Sendspin termina ogni {interval} s | {count} altoparlanti: il lettore Sendspin termina a intervalli fissi"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} Verifica che SENDSPIN_PORT nelle impostazioni del bridge corrisponda alla porta Sendspin in Music Assistant.",
+        "summary_error_only": "{error}",
+        "title": "{device} non riesce a raggiungere il server Sendspin"
+      },
+      "sendspin_url_malformed": {
+        "summary": "Modifica il server Music Assistant nelle Impostazioni. Deve essere un semplice nome host o indirizzo IP, senza http://, porta o percorso.",
+        "title": "{device}: l’indirizzo del server Music Assistant non è valido | L’indirizzo del server Music Assistant non è valido"
+      },
+      "setup_audio": {
+        "summary_no_server": "Nessun server PulseAudio o PipeWire trovato.",
+        "summary_no_server_env": "Nessun server PulseAudio o PipeWire trovato: PULSE_SERVER non è impostato.",
+        "summary_no_sinks": "Il server audio è raggiungibile, ma non ha ancora uscite audio.",
+        "summary_socket_missing": "Il socket audio {socket} è configurato ma non esiste sull’host; nessun server audio lo ha mai creato.",
+        "summary_socket_refused": "Il socket audio {socket} è montato, ma il server audio ha rifiutato la connessione ({error}).",
+        "summary_socket_unreachable": "Il socket audio {socket} è montato, ma il bridge non riesce ad aprirlo ({error}).",
+        "title": "Controlla il sistema audio"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "Il servizio Bluetooth (bluetoothd) non è in esecuzione sull’host, quindi il bridge non vede alcun adattatore finché non parte.",
+        "summary_no_controller": "Il bridge non ha trovato alcun adattatore Bluetooth.",
+        "summary_no_paired": "Nessun altoparlante Bluetooth associato è disponibile per il bridge.",
+        "summary_no_paired_disabled": "Nessun altoparlante Bluetooth associato è disponibile, e l’altoparlante salvato è disattivato.",
+        "title": "Controlla l’accesso Bluetooth"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "Nessun altoparlante Bluetooth associato è disponibile per il bridge.",
+        "summary_no_paired_disabled": "Nessun altoparlante Bluetooth associato è disponibile, e l’altoparlante salvato è disattivato.",
+        "title": "Associa o trova un altoparlante"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "Tutti gli altoparlanti configurati sono disattivati in questo momento.",
+        "summary_all_released": "Tutti gli altoparlanti configurati sono rilasciati dal bridge in questo momento.",
+        "summary_all_released_auto": "Il bridge ha rilasciato automaticamente tutti gli altoparlanti configurati dopo errori di connessione.",
+        "title": "Rendi disponibile un altoparlante"
+      },
+      "setup_latency": {
+        "summary_high_latency": "La compensazione della latenza è impostata, ma la latenza audio globale è piuttosto alta.",
+        "summary_multi_no_delays": "Ci sono più altoparlanti ma nessuno ha ancora una compensazione della latenza.",
+        "title": "Rivedi la regolazione della latenza"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Mancano i dati di accesso a Music Assistant.",
+        "summary_no_url": "L’indirizzo di Music Assistant non è impostato.",
+        "summary_not_connected": "I dati di accesso a Music Assistant sono salvati, ma il bridge non è connesso.",
+        "title": "Connetti Music Assistant"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "Il bridge non riesce a raggiungere i servizi D-Bus dell’host necessari per il controllo Bluetooth.",
+        "title": "Controlla l’accesso all’host"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "Alcuni altoparlanti connessi non hanno un’uscita audio Bluetooth pronta.",
+        "summary_none_configured": "Nessun lettore è ancora configurato.",
+        "summary_none_connected_bluetooth": "I lettori sono configurati, ma nessun altoparlante è connesso via Bluetooth in questo momento.",
+        "summary_none_connected_mixed": "I lettori sono configurati, ma nessun altoparlante è connesso via Bluetooth e nessuna uscita audio è presente.",
+        "summary_none_connected_outputs": "I lettori sono configurati, ma nessuna delle loro uscite audio è presente.",
+        "title": "Connetti il tuo primo altoparlante"
+      },
+      "setup_step": {
+        "summary": "La lista di configurazione ha ancora un passo incompleto.",
+        "title": "Completa la configurazione"
+      },
+      "sink_system_muted": {
+        "summary": "L’uscita audio è disattivata. Non viene riprodotto nulla finché non viene riattivata. Può succedere dopo un arresto anomalo o un riavvio.",
+        "summary_error": "{error}",
+        "title": "{device}: l’uscita audio è disattivata nel sistema"
+      },
+      "transport_down": {
+        "summary": "L’altoparlante è connesso, ma il suo lettore Sendspin non è in esecuzione. | Riconnetti {devices} per ripristinare il collegamento audio.",
+        "summary_error": "{error}",
+        "title": "{device} ha perso il collegamento audio | {count} altoparlanti hanno perso il collegamento audio"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "L’altoparlante è già in standby."
+      },
+      "bad_request": {
+        "detail": "La richiesta non era valida."
+      },
+      "bluetooth_busy": {
+        "detail": "Il Bluetooth è occupato con un’altra operazione. Riprova tra un momento."
+      },
+      "conflict": {
+        "detail": "Questo è in conflitto con lo stato attuale."
+      },
+      "forbidden": {
+        "detail": "Non hai il permesso di farlo."
+      },
+      "http_error": {
+        "detail": "La richiesta non è riuscita."
+      },
+      "internal_error": {
+        "detail": "Il bridge ha incontrato un errore interno."
+      },
+      "invalid_credentials": {
+        "detail": "I dati di accesso non sono corretti."
+      },
+      "invalid_mac": {
+        "detail": "L’indirizzo Bluetooth non è valido."
+      },
+      "invalid_request": {
+        "detail": "Alcuni valori non sono validi."
+      },
+      "job_in_progress": {
+        "detail": "La stessa operazione è già in corso."
+      },
+      "login_failed": {
+        "detail": "Accesso non riuscito."
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant non è ancora configurato."
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant non è disponibile."
+      },
+      "ma_unreachable": {
+        "detail": "Il bridge non riesce a raggiungere Music Assistant."
+      },
+      "method_not_allowed": {
+        "detail": "Questa azione non è disponibile qui."
+      },
+      "network_error": {
+        "detail": "Il bridge non è raggiungibile. Controlla la connessione."
+      },
+      "no_bluetooth": {
+        "detail": "Nessun adattatore Bluetooth disponibile."
+      },
+      "not_connected": {
+        "detail": "L’altoparlante non è connesso."
+      },
+      "not_found": {
+        "detail": "Non trovato."
+      },
+      "not_in_standby": {
+        "detail": "L’altoparlante non è in standby."
+      },
+      "not_ready": {
+        "detail": "Non ancora pronto. Riprova tra un momento."
+      },
+      "pairing_disabled": {
+        "detail": "L’associazione è disattivata."
+      },
+      "pairing_failed": {
+        "detail": "Associazione non riuscita."
+      },
+      "payload_too_large": {
+        "detail": "I dati sono troppo grandi."
+      },
+      "scan_in_progress": {
+        "detail": "È già in corso una scansione."
+      },
+      "session_expired": {
+        "detail": "La tua sessione è scaduta. Accedi di nuovo."
+      },
+      "timeout": {
+        "detail": "L’operazione ha impiegato troppo tempo."
+      },
+      "too_many_requests": {
+        "detail": "Troppe richieste. Attendi un momento e riprova."
+      },
+      "unauthorized": {
+        "detail": "Accedi per continuare."
+      },
+      "unavailable": {
+        "detail": "Non disponibile in questo momento."
+      },
+      "unknown_check": {
+        "detail": "Quel controllo non esiste."
+      },
+      "unknown_device": {
+        "detail": "Quell’altoparlante non è noto al bridge."
+      },
+      "unknown_job": {
+        "detail": "Quell’operazione non è nota (potrebbe essere scaduta)."
+      },
+      "upstream_error": {
+        "detail": "Un servizio da cui il bridge dipende ha risposto con un errore."
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "un altro server"
+      },
+      "attempt": {
+        "open": "Tentativo di riconnessione {attempt} in corso.",
+        "with_limit": "Tentativo di riconnessione {attempt}/{max}. Restano {remaining} tentativi prima che il bridge rilasci l’altoparlante."
+      },
+      "list": {
+        "more": "{first}, {second} e altri {count}"
+      },
+      "recovered": {
+        "text": "(recuperato)"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "Avvio del bridge"
+      }
+    }
+  },
+  "consequence": {
+    "stopsPlayback": "La riproduzione si ferma su: {names}.",
+    "disconnects": "Il Bluetooth si disconnette su: {names}.",
+    "leavesMa": "Il lettore sparisce da Music Assistant: {names}.",
+    "unpairs": "L’associazione Bluetooth viene rimossa. Per usarlo di nuovo, aggiungilo come nuovo altoparlante.",
+    "adapterDisconnects": "Ogni altoparlante su di esso si disconnette e la riproduzione si ferma finché non si riconnettono: {names}.",
+    "restartMinute": "La riproduzione si ferma su ogni altoparlante per circa un minuto mentre il bridge si riavvia.",
+    "playingNow": "In riproduzione ora: {names}.",
+    "replacesConfig": "Tutte le impostazioni e gli altoparlanti vengono sostituiti con il contenuto di questo file.",
+    "noUndo": "Non può essere annullato.",
+    "rollback": "Per tornare indietro, installa la versione precedente.",
+    "noReconnect": "Il bridge smette di gestire: {names}. Non si riconnettono finché non li recuperi.",
+    "wakeFromMenu": "Riattivali dal loro menu.",
+    "downloadFirst": "Scarica prima la configurazione attuale",
+    "repairs": "L’associazione Bluetooth viene rimossa e ricreata; l’altoparlante potrebbe dover essere in modalità associazione."
+  },
+  "longOp": {
+    "elapsed": "{seconds}s",
+    "cancel": "Annulla",
+    "cancelling": "Annullamento…",
+    "retry": "Riprova"
+  }
+}

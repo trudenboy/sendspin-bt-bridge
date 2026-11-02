@@ -1,0 +1,2970 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "bugReport": "バグ報告",
+    "docs": "ドキュメント",
+    "github": "GitHub リポジトリ",
+    "help": "ヘルプ",
+    "preferences": "環境設定",
+    "display": "表示",
+    "language": "言語",
+    "theme": "テーマ",
+    "themes": {
+      "auto": "自動",
+      "light": "ライト",
+      "dark": "ダーク"
+    },
+    "openDiagnostics": "診断を開く",
+    "sponsor": "スポンサー",
+    "sponsorHint": "プロジェクトを支援",
+    "bridgeName": "このブリッジ",
+    "runtimeRow": "ブリッジの実行環境",
+    "hostname": "ホスト名",
+    "ipAddress": "IP アドレス",
+    "upFor": "稼働時間 {uptime}",
+    "speakersConnected": "{n}/{total} 台 Bluetooth 接続済み",
+    "runtime": {
+      "ha_addon": "Home Assistant アドオン",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "スタンドアロン"
+    }
+  },
+  "status": {
+    "kind": {
+      "audio_link": "音声リンク",
+      "ma_account": "Music Assistant アカウント",
+      "bluetooth": "Bluetooth 接続"
+    },
+    "hint": {
+      "audio_link": "音声リンクは、このプレーヤーと Music Assistant の間のストリームです",
+      "ma_account": "Music Assistant アカウントは、ブリッジが Music Assistant API にサインインするためのものです",
+      "bluetooth": "Bluetooth 接続は、ブリッジとスピーカーの間のリンクです"
+    },
+    "audio_link": {
+      "streaming": "再生中",
+      "connected": "稼働中",
+      "foreign": "他のサーバー",
+      "disconnected": "停止",
+      "unavailable": "利用不可"
+    },
+    "ma_account": {
+      "signed_in": "サインイン済み",
+      "signed_out": "サインアウト済み",
+      "not_configured": "未設定"
+    },
+    "bluetooth": {
+      "connected": "接続済み",
+      "connecting": "接続中",
+      "disconnected": "切断",
+      "standby": "スタンバイ",
+      "released": "解放済み",
+      "disabled": "無効",
+      "not_paired": "未ペアリング"
+    },
+    "reason": {
+      "reconnecting": "ブリッジが再接続しています",
+      "user": "手動で解放されました",
+      "auto": "接続の問題が繰り返されたため自動的に解放されました",
+      "foreign_server": "プレーヤーは、このブリッジの Music Assistant 以外の Music Assistant に接続されています",
+      "bluetooth_down": "Bluetooth 接続を待っています",
+      "standby": "スピーカーはスタンバイ中です",
+      "released": "スピーカーは解放されています",
+      "disabled": "プレーヤーは無効です",
+      "unreachable_or_rejected": "Music Assistant に接続できないか、サインインが受け付けられませんでした"
+    },
+    "bluetoothSummary": "{n}/{total} 台 Bluetooth 接続済み",
+    "sectionTitle": "接続状態",
+    "accountRow": "Music Assistant アカウント",
+    "speakersTitle": "スピーカー"
+  },
+  "device": {
+    "status": {
+      "streaming": "再生中",
+      "ready": "準備完了",
+      "connecting": "接続中",
+      "error": "エラー",
+      "offline": "オフライン",
+      "standby": "スタンバイ",
+      "idle": "アイドル",
+      "degraded": "問題あり",
+      "recovering": "再接続中…",
+      "transitioning": "接続中…",
+      "disabled": "無効",
+      "released": "解放済み",
+      "output_missing": "出力が見つかりません",
+      "buffering": "バッファリング中",
+      "sink_muted": "システムによりミュート",
+      "stopping": "停止中",
+      "reconnecting": "再接続中",
+      "autoReleased": "自動解放",
+      "autoReleasedTitle": "接続の問題が繰り返されたため、ブリッジがこのスピーカーを解放しました。再試行するには取り戻してください。",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "{time} からスタンバイ中"
+    },
+    "actions": {
+      "reconnect": "再接続",
+      "disconnect": "切断",
+      "remove": "削除",
+      "wake": "復帰",
+      "standby": "スタンバイ",
+      "enable": "有効化",
+      "disable": "無効化",
+      "details": "詳細",
+      "enableFailed": "プレーヤーの有効化または無効化に失敗しました",
+      "volumeFailed": "{name} の音量を変更できませんでした",
+      "muteFailed": "{name} をミュートまたはミュート解除できませんでした",
+      "releaseFailed": "{name} を解放できませんでした",
+      "claimFailed": "{name} を取り戻せませんでした",
+      "forget": "Bluetooth のペアリング情報を削除",
+      "forgetConfirm": "Bluetooth のペアリング情報を削除しますか？スピーカーをもう一度ペアリングする必要があります。",
+      "repair": "再ペアリング",
+      "claim": "このブリッジをソースとして使用",
+      "reconnectFailed": "再接続に失敗しました",
+      "forgetTitle": "{name} のペアリング情報を削除しますか？",
+      "more": "{name} のその他の操作"
+    },
+    "battery": "バッテリー {level}%",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "ローカル音声",
+      "usb_audio": "USB 音声",
+      "virtual_sink": "仮想シンク",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "select": "{name} を選択",
+    "chips": {
+      "sync": {
+        "label": "同期",
+        "reanchoring": "再同期中",
+        "errorMs": "{ms} ms",
+        "title": "グループと同期して再生中",
+        "reanchoringTitle": "ストリームのタイミングを再同期しています",
+        "count": "×{count}",
+        "countTitle": "再同期: 今回のセッション {count} 回 · 5 分間で {m5} 回 · 30 分間で {m30} 回",
+        "playout": "プレイアウト",
+        "playoutTitle": "スピーカー出力で測定されたプレイアウト誤差",
+        "settling": "安定待ち",
+        "settlingTitle": "同期を安定させています。誤差は測定値のまま表示され、最大 {s} 秒で安定とみなされます",
+        "jumpsTitle": "プレイアウトのジャンプ: 今回のセッションで {count} 回"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "アダプターの理想的な受信範囲から {value} Δ dB のシグナル",
+        "tier": {
+          "excellent": "非常に強い電波",
+          "strong": "強い電波",
+          "fair": "普通の電波",
+          "poor": "弱い電波",
+          "bad": "非常に弱い電波",
+          "stale": "電波情報が古い"
+        },
+        "staleTitle": "最後の電波測定（{value} Δ dB）は 30 秒以上前のものです"
+      },
+      "group": {
+        "title": "Music Assistant グループ {name}",
+        "external": "他のブリッジにさらに {n} 台",
+        "openAction": "Music Assistant で開く"
+      },
+      "adapter": {
+        "title": "アダプター {name}（{hci}）· {state}",
+        "open": "設定でアダプター {name} を開く",
+        "state": {
+          "connected": "Bluetooth 接続済み",
+          "disconnected": "Bluetooth 切断",
+          "reconnecting": "Bluetooth 再接続中",
+          "released": "Bluetooth 解放済み",
+          "autoReleased": "接続の問題が発生したため Bluetooth を自動解放しました",
+          "disabled": "スピーカー無効"
+        }
+      },
+      "output": {
+        "title": "音声出力 {name}"
+      },
+      "transfer": {
+        "ready": "ルーム切り替え",
+        "notReady": "準備未完了",
+        "readyTitle": "ルームを切り替えられます",
+        "notReadyTitle": "ルームを切り替えられません: {reason}",
+        "reasons": {
+          "ready": "準備完了",
+          "disabled": "スピーカーが無効",
+          "bt_management_disabled": "Bluetooth 解放済み",
+          "stopping": "停止中",
+          "reconnecting": "再接続中",
+          "music_assistant_reconnecting": "Music Assistant 再接続中",
+          "reanchoring": "再同期中",
+          "output_missing": "出力が見つかりません",
+          "daemon_unavailable": "プレーヤーが実行されていません",
+          "bluetooth_disconnected": "Bluetooth 切断",
+          "music_assistant_disconnected": "Music Assistant 切断",
+          "sink_missing": "音声シンクがありません"
+        }
+      },
+      "blocked": {
+        "why": "理由",
+        "needs": "必要: {list}",
+        "openDiagnostics": "診断を開く",
+        "sinkMutedReason": "音声出力がシステムレベルでミュートされているため、音は再生されません。音量コントロールでミュートを解除してください。",
+        "title": {
+          "sink_muted": "システムによりミュート",
+          "reconnect": "再接続は利用できません",
+          "toggle_bt_management": "解放は利用できません",
+          "play_pause": "再生は利用できません",
+          "volume": "音量調整は利用できません",
+          "queue_control": "キュー操作は利用できません"
+        },
+        "deps": {
+          "bt_management_enabled": "このブリッジが Bluetooth を管理",
+          "bluetooth_paired": "Bluetooth ペアリング",
+          "reconnect_idle": "再接続の完了",
+          "device_not_stopping": "プレーヤーの停止完了",
+          "sendspin_connected": "Sendspin リンク",
+          "audio_sink": "音声シンク",
+          "ma_connected": "Music Assistant リンク",
+          "ma_player_registered": "Music Assistant にプレーヤーを登録"
+        },
+        "summary": "一部の操作は利用できません"
+      },
+      "backend": {
+        "bluetooth": "Bluetooth スピーカー",
+        "output": "音声出力"
+      },
+      "server": {
+        "title": "Music Assistant への音声リンク {where}",
+        "foreign": "音声リンクの接続先は {where} です。このブリッジの Music Assistant ではありません"
+      }
+    },
+    "elapsed": {
+      "underMinute": "1 分未満",
+      "minutes": "{n} 分",
+      "hours": "{h} 時間 {m} 分"
+    }
+  },
+  "config": {
+    "ma": "Music Assistant",
+    "save": "保存",
+    "adapterPowered": "オン",
+    "adapterOff": "オフ",
+    "noAdapters": "アダプターが見つかりません",
+    "passwordMismatch": "パスワードが一致しません",
+    "invalidJson": "JSON が無効です"
+  },
+  "diagnostics": {
+    "tabs": {
+      "logs": "ログ",
+      "system": "システム",
+      "overview": "概要"
+    },
+    "health": {
+      "title": "ブリッジのヘルス",
+      "healthy": "正常",
+      "degraded": "低下",
+      "error": "エラー",
+      "unknown": "不明",
+      "audio": "音声バックエンド",
+      "bluetooth": "Bluetooth コントローラー",
+      "dbus": "D-Bus",
+      "memory": "メモリ",
+      "check": {
+        "ok": "OK",
+        "warning": "注意",
+        "error": "問題",
+        "unknown": "不明"
+      }
+    },
+    "events": {
+      "loadMore": "さらに読み込む",
+      "empty": "イベントなし",
+      "emptyDesc": "まだイベントは記録されていません。"
+    },
+    "recovery": {
+      "title": "復旧ガイダンス",
+      "runChecks": "チェックを実行",
+      "noIssues": "問題なし",
+      "noIssuesDesc": "問題は見つかりませんでした。すべて正常に動作しています。"
+    },
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copyFailed": "コピーに失敗しました",
+    "downloadCsv": "CSV をダウンロード",
+    "audioSink": "音声シンク",
+    "codec": "コーデック",
+    "sampleRate": "サンプルレート",
+    "reanchorCount": "再同期回数",
+    "logs": {
+      "title": "アプリケーションログ",
+      "logLevel": "ログレベル",
+      "autoScroll": "自動スクロール",
+      "refresh": "更新",
+      "download": "ダウンロード",
+      "apply": "適用",
+      "search": "ログを検索…",
+      "showingLines": "{total} 行中 {shown} 行を表示",
+      "noLogs": "ログエントリはありません",
+      "loadFailed": "ログを読み込めませんでした。",
+      "levelApplied": "{level} でログを記録しています",
+      "levelFailed": "ログレベルを変更できませんでした",
+      "copyLine": "行をコピー"
+    },
+    "timeline": {
+      "title": "最近のイベント"
+    }
+  },
+  "ma": {
+    "login": {
+      "title": "Music Assistant に接続",
+      "step1": "ステップ 1: サーバーアドレス",
+      "step2": "ステップ 2: Music Assistant アカウントでサインイン",
+      "serverUrl": "サーバー URL",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "自動検出",
+      "token": "トークン",
+      "submit": "接続",
+      "failed": "接続に失敗しました。認証情報を確認してください。",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "withHa": "Home Assistant でサインイン",
+      "connected": "{url} の Music Assistant にサインインしました",
+      "useToken": "代わりにトークンを使用",
+      "maToken": "Music Assistant トークン",
+      "maTokenHint": "Music Assistant の「設定 → プロフィール」で長期トークンを作成し、ここに貼り付けてください。",
+      "tokenSubmit": "トークンで接続",
+      "tokenFailed": "Music Assistant がトークンを受け付けませんでした。",
+      "noServers": "ネットワーク上に Music Assistant サーバーが見つかりませんでした。上にアドレスを入力してください。"
+    },
+    "groups": {
+      "members": "メンバー",
+      "empty": "同期グループなし",
+      "emptyDesc": "Music Assistant の同期グループが見つかりません。グループを検出して開始してください。",
+      "discover": "グループを検出",
+      "create": "Music Assistant でグループを作成"
+    },
+    "nowPlaying": {
+      "artwork": "アルバムアートワーク",
+      "artworkPreview": "アートワークのプレビュー",
+      "artworkClose": "閉じる",
+      "noTrack": "再生中ではありません",
+      "prev": "前のトラック",
+      "playPause": "再生 / 一時停止",
+      "next": "次のトラック",
+      "notPlaying": "再生中ではありません — 最後に再生した曲"
+    },
+    "autoConnecting": "Music Assistant に接続しています…",
+    "openInMA": "Music Assistant で開く",
+    "silentAuthFailed": "自動接続に失敗しました。手動でログインしてください"
+  },
+  "login": {
+    "title": "サインイン",
+    "password": "パスワード",
+    "passwordPlaceholder": "パスワードを入力",
+    "submit": "サインイン",
+    "failed": "パスワードが正しくありません。もう一度お試しください。",
+    "username": "ユーザー名",
+    "code": "認証コード",
+    "codePrompt": "{module} に表示されたコードを入力",
+    "codeSubmit": "確認",
+    "method": {
+      "password": "ブリッジのパスワード",
+      "ma": "Music Assistant アカウント",
+      "ha_via_ma": "Home Assistant アカウント",
+      "ha": "Home Assistant アカウント"
+    }
+  },
+  "devices": {
+    "addDevice": "スピーカーを追加",
+    "empty": {
+      "title": "プレーヤーはまだありません",
+      "description": "Bluetooth スピーカーをスキャンするか、プレーヤーを手動で追加してください。"
+    },
+    "viewGrid": "グリッド表示",
+    "viewList": "リスト表示",
+    "allAdapters": "すべてのアダプター",
+    "allGroups": "すべてのグループ",
+    "selected": "{total} 台中 {count} 台を選択中",
+    "noneSelected": "0 台選択中",
+    "selectAll": "すべて選択",
+    "groupVolume": "グループ音量",
+    "muteAll": "すべてミュート",
+    "pauseAll": "すべて一時停止",
+    "reconnectAll": "すべて再接続",
+    "list": {
+      "name": "名前",
+      "status": "状態",
+      "volume": "音量",
+      "transport": "再生操作",
+      "adapter": "アダプター",
+      "actions": "操作",
+      "expand": "{name} の詳細を表示",
+      "collapse": "{name} の詳細を隠す",
+      "quickActions": "クイック操作"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "省電力",
+        "title": "選択中の {total} 台中 {count} 台で省電力をオンにします（Bluetooth は接続したまま）"
+      },
+      "standby": {
+        "label": "スタンバイ",
+        "title": "選択中の {total} 台中 {count} 台の Bluetooth を切断して、スピーカーのバッテリーを節約します",
+        "confirmTitle": "{count} 台のスピーカーをスタンバイにしますか？",
+        "confirmMessage": "{names} の Bluetooth が切断され、再生が停止します。スピーカーのメニューから復帰させてください。"
+      },
+      "release": {
+        "label": "解放",
+        "title": "選択中の {total} 台中 {count} 台を解放して、他のデバイスから使用できるようにします",
+        "confirmTitle": "{count} 台のスピーカーを解放しますか？",
+        "confirmMessage": "ブリッジは {names} の管理を停止します。取り戻すまで再接続されません。"
+      },
+      "failed": "{action} に失敗しました: {names}",
+      "enable": {
+        "label": "有効化",
+        "title": "選択中の {total} 台中 {count} 台を有効化します（無効なプレーヤー）"
+      },
+      "remove": {
+        "label": "削除",
+        "title": "選択中の {total} 台中 {count} 台を削除します（無効なプレーヤー）",
+        "confirmTitle": "{count} 台のプレーヤーを削除しますか？",
+        "confirmMessage": "{names} のプレーヤーが Music Assistant から消え、Bluetooth のペアリングが削除されます。"
+      }
+    },
+    "sort": {
+      "label": "並べ替え",
+      "activity": "アクティビティ",
+      "name": "名前",
+      "status": "状態"
+    },
+    "backendFilter": {
+      "label": "プレーヤーの種類",
+      "all": "すべてのプレーヤー",
+      "bluetooth": "Bluetooth スピーカー",
+      "output": "音声出力"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "overview": "概要",
+      "config": "設定",
+      "timing": "タイミング",
+      "history": "履歴"
+    },
+    "status": {
+      "playerState": "状態",
+      "audioSink": "音声シンク",
+      "codec": "コーデック",
+      "reportedDelay": "報告レイテンシ",
+      "reportedDelayHint": "スピーカーが Bluetooth 経由で報告するレイテンシ（A2DP Delay Reporting）です。目安であり、スピーカーの報告値であって実測値ではありません。",
+      "sampleRate": "サンプルレート"
+    },
+    "config": {
+      "name": "名前",
+      "mac": "MAC アドレス",
+      "adapter": "アダプター",
+      "port": "リスンポート",
+      "delay": "スピーカーのレイテンシ補正",
+      "enabled": "有効",
+      "save": "保存",
+      "saveFailed": "設定を保存できませんでした",
+      "enabledHelp": "無効なスピーカーは設定を保持しますが、プレーヤーは作成されません。",
+      "playoutSync": "プレイアウト同期",
+      "playoutSyncHelp": "オフにすると、プレイアウト同期以前と同じ動作になります。プレイアウト測定を行わない通常の音声出力です。",
+      "notConfigured": "このスピーカーは設定に含まれていません。"
+    },
+    "events": {
+      "empty": "記録されたイベントはありません"
+    },
+    "signal": {
+      "port": "ポート {port}",
+      "corrections": "{n} 件の補正 | {n} 件の補正",
+      "subprocess": "プレーヤープロセス"
+    },
+    "actions": {
+      "more": "その他の操作",
+      "reconnect": "再接続",
+      "reconnectDone": "再接続しています",
+      "repair": "再ペアリング",
+      "repairDone": "再ペアリングしています",
+      "pairing": "Music Assistant にペアリングさせる",
+      "pairingDone": "Music Assistant がしばらくペアリングできます",
+      "unmute": "音声出力のミュートを解除",
+      "unmuteDone": "音声出力のミュートを解除しました",
+      "release": "省電力をオンにする",
+      "releaseDone": "省電力がオンになりました",
+      "resume": "省電力をオフにする",
+      "resumeDone": "省電力がオフになりました"
+    },
+    "server": {
+      "title": "Music Assistant サーバー",
+      "name": "名前",
+      "host": "アドレス",
+      "id": "サーバー ID",
+      "url": "URL",
+      "foreign": "音声リンクの接続先は {where} の Music Assistant であり、このブリッジの Music Assistant ではありません。別のサーバーがこのプレーヤーを先に取得しました。プレーヤーを再接続して、このブリッジの Music Assistant が取得できるようにしてください。",
+      "refusedTitle": "拒否されました",
+      "refusedCount": "{n} 回の試行"
+    },
+    "troubleshoot": {
+      "label": "トラブルシューティング"
+    },
+    "overview": {
+      "audioPath": "音声経路",
+      "events": "最新のイベント",
+      "allEvents": "すべてのイベント →"
+    }
+  },
+  "volume": {
+    "mute": "ミュート",
+    "unmute": "ミュート解除",
+    "label": "{name} の音量"
+  },
+  "bluetooth": {
+    "scan": {
+      "scanning": "スキャン中…",
+      "pair": "ペアリング",
+      "unknown": "不明なデバイス",
+      "noDevices": "デバイスが見つかりません",
+      "adapter": "アダプター",
+      "add": "追加",
+      "added": "このブリッジ上",
+      "pairFailed": "ペアリングに失敗しました: {reason}",
+      "quiesce": "ペアリング中はこのアダプター上の他のスピーカーを一時的に切断する",
+      "noIo": "PIN 入力なしでペアリング（Just Works）。ペアリングをキャンセルするスピーカー向け",
+      "hfp": "ハンズフリープロファイル（通話）も許可する"
+    },
+    "audioOnly": "音声のみ",
+    "release": "スピーカーを解放",
+    "reclaim": "スピーカーを取り戻す",
+    "released": "解放済み"
+  },
+  "common": {
+    "loading": "読み込み中…",
+    "error": "エラー",
+    "retry": "再試行",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "close": "閉じる",
+    "search": "検索",
+    "noResults": "結果なし",
+    "no": "いいえ"
+  },
+  "update": {
+    "title": "ソフトウェアアップデート",
+    "available": "アップデートがあります",
+    "badge": "アップデート v{version}",
+    "checkNow": "アップデートを確認",
+    "upToDate": "最新バージョンを使用しています",
+    "versionCompare": "バージョンアップデート",
+    "instructions": "アップデート手順",
+    "releaseNotes": "リリースノート",
+    "recheck": "再確認",
+    "viewRelease": "リリースノート",
+    "applyNow": "今すぐアップデート",
+    "confirmTitle": "v{version} にアップデートしますか？",
+    "applyStarted": "アップデートを開始しました — ブリッジはまもなく再起動します",
+    "openHa": "HA でアップデート",
+    "copyCommand": "コマンドをコピー",
+    "checking": "アップデートを確認中…",
+    "channel": "チャンネル",
+    "checkChannel": "確認"
+  },
+  "transport": {
+    "play": "再生",
+    "pause": "一時停止",
+    "next": "次のトラック",
+    "previous": "前のトラック",
+    "failed": "再生操作に失敗しました",
+    "position": "トラック位置",
+    "shuffleOn": "シャッフルオン — オフにする",
+    "shuffleOff": "シャッフルオフ — オンにする",
+    "repeat": {
+      "off": "リピートオフ — 全曲リピート",
+      "all": "全曲リピート — 1 曲リピート",
+      "one": "1 曲リピート — オフにする"
+    },
+    "pending": "Music Assistant の確認を待っています",
+    "queue": "キュー操作"
+  },
+  "adapter": {
+    "turnOff": "オフにする",
+    "turnOn": "オンにする",
+    "confirmOffTitle": "アダプター {adapter} をオフにしますか？",
+    "confirmRebootTitle": "アダプター {adapter} を再起動しますか？",
+    "reboot": "再起動",
+    "powerToggled": "アダプターの電源を切り替えました",
+    "powerFailed": "アダプターの電源を切り替えられませんでした",
+    "rebooted": "アダプターを再起動しました",
+    "rebootFailed": "アダプターを再起動できませんでした",
+    "confirmNone": "現在このアダプターを使用しているスピーカーはありません。",
+    "openInHardware": "ハードウェアで開く"
+  },
+  "hardware": {
+    "subtitle": "このホストの Bluetooth アダプター、接続されているデバイス、音声デバイスです。",
+    "refresh": "更新",
+    "stale": "データが古い可能性があります",
+    "controllers": "Bluetooth コントローラー",
+    "devices": "Bluetooth デバイス",
+    "noControllers": "Bluetooth コントローラーが見つかりません",
+    "noDevices": "ペアリング済みの Bluetooth デバイスはありません",
+    "deviceCount": "デバイス: {n}",
+    "powered": "オン",
+    "poweredOff": "オフ",
+    "connected": "接続済み",
+    "paired": "ペアリング済み",
+    "trusted": "信頼済み",
+    "roleOutput": "音声を再生",
+    "roleInput": "音声を受信",
+    "roleEvidence": "根拠: {evidence}",
+    "battery": "バッテリー: {pct}%",
+    "rssi": "{db} dB",
+    "signal": "電波: {db} dB",
+    "addAsSpeaker": "スピーカーとして追加",
+    "addSpeakerFailed": "{name} をスピーカーとして追加できませんでした。",
+    "forgotBond": "{name} の Bluetooth ペアリング情報を削除しました。",
+    "forgetFailed": "ペアリング情報を削除できませんでした: {reason}",
+    "forgetPlayer": "このペアリング情報はプレーヤー {player} に使用されています。",
+    "connect": "接続",
+    "disconnect": "切断",
+    "pairDevice": "デバイスをペアリング",
+    "connectFailed": "{name} に接続できませんでした: {reason}",
+    "disconnectFailed": "{name} を切断できませんでした: {reason}",
+    "bondInUseTitle": "このペアリング情報はプレーヤーに使用されています",
+    "bondInUse": "このペアリング情報はプレーヤーに使用されています。ペアリング情報を削除する前に、そのプレーヤーを削除してください。",
+    "openPlayer": "ホームで {player} を開く",
+    "btRefused": "BlueZ が拒否しました（{code}）",
+    "btUnavailable": "Bluetooth スタックが応答しませんでした（{code}）",
+    "player": "プレーヤー",
+    "controllerId": "コントローラー",
+    "classOfDevice": "デバイスクラス",
+    "area": "エリア",
+    "openDetails": "{name} の詳細を表示",
+    "yes": "はい",
+    "no": "いいえ",
+    "unknown": "不明",
+    "unavailable": {
+      "dbusTitle": "このホストには D-Bus がありません",
+      "dbusBody": "D-Bus が応答しないため、ブリッジは BlueZ にアダプターを問い合わせられません。",
+      "bluetoothTitle": "このホストの Bluetooth を読み取れません",
+      "bluetoothBody": "ブリッジはこのホスト上の Bluetooth アダプターを検出できません。",
+      "hardwareTitle": "このホストのハードウェアを読み取れません",
+      "hardwareBody": "D-Bus も bluetoothctl も応答しませんでした。",
+      "nextStep": "ブリッジがホストの Bluetooth スタックにアクセスできることを確認し、このページを再読み込みしてください。",
+      "reason": "理由コード: {reason}"
+    },
+    "unsupported": {
+      "title": "このブリッジはハードウェア情報を報告できません",
+      "body": "API に /hardware ルートがありません。ブリッジをアップデートするか、設定と診断ページを使用してください。"
+    },
+    "drawer": {
+      "overview": "概要",
+      "technical": "技術的な詳細",
+      "power": "電源",
+      "present": "存在",
+      "area": "エリア",
+      "classOfDevice": "デバイスクラス",
+      "deviceCount": "このコントローラー上のデバイス",
+      "roles": "リンクロール",
+      "player": "プレーヤー",
+      "battery": "バッテリー",
+      "rssi": "電波",
+      "bonded": "ペアリング済み",
+      "controllers": "ペアリング情報を保持するコントローラー",
+      "synthetic": "合成 ID（sysfs エントリなし）",
+      "observedAt": "観測日時",
+      "id": "ID",
+      "mac": "MAC"
+    },
+    "audio": {
+      "title": "音声",
+      "cards": "サウンドカード",
+      "outputs": "音声出力",
+      "inputs": "音声入力",
+      "noDevices": "音声デバイスがありません",
+      "noDevicesBody": "音声サーバーは応答しましたが、カード、出力、入力は報告されませんでした。",
+      "noCards": "サウンドカードがありません",
+      "noOutputs": "音声出力がありません",
+      "noInputs": "音声入力がありません",
+      "notReportedTitle": "このブリッジは音声情報を報告しません",
+      "notReportedBody": "ハードウェア API が音声機能より前のものです。カード、出力、入力を表示するにはブリッジをアップデートしてください。",
+      "unavailableTitle": "このホストの音声を読み取れません",
+      "unavailableBody": "PulseAudio 互換のサーバーが応答しないため、カード、出力、入力は不明です。",
+      "captureUnavailableTitle": "スマートフォン入力は利用できません",
+      "captureUnavailableBody": "このホストでは Bluetooth 経由のスマートフォン音声を取り込めないため、ソースに再生する内容がありません。",
+      "noDriver": "ドライバーなし",
+      "driver": "ドライバー",
+      "activeProfile": "アクティブプロファイル",
+      "profileCount": "プロファイル数",
+      "portCount": "ポート数",
+      "profiles": "プロファイル",
+      "profileActive": "使用中",
+      "profileAvailable": "利用可能",
+      "profileUnavailable": "利用不可",
+      "profileUnknown": "利用可否不明",
+      "profileSwitch": "プロファイルを切り替え",
+      "profileSelectLabel": "プロファイル",
+      "profileConfirmTitle": "{card} をプロファイル {profile} に切り替えますか？",
+      "profileConsequence": "新しいプロファイルの起動中は、{card} のすべての出力が無音になる可能性があります。",
+      "profileConsequenceInUse": "新しいプロファイルの起動中は、{card} のすべての出力が無音になる可能性があり、{players} も同様です。",
+      "profileConfirm": "プロファイルを切り替え",
+      "profileSwitched": "{card} はプロファイル {profile} を使用するようになりました。",
+      "detailStale": "音声サーバーがこの読み取りを更新できませんでした。最新の状態が表示されていない可能性があります。",
+      "profileManagedByConnection": "このカードのプロファイルは Bluetooth 接続によって選択されます。",
+      "profileNone": "プロファイルなし",
+      "ports": "ポート",
+      "portActive": "アクティブ",
+      "portAvailable": "利用可能",
+      "portUnavailable": "利用不可",
+      "portUnknown": "利用可否不明",
+      "portSwitch": "ポートを切り替え",
+      "portSelectLabel": "ポート",
+      "portConfirmTitle": "{name} を {port} に切り替えますか？",
+      "portConsequence": "新しいポートへの切り替え中は {name} が無音になる可能性があり、この出力で再生しているものも同様です。",
+      "portConsequenceInUse": "新しいポートへの切り替え中は {name} が無音になる可能性があり、この出力で再生している {player} も同様です。",
+      "portConfirm": "ポートを切り替え",
+      "portSwitched": "{name} はポート {port} を使用するようになりました。",
+      "endpoints": "エンドポイント",
+      "output": "出力",
+      "input": "入力",
+      "direction": "方向",
+      "state": "状態",
+      "stateRunning": "実行中",
+      "stateIdle": "アイドル",
+      "stateSuspended": "一時停止",
+      "stateUnavailable": "利用不可",
+      "stateUnknown": "不明",
+      "activePort": "アクティブポート",
+      "portUnavailableReason": "アクティブポートが利用できないため、この入力は何も受信できません。",
+      "inputUnavailable": "この入力は利用できません。音声サーバーからの理由はありません。",
+      "outputPortUnavailableReason": "アクティブポートが利用できないため、この出力は再生できません。",
+      "outputUnavailable": "この出力は利用できません。音声サーバーからの理由はありません。",
+      "volume": "音量",
+      "muted": "ミュート中",
+      "inUse": "使用元",
+      "default": "デフォルト",
+      "setDefault": "デフォルトに設定",
+      "defaultConfirmTitle": "{name} をデフォルトの出力にしますか？",
+      "defaultConsequence": "出力が指定されていないすべての音は {name} で再生されます。",
+      "makeDefault": "デフォルトに設定",
+      "defaultSet": "{name} がデフォルトの出力になりました。",
+      "suspend": "一時停止",
+      "resume": "再開",
+      "suspendConfirmTitle": "{name} を一時停止しますか？",
+      "suspendConsequence": "{name} だけが無音になります。一覧には残り、再開するまで何も再生しません。",
+      "suspended": "{name} を一時停止しました。",
+      "commandFailed": "{name} を変更できませんでした: {reason}",
+      "kindMicrophone": "マイク",
+      "kindLineIn": "ライン入力",
+      "kindMonitor": "モニター",
+      "kindPhone": "Bluetooth 経由のスマートフォン",
+      "monitorOf": "モニター元",
+      "owner": "所属",
+      "ownerUnknown": "未分類",
+      "ownerCard": "カード {card}",
+      "ownerBluetooth": "Bluetooth デバイス {mac}",
+      "ownerInternal": "ブリッジ自身",
+      "sampleSpec": "サンプル形式",
+      "identifierSerial": "シリアル",
+      "identifierBusPath": "バスパス",
+      "identifierVendorId": "ベンダー ID",
+      "identifierProductId": "製品 ID",
+      "identifierAlsaLongCardName": "ALSA ロングカード名"
+    },
+    "source": {
+      "title": "ソース",
+      "stateOff": "オフ",
+      "stateWaiting": "スマートフォンを待機中",
+      "stateStreaming": "ストリーミング中",
+      "stateError": "エラー",
+      "offBody": "スマートフォンソースはオフです。ここで有効にすると、スマートフォンを Music Assistant に提供できます。",
+      "phone": "スマートフォン",
+      "start": "ソースを開始",
+      "stop": "ソースを停止",
+      "stopConfirmTitle": "ソースを停止しますか？",
+      "stopConsequence": "これらのスピーカーは Music Assistant に戻ります: {players}。",
+      "stopped": "ソースを停止しました。",
+      "pair": "スマートフォンをペアリング",
+      "stopPairing": "ペアリングを停止",
+      "pairing": "ペアリング受付中: 残り {time}。",
+      "pairingHint": "スマートフォンをペアリングしてください。PIN が間違っていると表示された場合は、先にスマートフォン側でこのブリッジを「削除」（古いペアリング）してください。",
+      "errorTitle": "ソースでエラーが発生しました",
+      "errorCapture": "このホストではスマートフォンの音声を取り込めません。",
+      "errorCaptureNext": "ブリッジはスマートフォン用の PipeWire キャプチャノードを必要とします。ホストの音声バックエンドを確認してください。",
+      "errorNoAdapter": "検出可能モードを受け入れた Bluetooth アダプターがありません。",
+      "errorNoAgent": "ブリッジは Bluetooth ペアリングエージェントを登録できませんでした。",
+      "errorBluetoothNext": "上記の Bluetooth コントローラーを確認し、もう一度ペアリングしてください。",
+      "errorNextStep": "設定 → Music Assistant でソース設定を確認し、ソースを再度開始してください。",
+      "failureTitle": "最後のソースコマンドは拒否されました",
+      "failureNextStep": "ソースを確認して、もう一度お試しください。",
+      "commandFailed": "ソースを変更できませんでした: {reason}",
+      "capture": "キャプチャ",
+      "capturePipewire": "PipeWire ノード",
+      "capturePulse": "PulseAudio ソース",
+      "captureUnavailable": "利用不可",
+      "node": "ノード",
+      "noNode": "キャプチャノードなし",
+      "subtitle": "スマートフォンからブリッジへストリームされ、ブリッジがソースとして Music Assistant に送信します。",
+      "statePairing": "ペアリングコードを待機中",
+      "maTitle": "Music Assistant",
+      "maOff": "ソースはオフです。有効にすると、スマートフォンを Music Assistant に提供できます。",
+      "maError": "Music Assistant への接続に失敗しました。",
+      "maConnected": "接続済みです。再生とルーティングは Music Assistant で管理されます。",
+      "maReconnecting": "ペアリング済みです。Music Assistant に再接続しています…",
+      "maNotPaired": "まだペアリングされていません。下のコードを Music Assistant に入力してください。",
+      "maConnectedShort": "接続済み",
+      "maPairedShort": "ペアリング済み",
+      "maUnpairedShort": "未ペアリング",
+      "maCodeLabel": "ペアリングコード",
+      "maCodeHint": "このコードを Music Assistant に入力してください。{time} の間有効です。",
+      "maPair": "Music Assistant とペアリング",
+      "maForget": "ペアリングを削除",
+      "maForgetConfirmTitle": "Music Assistant のペアリングを削除しますか？",
+      "maForgetConfirmBody": "Music Assistant で再びスマートフォンを再生するには、新しいコードが必要です。",
+      "maForgetDone": "Music Assistant のペアリングを削除しました",
+      "maRouting": "Music Assistant からスマートフォンを再生してください。ブリッジ自身がスピーカーにルーティングすることはありません。",
+      "maOpen": "Music Assistant を開く",
+      "maUnreachable": "Music Assistant に接続できません。",
+      "maUnreachableNext": "Music Assistant が実行中で、SENDSPIN_SERVER がそれを指していることを確認してください。ブリッジは再試行を続けます。",
+      "maPairingRequired": "ペアリングコードが必要です。",
+      "maRejected": "Music Assistant がペアリングコードを拒否しました。",
+      "maUnsupported": "この Music Assistant は Sendspin ソースを提供していません。",
+      "maUnsupportedNext": "Music Assistant を 2.10 以降にアップデートし、Sendspin ソースプロバイダーを有効にしてください。",
+      "maPairingNext": "ペアリングウィンドウを開き、Music Assistant にコードを入力してください。",
+      "phoneTitle": "スマートフォン（Bluetooth）",
+      "phoneIdle": "ストリーミングしていません",
+      "phoneNoPhone": "ブリッジにストリーミングしているスマートフォンはありません。",
+      "phoneHint": "スマートフォンは Bluetooth 経由でブリッジとペアリングし、Music Assistant が取り込んだ音声を受信します。",
+      "phonePaired": "スマートフォンをペアリングしました",
+      "phonePairedHint": "ペアリング情報は保存されています。スマートフォンで再生を開始すると、ブリッジが音声を取り込みます。",
+      "maSettingsHint": "ペアリングとコードは設定にあります。",
+      "maSettingsAction": "ペアリング設定を開く",
+      "maNotPairedWhere": "未ペアリングです。設定でブリッジと Music Assistant をペアリングしてください。",
+      "phonePairedNeedMa": "スマートフォンはペアリング済みです。音声を聞くには、ブリッジと Music Assistant をペアリングしてください。",
+      "phonePairedNeedMaAction": "Music Assistant とペアリング"
+    }
+  },
+  "kit": {
+    "closeDialog": "ダイアログを閉じる",
+    "closeDrawer": "ドロワーを閉じる",
+    "dismissNotification": "通知を閉じる",
+    "removeBadge": "削除",
+    "signalPath": "信号経路",
+    "selectAllRows": "すべての行を選択",
+    "clearSearch": "検索をクリア",
+    "loading": "読み込み中"
+  },
+  "sidebar": {
+    "collapse": "サイドバーを折りたたむ",
+    "expand": "サイドバーを展開"
+  },
+  "undo": {
+    "label": "元に戻す",
+    "handedOver": "{name} を解放しました。取り戻すまで再接続されません。",
+    "disabled": "{name} を無効にしました。",
+    "standby": "{name} をスタンバイにしました。Bluetooth を切断し、再生を停止しました。",
+    "woke": "{name} を復帰させました。",
+    "enabled": "{name} を有効にしました。",
+    "muted": "ミュート: {name}。",
+    "powerSave": "省電力オン: {name}。",
+    "btConnected": "{name} を接続しました。",
+    "btDisconnected": "{name} を切断しました。",
+    "audioMuted": "{name} をミュートしました。",
+    "audioUnmuted": "{name} のミュートを解除しました。",
+    "audioVolume": "音量を設定: {name}。",
+    "audioResumed": "再開: {name}。",
+    "sourceStarted": "ソースを開始しました。",
+    "sourcePairingOpen": "ペアリング受付中: スマートフォンをペアリングしてください。",
+    "sourcePairingClosed": "ペアリング受付を終了しました。"
+  },
+  "restart": {
+    "stopping": "ブリッジを停止しています…",
+    "restarting": "ブリッジを再起動しています…",
+    "ready": "ブリッジを正常に再起動しました",
+    "error": "再起動に失敗しました",
+    "openLogs": "ログを開く",
+    "dismiss": "閉じる",
+    "updating": "アップデート中… ブリッジは再起動します",
+    "updated": "アップデートしました。ブリッジが復帰しました",
+    "updateFailed": "アップデートに失敗しました",
+    "errorNext": "ログを開いて原因を確認し、もう一度お試しください。",
+    "updateTimedOut": "アップデートが完了しませんでした — ログを開いてください",
+    "updateTimedOutNext": "3 分経ってもブリッジが復帰しません。ログを開いてアップデートがどこで止まったかを確認してください。ブリッジがまだ古いバージョンの場合は、もう一度アップデートしてください。"
+  },
+  "bugreport": {
+    "title": "バグを報告",
+    "hints": {
+      "min": "{n} 文字以上。"
+    },
+    "submitBy": {
+      "github": "GitHub Issue を開く",
+      "proxy": "レポートを送信",
+      "copy": "レポートをコピー"
+    },
+    "fileReport": "バグを報告",
+    "fields": {
+      "title": "問題のタイトル",
+      "titlePlaceholder": "問題の簡単な説明",
+      "description": "説明",
+      "descPlaceholder": "何が起きましたか？どうなることを期待しましたか？",
+      "email": "メールアドレス（連絡用）"
+    },
+    "errors": {
+      "titleShort": "タイトルは 5 文字以上にしてください",
+      "descShort": "説明は 10 文字以上にしてください",
+      "emailInvalid": "有効なメールアドレスを入力してください"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "送信",
+      "copy": "コピー"
+    },
+    "diagnosticsPreview": "診断データ",
+    "autoAttached": "自動添付",
+    "loadingDiagnostics": "診断データを読み込み中…",
+    "loadFailed": "診断データを読み込めませんでした",
+    "submit": "レポートを送信",
+    "download": "ダウンロード",
+    "submitted": "バグレポートを送信しました",
+    "submitFailed": "バグレポートの送信に失敗しました",
+    "copied": "レポートをクリップボードにコピーしました",
+    "copyFailed": "クリップボードへのコピーに失敗しました"
+  },
+  "settings": {
+    "title": "設定",
+    "showAdvanced": "技術的な詳細を表示",
+    "unsaved": "未保存の変更",
+    "save": "保存",
+    "discard": "破棄",
+    "saved": "設定を保存しました",
+    "restartNeeded": "一部の変更を適用するにはブリッジを再起動してください",
+    "restartNow": "今すぐ再起動",
+    "restartConfirmTitle": "今すぐブリッジを再起動しますか？",
+    "units": {
+      "ms": "ms",
+      "s": "秒",
+      "min": "分",
+      "h": "時間"
+    },
+    "auto": "自動",
+    "embedded": {
+      "security": "Home Assistant 経由でサインインしています。サインインとアクセスはそこで管理されます。",
+      "updates": "アップデートは Home Assistant アドオンストアから提供されます。"
+    },
+    "sections": {
+      "general": {
+        "title": "一般",
+        "description": "名前、タイムゾーン、ログ。"
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "Music Assistant サーバーへの接続とプレーヤーの操作方法。"
+      },
+      "audio": {
+        "title": "音声",
+        "description": "Bluetooth 再生のバッファリングとコーデック。"
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "アダプター、再接続、復旧。"
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Home Assistant のエンティティと、エリアからのルーム名。"
+      },
+      "security": {
+        "title": "セキュリティ",
+        "description": "サインイン、セッション、API トークン。"
+      },
+      "updates": {
+        "title": "アップデート",
+        "description": "ブリッジが新しいバージョンを見つけてインストールする方法。"
+      },
+      "guidance": {
+        "title": "ガイダンス",
+        "description": "ダッシュボードにセットアップと復旧のヒントを表示するタイミング。"
+      },
+      "backup": {
+        "title": "バックアップ",
+        "description": "設定ファイルのエクスポート、インポート、編集。"
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "ブリッジ名",
+        "help": "Music Assistant で各プレーヤーの横に表示されます。空欄にするとホスト名を使用します。"
+      },
+      "TZ": {
+        "label": "タイムゾーン",
+        "help": "IANA 名（例: Europe/Berlin）。ログとイベントの時刻に使用されます。"
+      },
+      "WEB_PORT": {
+        "label": "Web ポート",
+        "help": "この Web インターフェースのポートです。空欄にすると環境変数 WEB_PORT または 8080 を使用します。再起動後に反映されます。"
+      },
+      "LOG_LEVEL": {
+        "label": "ログレベル",
+        "help": "DEBUG では、はるかに詳細な情報を記録します。問題を調査するときに使用してください。",
+        "addonHelp": "Home Assistant アドオンでは、アドオン自身の log_level オプション（設定タブ）が再起動のたびにこの値を設定します。保持するにはそちらで変更してください。"
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Music Assistant サーバー",
+        "help": "Music Assistant のホスト名または IP アドレス、またはネットワーク上で自動検出する場合は auto。"
+      },
+      "SENDSPIN_PORT": {
+        "label": "Sendspin ポート",
+        "help": "Music Assistant の Sendspin ポート。通常は 8927 です。"
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "最初のプレーヤーポート",
+        "help": "スピーカーはここから連続したポートで待ち受けます。空欄にすると空きポートを自動的に選択します。"
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "ペアリングを必須にする",
+        "help": "Music Assistant がこれらのスピーカーで再生するには、PIN の入力が必要です。"
+      },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "このブリッジの Music Assistant のみ",
+        "help": "スピーカーを取得しようとする他の Music Assistant を拒否します。ブリッジが自身の Music Assistant（サーバーアドレスまたは Music Assistant API の URL）を認識すると適用されます。"
+      },
+      "VOLUME_VIA_MA": {
+        "label": "Music Assistant 経由の音量",
+        "help": "音量変更は Music Assistant を経由するため、スライダーが同期したままになります。"
+      },
+      "MUTE_VIA_MA": {
+        "label": "Music Assistant 経由のミュート",
+        "help": "ミュートは Music Assistant を経由するため、プレーヤーに同じ状態が表示されます。"
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Music Assistant からのライブ更新",
+        "help": "再生中の曲、キュー、グループの変更のために接続を維持します。"
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "サインインを自動更新",
+        "help": "Music Assistant のサインインが期限切れになったら、バックグラウンドで更新します。"
+      },
+      "MA_ADDON_SLUG": {
+        "label": "別リポジトリの Music Assistant アドオン",
+        "help": "Home Assistant アドオン専用です。公式の Music Assistant アドオンまたはローカルのアドオンフォルダー内のものを使う場合は空欄にします。別リポジトリのものを使用する場合は、ブリッジがそれを経由してサインインできるよう、そのスラッグを入力してください。"
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "他のブリッジのスピーカーを警告",
+        "help": "Music Assistant に、別のブリッジが同じスピーカーをすでに担当していないか問い合わせます。"
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "音声バッファー",
+        "help": "値を大きくすると負荷の高いホストや仮想マシンでも安定し、小さくすると反応が速くなります。"
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "SBC コーデックを優先",
+        "help": "AAC や aptX の代わりに SBC を使用します。他のコーデックで音が途切れるスピーカーに有効です。"
+      },
+      "SMOOTH_RESTART": {
+        "label": "スムーズな再起動",
+        "help": "スピーカーのプレーヤーを一から再起動するのではなく、再接続します。"
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "PulseAudio によるストリーム移動を停止",
+        "help": "module-rescue-streams をアンロードして、再接続中のスピーカーが他の音声を借用しないようにします。"
+      },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "音声バッファーのレイテンシを補正",
+        "help": "PulseAudio のレイテンシに関係なく予定どおりに再生します。オフにすると以前のタイミングに戻り、そのレイテンシ分遅れます。"
+      },
+      "PLAYOUT_SYNC": {
+        "label": "プレイアウト同期",
+        "help": "オフでは通常の音声出力のままです。測定は試験的機能で、スピーカー出力でのプレイアウト誤差を測定して報告しますが、補正は行いません。測定と補正では、エアセンサーを使って各再生開始の位置を補正します。試験的なエアセンサーが必要で、ない場合は測定と同じ動作になります。スピーカーの再起動後に反映されます。",
+        "options": {
+          "off": "オフ",
+          "measure": "測定のみ",
+          "loop": "測定と補正"
+        }
+      },
+      "PLAYOUT_DIAG": {
+        "label": "再生クロック診断",
+        "help": "1 分ごとの Clock diag 行に、スピーカーシンク自身のクロックレートも記録します。再生は変わりません。"
+      },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "起動時に音声出力をリセット",
+        "help": "プレーヤーの初回起動前に、各ローカル音声出力を一度一時停止して再開します。無音で起動する出力に有効です。"
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "接続チェック間隔",
+        "help": "ブリッジが各スピーカーの接続を確認する頻度です。"
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "再接続の試行回数",
+        "help": "ブリッジが試行をやめるまでの連続再接続失敗回数です。0 は試行を続けます。"
+      },
+      "SHOW_TECHNICAL_DETAILS": {
+        "label": "デフォルトで技術的な詳細を表示",
+        "help": "この設定を選択していないブラウザーで、信号レベル、同期カウンター、サーバー ID、詳細設定を表示します。各ブラウザーでは環境設定メニューから変更できます。"
+      },
+      "RSSI_BADGE": {
+        "label": "電波強度",
+        "help": "接続中の各スピーカーにリアルタイムの電波強度を表示します。"
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "再接続ループの上限",
+        "help": "ブリッジがスピーカーを解放するまでの、期間内の接続/切断サイクル数です。0 で無効になります。"
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "再接続ループの期間",
+        "help": "これらのサイクルを数える期間です。"
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "音声シンクが見つからない場合の復旧",
+        "help": "デフォルトでオンです。音声ソースでもあるスピーカー（Amazon Echo など）に、接続するとすぐ音声を受け入れるよう要求します。ソースプロファイルのままのサウンドカードをシンク側に切り替え（Bluetooth がシンクを認識するまで新規接続は「Input/output error」を返すため、短時間再試行します）、それでも音声出力が現れない場合は、10 分間に最大 2 回スピーカーを再接続します。"
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "PulseAudio の Bluetooth モジュールを再読み込み",
+        "help": "試験的機能です。PulseAudio が Bluetooth 出力を作成しなくなったときの最後の手段です。"
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "停止したアダプターをリセット",
+        "help": "試験的機能です。再接続の試行回数を使い切った後、Bluetooth アダプターの電源を入れ直すかリセットします。"
+      },
+      "EXPERIMENTAL_AIR_SENSOR": {
+        "label": "エアセンサー（SBC スピーカー）",
+        "help": "試験的機能で、オプトインです。ブリッジの再起動が必要です。音声が実際に空中に出るタイミングを測定します。測定モードまたはループモードのプレイアウト同期、Bluetooth SBC スピーカー、CAP_NET_RAW が必要です。測定モードでは測定し、ループモードでは配置を補正します。",
+        "disabledReason": "先にプレイアウト同期（測定モードまたはループモード）をオンにしてください。"
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "Home Assistant への接続",
+          "help": "MQTT はブローカー経由でエンティティを公開し、統合は Sendspin Bridge カスタム統合を使用します。",
+          "options": {
+            "off": "オフ",
+            "mqtt": "MQTT",
+            "rest": "統合"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "MQTT ブローカー",
+            "help": "ホスト名または IP、または Mosquitto アドオンを使用する場合は auto。"
+          },
+          "port": {
+            "label": "MQTT ポート",
+            "help": "通常は 1883、TLS の場合は 8883 です。"
+          },
+          "tls": {
+            "label": "TLS を使用",
+            "help": "ブローカーへの接続を暗号化します。"
+          },
+          "username": {
+            "label": "MQTT ユーザー",
+            "help": "ブローカーが匿名クライアントを許可している場合は空欄にします。"
+          },
+          "password": {
+            "label": "MQTT パスワード",
+            "help": "ブリッジに保存され、再び表示されることはありません。"
+          },
+          "discovery_prefix": {
+            "label": "検出プレフィックス",
+            "help": "Home Assistant の MQTT 検出プレフィックスと一致する必要があります。"
+          },
+          "client_id": {
+            "label": "クライアント ID",
+            "help": "空欄にするとブリッジから生成します。"
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "ネットワーク上で通知",
+            "help": "Home Assistant がブリッジを検出し、統合を提案できるようにします。"
+          },
+          "supervisor_pair": {
+            "label": "Supervisor 経由でペアリング",
+            "help": "Home Assistant OS では、統合が手動でコピーせずにトークンを取得します。"
+          },
+          "advertise_host": {
+            "label": "通知アドレス",
+            "help": "Home Assistant がブリッジにアクセスするためのアドレスです。ブリッジがリバースプロキシや NAT の背後にある場合に設定します。空欄にすると自動検出します。"
+          },
+          "advertise_port": {
+            "label": "通知ポート",
+            "help": "0 にすると Web ポートを通知します。"
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "エリアからのルーム名",
+        "help": "Home Assistant のエリアからスピーカーのルーム名を提案します。"
+      },
+      "AUTH_ENABLED": {
+        "label": "サインインを必須にする",
+        "help": "このインターフェースを表示する前に、パスワードまたはアカウントを要求します。",
+        "disabledReason": "先にパスワードを設定してください。"
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "セッションの長さ",
+        "help": "サインインが有効な期間です。"
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "繰り返しの失敗をロックアウト",
+        "help": "間違ったパスワードが多すぎる場合、しばらくサインインをブロックします。"
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "許容される失敗回数",
+        "help": "ロックアウトが始まるまでの期間内の誤ったパスワードの回数です。"
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "カウント期間",
+        "help": "失敗した試行を数える期間です。"
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "ロックアウト期間",
+        "help": "サインインがブロックされる期間です。"
+      },
+      "TRUSTED_PROXIES": {
+        "label": "信頼済みプロキシ",
+        "help": "1 行に 1 つの IP アドレス。これらだけがブリッジに実際のクライアントアドレスを伝えられます。"
+      },
+      "CHECK_UPDATES": {
+        "label": "アップデートを確認",
+        "help": "バックグラウンドで新しいバージョンを確認します。"
+      },
+      "UPDATE_CHANNEL": {
+        "label": "アップデートチャンネル",
+        "help": "日常使用には安定版。リリース候補とベータはより早く提供され、動作しない可能性があります。",
+        "options": {
+          "stable": "安定版",
+          "rc": "リリース候補",
+          "beta": "ベータ"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "アップデートを自動インストール",
+        "help": "選択したチャンネルの新しいバージョンが見つかり次第インストールします。"
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "起動時の猶予期間",
+        "help": "起動後、セットアップのヒントを表示するまでこの時間待ちます。"
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "復旧の猶予期間",
+        "help": "切断されたスピーカーの修正を提案するまでこの時間待ちます。"
+      },
+      "SENDSPIN_SOURCE": {
+        "label": "スマートフォンをソースとして受け入れる",
+        "help": "Bluetooth でブリッジとペアリングしたスマートフォンからストリームされ、ブリッジがその音声を他のプレーヤーが再生できる Sendspin ソースとして提供します。PipeWire と、Home Assistant OS では PulseAudio で動作します。"
+      }
+    },
+    "sectionsNav": "セクション",
+    "parts": {
+      "maConnection": {
+        "label": "Music Assistant アカウント",
+        "help": "サインインすると、ブリッジがグループや再生中の曲を表示し、キューを操作できます。",
+        "change": "再サインイン",
+        "signIn": "サインイン"
+      },
+      "sendspinTest": {
+        "label": "Sendspin 接続",
+        "help": "上記のサーバーとポートでブリッジが Music Assistant に到達できるか確認します。",
+        "run": "テスト",
+        "ok": "OK",
+        "failed": "失敗"
+      },
+      "adapters": {
+        "label": "アダプター",
+        "help": "アダプターに分かりやすい名前を付けてください。デバイスクラスは、未知のコンピューターを拒否するスピーカー向けの回避策です。必要でなければ空欄にしてください。",
+        "name": "名前",
+        "deviceClass": "デバイスクラス",
+        "deviceClassHelp": "6 桁の 16 進数（例: 0x00010c はノート PC）。空欄にするとシステムのデフォルトを使用します。"
+      },
+      "ha": {
+        "publisher": "MQTT パブリッシャー",
+        "publisherHelp": "ブリッジとそのスピーカーを Home Assistant のエンティティとして公開します。",
+        "publisherBroker": "{broker} に接続しています。",
+        "mosquitto": "Mosquitto アドオン",
+        "mosquittoMissing": "Home Assistant にはまだ MQTT ブローカーがありません。Mosquitto アドオンをインストールし、ブローカーを auto に設定してください。",
+        "install": "インストール",
+        "broker": "ブローカー",
+        "brokerHelp": "ブローカーを自動検出するか、保存前に以下のアドレスと認証情報をテストしてください。",
+        "detect": "検出",
+        "test": "テスト",
+        "detected": "ブローカーが見つかり、入力しました。",
+        "notDetected": "ブローカーが見つかりません。手動で入力してください。",
+        "testOk": "ブローカーが接続を受け入れました（{ms} ms）。",
+        "testFailed": "ブローカーが接続を拒否しました。",
+        "component": "Sendspin Bridge 統合",
+        "componentSeen": "最終接続 {when}。",
+        "componentMissing": "HACS から統合をインストールし、Home Assistant で追加してください。",
+        "installHacs": "HACS で開く",
+        "connected": "接続済み",
+        "mdns": "ネットワーク通知",
+        "mdnsHelp": "Home Assistant はこの通知を通じてブリッジを検出します。",
+        "announced": "通知済み",
+        "notAnnounced": "未通知"
+      },
+      "areaMap": {
+        "label": "アダプターごとのルーム",
+        "help": "アダプター上のスピーカーはそのルームを取得します。エリア ID は Home Assistant のエリアアドレスの最後の部分です（設定 → エリア）。",
+        "areaId": "エリア ID",
+        "areaName": "ルーム名"
+      },
+      "password": {
+        "label": "パスワード",
+        "set": "このインターフェースへのサインイン用パスワードが設定されています。",
+        "notSet": "パスワードがまだありません。サインインを必須にする前に作成してください。",
+        "change": "変更",
+        "create": "作成",
+        "current": "現在のパスワード",
+        "new": "新しいパスワード",
+        "confirm": "新しいパスワードを再入力",
+        "tooShort": "8 文字以上。",
+        "save": "パスワードを保存",
+        "changed": "パスワードを保存しました"
+      },
+      "tokens": {
+        "label": "API トークン",
+        "help": "Home Assistant 統合や独自のスクリプト用です。Authorization: Bearer <token> として送信します。",
+        "once": "このトークンは今すぐコピーしてください。再び表示されることはありません。",
+        "copy": "コピー",
+        "copied": "トークンをコピーしました",
+        "created": "作成 {when}",
+        "lastUsed": "最終使用 {when}",
+        "revoke": "取り消す",
+        "revokeConfirm": "このトークンを取り消しますか？これを使用しているものは動作しなくなります。",
+        "newLabel": "トークン名",
+        "create": "トークンを作成"
+      },
+      "updates": {
+        "label": "バージョン {version}",
+        "available": "バージョン {version} が利用可能です。",
+        "upToDate": "このチャンネルに新しいバージョンはありません。",
+        "check": "今すぐ確認",
+        "install": "アップデート"
+      },
+      "backup": {
+        "export": "エクスポート",
+        "exportHelp": "パスワードとトークンを除いた設定をダウンロードします。",
+        "download": "ダウンロード",
+        "import": "インポート",
+        "importHelp": "以前にエクスポートしたファイルで設定を置き換えます。ブリッジにすでにあるシークレットは保持されます。",
+        "choose": "ファイルを選択",
+        "imported": "設定をインポートしました",
+        "confirmTitle": "設定を置き換えますか？",
+        "confirmLabel": "置き換え",
+        "raw": "JSON として編集",
+        "rawHelp": "この画面に表示されないキー用です。変更は保存ボタンで保存されます。",
+        "edit": "編集",
+        "apply": "適用"
+      },
+      "latency": {
+        "label": "バッファープリセット",
+        "recommended": "推奨"
+      },
+      "sourceLink": {
+        "label": "スマートフォンソース",
+        "help": "スマートフォンを Bluetooth でペアリングし、取り込み状態をハードウェアページで確認します。",
+        "action": "ハードウェアを開く"
+      },
+      "maPairing": {
+        "label": "スマートフォンソースのペアリング",
+        "help": "Music Assistant がスマートフォンの音声を再生するには、このブリッジを信頼している必要があります。",
+        "off": "スマートフォンソースはオフです。ハードウェアページで有効にしてから、ここで Music Assistant とペアリングしてください。",
+        "offAction": "ハードウェアを開く",
+        "whereToEnter": "Music Assistant で: 設定 → プレーヤー → このブリッジ → 設定 → 静的ペアリングコード。",
+        "routing": "再生とルーティングは Music Assistant に任せ、ブリッジはスマートフォンの音声を取り込むだけです。",
+        "notPaired": "まだペアリングされていません。ペアリングウィンドウを開き、Music Assistant にコードを入力してください。"
+      }
+    },
+    "leaveConfirm": "未保存の設定があります。このまま離れますか？",
+    "device": {
+      "name": {
+        "label": "名前",
+        "help": "Music Assistant でプレーヤーとして表示されます。"
+      },
+      "backend": {
+        "adapter": {
+          "label": "Bluetooth アダプター",
+          "help": "このスピーカーを接続するアダプターです。自動ではデフォルトのアダプターを使用します。"
+        },
+        "sink": {
+          "label": "音声出力",
+          "help": "このプレーヤーが再生する、このコンピューターの音声出力です。他のプレーヤーが使用中の出力は表示されません。"
+        }
+      },
+      "room_name": {
+        "label": "ルーム",
+        "help": "プレーヤーと一緒に表示され、Home Assistant にも提供されます。"
+      },
+      "room_id": {
+        "label": "Home Assistant のエリア ID",
+        "help": "スピーカーを Home Assistant のエリアにリンクします。"
+      },
+      "volume_controller": {
+        "label": "音量コントロール",
+        "help": "PulseAudio はスピーカーのシステム音量を変更し、Sendspin は代わりに音声ストリームをスケーリングします。",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Sendspin ストリーム"
+        }
+      },
+      "listen_port": {
+        "label": "プレーヤーポート",
+        "help": "Music Assistant がこのスピーカーに接続するポートです。空欄にすると自動的に選択します。"
+      },
+      "idle_mode": {
+        "label": "アイドル時",
+        "help": "何も再生されていないときにブリッジが行う動作です。",
+        "options": {
+          "default": "接続を維持",
+          "power_save": "省電力",
+          "auto_disconnect": "切断",
+          "keep_alive": "スピーカーを起動したままにする"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "省電力までの時間",
+        "help": "この時間音声がないと省電力をオンにします。"
+      },
+      "idle_disconnect_minutes": {
+        "label": "切断までの時間",
+        "help": "この時間音声がないと Bluetooth を切断します。0 では切断しません。"
+      },
+      "keep_alive_method": {
+        "label": "キープアライブ信号",
+        "help": "ほとんどのスピーカーには聞こえない 2 Hz のトーンが適しています。トーンに反応する一部のスピーカーには無音が有効です。",
+        "options": {
+          "infrasound": "聞こえないトーン",
+          "silence": "無音",
+          "none": "なし"
+        }
+      },
+      "keepalive_interval": {
+        "label": "信号間隔",
+        "help": "キープアライブ信号の間隔です。"
+      },
+      "static_delay_ms": {
+        "label": "スピーカーのレイテンシ補正",
+        "help": "このスピーカーが音を再生する遅れです。ブリッジはグループと同期するよう、その分早く音声を送信します。"
+      },
+      "min_buffer_ms": {
+        "label": "最小バッファー",
+        "help": "再生中にスピーカーがキューに保持する音声です。"
+      },
+      "required_lead_time_ms": {
+        "label": "起動リードタイム",
+        "help": "最初の音が再生されるまでにスピーカーが必要とする時間です。"
+      },
+      "allow_hfp_profile": {
+        "label": "ヘッドセットプロファイル（通話）を許可",
+        "help": "オフでは音楽用に A2DP を維持し、ホストがヘッドセットプロファイルを復元した場合はカードを戻します。オンでは他のアプリが通話用にスピーカーのマイクを使用できます。そのプロファイルが有効な間は 8 kHz モノラルになります。"
+      },
+      "calibration_bed": {
+        "label": "調整中もこのスピーカーを起動したままにする",
+        "help": "一部のアンプは、無音後の短いキャリブレーションクリックのためにミュートを解除せず、調整音が聞こえなくなることがあります。オンにすると、グループ調整セッション中だけこのスピーカーで小さなノイズを再生します。他のスピーカーはクリーンなクリック音のままです。"
+      }
+    },
+    "deviceGroups": {
+      "speaker": "スピーカー",
+      "idle": "アイドル時の動作",
+      "sync": "タイミング"
+    },
+    "leave": "保存せずに離れる",
+    "search": "設定を検索",
+    "nothingFound": "「{q}」に一致するものはありません。",
+    "changed": "変更済み",
+    "loadFailed": "設定を読み込めませんでした。",
+    "retry": "再試行",
+    "autosave": {
+      "saved": "保存しました",
+      "failed": "保存されませんでした: {reason}"
+    },
+    "appliesAfterRestart": "ここにある一部の設定は再起動後に適用されます。必要な場合は保存時に再起動を促します。"
+  },
+  "timing": {
+    "suggestion": "推奨レイテンシ補正: {value} ms",
+    "applySuggestion": "適用",
+    "history": {
+      "title": "最近のタイミング",
+      "syncError": "同期エラー {ms} ms",
+      "empty": "タイミングのサンプルはまだありません。スピーカーが再生中に表示されます。",
+      "buffer": "バッファーされた音声",
+      "error": "同期エラー"
+    },
+    "playout": {
+      "title": "プレイアウト",
+      "yes": "はい",
+      "no": "いいえ",
+      "settling": "安定待ち、最大 {s} 秒",
+      "fallback": "プレイアウト同期は通常の出力にフォールバックしました: {reason}",
+      "unknownReason": "不明な理由",
+      "rows": {
+        "error": "誤差",
+        "p95": "誤差 p95",
+        "slope": "誤差のドリフト",
+        "corrections": "補正",
+        "jumps": "ジャンプ",
+        "underruns": "アンダーラン",
+        "paLatency": "PulseAudio レイテンシ",
+        "hostLatency": "ホストレイテンシ",
+        "sinkRate": "シンクレート",
+        "clockSlew": "クロックスリュー",
+        "warm": "ウォーム"
+      }
+    },
+    "air": {
+      "title": "エアセンサー",
+      "chip": "エア: {state}, H {h} ms",
+      "chipNoH": "エア: {state}",
+      "states": {
+        "off": "オフ",
+        "unavailable": "利用不可",
+        "unsupported_codec": "未対応のコーデック",
+        "unsupported_input": "未対応の入力",
+        "no_signal": "信号なし",
+        "acquiring": "取得中",
+        "locked": "ロック済み",
+        "holding": "保持中",
+        "no_lock": "ロック喪失"
+      },
+      "rows": {
+        "state": "状態",
+        "host": "ホスト配置",
+        "air": "エア誤差",
+        "confidence": "信頼度",
+        "psr": "ピーク比（PSR）",
+        "lock": "最終確認",
+        "learnedTarget": "エアターゲット"
+      },
+      "needsCalibration": "キャリブレーションが必要",
+      "agoSeconds": "{s} 秒前",
+      "reasons": {
+        "needs_measure": "測定モードまたはループモードのプレイアウト同期が必要です。",
+        "not_bluetooth": "Bluetooth スピーカーのみ対応しています。",
+        "cpu_budget": "停止しました。センサーがプロセッサ時間を使いすぎました。",
+        "internal_error": "内部エラーで停止しました。次のストリームで再起動します。",
+        "playout_fallback": "プレイアウト同期は通常の出力にフォールバックしました。",
+        "unsupported_input": "この音声形式はサポートされていません（44.1/48 kHz、16〜32 ビット）。",
+        "no_cap_net_raw": "Bluetooth モニターを利用できません（CAP_NET_RAW が必要です）。",
+        "unsupported_platform": "このシステムには Bluetooth HCI モニターがありません（Linux のみ）。",
+        "monitor_error": "Bluetooth モニターが失敗しました。",
+        "sbc_params": "この SBC ストリームのパラメーターはサポートされていません。",
+        "sbc_fragmented": "スピーカーが SBC フレームを複数のパケットに分割しています。",
+        "codec": "スピーカーは {codec} を使用しています。SBC のみ対応しています。",
+        "unknown": "理由: {reason}"
+      },
+      "calibration": {
+        "title": "キャリブレーション",
+        "line": "エアから音までのレイテンシ: {latency} ms · {codec} {rate} kHz · {adapter} · {age}",
+        "forget": "削除",
+        "forgetTitle": "このキャリブレーションを削除しますか？",
+        "forgetConfirm": "同期ウィザードが再度測定するまで、{name} は {adapter} 上の {codec} {rate} kHz で未キャリブレーションとして扱われます。"
+      },
+      "correction": {
+        "target": "エア補正: {target}",
+        "calibrated": "キャリブレーション済み（{ms} ms）",
+        "learned": "学習済み（{n} 回の開始）",
+        "noData": "データなし（学習: {need} 回中 {n} 回の開始）",
+        "inactive": "非アクティブ: ロックされていません",
+        "bias": "エアバイアス {value} ms",
+        "corrections": "エア補正 {n} 回",
+        "trimEarly": "補正トリム {value} ms（目標は {ms} ms 早め）",
+        "trimLate": "補正トリム {value} ms（目標は {ms} ms 遅め）"
+      },
+      "learned": {
+        "title": "学習したレイテンシ",
+        "line": "学習: {delay} ms の補正で {latency} ms · {codec} · {adapter} · {starts} 回の開始",
+        "forget": "削除",
+        "forgetTitle": "この学習したレイテンシを削除しますか？",
+        "forgetConfirm": "{name} は {adapter} 上の {codec} {rate} kHz のレイテンシを再び学習し始めます。対応するキャリブレーションも削除されます。"
+      },
+      "learnedValue": "約 {ms} ms（学習済み）"
+    },
+    "details": "技術的な詳細"
+  },
+  "system": {
+    "bridge": "ブリッジ",
+    "uptime": "稼働時間",
+    "memory": "メモリ",
+    "platform": "プラットフォーム",
+    "python": "Python",
+    "audio": "音声サーバー",
+    "bluez": "BlueZ",
+    "downloads": "ダウンロード",
+    "downloadAction": "ダウンロード",
+    "download": {
+      "report": {
+        "label": "診断レポート",
+        "help": "シークレットを除いた、バグ報告に必要なすべての情報。"
+      },
+      "logs": {
+        "label": "サービスログ",
+        "help": "テキスト形式のブリッジログ。"
+      },
+      "timeline": {
+        "label": "復旧タイムライン",
+        "help": "起動とデバイスのイベントを CSV で。"
+      },
+      "config": {
+        "label": "設定",
+        "help": "パスワードとトークンを含みません。"
+      }
+    },
+    "players": "プレーヤープロセス",
+    "noPlayers": "実行中のプレーヤープロセスはありません。",
+    "player": "プレーヤー",
+    "restarts": "再起動回数",
+    "state": "状態",
+    "running": "実行中",
+    "reconnecting": "再接続中",
+    "stopped": "停止",
+    "hooks": {
+      "title": "Webhook",
+      "help": "ブリッジはデバイスとブリッジのイベントをこれらのアドレスに POST します。ブリッジが再起動するまで有効です。",
+      "allEvents": "すべてのイベント",
+      "counts": "成功 {ok} 件、失敗 {failed} 件",
+      "remove": "削除",
+      "url": "アドレス",
+      "categories": "カテゴリ（任意）",
+      "add": "追加"
+    }
+  },
+  "guidance": {
+    "title": "対応が必要な項目",
+    "done": "完了: {action}"
+  },
+  "nav": {
+    "home": "スピーカー",
+    "homeShort": "スピーカー",
+    "groups": "グループ",
+    "groupsShort": "グループ",
+    "settings": "設定",
+    "settingsShort": "設定",
+    "diagnostics": "診断",
+    "diagnosticsShort": "ヘルス",
+    "hardware": "ハードウェア",
+    "hardwareShort": "ハードウェア",
+    "sync": "グループ同期"
+  },
+  "home": {
+    "connected": "{total} 台中 {n} 台が Bluetooth 接続済み",
+    "playing": "{n} 台が再生中",
+    "source": {
+      "title": "スマートフォン → Music Assistant",
+      "streaming": "スマートフォンから再生中",
+      "pairing": "ペアリング中",
+      "waiting": "スマートフォンを待機中",
+      "off": "ソースはオフ",
+      "error": "ソースエラー",
+      "maConnected": "Music Assistant 接続済み",
+      "maPaired": "Music Assistant ペアリング済み、再接続中",
+      "maUnpaired": "Music Assistant は未ペアリング",
+      "openHardware": "ハードウェアを開く",
+      "pairAction": "Music Assistant とペアリング"
+    },
+    "checklist": {
+      "title": "最初のステップ",
+      "progress": "{total} 中 {done} 完了",
+      "speaker": "最初のスピーカーを追加",
+      "speakerAction": "スピーカーを追加",
+      "ma": "Music Assistant にサインイン",
+      "maAction": "設定を開く",
+      "phone": "スマートフォンソースを有効にしてペアリング",
+      "phoneAction": "ハードウェアを開く",
+      "dismiss": "最初のステップを隠す"
+    }
+  },
+  "groups": {
+    "via": "{url} の Music Assistant",
+    "connectFirst": "グループを表示・操作するには、ブリッジを Music Assistant に接続してください。"
+  },
+  "addSpeaker": {
+    "title": "スピーカーを追加",
+    "findHelp": "スピーカーをペアリングモードにしてください。近くのスピーカーが下に表示されます。",
+    "scan": "検索",
+    "scanAgain": "再検索",
+    "scanHint": "スピーカーをペアリングモードにしてから、検索を押してください。",
+    "looking": "スピーカーを探しています…",
+    "add": "追加",
+    "signal": {
+      "success": "強い",
+      "warning": "普通",
+      "error": "弱い",
+      "neutral": "—"
+    },
+    "trouble": "スピーカーが見つからない、またはペアリングに失敗しますか？",
+    "alreadyPaired": "すでにペアリング済みのスピーカーを選択",
+    "backToScan": "検索に戻る",
+    "paired": "ペアリングしました。名前とルームを設定してください。",
+    "roomHint": "任意。プレーヤーと一緒に表示され、Home Assistant にも提供されます。",
+    "addToBridge": "ブリッジに追加",
+    "addedTitle": "{name} をブリッジに追加しました。",
+    "testHelp": "短いクリック音を再生して、聞こえるか確認してください。",
+    "waiting": "スピーカーの音声を接続しています。数秒かかります。",
+    "testSound": "テスト音を再生",
+    "done": "完了",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "音声出力"
+    },
+    "audio": {
+      "intro": "このコンピューターの音声出力（USB DAC、サウンドカード、HDMI など）で再生します。",
+      "none": "音声出力が見つかりません。",
+      "refresh": "更新",
+      "inUse": "すでに別のプレーヤーが使用中",
+      "named": "この出力の名前とルームを選択してください。",
+      "looking": "音声出力を探しています…",
+      "taken": "別のプレーヤーがすでにこの出力を使用しています。"
+    },
+    "pairing": "{name} をペアリングしています…",
+    "errorNext": "スピーカーがペアリングモードにあり、アダプターの近くにあることを確認して、もう一度お試しください。"
+  },
+  "connection": {
+    "lost": "ブリッジへの接続が切れました — 再接続しています。表示が古い可能性があります。",
+    "reload": "再読み込み"
+  },
+  "shortcuts": {
+    "title": "キーボードショートカット",
+    "places": "スピーカー、グループ、設定、診断、ハードウェアへ移動",
+    "add": "スピーカーを追加",
+    "search": "このページ内を検索",
+    "help": "この一覧を表示",
+    "close": "ダイアログまたはメニューを閉じる"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "接続",
+      "bridge": "このブリッジ上"
+    },
+    "reconnect": "再接続",
+    "standby": "スタンバイにする",
+    "wake": "復帰",
+    "claim": "このブリッジをソースとして使用",
+    "handOver": "スピーカーを解放",
+    "takeBack": "スピーカーを取り戻す",
+    "disable": "無効化",
+    "enable": "有効化",
+    "remove": "スピーカーを削除",
+    "removeTitle": "{name} を削除しますか？",
+    "removeMessage": "プレーヤーが Music Assistant から消え、Bluetooth のペアリングが削除されます。再度使用するには、新しいスピーカーとして追加してください。",
+    "settings": "設定",
+    "repairTitle": "{name} を再ペアリングしますか？"
+  },
+  "sync": {
+    "open": "同期",
+    "tuneGroup": "グループ全体を調整",
+    "tuneGroupHelp": "このプレーヤーの Music Assistant グループのすべてのスピーカーを一度に揃えます。",
+    "backToGroups": "グループに戻る",
+    "tabs": {
+      "group": "グループ",
+      "manual": "手動",
+      "measure": "測定"
+    },
+    "members": "メンバー",
+    "delay": "{ms} ms",
+    "delayHeading": "レイテンシ補正（大きいほど早く再生）",
+    "sign": "+ 早く再生 · − 遅く再生",
+    "noMembers": "このグループにはメンバーがいません。",
+    "loadError": "グループのメンバーを読み取れませんでした（{code}）。",
+    "restoreFailed": "グループを復元できませんでした",
+    "restoreFailedHelp": "再起動により調整が中断されたため、一部のスピーカーがまだミュートされている可能性があります（{code}）。ブリッジは再試行を続けます。",
+    "manualIntro": "グループでクリック音を再生し、スピーカーごとに耳で調整します。",
+    "measureIntro": "マイクで各スピーカーを測定してから、耳で微調整します。",
+    "switchToManual": "マイクがありませんか？代わりに耳で調整してください。",
+    "switchToMeasure": "マイク付きのスマートフォンやノート PC がありますか？代わりに測定してください。",
+    "state": {
+      "idle": "調整は行われていません",
+      "created": "開始中",
+      "measuring": "測定中",
+      "proposed": "測定済み",
+      "applying": "遅延を適用中",
+      "tuning": "耳で調整中",
+      "restoring": "グループを復元中",
+      "done": "完了",
+      "cancelled": "キャンセル済み",
+      "failed": "失敗"
+    },
+    "status": {
+      "prepare": "グループを準備中",
+      "measure": "測定中",
+      "tune": "耳で調整中",
+      "done": "完了",
+      "elsewhere": "別のデバイスで調整中"
+    },
+    "groupError": "このグループを開けませんでした（{code}）。Music Assistant に接続でき、グループがまだ存在することを確認してください。",
+    "origin": {
+      "other": "調整できません"
+    },
+    "measuredAgo": "測定 {age}",
+    "noDelay": "レイテンシの報告なし",
+    "actions": {
+      "title": "調整",
+      "manual": "手動調整",
+      "semi": "マイクで測定",
+      "manualHelp": "マイクは不要です。聞き取れる小さな修正に最適です。",
+      "semiHelp": "スピーカーごとに約 1 分です。完了前に測定した遅延を聞いて調整できます。"
+    },
+    "profiles": {
+      "title": "プロファイル",
+      "apply": "適用",
+      "saveCurrent": "現在の設定を名前を付けて保存…",
+      "rename": "名前を変更",
+      "delete": "削除",
+      "empty": "プロファイルはまだありません。現在の遅延を保存すると、後で戻せます。",
+      "skipped": "{n} 件のメンバーをスキップ | {n} 件のメンバーをスキップ",
+      "notInGroup": "グループにいません: {names}",
+      "name": "名前",
+      "notes": "メモ（任意）",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "applyTitle": "「{name}」を適用",
+      "confirmApply": "この遅延を適用",
+      "member": "スピーカー",
+      "change": "現在 → プロファイル",
+      "noChanges": "グループのスピーカーはどれもこのプロファイルに含まれていません。",
+      "unchanged": "変更なし",
+      "applied": "「{name}」を適用しました。",
+      "saved": "「{name}」を保存しました。",
+      "renamed": "「{name}」に名前を変更しました。",
+      "deleted": "「{name}」を削除しました。",
+      "deleteTitle": "「{name}」を削除しますか？",
+      "deleteMessage": "遅延はそのまま残り、保存されたプロファイルだけが削除されます。",
+      "renameLabel": "「{name}」の新しい名前",
+      "failed": "操作に失敗しました（{code}）。",
+      "kind": {
+        "device": "スピーカー側",
+        "position": "試聴位置から"
+      },
+      "playerId": "プレーヤー ID {id}",
+      "nameRequired": "名前を入力してください。"
+    },
+    "listen": {
+      "title": "試聴",
+      "play": "クリック音を再生",
+      "stop": "クリック音を停止",
+      "solo": "このスピーカーのみ",
+      "soloHelp": "スピーカーを選ぶとそのスピーカーだけを聞けます（他はミュートされます）。「全員」も選べます。",
+      "soloMember": "{name} のみ",
+      "everyone": "全員",
+      "ab": "2 台を比較",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "2 台のスピーカーが 4 秒ごとに交互に再生します。",
+      "idle": "クリック音を停止しました。",
+      "playing": "すべてのスピーカーでクリック音を再生中です。",
+      "soloed": "{name} のみでクリック音を再生中です。",
+      "alternating": "{a} と {b} を交互に再生中です。",
+      "failed": "操作に失敗しました（{code}）。",
+      "needsClicks": "スピーカーを単独で聞いたり比較したりするには、クリック音を再生してください。",
+      "playHelp": "グループでクリックトラックを再生します（3 分間。停止したら再度再生してください）。グループのキューは置き換えられます。「クリック音を停止」はクリックトラックだけを停止します。"
+    },
+    "sound": {
+      "label": "サウンド",
+      "clicks": "クリック音",
+      "accent": "アクセント付きクリック音",
+      "noise": "ノイズ",
+      "hint": {
+        "clicks": "1 秒に 1 回のクリック音。すべてのスピーカーのクリック音が 1 つに聞こえるまで遅延を調整します。",
+        "accent": "4 回に 1 回のクリック音がより大きく高くなります。スピーカーが数百 ms ずれている場合に分かります。",
+        "noise": "2 台のスピーカー向け。中央に立ってください。揃っていればノイズは中央に聞こえ、そうでなければ空洞的で位相がずれて聞こえます。"
+      }
+    },
+    "manual": {
+      "title": "レイテンシ補正",
+      "help": "値を大きくするとスピーカーは早く再生します。変更はすぐに反映され、保存すると保持されます。",
+      "reset": "開始時の遅延に戻す",
+      "resetDone": "遅延をこの調整開始時の値に戻しました。",
+      "minus": "−{n} ms（遅く）",
+      "plus": "+{n} ms（早く）",
+      "valueLabel": "{name} のレイテンシ補正（ms）",
+      "departed": "グループから離れました",
+      "startFailed": "手動調整を開始できませんでした（{code}）。",
+      "busy": "このグループで測定が実行中です。先に測定タブで完了してください。",
+      "saveOnLeave": "遅延の変更を保持しますか？",
+      "saveOnLeaveHelp": "スピーカーのレイテンシ補正を変更しましたが、保存していません。変更を保持するか、この調整開始時の値に戻してください。",
+      "saveConfirm": "変更を保持",
+      "saveDecline": "変更を破棄",
+      "nudges": "{name} を調整",
+      "writeForbidden": "Music Assistant が {name} の変更を拒否しました。このアカウントにはプレーヤー設定を変更する権限がありません。",
+      "writeFailed": "{name} を変更できませんでした（{code}）。表示されている遅延は Music Assistant が保持している値です。",
+      "ended": "この調整は終了しました（タイムアウトしたか、別のデバイスで閉じられました）。遅延はそのまま残ります。もう一度調整するには「クリック音を開始」を押してください。",
+      "measured": "測定値: {ms} ms（{change}）",
+      "resetMeasured": "測定値に戻す",
+      "resetMeasuredMember": "{name} を測定した遅延に戻す",
+      "endedNotice": "手動調整が終了しました。クリック音が停止し、すべてのスピーカーのミュートが解除され、音量が戻りました。",
+      "startHelp": "開始すると、グループで再生中のものが停止し、クリックトラックが再生されます。ボタンを押すまで何も始まりません。",
+      "startClicks": "クリック音を開始",
+      "volumes": "音量",
+      "needStart": "調整するには「クリック音を開始」を押してください。",
+      "save": "保存",
+      "saved": "保存しました",
+      "discard": "変更を破棄",
+      "unsaved": "未保存の変更",
+      "listenOne": "1 台のスピーカーを聞く / 2 台を比較",
+      "stillRestoring": "前回の調整後、グループをまだ復元しています。しばらくしてからもう一度お試しください。"
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "このブラウザーではここで録音できません。マイクには HTTPS（または localhost）と最新のブラウザーが必要です。",
+        "permission": "マイクへのアクセスが拒否されました。ブラウザーの設定でこのページのマイクを許可して、もう一度お試しください。",
+        "no_microphone": "このデバイスにはマイクが見つかりませんでした。",
+        "mic_busy": "マイクが他のアプリで使用中か、起動できませんでした。",
+        "worklet": "録音モジュールを読み込めませんでした。ページを再読み込みして、もう一度お試しください。",
+        "not_open": "マイクが開かれていません。",
+        "busy": "録音はすでに実行中です。",
+        "interrupted": "音声が中断されました（ページがバックグラウンドにあったか、他のアプリが音声を取得しました）。タップして続行してください。影響を受けたスピーカーは再度測定されます。",
+        "timeout": "録音が時間内に完了しませんでした。",
+        "mic_lost": "マイクが停止しました（取り外されたか、アクセスが取り消されました）。再度開いて続行してください。影響を受けたスピーカーは再度測定されます。",
+        "failed": "録音に失敗しました。"
+      }
+    },
+    "wizard": {
+      "stageOf": "{stage}（{n}/{total}）· {name}",
+      "stages": {
+        "prepare": "準備",
+        "measure": "測定",
+        "tune": "調整",
+        "done": "完了"
+      },
+      "steps": {
+        "prepare": "場所と方法",
+        "clicker": "音楽を止めてクリック音を開始",
+        "volume": "音量を設定",
+        "members": "スピーカーごと",
+        "tune": "聞いて調整",
+        "done": "終了"
+      },
+      "notice": {
+        "title": "測定中は他の音は再生されません。",
+        "help": "クリック音を開始すると、グループでクリックトラックが再生されます。グループが再生中の場合は、先に停止します。スピーカーの測定中は、他のスピーカーはミュートされます。完了すると、ブリッジがミュートしたスピーカーはすべてミュート解除され、音量は元に戻り、クリック音は停止します。",
+        "queue": "キャリブレーションはグループのキューをクリックトラックに置き換えます。終了後に音楽を再度開始してください。"
+      },
+      "point": {
+        "legend": "どこで測定しますか？",
+        "device": "各スピーカーの位置で",
+        "deviceHelp": "スマートフォンを各スピーカーの近くに順に近づけます。スピーカーごとに 6 秒。デバイス自体を揃えます。",
+        "position": "試聴位置から",
+        "positionHelp": "いつも聞いている場所にいてください。スピーカーごとに 12 秒。音が自分に届くまでの時間を含みます。"
+      },
+      "micPermission": "ブラウザーがマイクの使用を求めます。録音はメモリ内に保持され、このブリッジにのみ送信されます。",
+      "holdStill": "ヒント: 部屋を静かにし、録音中はスマートフォンを動かさないでください。",
+      "estimate": "約 {min} 分かかります。",
+      "byEar": "耳で調整することもできます:",
+      "start": "マイクを許可して開始",
+      "micDenied": "マイクを使用できませんでした。",
+      "startFailed": "測定を開始できませんでした（{code}）。",
+      "level": {
+        "help": "マイクのメーターはクリック音ごとに跳ねるはずです。",
+        "meter": "マイク",
+        "tooQuiet": "小さすぎます: グループの音量を上げるか、近づいてください。",
+        "tooLoud": "大きすぎます: グループの音量を少し下げるか、離れてください。",
+        "fine": "マイクがクリック音を拾っています。",
+        "value": "{pct} %"
+      },
+      "members": {
+        "help": "各スピーカーを個別に測定します。どのスピーカーも繰り返し測定できます。",
+        "order": "順番は部屋を歩くための目安で、結果には影響しません。",
+        "moveUp": "{name} を上へ",
+        "moveDown": "{name} を下へ",
+        "notMeasured": "未測定（調整できません）: {names}",
+        "left": "続行するにはすべてのスピーカーを録音するかスキップしてください（残り {n} 台）。 | 続行するにはすべてのスピーカーを録音するかスキップしてください（残り {n} 台）。"
+      },
+      "hint": {
+        "notHeard": "聞こえません: {name} の音量を上げるか近づいてから「繰り返す」を押すか、スキップしてください。",
+        "unstable": "不安定です: 部屋を静かにし、スマートフォンを動かさないでから「繰り返す」を押すか、スキップしてください。",
+        "reason": {
+          "clipped": "録音がクリップしています。スマートフォンが近すぎるか、{name} の音量が大きすぎます。スマートフォンを離すか {name} の音量を下げてから「繰り返す」を押してください。",
+          "quiet": "録音がほぼ無音です。スマートフォンを {name} に近づけてから「繰り返す」を押してください。",
+          "lowSnr": "クリック音が部屋のノイズに埋もれました。部屋を静かにするか、スマートフォンを {name} に近づけてから「繰り返す」を押してください。",
+          "noClicks": "録音に {name} のクリック音が見つかりませんでした。{name} がクリック音を再生しているか確認し、スマートフォンを近づけてから「繰り返す」を押してください。",
+          "tooFewClicks": "{name} のクリック音が少なすぎます。スマートフォンが時間枠の一部を取り逃した可能性があります —「繰り返す」を押してください。"
+        }
+      },
+      "holdNear": "{name} から 30〜50 cm 離してスマートフォンを保持",
+      "stayPut": "その場にいてください",
+      "record": "録音",
+      "recordMember": "{name} を録音",
+      "repeat": "繰り返す",
+      "repeatMember": "{name} を繰り返す",
+      "skip": "スキップ",
+      "skipMember": "{name} をスキップ",
+      "soloing": "{name} のみを再生中…",
+      "recording": "{name} を録音中…",
+      "heard": "聞こえました",
+      "notHeard": "聞こえません",
+      "unstable": "不安定",
+      "skipped": "スキップ済み",
+      "departed": "グループから離れました",
+      "confidence": "{pct} %",
+      "redo": "再録音",
+      "result": "{name}: {result}",
+      "restartRound": "マイクのクロックが中断されたため、「再録音」と表示されたスピーカーをもう一度録音してください。",
+      "tapToContinue": "タップして続行",
+      "micLost": "マイクが停止しました（取り外されたか、アクセスが取り消されました）。",
+      "reopen": "マイクを再度開く",
+      "failed": "操作に失敗しました（{code}）。",
+      "ended": "測定は終了しました（タイムアウトしたか、別のデバイスで閉じられました）。ミュートされたスピーカーはミュート解除され、クリック音は停止しました。",
+      "next": "次へ",
+      "back": "戻る",
+      "cancel": "キャンセル",
+      "toTune": "測定した遅延を適用して聞く",
+      "memberGone": "{name} はグループから離れました。測定はそのまま続きます。",
+      "computing": "遅延を計算しています…",
+      "proposalFailed": "遅延を計算できませんでした（{code}）。",
+      "retry": "再試行",
+      "applying": "測定した遅延を適用しています…",
+      "applyFailed": "遅延を適用できませんでした（{code}）。",
+      "capture": {
+        "legend": "何が録音しますか？",
+        "device": "このデバイスのマイク",
+        "deviceHelp": "このデバイスを各スピーカーまで運びます。マイクには HTTPS（または localhost）が必要です。",
+        "phone": "スマートフォン（QR コードをスキャン）",
+        "phoneHelp": "スマートフォンでキャプチャページを開きます。すべてのスピーカーを一度に録音して送信します。通常の HTTP でも動作します（スマートフォンのレコーダーを使用）。",
+        "usePhone": "代わりにスマートフォンで測定"
+      },
+      "startPhone": "開始"
+    },
+    "tune": {
+      "help": "測定した遅延が適用され、クリック音は再生され続けます。各スピーカーを単独で聞くか 2 台を比較し、必要に応じて遅延を手動で調整してから完了してください。",
+      "spread": "スピーカー間の最大差: 測定時 {before} ms → 現在 約 {after} ms。",
+      "kept": "聞こえなかったかスキップされたため、遅延は変更されていません: {names}",
+      "ready": "測定した遅延を適用しました。聞いて調整してください。",
+      "finish": "完了",
+      "finishSave": "完了してプロファイルとして保存…",
+      "saveTitle": "完了してプロファイルとして保存",
+      "saveConfirm": "保存して完了"
+    },
+    "air": {
+      "title": "Bluetooth レイテンシの測定結果",
+      "help": "スマートフォンの録音から、ブリッジの各スピーカーが Bluetooth で音声を受信してから再生するまでの時間です。ヘッドホンの Web プレーヤーや有線出力など、予定どおりに音を再生するリファレンスと比較します。独自の遅延があるリファレンス（PC スピーカー、Bluetooth ヘッドセット）を使うと、すべての値がその分ずれます。保存した値はブリッジが独自に使用するものであり、スピーカーの遅延設定ではありません。",
+      "reference": "リファレンス",
+      "referencePick": "リファレンスを選択…",
+      "referenceHint": "予定どおりに再生するヘッドセット、有線出力、その他のリファレンスを選択してください。提案される遅延のリファレンスにもなります。",
+      "referenceFailed": "リファレンスを設定できませんでした（{code}）。",
+      "value": "Bluetooth レイテンシの測定値: {ms} ms",
+      "hint": "スピーカーの報告値: {ms} ms",
+      "save": "この Bluetooth レイテンシを保存",
+      "saveButton": "保存",
+      "saveFailed": "保存できませんでした（{code}）。",
+      "outOfRange": "{min}〜{max} ms の範囲外のため保存できません",
+      "reasons": {
+        "not_effective": "このスピーカーではエアセンサーがオンになっていませんでした",
+        "no_reference": "先にリファレンスを選択してください",
+        "not_measured": "このスピーカーまたはリファレンスが聞こえませんでした",
+        "not_sbc": "スピーカーが SBC を再生していません",
+        "air_epoch_changed": "このスピーカーの順番の間に Bluetooth ストリームが再起動しました",
+        "air_delay_changed": "録音中にスピーカーのレイテンシ補正が変更されました。",
+        "no_air_clicks": "エア上でこのスピーカーのクリック音が見つかりませんでした",
+        "no_written_clicks": "ブリッジが書き出した音声にこのスピーカーのクリック音が見つかりませんでした",
+        "fold_failed": "このスピーカーのエア測定を完了できませんでした",
+        "no_air_frames": "このスピーカーの順番の間に Bluetooth 音声がエア上で観測されませんでした"
+      },
+      "valueSaved": "Bluetooth レイテンシの測定値: {ms} ms（保存済み）"
+    },
+    "cancel": {
+      "title": "測定を停止しますか？",
+      "message": "これまでの録音は失われます。ブリッジがミュートしたスピーカーはミュート解除され、音量が戻り、クリック音が停止します。",
+      "tuneTitle": "停止して遅延を元に戻しますか？",
+      "tuneMessage": "遅延は測定前の値に戻ります。ブリッジがミュートしたスピーカーはミュート解除され、音量が戻り、クリック音が停止します。",
+      "confirm": "停止",
+      "keep": "続ける",
+      "done": "測定をキャンセルしました。スピーカーのミュートを解除し、音量を戻し、クリック音を停止しました。",
+      "resetFailed": "遅延を元に戻せませんでした（{code}）。調整は開いたままです。もう一度お試しください。"
+    },
+    "reloaded": {
+      "manual": "ページが再読み込みされたため手動調整は終了しました。遅延はそのまま残ります。",
+      "measure": "ページが再読み込みされたため測定は終了しました。"
+    },
+    "joinManual": {
+      "title": "別のデバイスで手動調整が開いています",
+      "help": "参加するとここから聞いて調整できます。終了することもできます。このページを離れても調整は終了しません。",
+      "join": "参加"
+    },
+    "readOnly": "別のデバイスで調整中",
+    "readOnlyHelp": "その調整が終了するまで、このページではグループを表示するだけです。",
+    "restoreRetrying": "Music Assistant に接続できなかったため（{code}）、一部のスピーカーがまだミュートされているか、クリック音を再生している可能性があります。ブリッジは再試行を続けます。",
+    "proposal": {
+      "name": "プロファイル名",
+      "nameRequired": "名前を入力してください。",
+      "defaultName": "測定日 {date}",
+      "warnings": "警告",
+      "clampedWarning": "一部の遅延は 0〜5000 ms に制限されました。残る差は約 {ms} ms です。",
+      "largeWarning": "2000 ms を超える遅延では、Music Assistant が音声をかなり先まで送る必要があり、バッファーの小さいスピーカーは音が途切れる可能性があります。",
+      "forbidden": "Music Assistant が遅延の変更を拒否しました。このアカウントにはプレーヤー設定を変更する権限がありません。Music Assistant で手動でこれらの値を設定してください:",
+      "forbiddenHint": "または、ブリッジの設定で管理者アカウントを使って Music Assistant に再接続し、もう一度お試しください。",
+      "copy": "値をコピー",
+      "copied": "コピーしました。",
+      "copyFailed": "コピーできませんでした。値を選択して手動でコピーしてください。"
+    },
+    "done": {
+      "restoring": "グループを復元しています…",
+      "restoringHelp": "音量を戻し、スピーカーのミュートを解除し、クリック音を停止しています。遅延はそのまま残ります。",
+      "restored": "グループを復元しました",
+      "restoredHelp": "すべてのスピーカーのミュートが解除され、音量が戻り、クリック音が停止しました。新しい遅延は保持されます。Music Assistant で音楽を再度開始してください。",
+      "spread": "スピーカー間の最大差: {before} ms → 約 {after} ms",
+      "saved": "「{name}」として保存しました。",
+      "saveFailed": "遅延は保持されていますが、プロファイルを保存できませんでした（{code}）。",
+      "listen": "クイック試聴",
+      "listenHelp": "グループ全体で 10 秒間クリック音を再生してから停止します。",
+      "listening": "グループ全体でクリック音を再生中…",
+      "listenFailed": "クリック音を再生できませんでした（{code}）。",
+      "again": "再測定",
+      "queue": "グループのキューにはクリックトラックだけが残っています。Music Assistant で音楽を再度開始してください。"
+    },
+    "endForeign": "そのセッションを終了",
+    "endForeignTitle": "別のデバイスの調整を終了しますか？",
+    "endForeignMessage": "そのクリック音が停止し、グループが復元されます。すでに書き込まれた遅延はそのまま残ります。",
+    "signal": {
+      "restarted": "クリック音が再開しました。すべてのスピーカーをもう一度録音してください。"
+    },
+    "prep": {
+      "failed": "操作に失敗しました（{code}）。",
+      "group": {
+        "playing": "再生中",
+        "idle": "停止",
+        "paused": "一時停止",
+        "unknown": "不明"
+      },
+      "clicker": {
+        "help": "クリックトラックは Music Assistant 経由でグループのすべてのスピーカーに 3 分間再生されます。停止したら再度開始してください。",
+        "start": "クリック音を開始",
+        "again": "クリック音を再度開始",
+        "playing": "クリック音を再生中です。",
+        "stopped": "クリック音は再生されていません。",
+        "groupPlaying": "グループが別のものを再生しています。先に停止してください。",
+        "whyDisabled": "続行するにはクリック音を開始してください。",
+        "left": "クリック音: 残り {time}",
+        "helpStop": "グループが何かを再生しています。クリック音を開始すると先にそれを停止し、グループのすべてのスピーカーで 3 分間クリックトラックを再生します。",
+        "groupState": "グループ:",
+        "stopAndStart": "音楽を停止してクリック音を開始",
+        "confirmTitle": "グループの音楽を停止しますか？",
+        "confirmMessage": "グループで再生中のものが停止し、キューがクリックトラックに置き換えられます。終了後に音楽を再度開始してください。"
+      },
+      "volume": {
+        "help": "測定する場所でクリック音がはっきり聞こえる音量に設定してください。",
+        "noVolume": "音量コントロールがありません",
+        "silent": "無音: 測定するには音量を上げてください",
+        "back": "完了すると音量は元に戻ります。"
+      },
+      "skip": "スキップ"
+    },
+    "mute": {
+      "unsupported": "{name} をミュートできないため、グループにいる間は他のスピーカーを 1 台ずつ測定できません。スキップするか、手動調整で耳で調整してください。",
+      "unsupportedManual": "{name} をミュートできないため、他のスピーカーを単独で聞けません。「全員」と {name} のみは引き続き使用できます。"
+    },
+    "ready": {
+      "title": "測定する前に",
+      "unmutable": "{name} をミュートできません。グループにいる間は他のスピーカーを 1 台ずつ測定できません。{name} 自体は測定できます。または手動調整で耳で調整してください。",
+      "unavailable": "{name} は Music Assistant で利用できません（オフまたは切断）。測定できません。",
+      "silent": "{name} は 0 % です。音が聞こえません。音量ステップで上げるか、スキップしてください。",
+      "muted": "{name} は Music Assistant でミュートされています。ブリッジはミュートを解除しないため、音は聞こえません。ミュートを解除するか、スキップしてください。",
+      "skip": "{name} を測定時にスキップ",
+      "skipped": "{name} はスキップされます（タップすると測定します）"
+    },
+    "badge": {
+      "unmutable": "ミュートできません",
+      "unavailable": "利用不可",
+      "silent": "音量 0 %",
+      "muted": "ミュート中"
+    },
+    "phone": {
+      "help": "スマートフォンでキャプチャページを開きます。ブリッジは各スピーカーで順番に単独でクリック音を再生し、スマートフォンは一度だけ録音します。",
+      "qr": "スマートフォン用キャプチャリンクの QR コード",
+      "scan": "スマートフォンのカメラでスキャンするか、リンクを開いてください",
+      "copy": "リンクをコピー",
+      "newLink": "新しいリンク",
+      "linkFailed": "リンクを作成できませんでした（{code}）。",
+      "security": "このリンクでは、スマートフォンがどのスピーカーが再生しているかを確認し、この測定の録音を送信できるだけです。{min} 分間有効で、測定が終了すると停止します。",
+      "sameNetwork": "スマートフォンはブリッジと同じネットワークに接続する必要があります。",
+      "step1": "スマートフォンで「開始」を押します。録音が始まり、スピーカーが 1 台ずつ再生します。",
+      "step2": "または、スマートフォンが録音している間に、ここで「シーケンスを再生」を押します。",
+      "step3": "シーケンスが終了すると、スマートフォンが録音を送信し、結果がここに表示されます。",
+      "play": "シーケンスを再生（{n}）",
+      "measureIt": "測定する",
+      "notYet": "まだ測定されていません",
+      "lead": "開始中: すべてのスピーカーがしばらく無音になります…",
+      "now": "現在: {name} のみ（{n}/{total}）",
+      "pause": "一時停止: 次のスピーカーに移動してください…",
+      "measured": "スマートフォンの録音を測定しました。",
+      "waitingUpload": "シーケンスが終了しました。スマートフォンの録音を待っています…",
+      "failed": "シーケンスが停止しました（{code}）。",
+      "certificate": "スマートフォンで証明書の警告が一度表示されます。受け入れると、ブラウザーで直接録音できます。",
+      "httpFallback": "証明書がない場合は、通常のリンク（スマートフォンのレコーダー）を使用してください:",
+      "keepsDelay": "未測定のため、現在の遅延を維持します: {names}"
+    },
+    "tuneLink": "グループで調整 →",
+    "noGroupHelp": "{name} は同期グループに属していません。他のスピーカーと一緒に調整するには、グループで同期グループを作成し、このスピーカーを追加してください。",
+    "noGroupLink": "グループを開く →"
+  },
+  "server": {
+    "action": {
+      "apply_latency_recommended": {
+        "label": "{value} ms のレイテンシを適用"
+      },
+      "edit_ma_server": {
+        "label": "Music Assistant サーバーを編集"
+      },
+      "enable_device": {
+        "label": "有効化 | {count} 台のスピーカーを有効化"
+      },
+      "open_adapter_settings": {
+        "label": "アダプター設定を開く"
+      },
+      "open_audio_diagnostics": {
+        "label": "診断を開く"
+      },
+      "open_bluetooth_settings": {
+        "label": "Bluetooth 設定を開く"
+      },
+      "open_config": {
+        "label": "設定を開く"
+      },
+      "open_devices_settings": {
+        "label": "スピーカー設定を開く"
+      },
+      "open_diagnostics": {
+        "label": "診断を開く"
+      },
+      "open_ma_settings": {
+        "label": "Music Assistant 設定を開く"
+      },
+      "open_output_diagnostics": {
+        "label": "診断を開く"
+      },
+      "open_player_settings": {
+        "label": "プレーヤー設定を開く"
+      },
+      "open_runtime_diagnostics": {
+        "label": "診断を開く"
+      },
+      "prefer_sbc_codec": {
+        "label": "SBC コーデックを優先"
+      },
+      "recheck_outputs": {
+        "label": "音声出力を再確認"
+      },
+      "reclaim_bluetooth": {
+        "label": "スピーカーを取り戻す | {count} 台のスピーカーを取り戻す"
+      },
+      "reconnect_device": {
+        "label": "スピーカーを再接続 | {count} 台のスピーカーを再接続"
+      },
+      "release_bluetooth": {
+        "label": "スピーカーを解放"
+      },
+      "repair_speaker": {
+        "label": "スピーカーを再ペアリング"
+      },
+      "rerun_checks": {
+        "label": "チェックを再実行"
+      },
+      "rerun_preflight": {
+        "label": "ホストチェックを再実行"
+      },
+      "retry_ma_discovery": {
+        "label": "Music Assistant を再検出"
+      },
+      "revalidate_ma_link": {
+        "label": "Music Assistant リンクを再確認"
+      },
+      "review_buffer_settings": {
+        "label": "バッファー設定を確認"
+      },
+      "review_diagnostics": {
+        "label": "診断を確認"
+      },
+      "review_latency_settings": {
+        "label": "レイテンシ設定を確認"
+      },
+      "review_pulse_latency": {
+        "label": "音声レイテンシを確認"
+      },
+      "scan_devices": {
+        "label": "スピーカーをスキャン"
+      },
+      "start_pairing": {
+        "label": "ペアリングを開始"
+      },
+      "test_ma_connection": {
+        "label": "Music Assistant 接続をテスト"
+      },
+      "tune_latency_compensation": {
+        "label": "レイテンシ補正を調整"
+      },
+      "unmute_speaker": {
+        "label": "スピーカーのミュートを解除"
+      }
+    },
+    "blocked": {
+      "daemon_disconnected": {
+        "message": "Music Assistant への音声リンクが接続されていません。"
+      },
+      "ma_disconnected": {
+        "message": "ブリッジが Music Assistant API に接続されていません。"
+      },
+      "ma_queue_unknown": {
+        "message": "Music Assistant にはこのスピーカーのキューがまだありません。"
+      },
+      "ma_reconnecting": {
+        "message": "Music Assistant が再接続しています。"
+      },
+      "no_sink": {
+        "message": "音声出力が設定されていません。"
+      },
+      "not_paired": {
+        "message": "スピーカーはペアリングされていません。ペアリングモードにして再ペアリングしてください。"
+      },
+      "reconnecting": {
+        "message": "再接続はすでに進行中です。"
+      },
+      "released": {
+        "message": "Bluetooth はブリッジから解放されています。先にスピーカーを取り戻してください。"
+      },
+      "stopping": {
+        "message": "プレーヤーを停止しています。"
+      }
+    },
+    "cause": {
+      "air_not_effective": {
+        "text": "このスピーカーではエアセンサーが動作していません（Bluetooth スピーカーが必要です）。"
+      },
+      "air_not_locked": {
+        "text": "エアセンサーは起動後、このスピーカーのストリームにロックしていません。"
+      },
+      "air_unavailable": {
+        "text": "このスピーカーではエアセンサーを実行できません（エアセンサーの状態を参照してください）。"
+      },
+      "cpu_budget": {
+        "text": "Bluetooth モニターの読み取りが CPU の予算を超えたため、ブリッジが再起動するまでエアセンサーはオフです。"
+      },
+      "internal_error": {
+        "text": "エアセンサーで内部エラーが発生し、自動的にオフになりました（詳細はログを参照してください）。"
+      },
+      "module_suspend_on_idle": {
+        "text": "PulseAudio の module-suspend-on-idle が読み込まれており、アイドル状態の出力を一時停止します。"
+      },
+      "monitor_error": {
+        "text": "Bluetooth モニターのソケットが失敗しました。ブリッジは再試行を続けます。"
+      },
+      "no_cap_net_raw": {
+        "text": "ブリッジが Bluetooth モニターのソケットを開けません。NET_RAW ケーパビリティが必要です（コンテナの cap_add に NET_RAW を追加してください）。"
+      },
+      "observed_suspend": {
+        "text": "スピーカーが接続されたままアイドル状態だったため、ホストがこのスピーカーの音声出力を一時停止しました。"
+      },
+      "playout_fallback": {
+        "text": "プレイアウトエンジンが従来のプレーヤーにフォールバックしたため、比較できるスケジュールがありません。"
+      },
+      "sink_ambiguous": {
+        "text": "複数の同一の出力が一致し、どれかを区別できません。"
+      },
+      "sink_in_use": {
+        "text": "別のプレーヤーがすでにこの出力で再生しています。"
+      },
+      "sink_unplugged": {
+        "text": "取り外されたか、名前が変更されました。"
+      },
+      "unknown_suspend": {
+        "text": "ホストがこのスピーカーの音声出力を一時停止しました。"
+      },
+      "unsupported_input": {
+        "text": "ストリームの音声形式はサポートされていません（エアセンサーには 44.1 または 48 kHz が必要です）。"
+      },
+      "unsupported_platform": {
+        "text": "このシステムには Bluetooth モニターのソケットがありません（Linux のみ）。"
+      },
+      "wireplumber_suspend_timeout": {
+        "text": "WirePlumber がアイドル状態の Bluetooth ノードを一時停止します（session.suspend-timeout-seconds）。"
+      }
+    },
+    "event": {
+      "audio-stream-stalled": {
+        "summary": "再生はアクティブですが、音声ストリームが届きません",
+        "title": "音声停止"
+      },
+      "audio-streaming": {
+        "summary": "音声ストリームがアクティブになりました",
+        "title": "音声ストリーミング中"
+      },
+      "bluetooth-connected": {
+        "summary": "Bluetooth スピーカーが接続されました",
+        "title": "スピーカー接続"
+      },
+      "bluetooth-disconnected": {
+        "summary": "Bluetooth スピーカーが切断されました",
+        "title": "スピーカー切断"
+      },
+      "bluetooth-reconnect-failed": {
+        "summary": "Bluetooth の再接続に失敗しました",
+        "title": "再接続失敗"
+      },
+      "bluetooth-reconnected": {
+        "summary": "Bluetooth の再接続に成功しました",
+        "title": "スピーカー再接続"
+      },
+      "bluetooth-standby-entered": {
+        "summary": "音声がないまま {idle_minutes} 分経過したため、スピーカーがスタンバイになりました",
+        "title": "スタンバイ"
+      },
+      "bluetooth-standby-exited": {
+        "summary": "スピーカーがスタンバイから復帰しています",
+        "title": "復帰中"
+      },
+      "bt-management-disabled": {
+        "summary": "ブリッジがこのスピーカーの Bluetooth を解放しました",
+        "title": "Bluetooth 解放"
+      },
+      "bt-management-reclaimed": {
+        "summary": "スピーカーが自力で再接続したため、ブリッジが Bluetooth を取り戻しました",
+        "title": "Bluetooth 取り戻し"
+      },
+      "daemon-connected": {
+        "summary": "プレーヤーが Music Assistant に接続しました",
+        "title": "音声リンク稼働"
+      },
+      "daemon-disconnected": {
+        "summary": "プレーヤーが Music Assistant から切断されました",
+        "title": "音声リンク停止"
+      },
+      "health-bluetooth_disconnected": {
+        "summary": "Bluetooth スピーカーが切断されています",
+        "title": "切断"
+      },
+      "health-daemon_disconnected": {
+        "summary": "Sendspin プレーヤーが接続されていません",
+        "title": "音声リンク停止"
+      },
+      "health-error": {
+        "summary": "{error}",
+        "title": "エラー"
+      },
+      "health-foreign_server": {
+        "summary": "{host} {name} の Music Assistant に接続しています。このブリッジの Music Assistant ではありません",
+        "title": "別の Music Assistant"
+      },
+      "health-idle": {
+        "summary": "アイドル",
+        "title": "アイドル"
+      },
+      "health-ma_reconnecting": {
+        "summary": "Music Assistant の接続を更新しています",
+        "title": "Music Assistant リンクを更新中"
+      },
+      "health-output_missing": {
+        "summary": "音声出力が見つかりません",
+        "title": "音声出力が見つかりません"
+      },
+      "health-playback_without_audio": {
+        "summary": "再生はアクティブですが、音声ストリームが届きません",
+        "title": "音声停止"
+      },
+      "health-reconnecting": {
+        "summary": "Bluetooth の再接続が進行中です",
+        "title": "再接続中"
+      },
+      "health-released": {
+        "summary": "Bluetooth はブリッジから解放されています",
+        "title": "解放済み"
+      },
+      "health-resyncing": {
+        "summary": "音声を再同期しています",
+        "title": "再同期中"
+      },
+      "health-sink_muted": {
+        "summary": "音声出力がシステムでミュートされています",
+        "title": "音声出力ミュート"
+      },
+      "health-stopping": {
+        "summary": "プレーヤーを停止しています",
+        "title": "停止中"
+      },
+      "ma-monitor-stale": {
+        "summary": "Music Assistant の接続が切れました: {error}",
+        "title": "Music Assistant リンク喪失"
+      },
+      "ma-server-refused": {
+        "summary": "{host} の Music Assistant を拒否しました。このブリッジは {owner} に属しています",
+        "title": "Music Assistant 拒否"
+      },
+      "playback-started": {
+        "summary": "再生を開始しました",
+        "title": "再生開始"
+      },
+      "playback-stopped": {
+        "summary": "再生を停止しました",
+        "title": "再生停止"
+      },
+      "reanchoring": {
+        "summary": "ストリームのタイミングを再同期しています",
+        "title": "再同期中"
+      },
+      "reconnecting": {
+        "summary": "Bluetooth の再接続が進行中です",
+        "title": "再接続中"
+      },
+      "runtime-error-cleared": {
+        "summary": "エラーが解消しました",
+        "title": "エラー解消"
+      },
+      "runtime-error": {
+        "summary": "{error}",
+        "title": "エラー"
+      },
+      "sink-lost": {
+        "summary": "音声出力が取り外されました。プレーヤーは代替出力で待機しています",
+        "title": "音声出力喪失"
+      },
+      "sink-muted": {
+        "summary": "音声出力がシステムでミュートされています",
+        "title": "音声出力ミュート"
+      },
+      "sink-rematched": {
+        "summary": "音声出力が新しい名前で見つかりました: {sink}",
+        "title": "音声出力名変更"
+      },
+      "sink-restored": {
+        "summary": "音声出力が戻りました: {sink}",
+        "title": "音声出力復帰"
+      },
+      "sink-unmuted": {
+        "summary": "音声出力のミュートが解除されました",
+        "title": "音声出力ミュート解除"
+      },
+      "startup-config": {
+        "summary": "設定を読み込み中",
+        "title": "設定"
+      },
+      "startup-devices": {
+        "summary": "スピーカー一覧を準備しました",
+        "title": "スピーカー"
+      },
+      "startup-failed": {
+        "summary": "起動に失敗しました: {message}",
+        "title": "起動失敗"
+      },
+      "startup-idle": {
+        "summary": "起動を開始しました",
+        "title": "起動"
+      },
+      "startup-integrations": {
+        "summary": "Music Assistant 統合を初期化しました",
+        "title": "統合"
+      },
+      "startup-ready": {
+        "summary": "起動が完了しました",
+        "title": "準備完了"
+      },
+      "startup-runtime": {
+        "summary": "実行環境の設定を準備しました",
+        "title": "実行環境"
+      },
+      "startup-shutdown": {
+        "summary": "ブリッジをシャットダウンしています",
+        "title": "シャットダウン"
+      },
+      "startup-web": {
+        "summary": "Web インターフェースの準備ができました",
+        "title": "Web インターフェース"
+      }
+    },
+    "header": {
+      "add_first_speaker": {
+        "label": "最初のスピーカーを追加"
+      },
+      "all_disabled": {
+        "label": "すべてのスピーカーが無効"
+      },
+      "all_released": {
+        "label": "すべてのスピーカーが解放済み"
+      },
+      "devices_ready": {
+        "label": "{total} 台中 {ready} 台のアクティブなスピーカーが準備完了"
+      },
+      "first_run": {
+        "label": "初回実行"
+      },
+      "issues_attention": {
+        "label": "{count} 件の対応が必要な問題"
+      },
+      "no_playable_speaker": {
+        "label": "再生可能なスピーカーがありません"
+      },
+      "setup_progress": {
+        "label": "セットアップ {percent}%"
+      },
+      "startup": {
+        "label": "起動 {percent}%"
+      },
+      "startup_finalizing": {
+        "label": "起動 90%"
+      },
+      "waiting_for_setup": {
+        "label": "セットアップを待機中"
+      }
+    },
+    "issue": {
+      "air_correction_inactive": {
+        "summary": "このスピーカーはループモードですが、エア補正が動作していません。測定モードと同じ動作になります。{cause}",
+        "title": "{device}: エア補正が動作していません"
+      },
+      "air_sensor_codec": {
+        "summary": "スピーカーは {codec} でストリームしており、エアセンサーは SBC のみ読み取れます。PREFER_SBC_CODEC をオンにしてスピーカーを再接続してください。再生には影響しません。",
+        "title": "{device}: エアセンサーには SBC コーデックが必要です"
+      },
+      "air_sensor_codec_unsupported": {
+        "summary": "スピーカーはエアセンサーが対応していない SBC 設定を使用しています（{settings}）。再生には影響しません。",
+        "title": "{device}: エアセンサーがこのスピーカーの SBC ストリームを読み取れません"
+      },
+      "air_sensor_unavailable": {
+        "summary": "{causes} 再生には影響しません。この表示を消すには EXPERIMENTAL_AIR_SENSOR をオフにしてください（再起動が必要です）。",
+        "title": "{device}: エアセンサーを利用できません | {count} 台のスピーカーでエアセンサーを利用できません"
+      },
+      "audio_unavailable": {
+        "summary": "ブリッジは現在、音声システムにアクセスできません。",
+        "summary_all_disabled": "ブリッジは現在、音声システムにアクセスできません。スピーカーを有効にする前に音声へのアクセスを復旧してください。そうしないと再生は利用できないままです。",
+        "summary_no_server": "PulseAudio または PipeWire のサーバーが見つかりませんでした。",
+        "summary_no_server_env": "PulseAudio または PipeWire のサーバーが見つかりませんでした。PULSE_SERVER が設定されていません。",
+        "summary_socket_missing": "音声ソケット {socket} は設定されていますが、ホスト上に存在しません。これまでに音声サーバーが作成したことがありません。",
+        "summary_socket_refused": "音声ソケット {socket} はマウントされていますが、音声サーバーが接続を拒否しました（{error}）。",
+        "summary_socket_unreachable": "音声ソケット {socket} はマウントされていますが、ブリッジが開けません（{error}）。",
+        "title": "音声システムを利用できません"
+      },
+      "auto_disabled_never_paired": {
+        "summary": "ペアリングの失敗が繰り返されたため、このスピーカーは無効になりました。ペアリングモードにして有効化をクリックすると再試行できます。",
+        "summary_error": "{error}",
+        "title": "{device} は自動的に無効になりました: 一度もペアリングされていません"
+      },
+      "auto_released": {
+        "summary": "接続の問題が繰り返されたため、ブリッジがこのスピーカーの Bluetooth を解放しました。 | ブリッジが再び管理できるよう、{devices} を取り戻してください。",
+        "summary_error": "{error}",
+        "title": "{device} は自動的に解放されました | {count} 台のスピーカーが自動的に解放されました"
+      },
+      "bluetooth_unavailable": {
+        "summary": "ブリッジは Bluetooth アダプターを見つけられませんでした。アダプター設定を開いて一覧を更新してください。",
+        "summary_all_disabled": "ブリッジは現在 Bluetooth アダプターにアクセスできません。スピーカーを有効にする前にアダプターへのアクセスを復旧してください。そうしないと再生は利用できないままです。",
+        "summary_daemon_down": "ホストで Bluetooth サービス（bluetoothd）が実行されていないため、起動するまでブリッジはアダプターを認識しません。",
+        "title": "Bluetooth アダプターを利用できません"
+      },
+      "bt_sink_suspend_in_gaps": {
+        "summary": "{cause} このような一時停止の後、スピーカーはストリームを再開し、数十ミリ秒ずれることがあります。ブリッジはホストの音声設定を変更しません。停止するには、ホストがアイドル状態の音声出力を一時停止しないようにしてください: {docs}",
+        "title": "{device}: 曲の間でホストが音声出力を一時停止します"
+      },
+      "config_dir_not_writable": {
+        "summary": "ブリッジプロセス（UID {uid}）が {config_dir} に書き込めません。Music Assistant トークンの保存、パスワード変更、スピーカー設定の保存はすべて失敗します。修正: {remediation}",
+        "title": "{config_dir} にブリッジから書き込めません"
+      },
+      "config_migration_failed": {
+        "summary": "ブリッジはスピーカーなしで起動しました。config.json は変更されず、古いファイルのままです。エラー: {error}。バグレポートを送信してください。",
+        "title": "設定をこのバージョンにアップデートできませんでした"
+      },
+      "disconnected": {
+        "summary": "スピーカーの電源を入れるか再接続してください。 | {devices} の電源を入れるか再接続してください。",
+        "summary_error": "{error}",
+        "title": "{device} は切断されています | {count} 台のスピーカーが切断されています"
+      },
+      "duplicate_device": {
+        "summary": "このスピーカーは Music Assistant で「{other_bridge}」としても登録されています。2 つのブリッジで実行すると再接続ループが発生します。どちらかのブリッジで無効にするか、もう一方を停止してください。 | これらのスピーカーは別のブリッジにも登録されています: {devices}。再接続ループを避けるため、どちらかのブリッジで無効にするか、もう一方を停止してください。",
+        "title": "{device} は別のブリッジと競合する可能性があります | {count} 台のスピーカーが別のブリッジと競合する可能性があります"
+      },
+      "latency": {
+        "summary": "レイテンシ調整を改善できます。",
+        "summary_high_latency": "レイテンシ補正は設定されていますが、全体の音声レイテンシがまだ高いです。",
+        "summary_multi_no_delays": "スピーカーが複数ありますが、まだどれにもレイテンシ補正が設定されていません。",
+        "summary_repeated_resyncs": "再生中に再同期が繰り返されました。",
+        "title": "レイテンシ調整に注意が必要です"
+      },
+      "ma_auth": {
+        "summary": "Music Assistant の準備がまだできていません。",
+        "summary_no_credentials": "Music Assistant のサインイン情報がありません。",
+        "summary_no_url": "Music Assistant のアドレスが設定されていません。",
+        "summary_not_connected": "Music Assistant のサインイン情報は保存されていますが、ブリッジが接続されていません。",
+        "title": "Music Assistant に注意が必要です"
+      },
+      "missing_sink": {
+        "summary": "スピーカーは接続されていますが、Bluetooth 音声出力の準備がまだできていません。 | {devices} を再接続するか、音声設定を確認してください。",
+        "summary_error": "{error}",
+        "title": "{device} は接続されていますが、音声出力の準備ができていません | {count} 台のスピーカーが接続されていますが、音声出力の準備ができていません"
+      },
+      "needs_attention": {
+        "summary": "最近のイベントと診断を確認してください。",
+        "summary_daemon_disconnected": "Sendspin プレーヤーが接続されていません。",
+        "summary_error": "{error}",
+        "summary_foreign_server": "{host} {name} の Music Assistant に接続しています。このブリッジの Music Assistant ではありません。",
+        "summary_playback_without_audio": "再生はアクティブですが、音声ストリームが届きません。",
+        "summary_reconnecting": "Bluetooth の再接続が進行中です。",
+        "summary_resyncing": "音声を再同期しています。",
+        "summary_sink_muted": "音声出力がシステムでミュートされています。",
+        "summary_stopping": "プレーヤーを停止しています。",
+        "title": "{device} に注意が必要です"
+      },
+      "never_paired": {
+        "summary": "このスピーカーはブリッジに追加されましたが、Bluetooth に一度も現れていません。ペアリングモードにして「ペアリングを開始」をクリックしてください。 | これらのスピーカーは追加されましたが、Bluetooth に一度も現れていません: {devices}。ペアリングモードにしてペアリングを開始してください。",
+        "summary_error": "{error}",
+        "title": "{device} は一度もペアリングされていません | {count} 台のスピーカーが一度もペアリングされていません"
+      },
+      "output_missing": {
+        "summary": "出力 {sink} は利用できません。{cause} デバイスを再接続するか、プレーヤーの設定で別の出力を選択してください。それまではプレーヤーは Music Assistant のグループに無音のまま残ります。",
+        "title": "{device}: 音声出力が見つかりません"
+      },
+      "output_muted": {
+        "summary": "出力 {sink} はシステムミキサーでミュートされているため、何も聞こえません。Music Assistant の音量ではミュートを解除できません。システムのサウンド設定でミュートを解除してください。 | 同じことが次にも当てはまります: {others}。",
+        "title": "{device}: 音声出力がミュートされています | {count} 個の音声出力に注意が必要です"
+      },
+      "output_port_unavailable": {
+        "summary": "{sink} のアクティブポート {port} は接続がないと報告しています。ケーブルまたはスピーカーを確認してください。 | 同じことが次にも当てはまります: {others}。",
+        "title": "{device}: 音声出力に何も接続されていません | {count} 個の音声出力に注意が必要です"
+      },
+      "output_volume_zero": {
+        "summary": "出力 {sink} はシステムミキサーで 0 % に設定されています。Music Assistant の音量では上げられません。システムのサウンド設定で上げてください。 | 同じことが次にも当てはまります: {others}。",
+        "title": "{device}: 音声出力の音量が 0 % です | {count} 個の音声出力に注意が必要です"
+      },
+      "pa_socket_missing": {
+        "summary": "音声ソケット {socket} は設定されていますが、ホスト上にまだ存在しません。PipeWire または PulseAudio のサーバーが作成していません。これは、ユーザーセッションの lingering がないヘッドレスホストでよく見られる兆候です。",
+        "title": "音声サーバーにアクセスできません: ユーザーの lingering を有効にしてください"
+      },
+      "pa_socket_refused": {
+        "summary": "音声ソケット {socket} はマウントされていますが、ホストの PipeWire または PulseAudio サーバーが接続を拒否しました。これは、ユーザーセッションの lingering がないヘッドレスホストでよく見られる兆候です。",
+        "title": "音声サーバーにアクセスできません: ユーザーの lingering を有効にしてください"
+      },
+      "repair_required": {
+        "summary": "スピーカーはペアリングされなくなったため、再接続の試行が失敗し続けています。ペアリングモードにして再ペアリングしてください。 | これらのスピーカーはペアリングされていません。ペアリングモードから {devices} を再ペアリングしてください。",
+        "summary_error": "{error}",
+        "title": "{device} は再ペアリングが必要です | {count} 台のスピーカーが再ペアリングを必要としています"
+      },
+      "runtime_access": {
+        "summary": "ブリッジは Bluetooth 制御に必要なホストの D-Bus サービスにアクセスできません。診断を開いて、コンテナのマウントと権限を確認してください。",
+        "summary_all_disabled": "ブリッジは現在、必要なホストサービスにアクセスできません。スピーカーを有効にする前にホストへのアクセスを復旧してください。そうしないと再生は利用できないままです。",
+        "title": "ブリッジが必要なホストサービスにアクセスできません"
+      },
+      "samsung_cod_filter": {
+        "summary": "{adapter} が接続を試みましたが、スピーカーは「Limited Resources」で拒否しました。Samsung Q シリーズのサウンドバーは、接続元の Bluetooth デバイスクラスで受信ペアリングをフィルタリングします。設定の Bluetooth で {adapter} の device_class を 0x00010c に設定してから、再度ペアリングしてください。",
+        "summary_no_adapter": "Bluetooth アダプターが接続を試みましたが、スピーカーは「Limited Resources」で拒否しました。Samsung Q シリーズのサウンドバーは、接続元の Bluetooth デバイスクラスで受信ペアリングをフィルタリングします。設定の Bluetooth でアダプターの device_class を 0x00010c に設定してから、再度ペアリングしてください。",
+        "title": "{device}: スピーカーのデバイスクラスフィルターによりペアリングが拒否されました"
+      },
+      "sendspin_daemon_loop_timeout": {
+        "summary": "プレーヤーは接続しますが、一定間隔（{interval} 秒）で切断されるか、自ら切断します。Music Assistant のサーバーとポートを確認し、接続テストを実行してください。",
+        "title": "{device}: Sendspin プレーヤーが {interval} 秒ごとに終了します | {count} 台のスピーカー: Sendspin プレーヤーが一定間隔で終了します"
+      },
+      "sendspin_port_unreachable": {
+        "summary": "{error} ブリッジの設定にある SENDSPIN_PORT が Music Assistant の Sendspin ポートと一致することを確認してください。",
+        "summary_error_only": "{error}",
+        "title": "{device} は Sendspin サーバーに接続できません"
+      },
+      "sendspin_url_malformed": {
+        "summary": "設定で Music Assistant サーバーを編集してください。http://、ポート、パスを含まない、ホスト名または IP アドレスのみを指定する必要があります。",
+        "title": "{device}: Music Assistant サーバーのアドレスが無効です | Music Assistant サーバーのアドレスが無効です"
+      },
+      "setup_audio": {
+        "summary_no_server": "PulseAudio または PipeWire のサーバーが見つかりませんでした。",
+        "summary_no_server_env": "PulseAudio または PipeWire のサーバーが見つかりませんでした。PULSE_SERVER が設定されていません。",
+        "summary_no_sinks": "音声サーバーにはアクセスできますが、音声出力がまだありません。",
+        "summary_socket_missing": "音声ソケット {socket} は設定されていますが、ホスト上に存在しません。これまでに音声サーバーが作成したことがありません。",
+        "summary_socket_refused": "音声ソケット {socket} はマウントされていますが、音声サーバーが接続を拒否しました（{error}）。",
+        "summary_socket_unreachable": "音声ソケット {socket} はマウントされていますが、ブリッジが開けません（{error}）。",
+        "title": "音声システムを確認"
+      },
+      "setup_bluetooth": {
+        "summary_daemon_down": "ホストで Bluetooth サービス（bluetoothd）が実行されていないため、起動するまでブリッジはアダプターを認識しません。",
+        "summary_no_controller": "ブリッジは Bluetooth アダプターを見つけられませんでした。",
+        "summary_no_paired": "ブリッジが使用できるペアリング済みの Bluetooth スピーカーがありません。",
+        "summary_no_paired_disabled": "ペアリング済みの Bluetooth スピーカーがなく、保存されたスピーカーは無効です。",
+        "title": "Bluetooth へのアクセスを確認"
+      },
+      "setup_bluetooth_pair": {
+        "summary_no_paired": "ブリッジが使用できるペアリング済みの Bluetooth スピーカーがありません。",
+        "summary_no_paired_disabled": "ペアリング済みの Bluetooth スピーカーがなく、保存されたスピーカーは無効です。",
+        "title": "スピーカーをペアリングまたは検出"
+      },
+      "setup_bridge_control": {
+        "summary_all_disabled": "設定されているすべてのスピーカーが現在無効です。",
+        "summary_all_released": "設定されているすべてのスピーカーが現在ブリッジから解放されています。",
+        "summary_all_released_auto": "接続の失敗後、ブリッジが設定されているすべてのスピーカーを自動的に解放しました。",
+        "title": "スピーカーを使用可能にする"
+      },
+      "setup_latency": {
+        "summary_high_latency": "レイテンシ補正は設定されていますが、全体の音声レイテンシがかなり高いです。",
+        "summary_multi_no_delays": "スピーカーが複数ありますが、まだどれにもレイテンシ補正が設定されていません。",
+        "title": "レイテンシ調整を確認"
+      },
+      "setup_ma_auth": {
+        "summary_no_credentials": "Music Assistant のサインイン情報がありません。",
+        "summary_no_url": "Music Assistant のアドレスが設定されていません。",
+        "summary_not_connected": "Music Assistant のサインイン情報は保存されていますが、ブリッジが接続されていません。",
+        "title": "Music Assistant に接続"
+      },
+      "setup_runtime_access": {
+        "summary_no_dbus": "ブリッジは Bluetooth 制御に必要なホストの D-Bus サービスにアクセスできません。",
+        "title": "ホストへのアクセスを確認"
+      },
+      "setup_sink_verification": {
+        "summary_missing_sink": "接続されている一部のスピーカーに Bluetooth 音声出力の準備ができていません。",
+        "summary_none_configured": "プレーヤーがまだ設定されていません。",
+        "summary_none_connected_bluetooth": "プレーヤーは設定されていますが、現在 Bluetooth で接続されているスピーカーはありません。",
+        "summary_none_connected_mixed": "プレーヤーは設定されていますが、Bluetooth で接続されているスピーカーも音声出力もありません。",
+        "summary_none_connected_outputs": "プレーヤーは設定されていますが、その音声出力がどれも存在しません。",
+        "title": "最初のスピーカーを接続"
+      },
+      "setup_step": {
+        "summary": "セットアップチェックリストに未完了のステップがあります。",
+        "title": "セットアップを完了"
+      },
+      "sink_system_muted": {
+        "summary": "音声出力がミュートされています。ミュートを解除するまで何も再生されません。クラッシュや再起動後に起こることがあります。",
+        "summary_error": "{error}",
+        "title": "{device}: 音声出力がシステムでミュートされています"
+      },
+      "transport_down": {
+        "summary": "スピーカーは接続されていますが、Sendspin プレーヤーが実行されていません。 | {devices} を再接続して音声リンクを戻してください。",
+        "summary_error": "{error}",
+        "title": "{device} は音声リンクを失いました | {count} 台のスピーカーが音声リンクを失いました"
+      }
+    },
+    "problem": {
+      "already_in_standby": {
+        "detail": "スピーカーはすでにスタンバイです。"
+      },
+      "bad_request": {
+        "detail": "リクエストが無効です。"
+      },
+      "bluetooth_busy": {
+        "detail": "Bluetooth が別の操作でビジーです。しばらくしてからもう一度お試しください。"
+      },
+      "conflict": {
+        "detail": "現在の状態と競合しています。"
+      },
+      "forbidden": {
+        "detail": "この操作を行う権限がありません。"
+      },
+      "http_error": {
+        "detail": "リクエストに失敗しました。"
+      },
+      "internal_error": {
+        "detail": "ブリッジで内部エラーが発生しました。"
+      },
+      "invalid_credentials": {
+        "detail": "サインイン情報が正しくありません。"
+      },
+      "invalid_mac": {
+        "detail": "Bluetooth アドレスが無効です。"
+      },
+      "invalid_request": {
+        "detail": "一部の値が無効です。"
+      },
+      "job_in_progress": {
+        "detail": "同じ操作がすでに実行中です。"
+      },
+      "login_failed": {
+        "detail": "サインインに失敗しました。"
+      },
+      "ma_not_configured": {
+        "detail": "Music Assistant がまだ設定されていません。"
+      },
+      "ma_unavailable": {
+        "detail": "Music Assistant を利用できません。"
+      },
+      "ma_unreachable": {
+        "detail": "ブリッジが Music Assistant にアクセスできません。"
+      },
+      "method_not_allowed": {
+        "detail": "この操作はここでは利用できません。"
+      },
+      "network_error": {
+        "detail": "ブリッジに接続できません。接続を確認してください。"
+      },
+      "no_bluetooth": {
+        "detail": "利用可能な Bluetooth アダプターがありません。"
+      },
+      "not_connected": {
+        "detail": "スピーカーが接続されていません。"
+      },
+      "not_found": {
+        "detail": "見つかりません。"
+      },
+      "not_in_standby": {
+        "detail": "スピーカーはスタンバイではありません。"
+      },
+      "not_ready": {
+        "detail": "まだ準備ができていません。しばらくしてからもう一度お試しください。"
+      },
+      "pairing_disabled": {
+        "detail": "ペアリングはオフになっています。"
+      },
+      "pairing_failed": {
+        "detail": "ペアリングに失敗しました。"
+      },
+      "payload_too_large": {
+        "detail": "データが大きすぎます。"
+      },
+      "scan_in_progress": {
+        "detail": "スキャンはすでに実行中です。"
+      },
+      "session_expired": {
+        "detail": "セッションの有効期限が切れました。再度サインインしてください。"
+      },
+      "timeout": {
+        "detail": "操作に時間がかかりすぎました。"
+      },
+      "too_many_requests": {
+        "detail": "リクエストが多すぎます。しばらく待ってからもう一度お試しください。"
+      },
+      "unauthorized": {
+        "detail": "続行するにはサインインしてください。"
+      },
+      "unavailable": {
+        "detail": "現在利用できません。"
+      },
+      "unknown_check": {
+        "detail": "そのチェックは存在しません。"
+      },
+      "unknown_device": {
+        "detail": "そのスピーカーはブリッジに認識されていません。"
+      },
+      "unknown_job": {
+        "detail": "その操作は認識されていません（期限切れの可能性があります）。"
+      },
+      "upstream_error": {
+        "detail": "ブリッジが依存するサービスがエラーを返しました。"
+      }
+    },
+    "shared": {
+      "another_server": {
+        "text": "別のサーバー"
+      },
+      "attempt": {
+        "open": "再接続の試行 {attempt} が進行中です。",
+        "with_limit": "再接続の試行 {attempt}/{max}。ブリッジがスピーカーを解放するまで残り {remaining} 回です。"
+      },
+      "list": {
+        "more": "{first}、{second}、他 {count} 件"
+      },
+      "recovered": {
+        "text": "（復旧済み）"
+      }
+    },
+    "source": {
+      "bridge_startup": {
+        "name": "ブリッジの起動"
+      }
+    }
+  },
+  "consequence": {
+    "stopsPlayback": "再生が停止します: {names}。",
+    "disconnects": "Bluetooth が切断されます: {names}。",
+    "leavesMa": "プレーヤーが Music Assistant から消えます: {names}。",
+    "unpairs": "Bluetooth のペアリングが削除されます。再度使用するには、新しいスピーカーとして追加してください。",
+    "adapterDisconnects": "このアダプター上のすべてのスピーカーが切断され、再接続するまで再生が停止します: {names}。",
+    "restartMinute": "ブリッジの再起動中、約 1 分間すべてのスピーカーで再生が停止します。",
+    "playingNow": "再生中: {names}。",
+    "replacesConfig": "すべての設定とスピーカーがこのファイルの内容に置き換えられます。",
+    "noUndo": "元に戻すことはできません。",
+    "rollback": "戻すには、前のバージョンをインストールしてください。",
+    "noReconnect": "ブリッジは {names} の管理を停止します。取り戻すまで再接続されません。",
+    "wakeFromMenu": "スピーカーのメニューから復帰させてください。",
+    "downloadFirst": "先に現在の設定をダウンロード",
+    "repairs": "Bluetooth のペアリングを削除して再作成します。スピーカーをペアリングモードにする必要がある場合があります。"
+  },
+  "longOp": {
+    "elapsed": "{seconds} 秒",
+    "cancel": "キャンセル",
+    "cancelling": "キャンセル中…",
+    "retry": "再試行"
+  }
+}

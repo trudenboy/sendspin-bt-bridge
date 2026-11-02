@@ -1,7 +1,17 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { i18n } from '@/i18n'
+import { frenchPlural } from '@/i18n/plural'
 
 const t = i18n.global.t
+
+describe('french plural rule', () => {
+  it('counts 0 and 1 as singular and 2+ as plural', () => {
+    expect(frenchPlural(0, 2)).toBe(0)
+    expect(frenchPlural(1, 2)).toBe(0)
+    expect(frenchPlural(2, 2)).toBe(1)
+    expect(frenchPlural(0, 1)).toBe(0)
+  })
+})
 
 describe('profile skipped count plural', () => {
   afterEach(() => { i18n.global.locale.value = 'en' })

@@ -51,7 +51,7 @@ function onViewportChange() {
 }
 
 function focusFirstItem() {
-  const items = menuRef.value?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])')
+  const items = menuRef.value?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled])')
   items?.[0]?.focus()
 }
 
@@ -67,7 +67,7 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault()
     const items = Array.from(
-      menuRef.value?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? []
+      menuRef.value?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled])') ?? []
     )
     if (items.length === 0) return
 
@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
           :class="[width === 'auto' ? 'min-w-[12rem]' : '']"
           :style="position"
           @click="close"
-          @keydown="onKeydown"
+          @keydown.stop="onKeydown"
         >
           <slot />
         </div>

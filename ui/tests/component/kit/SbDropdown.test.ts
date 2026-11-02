@@ -84,7 +84,55 @@ describe('SbDropdown', () => {
   })
 })
 
+describe('SbDropdown keyboard', () => {
+  it('moves the focus through radio and checkbox items', async () => {
+    const wrapper = mount(SbDropdown, {
+      attachTo: document.body,
+      slots: {
+        default: `
+          <button role="menuitemradio" aria-checked="true">Deutsch</button>
+          <button role="menuitemcheckbox" aria-checked="false">Advanced</button>
+        `,
+      },
+    })
+    await wrapper.find('button').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const menu = wrapper.find('[role="menu"]').element as HTMLElement
+    const items = wrapper.findAll<HTMLElement>('[role^="menuitem"]')
+    expect(items).toHaveLength(2)
+    expect(document.activeElement).toBe(items[0].element)
+
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(items[1].element)
+
+    wrapper.unmount()
+  })
+})
+
 describe('SbDropdownItem', () => {
+  it('renders a radio with its checked state', () => {
+    const wrapper = mount(SbDropdownItem, {
+      props: { role: 'menuitemradio', checked: true },
+      slots: { default: 'Deutsch' },
+    })
+    expect(wrapper.find('[role="menuitemradio"]').attributes('aria-checked')).toBe('true')
+  })
+
+  it('renders a checkbox with its checked state', () => {
+    const wrapper = mount(SbDropdownItem, {
+      props: { role: 'menuitemcheckbox', checked: false },
+      slots: { default: 'Advanced' },
+    })
+    expect(wrapper.find('[role="menuitemcheckbox"]').attributes('aria-checked')).toBe('false')
+  })
+
+  it('does not add aria-checked to a plain item', () => {
+    const wrapper = mount(SbDropdownItem, { slots: { default: 'Action' } })
+    expect(wrapper.find('[role="menuitem"]').attributes('aria-checked')).toBeUndefined()
+  })
+
   it('renders slot content', () => {
     const wrapper = mount(SbDropdownItem, {
       slots: { default: 'Delete' },

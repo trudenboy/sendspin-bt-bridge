@@ -1,0 +1,33 @@
+concept,en,ru,de,es,fr,it,ja,ko,tr,zh-Hans,notes
+bridge,Bridge,мост,Bridge,puente,pont,bridge,köprü,ブリッジ,브리지,桥接器,"The app; keep ""Sendspin Bridge"" as the product name"
+speaker,Speaker,Колонка,Lautsprecher,altavoz,enceinte,altoparlante,スピーカー,스피커,hoparlör,音箱,"A Bluetooth speaker or headset"
+player,Player,Плеер,Player,reproductor,lecteur,lettore,プレーヤー,플레이어,oynatıcı,播放器,"The Music Assistant player created for a speaker"
+audio output,Audio output,Аудиовыход,Audioausgang,salida de audio,sortie audio,uscita audio,音声出力,오디오 출력,ses çıkışı,音频输出,"Wired or local output; not a Bluetooth speaker"
+audio input,Audio input,Аудиовход,Audioeingang,entrada de audio,entrée audio,ingresso audio,音声入力,오디오 입력,ses girişi,音频输入,"Microphone, line-in, or phone stream"
+pairing,Pairing,Спаривание,Kopplung,emparejamiento,appairage,associazione,ペアリング,페어링,eşleştirme,配对,"Bluetooth pairing; not the Music Assistant sign-in"
+pairing code,Pairing code,Код спаривания,Kopplungscode,código de emparejamiento,code d'appairage,codice di associazione,ペアリングコード,페어링 코드,eşleştirme kodu,配对码,"Eight digits for Music Assistant"
+release,Release,Освободить,Freigeben,liberar,libérer,rilasciare,解放,해제,serbest bırak,释放,"Stop managing the speaker's Bluetooth"
+reclaim,Reclaim,Вернуть,Zurückholen,recuperar,récupérer,recuperare,取り戻す,되찾기,geri al,收回,"Undo release"
+standby,Standby,Режим ожидания,Standby,espera,veille,standby,スタンバイ,대기,bekleme,待机,"Disconnect Bluetooth to save battery"
+power save,Power save,Энергосбережение,Energiesparen,ahorro de energía,économie d'énergie,risparmio energetico,省電力,전원 절약,güç tasarrufu,节能,"Free the audio output while idle"
+resync,Resync,Пересинхронизация,Neusynchronisierung,resincronización,resynchronisation,risincronizzazione,再同期,재동기화,yeniden eşitleme,重新同步,"Timing corrected after a glitch"
+latency compensation,Speaker latency compensation,Компенсация задержки колонки,Latenzkompensation,compensación de latencia,compensation de latence,compensazione della latenza,スピーカーのレイテンシ補正,스피커 지연 보정,hoparlör gecikme telafisi,音箱延迟补偿,"Per-speaker offset; larger = earlier"
+reported latency,Reported latency,Заявленная задержка,Gemeldete Latenz,latencia notificada,latence signalée,latenza dichiarata,報告レイテンシ,보고된 지연,bildirilen gecikme,报告的延迟,"A2DP delay report; advisory"
+settling,Settling,Стабилизация,Einschwingen,estabilización,stabilisation,stabilizzazione,安定待ち,안정화,oturma,稳定中,"Sync has not held steady after a start or jump"
+air sensor,Air sensor,Датчик эфира,Luftsensor,sensor de aire,capteur radio,sensore radio,エアセンサー,공중 센서,hava sensörü,空中传感器,"Experimental SBC-only Bluetooth measurement"
+audio link,Audio link,Аудиоканал,Audiostrecke,enlace de audio,lien audio,collegamento audio,音声リンク,오디오 링크,ses bağlantısı,音频链路,"Sendspin stream between this player and Music Assistant"
+adapter,Adapter,Адаптер,Adapter,adaptador,adaptateur,adattatore,アダプター,어댑터,bağdaştırıcı,适配器,"Bluetooth adapter, e.g. hci0"
+codec,Codec,Кодек,Codec,códec,codec,codec,コーデック,코덱,kodek,编解码器,"A2DP codec; keep SBC, AAC, LDAC"
+stream,Stream,Поток,Stream,flujo,flux,flusso,ストリーム,스트림,akış,流,"Audio stream"
+group,Group,Группа,Gruppe,grupo,groupe,gruppo,グループ,그룹,grup,组,"Music Assistant sync group"
+settings,Settings,Настройки,Einstellungen,ajustes,paramètres,impostazioni,設定,설정,ayarlar,设置,
+diagnostics,Diagnostics,Диагностика,Diagnose,diagnóstico,diagnostic,diagnostica,診断,진단,tanılama,诊断,
+update,Update,Обновление,Aktualisierung,actualización,mise à jour,aggiornamento,アップデート,업데이트,güncelleme,更新,
+token,Token,Токен,Token,token,jeton,token,トークン,토큰,belirteç,令牌,"API token"
+mute,Mute,Без звука,Stummschalten,silenciar,muet,disattiva audio,ミュート,음소거,sessize al,静音,
+volume,Volume,Громкость,Lautstärke,volumen,volume,volume,音量,볼륨,ses düzeyi,音量,
+queue,Queue,Очередь,Warteschlange,cola,file d'attente,coda,キュー,대기열,kuyruk,队列,
+source,Source,Источник,Quelle,fuente,source,sorgente,ソース,소스,kaynak,源,"The Sendspin source of a player"
+phone,Phone,Телефон,Smartphone,teléfono,téléphone,telefono,スマートフォン,스마트폰,telefon,手机,
+add-on,Add-on,Дополнение,Add-on,complemento,module complémentaire,componente aggiuntivo,アドオン,애드온,eklenti,附加组件,"Home Assistant add-on"
+technical details,Technical details,Технические подробности,Technische Details,detalles técnicos,détails techniques,dettagli tecnici,技術的な詳細,기술 세부정보,teknik ayrıntılar,技术详情,

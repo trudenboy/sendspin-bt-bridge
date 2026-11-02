@@ -13,6 +13,12 @@ describe('lazy locales', () => {
     expect(availableLocales()).toContain('ru')
   })
 
+  it('lists every shipped language and sorts by its own name', () => {
+    const locales = availableLocales()
+    expect(locales).toEqual(expect.arrayContaining(['de', 'es', 'fr', 'it', 'ja', 'ko', 'tr', 'zh-Hans']))
+    expect(locales.indexOf('de')).toBeLessThan(locales.indexOf('ja'))
+  })
+
   it('loads Russian on demand and switches to it', async () => {
     await setLocale('ru')
     expect(i18n.global.locale.value).toBe('ru')
@@ -32,6 +38,18 @@ describe('lazy locales', () => {
     expect(matchLocale('ru-RU')).toBe('ru')
     expect(matchLocale('RU')).toBe('ru')
     expect(matchLocale('en-GB')).toBe('en')
+    expect(matchLocale('de-DE')).toBe('de')
+    expect(matchLocale('es-419')).toBe('es')
+    expect(matchLocale('fr-CA')).toBe('fr')
+    expect(matchLocale('it-IT')).toBe('it')
+    expect(matchLocale('ja-JP')).toBe('ja')
+    expect(matchLocale('ko-KR')).toBe('ko')
+    expect(matchLocale('tr-TR')).toBe('tr')
+    expect(matchLocale('zh-CN')).toBe('zh-Hans')
+    expect(matchLocale('zh-Hans')).toBe('zh-Hans')
+    expect(matchLocale('zh')).toBe('zh-Hans')
+    expect(matchLocale('zh-TW')).toBeNull()
+    expect(matchLocale('zh-Hant')).toBeNull()
     expect(matchLocale('xx')).toBeNull()
     expect(matchLocale(null)).toBeNull()
   })

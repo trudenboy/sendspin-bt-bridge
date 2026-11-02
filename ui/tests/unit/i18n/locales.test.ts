@@ -9,12 +9,28 @@ describe('locale files', () => {
     expect(report.locales).toEqual(expect.arrayContaining(['en', 'ru']))
   })
 
+  it('ships the eight new languages', () => {
+    expect(report.locales).toEqual(expect.arrayContaining(['de', 'es', 'fr', 'it', 'ja', 'ko', 'tr', 'zh-Hans']))
+  })
+
   it('has every English key in Russian (ru must be complete)', () => {
     expect(report.missing.ru ?? []).toEqual([])
   })
 
   it('keeps placeholders identical to English in every locale', () => {
     expect(report.placeholderMismatches).toEqual([])
+  })
+
+  it('keeps every plural form’s placeholders', () => {
+    expect(report.formPlaceholderMismatches).toEqual([])
+  })
+
+  it('has no empty translations in any locale', () => {
+    expect(report.empty).toEqual([])
+  })
+
+  it('reports coverage for every locale', () => {
+    expect(report.coverage.ru?.total).toBeGreaterThan(0)
   })
 
   it('keeps plural forms where English has them', () => {
@@ -38,5 +54,14 @@ describe('checker', () => {
     expect(r.missing.de).toEqual(['c'])
     expect(r.placeholderMismatches).toEqual([{ locale: 'de', key: 'a', en: ['n'], got: [] }])
     expect(r.pluralMismatches).toEqual([{ locale: 'de', key: 'b' }])
+  })
+
+  it('flags an empty translation and a placeholder lost in one plural form', () => {
+    const r = checkLocales({
+      en: { a: 'x', b: 'one {n} | many {devices}' },
+      de: { a: '', b: 'eins {n} | viele' },
+    })
+    expect(r.empty).toEqual([{ locale: 'de', key: 'a' }])
+    expect(r.formPlaceholderMismatches).toEqual([{ locale: 'de', key: 'b', form: 1, missing: ['devices'] }])
   })
 })

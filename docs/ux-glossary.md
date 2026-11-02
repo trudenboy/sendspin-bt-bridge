@@ -4,6 +4,10 @@ One term per concept in the web UI, in both languages. The vitest lint
 `ui/tests/unit/i18n/glossary.test.ts` fails when a retired term comes back
 into `ui/src/i18n/en.json` or `ru.json`. Decision record: UI/UX overhaul Q8.
 
+The eight community languages use the same concepts; their agreed terms live in
+[`docs/i18n/glossary.csv`](i18n/glossary.csv). Update both files when a concept
+is renamed.
+
 Add a new user-facing word here first, then use it. If two words name the
 same thing, the one in the "Use" columns wins.
 

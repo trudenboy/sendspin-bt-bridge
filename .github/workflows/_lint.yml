@@ -129,6 +129,9 @@ jobs:
       - name: Verify the generated API types match ui/openapi.json
         run: npm run check:api
 
+      - name: Check locale files
+        run: npm run check:locales
+
       - name: Type-check and build
         run: npm run build
 

@@ -2,11 +2,16 @@
 interface Props {
   disabled?: boolean
   destructive?: boolean
+  /** A plain action, a radio choice (language, theme) or a checkbox (technical details). */
+  role?: 'menuitem' | 'menuitemradio' | 'menuitemcheckbox'
+  checked?: boolean
 }
 
 withDefaults(defineProps<Props>(), {
   disabled: false,
   destructive: false,
+  role: 'menuitem',
+  checked: false,
 })
 
 const emit = defineEmits<{
@@ -21,7 +26,8 @@ function onClick() {
 <template>
   <button
     type="button"
-    role="menuitem"
+    :role="role"
+    :aria-checked="role === 'menuitem' ? undefined : checked"
     :disabled="disabled"
     class="flex w-full items-center px-4 py-2 text-left text-sm transition-colors"
     :class="[

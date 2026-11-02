@@ -3,8 +3,9 @@
 Decision record: UI/UX overhaul Q2. The bridge writes some texts for people
 (guidance, recovery cards, header pill, action labels, timeline events, blocked
 reasons, API errors). Each carries a stable `code` and `params`; the web UI
-translates them (`server.<area>.<code>.<leaf>` in `ui/src/i18n/en.json` and
-`ru.json`, through `ui/src/i18n/server.ts`). The English `title` / `summary` /
+translates them (`server.<area>.<code>.<leaf>` in `ui/src/i18n/en.json` and the
+translation files, through `ui/src/i18n/server.ts`; `ru.json` is the reference
+translation). The English `title` / `summary` /
 `label` / `message` / `detail` stay as the fallback for a code the UI does not
 know. Words follow `docs/ux-glossary.md`.
 

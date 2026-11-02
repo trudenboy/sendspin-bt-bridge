@@ -1,0 +1,818 @@
+[
+  {
+    "locale": "de",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "de",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "de",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "de",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "de",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "de",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "de",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "de",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "de",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "de",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "de",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "de",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "de",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "de",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "de",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "de",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "de",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "de",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "es",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "es",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "es",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "es",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "es",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "es",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "es",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "es",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "es",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "es",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "es",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "es",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "es",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "es",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "es",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "es",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "es",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "es",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "fr",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "fr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "fr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "fr",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "fr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "fr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "fr",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "fr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "fr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "fr",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "fr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "fr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "fr",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "fr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "fr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "fr",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "fr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "fr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "it",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "it",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "it",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "it",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "it",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "it",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "it",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "it",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "it",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "it",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "it",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "it",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "it",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "it",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "it",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "it",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "it",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "it",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ja",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "ja",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ja",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ja",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "ja",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ja",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ja",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "ja",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ja",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ja",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "ja",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ja",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ja",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "ja",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ja",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ja",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "ja",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ja",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ko",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "ko",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ko",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ko",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "ko",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ko",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ko",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "ko",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ko",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ko",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "ko",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ko",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ko",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "ko",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ko",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "ko",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "ko",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "ko",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "tr",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "tr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "tr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "tr",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "tr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "tr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "tr",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "tr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "tr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "tr",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "tr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "tr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "tr",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "tr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "tr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "tr",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "tr",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "tr",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "zh-Hans",
+    "route": "home",
+    "path": "/",
+    "desktop": {
+      "lang": "zh-Hans",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "zh-Hans",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "zh-Hans",
+    "route": "groups",
+    "path": "/groups",
+    "desktop": {
+      "lang": "zh-Hans",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "zh-Hans",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "zh-Hans",
+    "route": "config",
+    "path": "/config",
+    "desktop": {
+      "lang": "zh-Hans",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "zh-Hans",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "zh-Hans",
+    "route": "diagnostics",
+    "path": "/diagnostics",
+    "desktop": {
+      "lang": "zh-Hans",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "zh-Hans",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "zh-Hans",
+    "route": "hardware",
+    "path": "/hardware",
+    "desktop": {
+      "lang": "zh-Hans",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "zh-Hans",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  },
+  {
+    "locale": "zh-Hans",
+    "route": "sync",
+    "path": "/sync/syncgroup_main_floor",
+    "desktop": {
+      "lang": "zh-Hans",
+      "scrollWidth": 1280,
+      "bodyWidth": 1280,
+      "innerWidth": 1280
+    },
+    "mobile": {
+      "lang": "zh-Hans",
+      "scrollWidth": 375,
+      "bodyWidth": 375,
+      "innerWidth": 375
+    }
+  }
+]

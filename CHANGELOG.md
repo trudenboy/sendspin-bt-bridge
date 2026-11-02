@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.10] - 2026-11-02
+
+### Added
+
+- The web interface now speaks Italian, Spanish, German, French, Simplified Chinese, Japanese, Korean and Turkish alongside English and Russian. The first pass is machine-assisted and community review continues on Weblate; a string without a translation falls back to English.
+
+### Changed
+
+- The language menu lists languages by their native names and marks the current language for screen readers; arrow keys now reach the radio and checkbox items in that menu.
+
+### Fixed
+
+- Dates and times in the device drawer, the standby badge and the diagnostic event timeline follow the selected interface language instead of the browser's.
+- French messages use the singular after 0 and 1.
+- Long translated labels in the first-run checklist and the Music Assistant account line wrap on phones instead of widening the page.
+
 ## [3.2.0-beta.9] - 2026-11-02
 
 ### Changed
