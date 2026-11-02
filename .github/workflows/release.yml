@@ -377,22 +377,30 @@ jobs:
           [ -n "${beta_tag}" ] && cmd+=(--beta-version "${beta_tag#v}")
           "${cmd[@]}"
 
-      - name: Rebuild the beta add-on from its released tag
-        # The beta channel ships add-on form changes (options, translations,
-        # README) that stable must not receive yet. Generate the beta directory
-        # from the released tag's own `ha-addon/` template, then put it over
-        # the main-generated copy; stable and rc stay built from main.
-        if: needs.prepare.outputs.channel == 'beta'
+      - name: Rebuild the beta add-on from the latest beta tag
+        # beta ships add-on form changes (options, translations, docs) that
+        # stable must not receive yet.  Generate ha-addon-beta from that tag's
+        # own `ha-addon/` template and put it over the main-generated copy, so
+        # a stable or rc release cannot revert the beta form either.
         env:
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
+          beta_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' | head -n 1 || true)"
+          if [ "${CHANNEL}" = "beta" ]; then
+            beta_tag="v${VERSION}"
+          fi
+          if [ -z "${beta_tag}" ]; then
+            echo "No beta tag yet; leaving the beta add-on as generated from main"
+            exit 0
+          fi
           worktree="$(mktemp -d)"
           out="$(mktemp -d)"
           trap 'git worktree remove --force "${worktree}" >/dev/null 2>&1 || true' EXIT
-          git worktree add --detach "${worktree}" "v${VERSION}"
+          git worktree add --detach "${worktree}" "${beta_tag}"
           python "${worktree}/scripts/generate_ha_addon_variants.py" sync-current-repo \
-            --output-dir "${out}" --beta-version "${VERSION}"
+            --output-dir "${out}" --beta-version "${beta_tag#v}"
           rm -rf ha-addon-beta
           cp -r "${out}/ha-addon-beta" ha-addon-beta
 
