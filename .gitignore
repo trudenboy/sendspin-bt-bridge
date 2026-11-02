@@ -78,3 +78,6 @@ ui/dist/
 .research/
 .ux-tools/
 .npmcache/
+
+# Release-worktree scratch (local simulation of main/tag builds)
+.worktrees/

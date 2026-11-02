@@ -377,6 +377,25 @@ jobs:
           [ -n "${beta_tag}" ] && cmd+=(--beta-version "${beta_tag#v}")
           "${cmd[@]}"
 
+      - name: Rebuild the beta add-on from its released tag
+        # The beta channel ships add-on form changes (options, translations,
+        # README) that stable must not receive yet. Generate the beta directory
+        # from the released tag's own `ha-addon/` template, then put it over
+        # the main-generated copy; stable and rc stay built from main.
+        if: needs.prepare.outputs.channel == 'beta'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          worktree="$(mktemp -d)"
+          out="$(mktemp -d)"
+          trap 'git worktree remove --force "${worktree}" >/dev/null 2>&1 || true' EXIT
+          git worktree add --detach "${worktree}" "v${VERSION}"
+          python "${worktree}/scripts/generate_ha_addon_variants.py" sync-current-repo \
+            --output-dir "${out}" --beta-version "${VERSION}"
+          rm -rf ha-addon-beta
+          cp -r "${out}/ha-addon-beta" ha-addon-beta
+
       - name: Commit and push addon + footer changes
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
