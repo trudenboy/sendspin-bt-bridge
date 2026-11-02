@@ -81,3 +81,4 @@ ui/dist/
 
 # Release-worktree scratch (local simulation of main/tag builds)
 .worktrees/
+.uvcache/
