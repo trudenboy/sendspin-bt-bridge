@@ -152,3 +152,5 @@ light theme, English:
   it is not a capture of a real broken host.
 
 Retake them with `DEMO_MODE=true` and the same viewport when the page changes. Recaptured 2026-11-01 for the Music Assistant source-client strip: the demo stand publishes a streaming source through a fake manager (the real protocol path is covered by the integration test, not by the stand).
+
+- `screenshot-hardware-source.png` — retake after the Music Assistant pairing move: the Hardware strip now shows the Music Assistant connection with a link to Settings, and the code/countdown live in Settings → Music Assistant.

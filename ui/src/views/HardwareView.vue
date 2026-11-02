@@ -46,13 +46,6 @@ watch(
   },
   { immediate: true },
 )
-watch(
-  () => bridge.bridge?.sendspin_source?.ma_pairing_seconds_left ?? 0,
-  (left) => {
-    if (left > 0) store.adoptMaPairingWindow(left)
-  },
-  { immediate: true },
-)
 
 const snapshot = computed(() => store.snapshot)
 const controllers = computed(() => snapshot.value?.controllers ?? [])
@@ -92,29 +85,6 @@ async function onSourceStop() {
   try {
     await store.stopSource()
     notifications.success(t('hardware.source.stopped'))
-  } catch (e) {
-    notifications.error(sourceCommandFailure(e))
-  }
-}
-
-function onMaPair() {
-  void undoable('source.maPairing', () => store.openMaPairingWindow(), () => store.forgetMaPairing(), {
-    doneKey: 'undo.sourceMaPairing',
-    name: '',
-    failure: sourceCommandFailure,
-  })
-}
-
-async function onMaForget() {
-  const ok = await confirmAction('source.maForget', {
-    title: t('hardware.source.maForgetConfirmTitle'),
-    consequences: [t('hardware.source.maForgetConfirmBody')],
-    confirmLabel: t('hardware.source.maForget'),
-  })
-  if (!ok) return
-  try {
-    await store.forgetMaPairing()
-    notifications.success(t('hardware.source.maForgetDone'))
   } catch (e) {
     notifications.error(sourceCommandFailure(e))
   }
@@ -661,7 +631,6 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
       <SourceFeedPanel
         :source="store.source"
         :pairing-seconds-left="store.pairingSecondsLeft"
-        :ma-pairing-seconds-left="store.maPairingSecondsLeft"
         :phone-name="sourcePhoneName"
         :failure="store.sourceError"
         :busy="store.sourceBusy"
@@ -669,8 +638,6 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
         @stop="onSourceStop"
         @pair="onSourcePair"
         @stop-pairing="onSourceStopPairing"
-        @ma-pair="onMaPair"
-        @forget-ma="onMaForget"
       />
 
       <section class="mb-8" data-controllers-section>

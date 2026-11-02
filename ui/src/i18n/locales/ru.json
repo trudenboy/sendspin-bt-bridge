@@ -838,7 +838,12 @@
       "phoneNoPhone": "В мост не стримит ни один телефон.",
       "phoneHint": "Телефон спаривается с мостом по Bluetooth; Music Assistant получает захваченный звук.",
       "phonePaired": "Телефон спарен",
-      "phonePairedHint": "Сопряжение сохранено; включите воспроизведение на телефоне, и мост начнёт захват."
+      "phonePairedHint": "Сопряжение сохранено; включите воспроизведение на телефоне, и мост начнёт захват.",
+      "maSettingsHint": "Сопряжение и код — в настройках.",
+      "maSettingsAction": "Открыть настройки сопряжения",
+      "maNotPairedWhere": "Не сопряжено. Сопрягите мост с Music Assistant в настройках.",
+      "phonePairedNeedMa": "Телефон спарен. Осталось сопрячь мост с Music Assistant, чтобы услышать его.",
+      "phonePairedNeedMaAction": "Сопрячь с Music Assistant"
     }
   },
   "kit": {
@@ -872,8 +877,7 @@
     "audioResumed": "Возобновлено: {name}.",
     "sourceStarted": "Источник запущен.",
     "sourcePairingOpen": "Окно сопряжения открыто: спарьте телефон.",
-    "sourcePairingClosed": "Окно сопряжения закрыто.",
-    "sourceMaPairing": "Окно спаривания открыто"
+    "sourcePairingClosed": "Окно сопряжения закрыто."
   },
   "restart": {
     "stopping": "Остановка моста…",
@@ -1011,7 +1015,7 @@
       },
       "SENDSPIN_PORT": {
         "label": "Порт Sendspin",
-        "help": "Порт Sendspin у Music Assistant, обычно 9000."
+        "help": "Порт Sendspin у Music Assistant, обычно 8927."
       },
       "BASE_LISTEN_PORT": {
         "label": "Первый порт плееров",
@@ -1246,7 +1250,7 @@
       },
       "SENDSPIN_SOURCE": {
         "label": "Принимать телефон как источник",
-        "help": "Телефон, сопряжённый с bridge по Bluetooth, стримит в него звук, а bridge отдаёт его как Sendspin-источник, который могут играть другие плееры. Нужен PipeWire (PulseAudio не отдаёт вход телефона)."
+        "help": "Телефон, сопряжённый с мостом по Bluetooth, стримит в него звук, а мост отдаёт его как Sendspin-источник, который могут играть другие плееры. Работает с PipeWire, а на Home Assistant OS — и с PulseAudio."
       }
     },
     "sectionsNav": "Разделы",
@@ -1355,9 +1359,18 @@
         "recommended": "рекомендуется"
       },
       "sourceLink": {
-        "label": "Источник",
-        "help": "Состояние источника и оба окна сопряжения (телефона и Music Assistant) — на странице «Оборудование».",
+        "label": "Источник телефона",
+        "help": "Сопряжение телефона по Bluetooth и состояние захвата — на странице «Оборудование».",
         "action": "Открыть «Оборудование»"
+      },
+      "maPairing": {
+        "label": "Сопряжение источника телефона",
+        "help": "Music Assistant должен доверять мосту, прежде чем сможет воспроизводить звук телефона.",
+        "off": "Источник телефона выключен. Включите его на странице «Оборудование», затем сопрягите здесь с Music Assistant.",
+        "offAction": "Открыть «Оборудование»",
+        "whereToEnter": "В Music Assistant: Настройки → Плееры → этот мост → Настроить → Статический код сопряжения.",
+        "routing": "Воспроизведением и маршрутизацией управляет Music Assistant; мост только захватывает звук телефона.",
+        "notPaired": "Пока не сопряжено. Откройте окно сопряжения и введите код в Music Assistant."
       }
     },
     "leaveConfirm": "Есть несохранённые настройки. Уйти?",
@@ -1631,7 +1644,20 @@
   },
   "home": {
     "connected": "Bluetooth-соединение: {n} из {total}",
-    "playing": "Играют: {n}"
+    "playing": "Играют: {n}",
+    "source": {
+      "title": "Телефон → Music Assistant",
+      "streaming": "Играет с телефона",
+      "pairing": "Идёт сопряжение",
+      "waiting": "Ждём телефон",
+      "off": "Источник выключен",
+      "error": "Ошибка источника",
+      "maConnected": "Music Assistant подключён",
+      "maPaired": "Music Assistant сопряжён, переподключение",
+      "maUnpaired": "Music Assistant не сопряжён",
+      "openHardware": "Открыть «Оборудование»",
+      "pairAction": "Сопрячь с Music Assistant"
+    }
   },
   "groups": {
     "via": "Music Assistant: {url}",

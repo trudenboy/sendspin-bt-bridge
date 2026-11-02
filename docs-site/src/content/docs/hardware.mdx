@@ -82,11 +82,11 @@ Assistant receives it as a source it can play on any player — including the sp
 this bridge drives. The bridge does not play the phone on a speaker itself; that is
 Music Assistant's routing.
 
-There are two pairings, and the strip names both. First, pair the phone over Bluetooth
-with the two-minute window below the Music Assistant block. Second, pair the bridge with
-Music Assistant: enabling the source shows an eight-digit code, and the same code is
-entered when the source is added in Music Assistant. The code and the pairing survive a
-restart, so it is asked once; "Forget pairing" drops it and opens a fresh window.
+There are two pairings, and each lives where it belongs. Pair the phone over Bluetooth
+with the two-minute window on this page. Pair the bridge with Music Assistant in
+**Settings → Music Assistant**: the pairing block shows the eight-digit code, the
+countdown, and "Forget pairing". Enter the same code when the source is added in Music
+Assistant; the pairing survives a restart, so it is asked once.
 
 The source has five states — off, waiting for the code, waiting for the phone,
 streaming, and error — and every error names its cause and next step (`ma_unreachable`,
@@ -99,7 +99,7 @@ Capturing needs the host's recording tools: `wpctl` on PipeWire, or `pactl` and
 `parecord` on PulseAudio. A host without them refuses to enable the source instead of
 showing a stream that never starts.
 
-![The phone source strip: the Music Assistant source-client link and the phone's Bluetooth pairing window](/sendspin-bt-bridge/screenshots/screenshot-hardware-source.png)
+![The phone source strip: the Music Assistant connection with a link to its pairing settings, and the phone's Bluetooth pairing window](/sendspin-bt-bridge/screenshots/screenshot-hardware-source.png)
 
 ## When a section is empty
 

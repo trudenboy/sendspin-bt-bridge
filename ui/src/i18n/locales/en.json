@@ -838,7 +838,12 @@
       "phoneNoPhone": "No phone is streaming into the bridge.",
       "phoneHint": "The phone pairs with the bridge over Bluetooth; Music Assistant receives the captured audio.",
       "phonePaired": "Phone paired",
-      "phonePairedHint": "The bond is saved; start playing on the phone and the bridge will capture it."
+      "phonePairedHint": "The bond is saved; start playing on the phone and the bridge will capture it.",
+      "maSettingsHint": "Pairing and the code are in Settings.",
+      "maSettingsAction": "Open pairing settings",
+      "maNotPairedWhere": "Not paired. Pair the bridge with Music Assistant in Settings.",
+      "phonePairedNeedMa": "Phone paired. Pair the bridge with Music Assistant to hear it.",
+      "phonePairedNeedMaAction": "Pair with Music Assistant"
     }
   },
   "kit": {
@@ -872,8 +877,7 @@
     "audioResumed": "Resumed: {name}.",
     "sourceStarted": "Source started.",
     "sourcePairingOpen": "Pairing window open: pair the phone now.",
-    "sourcePairingClosed": "Pairing window closed.",
-    "sourceMaPairing": "Pairing window opened"
+    "sourcePairingClosed": "Pairing window closed."
   },
   "restart": {
     "stopping": "Stopping bridge…",
@@ -1011,7 +1015,7 @@
       },
       "SENDSPIN_PORT": {
         "label": "Sendspin port",
-        "help": "Music Assistant's Sendspin port, normally 9000."
+        "help": "Music Assistant's Sendspin port, normally 8927."
       },
       "BASE_LISTEN_PORT": {
         "label": "First player port",
@@ -1246,7 +1250,7 @@
       },
       "SENDSPIN_SOURCE": {
         "label": "Accept a phone as a source",
-        "help": "A phone paired to the bridge over Bluetooth streams into it, and the bridge offers that audio as a Sendspin source other players can play. Needs PipeWire (PulseAudio never exposes the phone's input)."
+        "help": "A phone paired to the bridge over Bluetooth streams into it, and the bridge offers that audio as a Sendspin source other players can play. Works with PipeWire and, on Home Assistant OS, PulseAudio."
       }
     },
     "sectionsNav": "Sections",
@@ -1355,9 +1359,18 @@
         "recommended": "recommended"
       },
       "sourceLink": {
-        "label": "Source",
-        "help": "The source's state and both pairing windows (phone and Music Assistant) are on the Hardware page.",
+        "label": "Phone source",
+        "help": "Pair the phone over Bluetooth and see its capture state on the Hardware page.",
         "action": "Open Hardware"
+      },
+      "maPairing": {
+        "label": "Phone source pairing",
+        "help": "Music Assistant must trust this bridge before it can play the phone's audio.",
+        "off": "The phone source is off. Enable it on the Hardware page, then pair it with Music Assistant here.",
+        "offAction": "Open Hardware",
+        "whereToEnter": "In Music Assistant: Settings → Players → this bridge → Configure → Static pairing code.",
+        "routing": "Playback and routing stay in Music Assistant; the bridge only captures the phone.",
+        "notPaired": "Not paired yet. Open a pairing window, then enter the code in Music Assistant."
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",
@@ -1631,7 +1644,20 @@
   },
   "home": {
     "connected": "{n} of {total} Bluetooth connected",
-    "playing": "{n} playing"
+    "playing": "{n} playing",
+    "source": {
+      "title": "Phone → Music Assistant",
+      "streaming": "Playing from the phone",
+      "pairing": "Pairing in progress",
+      "waiting": "Waiting for the phone",
+      "off": "Source is off",
+      "error": "Source error",
+      "maConnected": "Music Assistant connected",
+      "maPaired": "Music Assistant paired, reconnecting",
+      "maUnpaired": "Music Assistant is not paired",
+      "openHardware": "Open Hardware",
+      "pairAction": "Pair with Music Assistant"
+    }
   },
   "groups": {
     "via": "Music Assistant at {url}",

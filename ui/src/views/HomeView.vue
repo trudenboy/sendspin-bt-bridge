@@ -17,6 +17,7 @@ import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
+import SourceSummaryCard from '@/components/hardware/SourceSummaryCard.vue'
 import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
 import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
 import StatusState from '@/components/StatusState.vue'
@@ -289,6 +290,8 @@ watch(
 
     <template v-else>
       <GuidanceBanner />
+
+      <SourceSummaryCard />
 
       <!-- From md up the header's runtime row carries these. -->
       <p v-if="bridge.devices.length" data-home-summary class="mb-4 flex md:hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">

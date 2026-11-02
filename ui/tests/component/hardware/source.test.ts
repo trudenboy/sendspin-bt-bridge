@@ -2,13 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { getHardware } from '@/api/hardware'
-import {
-  cancelMaPairing,
-  closeSourcePairing,
-  openMaPairing,
-  openSourcePairing,
-  setSourceEnabled,
-} from '@/api/source'
+import { closeSourcePairing, openSourcePairing, setSourceEnabled } from '@/api/source'
 import { useBridgeStore } from '@/stores/bridge'
 import { useHardwareStore } from '@/stores/hardware'
 import { useNotificationStore } from '@/stores/notifications'
@@ -47,8 +41,6 @@ describe('Hardware page: source strip', () => {
     confirm.confirmDialog.mockResolvedValue(true)
     vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed() }) as never)
     vi.mocked(setSourceEnabled).mockResolvedValue({} as never)
-    vi.mocked(openMaPairing).mockResolvedValue({ code: '12345678', seconds_left: 300, client_id: 'peer' } as never)
-    vi.mocked(cancelMaPairing).mockResolvedValue(undefined as never)
     vi.mocked(openSourcePairing).mockResolvedValue(phoneWindow() as never)
     vi.mocked(closeSourcePairing).mockResolvedValue(undefined as never)
   })
@@ -79,14 +71,17 @@ describe('Hardware page: source strip', () => {
     expect(setSourceEnabled).toHaveBeenCalledWith(true)
   })
 
-  it('shows the Music Assistant link and the phone block without relays', async () => {
+  it('shows the Music Assistant status and sends pairing to Settings', async () => {
     wrapper = mountView()
     await flushPromises()
 
     const panel = wrapper.get('[data-source-panel]')
     expect(panel.attributes('data-source-state')).toBe('waiting')
     expect(panel.get('[data-source-state-badge]').text()).toContain(en.hardware.source.stateWaiting)
-    expect(panel.get('[data-source-ma]').text()).toContain('ws://ma.local:8927/sendspin')
+    expect(panel.get('[data-source-ma]').text()).toContain(en.hardware.source.maSettingsHint)
+    expect(panel.get('[data-source-ma-settings]').attributes('href')).toBe('/config#settings-musicAssistant')
+    expect(panel.find('[data-source-ma-pair]').exists()).toBe(false)
+    expect(panel.find('[data-source-ma-forget]').exists()).toBe(false)
     expect(panel.find('[data-source-player]').exists()).toBe(false)
     expect(panel.find('[data-source-relay]').exists()).toBe(false)
     expect(panel.get('[data-source-phone-block]').exists()).toBe(true)
@@ -94,22 +89,7 @@ describe('Hardware page: source strip', () => {
     expect(panel.find('[data-source-stop]').exists()).toBe(true)
   })
 
-  it('shows the streaming phone by name and MAC', async () => {
-    vi.mocked(getHardware).mockResolvedValue(
-      snapshot({ source: sourceFeed({ state: 'streaming', phone_mac: 'FC:58:FA:EB:08:6C' }) }) as never,
-    )
-
-    wrapper = mountView()
-    await flushPromises()
-
-    const panel = wrapper.get('[data-source-panel]')
-    expect(panel.attributes('data-source-state')).toBe('streaming')
-    const phone = panel.get('[data-source-phone]')
-    expect(phone.text()).toContain('ENEBY20')
-    expect(phone.text()).toContain('FC:58:FA:EB:08:6C')
-  })
-
-  it('shows the Music Assistant pairing code and its countdown', async () => {
+  it('never shows the Music Assistant pairing code on the Hardware page', async () => {
     vi.mocked(getHardware).mockResolvedValue(
       snapshot({
         source: sourceFeed({
@@ -131,34 +111,17 @@ describe('Hardware page: source strip', () => {
     await flushPromises()
 
     const panel = wrapper.get('[data-source-panel]')
-    expect(panel.get('[data-source-ma-code]').text()).toContain('12345678')
-    expect(panel.get('[data-source-ma-code]').text()).toContain(
-      en.hardware.source.maCodeHint.replace('{time}', '0:47'),
-    )
-    expect(panel.find('[data-source-ma-pair]').exists()).toBe(true)
+    expect(panel.find('[data-source-ma-code]').exists()).toBe(false)
+    expect(panel.text()).not.toContain('12345678')
+    expect(panel.get('[data-source-ma-settings]').attributes('href')).toBe('/config#settings-musicAssistant')
   })
 
-  it('pairs with Music Assistant through the route and shows the returned code', async () => {
+  it('points at Settings when the phone is paired but Music Assistant is not', async () => {
     vi.mocked(getHardware).mockResolvedValue(
       snapshot({
         source: sourceFeed({
-          state: 'pairing',
-          ma: {
-            server: 'ws://ma.local:8927/sendspin',
-            connected: true,
-            paired: false,
-            pairing_required: true,
-            pairing_code: null,
-            pairing_seconds_left: 0,
-            error: null,
-          },
-        }),
-      }) as never,
-    )
-    vi.mocked(getHardware).mockResolvedValueOnce(
-      snapshot({
-        source: sourceFeed({
-          state: 'pairing',
+          state: 'waiting',
+          paired_phone_mac: '34:C7:E9:25:A3:A3',
           ma: {
             server: 'ws://ma.local:8927/sendspin',
             connected: true,
@@ -174,25 +137,25 @@ describe('Hardware page: source strip', () => {
 
     wrapper = mountView()
     await flushPromises()
-    const panel = wrapper.get('[data-source-panel]')
-    expect(panel.find('[data-source-ma-code]').exists()).toBe(false)
 
-    await wrapper.get('[data-source-ma-pair]').trigger('click')
-    await flushPromises()
-
-    expect(openMaPairing).toHaveBeenCalledOnce()
-    expect(useHardwareStore().maPairingSecondsLeft).toBe(300)
+    const banner = wrapper.get('[data-source-phone-needs-ma]')
+    expect(banner.text()).toContain(en.hardware.source.phonePairedNeedMa)
+    expect(banner.get('a').attributes('href')).toBe('/config#settings-musicAssistant')
   })
 
-  it('forgets the Music Assistant pairing after a confirm', async () => {
+  it('shows the streaming phone by name and MAC', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ source: sourceFeed({ state: 'streaming', phone_mac: 'FC:58:FA:EB:08:6C' }) }) as never,
+    )
+
     wrapper = mountView()
     await flushPromises()
 
-    await wrapper.get('[data-source-ma-forget]').trigger('click')
-    await flushPromises()
-
-    expect(confirm.confirmDialog).toHaveBeenCalled()
-    expect(cancelMaPairing).toHaveBeenCalledOnce()
+    const panel = wrapper.get('[data-source-panel]')
+    expect(panel.attributes('data-source-state')).toBe('streaming')
+    const phone = panel.get('[data-source-phone]')
+    expect(phone.text()).toContain('ENEBY20')
+    expect(phone.text()).toContain('FC:58:FA:EB:08:6C')
   })
 
   it('explains an unreachable Music Assistant with a next step', async () => {

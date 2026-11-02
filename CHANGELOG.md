@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Music Assistant pairing moved from the Hardware page to Settings → Music Assistant, next to the account it belongs to; the Hardware page keeps the connection status and links there.
+- After the phone pairs over Bluetooth, the Hardware page points to the Music Assistant pairing when the bridge is not paired yet, instead of leaving two unrelated actions on one screen.
+
+### Fixed
+
+- The Sendspin port help no longer says 9000: the default is 8927.
+- The phone source no longer claims PipeWire-only capture: PulseAudio works on Home Assistant OS.
+
 ## [3.2.0-beta.6] - 2026-11-02
 
 ### Fixed

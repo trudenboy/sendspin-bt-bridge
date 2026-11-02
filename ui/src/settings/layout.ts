@@ -53,6 +53,7 @@ export interface FieldDef {
 
 export type SectionComponent =
   | 'maConnection'
+  | 'maPairing'
   | 'sendspinTest'
   | 'sourceLink'
   | 'latencyAssistant'
@@ -114,7 +115,7 @@ export const SECTIONS: readonly SectionDef[] = [
   {
     id: 'musicAssistant',
     icon: 'music',
-    before: ['maConnection'],
+    before: ['maConnection', 'maPairing'],
     fields: [
       { key: 'SENDSPIN_SERVER', kind: 'text', placeholder: 'auto' },
       { key: 'SENDSPIN_PORT', kind: 'number', min: 1, max: 65535 },
