@@ -30,41 +30,6 @@ configuration:
     description: >-
       IANA timezone name (e.g. "Europe/Moscow", "America/New_York").
       Leave empty to automatically use the Home Assistant system timezone.
-  pulse_latency_msec:
-    name: "PulseAudio latency (ms)"
-    description: >-
-      Requested PulseAudio buffer latency in milliseconds. Larger values reduce
-      audio dropouts on slow hardware at the cost of slightly higher latency.
-      Default is 600 ms; reduce it on faster hardware if you want lower latency.
-  startup_banner_grace_seconds:
-    name: "Startup finalizing grace period (sec)"
-    description: >-
-      How long the web UI keeps the restart page in the finalizing state after
-      the backend reports ready. Lower this if Save & Restart feels stuck near
-      "Startup 90%". Set to 0 to unlock immediately.
-  recovery_banner_grace_seconds:
-    name: "Recovery banner delay after unlock (sec)"
-    description: >-
-      How long top-level recovery banners stay hidden after the restart page
-      unlocks. Use this to give Bluetooth devices extra time to reconnect
-      before attention banners appear.
-  prefer_sbc_codec:
-    name: "Prefer SBC codec"
-    description: >-
-      When enabled, the bridge attempts to switch the Bluetooth A2DP codec to
-      SBC immediately after each device connects. SBC is the simplest mandatory
-      A2DP codec and requires the least CPU for encoding. Useful on slow
-      hardware (e.g. Celeron G1610T) with multiple simultaneous speakers.
-      Has no effect if PulseAudio does not support send-message (PA < 15) or
-      the device is already using SBC. Enable this alongside changing the
-      Music Assistant audio format to PCM 44.1 kHz / 16-bit for maximum CPU
-      savings.
-  bt_check_interval:
-    name: "Bluetooth check interval"
-    description: >-
-      Bluetooth reconnect check interval in seconds. The bridge polls each
-      device at this rate and reconnects automatically if the connection drops.
-      Default is 10 seconds.
   bt_max_reconnect_fails:
     name: "Max reconnect failures"
     description: >-
@@ -82,30 +47,6 @@ configuration:
       Logging level for the bridge. Use "info" for normal operation or
       "debug" for detailed troubleshooting output. Debug mode produces
       significantly more log data.
-  ma_api_url:
-    name: "Music Assistant API URL"
-    description: >-
-      Music Assistant REST API URL for volume routing
-      (e.g. http://192.168.1.100:8095). Required when "Volume via MA" is
-      enabled. Leave empty if not using MA volume routing.
-  ma_api_token:
-    name: "Music Assistant API token"
-    description: >-
-      Authentication token for the Music Assistant REST API. Required only
-      if your MA instance has authentication enabled. Leave empty otherwise.
-  ma_auto_silent_auth:
-    name: "Auto-get MA token on UI open"
-    description: >-
-      When enabled, the ingress web UI will try to create a long-lived Music
-      Assistant token automatically using the current Home Assistant session
-      as soon as the page opens. Applies to Home Assistant addon ingress mode only.
-  ma_addon_slug:
-    name: "Music Assistant add-on from a custom repository"
-    description: >-
-      Leave empty for the official Music Assistant add-on or one in the local
-      add-on folder. For a Music Assistant add-on from another repository,
-      enter its slug (shown in its add-on page URL) so the bridge may sign in
-      to Music Assistant through it.
   volume_via_ma:
     name: "Volume via Music Assistant"
     description: >-

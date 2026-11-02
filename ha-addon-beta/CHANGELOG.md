@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.9] - 2026-11-02
+
+### Changed
+
+- The add-on form now covers only what the bridge needs before its UI is reachable: Music Assistant server and port, bridge name, timezone, HA area naming, reconnect threshold, log level, adapters and the HA integration block. Audio tuning and Music Assistant credentials moved to the web UI, and existing values survive the upgrade.
+- Settings sections whose fields need a restart say so before saving.
+
+### Fixed
+
+- The add-on no longer overwrites the Music Assistant token with the `ma_api_token` option value on every restart: the option is gone and the UI-issued token is kept.
+- The update badge in the header is a full 24 px pointer target on phones.
+
 ## [3.2.0-beta.8] - 2026-11-02
 
 ### Changed

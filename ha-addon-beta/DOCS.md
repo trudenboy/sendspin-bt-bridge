@@ -98,21 +98,14 @@ Important:
 | `base_listen_port` | port | _(track default)_ | Optional starting port for auto-assigned Sendspin player listeners. Defaults are `8928` (stable), `9028` (RC), and `9128` (beta). |
 | `bridge_name` | string | _(empty)_ | Custom name for this bridge instance. When empty the system hostname is used automatically. |
 | `tz` | string | _(empty)_ | IANA timezone (e.g. `Europe/London`, `America/New_York`). Leave empty to inherit the Home Assistant system timezone. |
-| `pulse_latency_msec` | int | `600` | PulseAudio buffer latency in milliseconds. Higher values reduce audio dropouts on slower or virtualized systems at the cost of slightly higher latency. |
-| `startup_banner_grace_seconds` | int | `5` | How long the UI keeps the restart screen in its finalizing state after the backend reports ready. Set `0` to unlock immediately. |
-| `recovery_banner_grace_seconds` | int | `15` | How long top-level recovery banners stay hidden after the restart screen unlocks. Use this to give devices extra time to reconnect before attention banners appear. |
-| `prefer_sbc_codec` | bool | `false` | Force the SBC Bluetooth codec after each connection. SBC uses less CPU than AAC/LDAC—useful on low-power hardware with multiple speakers. Enable alongside PCM 44.1 kHz / 16-bit in MA for maximum CPU savings. |
-| `bt_check_interval` | int | `10` | Bluetooth reconnect check interval in seconds. Lower values detect disconnects faster. |
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
 | `log_level` | list | `info` | Logging verbosity: `info` or `debug`. Use `debug` when troubleshooting. |
+
+Audio tuning (PulseAudio latency, codec preference, reconnect interval) and Music Assistant credentials are managed in the bridge's web UI: add-on options set the bridge up before its UI is reachable.
 ### Music Assistant API options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `ma_api_url` | string | _(empty)_ | Music Assistant REST API URL (e.g. `http://192.168.1.100:8095`). Auto-detected in addon mode. |
-| `ma_api_token` | string | _(empty)_ | MA API token. **In addon mode** — open **Configuration → Music Assistant** and use "Sign in with Home Assistant" to create or refresh it automatically (no manual setup needed). For Docker/LXC — create a token in MA → Settings → API Tokens and paste it here. |
-| `ma_auto_silent_auth` | bool | `true` | Addon/Ingress only. When enabled, the bridge first tries silent token creation or reuse via Home Assistant Ingress before falling back to the regular HA login popup. |
-| `ma_addon_slug` | string | _(empty)_ | Addon only. Leave empty for the official Music Assistant add-on or one in the local add-on folder. For a Music Assistant add-on from another (custom) repository, enter its slug so the bridge may sign in through it — the bridge never trusts an add-on just because its name says Music Assistant. A local or named add-on is used only when the Music Assistant URL is its address (for a host-network add-on: the Home Assistant host on port 8095). Residual risk: if Music Assistant is stopped and another add-on you installed on the host network takes port 8095 and is itself local or named here, the bridge would sign in through that add-on. |
 | `volume_via_ma` | bool | `true` | Route volume commands through the MA API instead of controlling PulseAudio directly. Keeps MA and the speaker in sync. |
 
 The Music Assistant panel is reconfigurable: you can return to
@@ -185,7 +178,7 @@ its own player in Music Assistant.
 - Use `static_delay_ms` (0–5000) to fine-tune audio timing across speakers
   when grouping them in Music Assistant multi-room mode. DAC-anchored sync
   handles most latency automatically; only add a small positive value if needed.
-- On low-power hardware (RPi 3 / armv7), enable `prefer_sbc_codec` and limit
+- On low-power hardware (RPi 3 / armv7), enable **Prefer SBC codec** in the web UI and limit
   the number of simultaneous speakers to avoid CPU saturation.
 
 ## Web Interface
@@ -275,7 +268,7 @@ for the entity catalog and example automations.
 ### No audio
 
 1. Check the addon Log tab for PulseAudio sink detection messages.
-2. Increase `pulse_latency_msec` to `400`–`600` if the sink is found but audio
+2. Increase **PulseAudio latency** (Settings → Audio) to `400`–`600` if the sink is found but audio
    is silent or choppy.
 3. Verify the speaker is in **A2DP mode** (not HFP/HSP hands-free mode).
 4. Restart the addon after the speaker is fully connected and showing in
@@ -283,14 +276,14 @@ for the entity catalog and example automations.
 
 ### High CPU usage
 
-1. Enable `prefer_sbc_codec: true` to use the lightest Bluetooth audio codec.
+1. Enable **Prefer SBC codec** (Settings → Audio) to use the lightest Bluetooth audio codec.
 2. In Music Assistant, set the Sendspin player output format to
    **PCM 44.1 kHz / 16-bit** (instead of higher sample rates or 24-bit).
 3. Reduce the number of simultaneous speakers on armv7 / low-power hardware.
 
 ### Speaker disconnects frequently
 
-1. Lower `bt_check_interval` (e.g. `5`) for faster reconnect detection.
+1. Lower **Bluetooth check interval** (Settings → Bluetooth, e.g. `5`) for faster reconnect detection.
 2. Move the speaker closer to the Bluetooth adapter or reduce interference
    from Wi-Fi / USB 3.0 devices.
 3. Set a positive `keepalive_interval` on the device to prevent the speaker

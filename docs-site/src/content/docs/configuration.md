@@ -189,17 +189,13 @@ Core addon options include:
 | **base_listen_port** | Starting port for auto-assigned device listeners |
 | **bridge_name** | Optional instance label appended to players |
 | **tz** | IANA timezone |
-| **pulse_latency_msec** | Audio buffer latency hint |
-| **prefer_sbc_codec** | Lower-CPU codec preference |
-| **bt_check_interval** | Reconnect polling interval |
 | **bt_max_reconnect_fails** | Auto-disable threshold |
 | **auth_enabled** | Direct-listener auth toggle; HA addon mode still enforces HA auth regardless |
-| **ma_api_url / ma_api_token** | Music Assistant REST integration |
-| **ma_auto_silent_auth** | Allow addon/Ingress pages to try silent HA-backed MA token creation on open |
-| **ma_addon_slug** | Slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need none) |
 | **volume_via_ma / mute_via_ma** | Route controls through MA to keep UI state aligned |
 | **update_channel** | In-app release-lane preference for update checks and warnings |
 | **log_level** | Base logging verbosity |
+
+Audio tuning (PulseAudio latency, codec preference, reconnect interval) and Music Assistant credentials are **web-UI settings** in the bridge itself; add-on options only cover what the bridge needs before its UI is reachable.
 
 ![HA addon device and adapter lists plus device edit dialog](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
 

@@ -23,7 +23,15 @@ import {
   Settings2,
   ShieldCheck,
 } from 'lucide-vue-next'
-import { SECTIONS, type ConfigDoc, type FieldDef, type SectionComponent, type SectionDef } from '@/settings/layout'
+import {
+  COMPONENT_OWNED_KEYS,
+  RESTART_REQUIRED_FIELDS,
+  SECTIONS,
+  type ConfigDoc,
+  type FieldDef,
+  type SectionComponent,
+  type SectionDef,
+} from '@/settings/layout'
 import SettingField from '@/components/settings/SettingField.vue'
 import MaConnectionSection from '@/components/settings/MaConnectionSection.vue'
 import MaPairingSection from '@/components/settings/MaPairingSection.vue'
@@ -77,6 +85,15 @@ const showAdvanced = technicalDetails
 const setAdvanced = (v: boolean) => setTechnicalDetails(v)
 
 const doc = computed(() => (configStore.config ?? {}) as ConfigDoc)
+
+/** A section that owns a restart-only key says so before the operator saves. */
+function sectionNeedsRestart(section: SectionDef): boolean {
+  if (section.fields.some((field) => RESTART_REQUIRED_FIELDS.has(field.key))) return true
+  const parts = new Set<string>([...(section.before ?? []), ...(section.after ?? [])])
+  return Object.entries(COMPONENT_OWNED_KEYS).some(
+    ([key, part]) => part !== 'devices' && parts.has(part) && RESTART_REQUIRED_FIELDS.has(key),
+  )
+}
 
 /* Search, as in Home Assistant's settings: matches a field's label, help or key. */
 const query = ref('')
@@ -263,6 +280,9 @@ onMounted(async () => {
                 {{ t(`settings.sections.${s.id}.title`) }}
               </h2>
               <p class="mt-1 text-sm text-text-secondary">{{ t(`settings.sections.${s.id}.description`) }}</p>
+              <p v-if="sectionNeedsRestart(s)" data-section-restart class="mt-1 text-xs text-text-secondary">
+                {{ t('settings.appliesAfterRestart') }}
+              </p>
             </div>
           </header>
           <p v-if="embedded && HA_OWNED[s.id]" class="px-4 py-4 text-sm text-text-primary sm:px-5" :data-embedded-note="s.id">

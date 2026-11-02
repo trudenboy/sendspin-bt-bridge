@@ -966,9 +966,10 @@ def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
     assert "web_port" not in options
     assert "base_listen_port" not in options
     assert "update_channel" not in options
-    assert options["ma_auto_silent_auth"] is True
-    assert options["startup_banner_grace_seconds"] == 10
-    assert options["recovery_banner_grace_seconds"] == 25
+    # Audio tuning and MA credentials are web-UI settings, not add-on options.
+    assert "ma_auto_silent_auth" not in options
+    assert "startup_banner_grace_seconds" not in options
+    assert "recovery_banner_grace_seconds" not in options
 
 
 def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
@@ -1010,9 +1011,9 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
     assert "web_port" not in options
     assert options["base_listen_port"] == 19000
     assert "update_channel" not in options
-    assert options["ma_auto_silent_auth"] is False
-    assert options["startup_banner_grace_seconds"] == 0
-    assert options["recovery_banner_grace_seconds"] == 8
+    assert "ma_auto_silent_auth" not in options
+    assert "startup_banner_grace_seconds" not in options
+    assert "recovery_banner_grace_seconds" not in options
 
 
 def test_api_ha_areas_returns_bridge_suggestions_and_adapter_matches(client, monkeypatch):

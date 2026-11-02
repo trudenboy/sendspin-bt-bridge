@@ -184,21 +184,10 @@ def main() -> None:
         "HA_AREA_NAME_ASSIST_ENABLED": bool(opts.get("ha_area_name_assist_enabled", True)),
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
-        "PULSE_LATENCY_MSEC": _int_opt(opts, "pulse_latency_msec", 600),
-        "STARTUP_BANNER_GRACE_SECONDS": _int_opt(opts, "startup_banner_grace_seconds", 5),
-        "RECOVERY_BANNER_GRACE_SECONDS": _int_opt(opts, "recovery_banner_grace_seconds", 15),
-        "PREFER_SBC_CODEC": bool(opts.get("prefer_sbc_codec", False)),
-        "DISABLE_PA_RESCUE_STREAMS": bool(opts.get("disable_pa_rescue_streams", False)),
         "COMPENSATE_OUTPUT_LATENCY": True,
         "PLAYOUT_DIAG": False,
-        "BT_CHECK_INTERVAL": _int_opt(opts, "bt_check_interval", 10),
         "BT_MAX_RECONNECT_FAILS": _int_opt(opts, "bt_max_reconnect_fails", 0),
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
-        "MA_API_URL": opts.get("ma_api_url") or "",
-        "MA_API_TOKEN": opts.get("ma_api_token") or "",
-        "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
-        "MA_ADDON_SLUG": str(opts.get("ma_addon_slug") or "").strip(),
-        "DUPLICATE_DEVICE_CHECK": bool(opts.get("duplicate_device_check", True)),
         "UPDATE_CHANNEL": get_self_delivery_channel(),
         # v2.65.0 — HA integration namespace.  The addon flattens the
         # nested ``mqtt.*`` and ``rest.*`` blocks because Supervisor's
@@ -215,6 +204,21 @@ def main() -> None:
             existing = loaded
     except Exception as exc:
         logger.warning("Skipping preservation of existing config settings: %s", exc)
+
+    # Tuning and Music Assistant credentials are owned by the web UI now, not
+    # by add-on options: a restart must carry the operator's values forward
+    # instead of reverting them to a default.
+    for key in (
+        "PULSE_LATENCY_MSEC",
+        "PREFER_SBC_CODEC",
+        "DISABLE_PA_RESCUE_STREAMS",
+        "BT_CHECK_INTERVAL",
+        "MA_AUTO_SILENT_AUTH",
+        "MA_ADDON_SLUG",
+        "DUPLICATE_DEVICE_CHECK",
+    ):
+        if key in existing:
+            config[key] = existing[key]
 
     # The phone source is switched from the Hardware page, and add-on options do
     # not carry that choice: a restart must not quietly switch it back off.

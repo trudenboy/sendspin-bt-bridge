@@ -75,6 +75,34 @@ export interface SectionDef {
   after?: SectionComponent[]
 }
 
+/**
+ * Keys the bridge applies only after a restart (source of truth:
+ * services/infrastructure/config_diff._RESTART_REQUIRED_FIELDS; an integration
+ * test keeps this copy honest). Sections containing one say so.
+ */
+export const RESTART_REQUIRED_FIELDS: ReadonlySet<string> = new Set([
+  'AUTH_ENABLED',
+  'AUTH_PASSWORD_HASH',
+  'BRUTE_FORCE_LOCKOUT_MINUTES',
+  'BRUTE_FORCE_MAX_ATTEMPTS',
+  'BRUTE_FORCE_PROTECTION',
+  'BRUTE_FORCE_WINDOW_MINUTES',
+  'EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE',
+  'EXPERIMENTAL_ADAPTER_AUTO_RECOVERY',
+  'EXPERIMENTAL_AIR_SENSOR',
+  'EXPERIMENTAL_PA_MODULE_RELOAD',
+  'MA_API_TOKEN',
+  'MA_API_URL',
+  'MA_AUTO_SILENT_AUTH',
+  'MA_WEBSOCKET_MONITOR',
+  'PULSE_SINK_RESET_ON_START',
+  'SECRET_KEY',
+  'SESSION_TIMEOUT_HOURS',
+  'TRUSTED_PROXIES',
+  'TZ',
+  'WEB_PORT',
+])
+
 export function getPath(config: ConfigDoc | null | undefined, key: string): unknown {
   let cur: unknown = config
   for (const part of key.split('.')) {

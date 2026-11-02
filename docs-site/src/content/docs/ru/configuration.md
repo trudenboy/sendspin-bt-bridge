@@ -160,17 +160,13 @@ Standalone-login использует CSRF-защищённые формы и co
 | **base_listen_port** | Стартовый порт для автоматически назначаемых listener'ов устройств |
 | **bridge_name** | Необязательная метка экземпляра bridge |
 | **tz** | Часовой пояс IANA |
-| **pulse_latency_msec** | Подсказка размера аудиобуфера |
-| **prefer_sbc_codec** | Предпочтение более лёгкого кодека |
-| **bt_check_interval** | Интервал polling-проверки |
 | **bt_max_reconnect_fails** | Порог auto-disable |
 | **auth_enabled** | Standalone-style auth toggle для прямого доступа; в HA addon mode auth всё равно принудительно контролируется HA |
-| **ma_api_url / ma_api_token** | REST-интеграция с Music Assistant |
-| **ma_auto_silent_auth** | Разрешить addon/Ingress-страницам пробовать silent-создание HA-backed MA-токена при открытии |
-| **ma_addon_slug** | Slug аддона Music Assistant из стороннего репозитория, через который мосту можно входить (для официального и локального аддона не нужен) |
 | **volume_via_ma / mute_via_ma** | Маршрутизация управления через MA |
 | **update_channel** | Выбор release-lane для in-app update checks и предупреждений |
 | **log_level** | Базовый уровень логирования |
+
+Тонкая настройка звука (задержка PulseAudio, кодек, интервал переподключения) и доступы Music Assistant теперь живут **в веб-интерфейсе моста**; опции аддона покрывают только то, что нужно до его запуска.
 
 ![Списки устройств и адаптеров аддона HA вместе с диалогом редактирования устройства](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
 

@@ -1476,7 +1476,8 @@
     "autosave": {
       "saved": "Saved",
       "failed": "Not saved: {reason}"
-    }
+    },
+    "appliesAfterRestart": "Some settings here apply after a restart; saving offers one when needed."
   },
   "timing": {
     "suggestion": "Suggested latency compensation: {value} ms",

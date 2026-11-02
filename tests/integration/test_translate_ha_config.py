@@ -92,19 +92,15 @@ def test_optional_int_opt_blank():
 # ── Zero-valued options ──────────────────────────────────────────────────
 
 
-def test_zero_latency_preserved(tmp_path):
-    """pulse_latency_msec=0 must appear as PULSE_LATENCY_MSEC=0, not 200."""
-    _write_json(tmp_path / "options.json", _minimal_options(pulse_latency_msec=0))
+def test_the_web_ui_latency_survives_an_addon_restart(tmp_path):
+    """The UI owns PULSE_LATENCY_MSEC now; a restart must not reset it."""
+    _write_json(tmp_path / "config.json", {"PULSE_LATENCY_MSEC": 0})
+    _write_json(tmp_path / "options.json", _minimal_options())
 
-    with (
-        patch.object(_detect_adapters, "__wrapped__", side_effect=lambda: [])
-        if hasattr(_detect_adapters, "__wrapped__")
-        else patch("scripts.translate_ha_config._detect_adapters", return_value=[])
-    ):
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
         main()
 
-    cfg = _read_json(tmp_path / "config.json")
-    assert cfg["PULSE_LATENCY_MSEC"] == 0
+    assert _read_json(tmp_path / "config.json")["PULSE_LATENCY_MSEC"] == 0
 
 
 def test_playout_sync_preserved_across_addon_restart(tmp_path):
@@ -123,28 +119,26 @@ def test_air_sensor_switch_preserved_across_addon_restart(tmp_path):
     assert _read_json(tmp_path / "config.json")["EXPERIMENTAL_AIR_SENSOR"] is True
 
 
-def test_default_latency(tmp_path):
-    """When pulse_latency_msec is absent, default to 600."""
-    opts = _minimal_options()
-    assert "pulse_latency_msec" not in opts
-    _write_json(tmp_path / "options.json", opts)
+def test_a_fresh_install_leaves_audio_tuning_to_the_app_defaults(tmp_path):
+    """Tuning left the add-on form: a fresh config.json does not pin it."""
+    _write_json(tmp_path / "options.json", _minimal_options())
 
     with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
         main()
 
     cfg = _read_json(tmp_path / "config.json")
-    assert cfg["PULSE_LATENCY_MSEC"] == 600
+    assert "PULSE_LATENCY_MSEC" not in cfg
+    assert "PREFER_SBC_CODEC" not in cfg
 
 
-def test_zero_bt_check_interval(tmp_path):
-    """bt_check_interval=0 must be preserved as 0, not the default 10."""
-    _write_json(tmp_path / "options.json", _minimal_options(bt_check_interval=0))
+def test_a_zero_bt_check_interval_survives_an_addon_restart(tmp_path):
+    _write_json(tmp_path / "config.json", {"BT_CHECK_INTERVAL": 0})
+    _write_json(tmp_path / "options.json", _minimal_options())
 
     with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
         main()
 
-    cfg = _read_json(tmp_path / "config.json")
-    assert cfg["BT_CHECK_INTERVAL"] == 0
+    assert _read_json(tmp_path / "config.json")["BT_CHECK_INTERVAL"] == 0
 
 
 # ── Runtime state preservation ───────────────────────────────────────────
@@ -544,8 +538,11 @@ def test_basic_translation(tmp_path):
     assert cfg["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert cfg["BLUETOOTH_DEVICES"][1]["name"] == "Bedroom"
     assert cfg["TZ"] == "Europe/London"
-    assert cfg["STARTUP_BANNER_GRACE_SECONDS"] == 7
-    assert cfg["RECOVERY_BANNER_GRACE_SECONDS"] == 9
+    # Tuning and MA credentials are web-UI settings now, not add-on options.
+    assert "PREFER_SBC_CODEC" not in cfg
+    assert "PULSE_LATENCY_MSEC" not in cfg
+    assert "STARTUP_BANNER_GRACE_SECONDS" not in cfg
+    assert "MA_API_TOKEN" not in cfg
     assert cfg["UPDATE_CHANNEL"] == "stable"
 
 
@@ -562,6 +559,18 @@ def test_translation_uses_installed_addon_track(tmp_path):
             ma_api_token="tok123",
             ma_auto_silent_auth=False,
         ),
+    )
+
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "PREFER_SBC_CODEC": True,
+            "PULSE_LATENCY_MSEC": 100,
+            "BT_CHECK_INTERVAL": 30,
+            "MA_API_URL": "http://ma:8095",
+            "MA_API_TOKEN": "tok123",
+            "MA_AUTO_SILENT_AUTH": False,
+        },
     )
 
     with (

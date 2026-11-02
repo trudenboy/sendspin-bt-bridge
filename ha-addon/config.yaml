@@ -47,18 +47,8 @@ options:
   bridge_name: ""
   ha_area_name_assist_enabled: true
   tz: ""
-  pulse_latency_msec: 600
-  startup_banner_grace_seconds: 5
-  recovery_banner_grace_seconds: 15
-  prefer_sbc_codec: false
-  disable_pa_rescue_streams: false
-  bt_check_interval: 10
   bt_max_reconnect_fails: 0
   log_level: "info"
-  ma_api_url: ""
-  ma_api_token: ""
-  ma_auto_silent_auth: true
-  ma_addon_slug: ""
   bluetooth_adapters: []
   ha_integration:
     enabled: false
@@ -79,18 +69,8 @@ schema:
   bridge_name: str?
   ha_area_name_assist_enabled: bool?
   tz: str?
-  pulse_latency_msec: int?
-  startup_banner_grace_seconds: int?
-  recovery_banner_grace_seconds: int?
-  prefer_sbc_codec: bool?
-  disable_pa_rescue_streams: bool?
-  bt_check_interval: int?
   bt_max_reconnect_fails: int?
   log_level: "list(info|debug)?"
-  ma_api_url: str?
-  ma_api_token: str?
-  ma_auto_silent_auth: bool?
-  ma_addon_slug: str?
   bluetooth_adapters:
     - id: str
       mac: str?

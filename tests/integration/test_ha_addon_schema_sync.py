@@ -26,20 +26,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Keys ``_sync_ha_options`` always pushes to Supervisor.  Keep this list
 # in sync with ``routes/api_config.py:_sync_ha_options``; the test below
 # checks every entry against every addon config.
+# Audio tuning and Music Assistant credentials left the add-on form: the web
+# UI owns them, so Supervisor must not mirror them back into options.json.
 ALWAYS_PUSHED_KEYS: tuple[str, ...] = (
     "sendspin_server",
     "sendspin_port",
     "bridge_name",
     "ha_area_name_assist_enabled",
     "tz",
-    "pulse_latency_msec",
-    "startup_banner_grace_seconds",
-    "recovery_banner_grace_seconds",
-    "prefer_sbc_codec",
-    "disable_pa_rescue_streams",  # the one that broke in #user-report
-    "bt_check_interval",
     "bt_max_reconnect_fails",
-    "ma_auto_silent_auth",
     "bluetooth_adapters",
 )
 
