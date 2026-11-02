@@ -99,10 +99,14 @@ def test_garbage_without_a_click_track_is_not_heard(rec):
     ids=["sparse_lsb", "bursty"],
 )
 def test_garbage_at_the_largest_accepted_geometry_is_cheap(make):
+    # A wall-clock guard, not a benchmark: 20 s at 48 kHz used to be fine at
+    # ~1.5-2 s, but a loaded CI runner (xdist, eight workers) pushed it past
+    # 2 s twice, so the old bound measured the runner rather than the code.
+    # 6 s still fails loudly on a quadratic regression (which takes minutes).
     rec = make()
     t = time.perf_counter()
     m = est.estimate(rec)
-    assert time.perf_counter() - t < 2.0
+    assert time.perf_counter() - t < 6.0
     assert m.status == "not_heard"
 
 
