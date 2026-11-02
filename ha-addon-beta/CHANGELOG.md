@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.7] - 2026-11-02
+
+### Added
+
+- A first-run checklist on the Speakers page: add a speaker, sign in to Music Assistant, enable and pair the phone source. It tracks progress and can be hidden.
+
+### Changed
+
+- The Speakers page shows its bulk-action bar only when something is selected, and a problem appears once — as the actionable banner — instead of also as a duplicate header pill on that page.
+- Music Assistant pairing moved from the Hardware page to Settings → Music Assistant, next to the account it belongs to; the Hardware page keeps the connection status and links there.
+- After the phone pairs over Bluetooth, the Hardware page points to the Music Assistant pairing when the bridge is not paired yet, instead of leaving two unrelated actions on one screen.
+
+### Fixed
+
+- Status colours, in-text links and dimmed meta text now meet WCAG 2.2 AA in both themes: the axe scan reports zero violations across seven routes in light, dark and mobile.
+- The log level selector has an accessible name, the log list scrolls with the keyboard, Recovery Guidance follows the page's heading order, and chips announce their visible labels (group counter included).
+- The Sendspin port help no longer says 9000: the default is 8927.
+- The phone source no longer claims PipeWire-only capture: PulseAudio works on Home Assistant OS.
+
 ## [3.2.0-beta.6] - 2026-11-02
 
 ### Fixed
