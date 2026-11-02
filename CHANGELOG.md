@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.7] - 2026-11-02
+
 ### Added
 
 - A first-run checklist on the Speakers page: add a speaker, sign in to Music Assistant, enable and pair the phone source. It tracks progress and can be hidden.
@@ -14,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The Speakers page shows its bulk-action bar only when something is selected, and a problem appears once — as the actionable banner — instead of also as a duplicate header pill on that page.
-
 - Music Assistant pairing moved from the Hardware page to Settings → Music Assistant, next to the account it belongs to; the Hardware page keeps the connection status and links there.
 - After the phone pairs over Bluetooth, the Hardware page points to the Music Assistant pairing when the bridge is not paired yet, instead of leaving two unrelated actions on one screen.
 
