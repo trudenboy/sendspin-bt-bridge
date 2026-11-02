@@ -18,6 +18,7 @@ import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import SourceSummaryCard from '@/components/hardware/SourceSummaryCard.vue'
+import FirstRunChecklist from '@/components/hardware/FirstRunChecklist.vue'
 import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
 import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
 import StatusState from '@/components/StatusState.vue'
@@ -291,6 +292,8 @@ watch(
     <template v-else>
       <GuidanceBanner />
 
+      <FirstRunChecklist @add-speaker="scanModalOpen = true" />
+
       <SourceSummaryCard />
 
       <!-- From md up the header's runtime row carries these. -->
@@ -411,7 +414,7 @@ watch(
 
       <!-- Group action bar -->
       <GroupActionBar
-        v-if="showGroupBar"
+        v-if="showGroupBar && selection.selectedCount.value > 0"
         :devices="deviceStore.filteredDevices"
         :total="deviceStore.filteredPlayers.length"
         :selected-count="selection.selectedCount.value"

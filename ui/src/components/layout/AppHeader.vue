@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { technicalDetails, setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import { useTheme } from '@/composables/useTheme'
 import { useBridgeStore } from '@/stores/bridge'
@@ -17,6 +17,7 @@ import { describeStatus } from '@/composables/useStatusState'
 import { availableLocales, chooseLocale, languageName } from '@/i18n'
 
 const { t, te, locale } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const { mode, embedded } = useTheme()
 const bridge = useBridgeStore()
@@ -113,7 +114,7 @@ const iconButton =
           <span class="truncate">{{ embeddedPill.label }}</span>
         </button>
         <button
-          v-else-if="status"
+          v-else-if="status && route.name !== 'home'"
           type="button"
           class="hidden max-w-64 items-center gap-1.5 truncate rounded-full px-3 py-1 text-xs font-medium md:inline-flex"
           :class="statusClass[status.tone] ?? 'tone-neutral'"

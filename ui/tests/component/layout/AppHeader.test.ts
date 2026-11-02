@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import en from '@/i18n/locales/en.json'
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ name: 'diagnostics' }) }))
 vi.mock('@/stores/bridge', () => ({ useBridgeStore: () => ({ bridge: null, fetchBridge: vi.fn(), fetch: vi.fn() }) }))
 vi.mock('@/stores/update', () => ({
   useUpdateStore: () => ({ updateAvailable: true, latestVersion: '9.9.9', openDialog: vi.fn(), fetchInfo: vi.fn() }),

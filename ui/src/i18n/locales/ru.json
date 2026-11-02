@@ -1657,6 +1657,17 @@
       "maUnpaired": "Music Assistant не сопряжён",
       "openHardware": "Открыть «Оборудование»",
       "pairAction": "Сопрячь с Music Assistant"
+    },
+    "checklist": {
+      "title": "Первые шаги",
+      "progress": "Готово {done} из {total}",
+      "speaker": "Добавьте первую колонку",
+      "speakerAction": "Добавить колонку",
+      "ma": "Войдите в Music Assistant",
+      "maAction": "Открыть настройки",
+      "phone": "Включите источник телефона и сопрягите его",
+      "phoneAction": "Открыть «Оборудование»",
+      "dismiss": "Скрыть первые шаги"
     }
   },
   "groups": {

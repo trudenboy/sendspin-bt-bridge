@@ -1657,6 +1657,17 @@
       "maUnpaired": "Music Assistant is not paired",
       "openHardware": "Open Hardware",
       "pairAction": "Pair with Music Assistant"
+    },
+    "checklist": {
+      "title": "First steps",
+      "progress": "{done} of {total} done",
+      "speaker": "Add your first speaker",
+      "speakerAction": "Add speaker",
+      "ma": "Sign in to Music Assistant",
+      "maAction": "Open settings",
+      "phone": "Enable the phone source and pair it",
+      "phoneAction": "Open Hardware",
+      "dismiss": "Hide first steps"
     }
   },
   "groups": {
