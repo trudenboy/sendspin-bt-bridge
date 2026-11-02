@@ -73,3 +73,8 @@ scan-scroll-test*.png
 # Front-end dependencies are installed, never committed
 ui/node_modules/
 ui/dist/
+
+# Local UI-audit and screenshot scratch (not part of the product)
+.research/
+.ux-tools/
+.npmcache/
