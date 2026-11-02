@@ -6,6 +6,8 @@ import HealthSummary from '@/components/diagnostics/HealthSummary.vue'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
 import en from '@/i18n/locales/en.json'
 
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
 vi.mock('@/api/diagnostics', () => ({
   getDiagnostics: vi.fn().mockResolvedValue({}),
   getRecoveryAssistant: vi.fn().mockResolvedValue({}),
@@ -87,5 +89,29 @@ describe('HealthSummary', () => {
       global: { plugins: [buildI18n()] },
     })
     expect(wrapper.text()).toContain('Unknown')
+  })
+
+  it('names the cause and its action when the verdict is degraded', () => {
+    const store = useDiagnosticsStore()
+    store.loading = false
+    store.health = { status: 'degraded' }
+    store.preflight = { dbus: true, memory_mb: 2048, audio: { sinks: 1 }, bluetooth: { controller: true, daemon: 'active' } }
+    store.recovery = {
+      issues: [
+        {
+          key: 'bluetooth_off',
+          severity: 'warning',
+          title: 'Bluetooth is off',
+          summary: 'Turn the adapter on.',
+          primary_action: { key: 'open_bluetooth_settings', label: 'Open Bluetooth settings' },
+        },
+      ],
+    } as never
+
+    const wrapper = mount(HealthSummary, { global: { plugins: [buildI18n()] } })
+    const cause = wrapper.get('[data-health-cause]')
+    expect(cause.text()).toContain('Bluetooth is off')
+    expect(cause.text()).toContain('Turn the adapter on.')
+    expect(cause.find('[data-health-cause-action]').exists()).toBe(true)
   })
 })

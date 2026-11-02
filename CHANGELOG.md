@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.8] - 2026-11-02
+
+### Changed
+
+- The Diagnostics verdict now names the first cause and offers its recovery action in the same block, instead of showing "Degraded" alone.
+- Each log line has a copy button, the level filters expose their pressed state to assistive tech, and rows are a little roomier.
+
 ## [3.2.0-beta.7] - 2026-11-02
 
 ### Added

@@ -7,10 +7,13 @@ import { Activity, Bluetooth, Monitor, HardDrive, ClipboardCopy } from 'lucide-v
 import { copyToClipboard } from '@/utils/clipboard'
 import { useBridgeStore } from '@/stores/bridge'
 import StatusState from '@/components/StatusState.vue'
+import { useGuidanceActions, type GuidanceAction } from '@/composables/useGuidanceActions'
+import { tAction, tServer, type ServerText } from '@/i18n/server'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
 const bridge = useBridgeStore()
+const { run } = useGuidanceActions()
 const copyLabel = ref(t('diagnostics.copy'))
 
 async function copyHealth() {
@@ -71,6 +74,23 @@ function badgeTone(status: CheckStatus) {
   return map[status]
 }
 
+interface VerdictIssue extends ServerText {
+  severity: string
+  title: string
+  summary?: string
+  primary_action?: GuidanceAction
+}
+
+/** Degraded must say why, in the same block: the first recovery issue and its action. */
+const verdictIssue = computed<VerdictIssue | null>(() => {
+  const recovery = diagnostics.recovery as { issues?: VerdictIssue[] } | null
+  const issue = recovery?.issues?.[0]
+  return overall.value !== 'ok' && issue ? issue : null
+})
+function issueTone(severity: string) {
+  return severity === 'critical' || severity === 'error' ? 'error' : severity === 'warning' ? 'warning' : 'info'
+}
+
 const subsystems = computed<SubsystemCheck[]>(() => [
   { key: 'audio', label: t('diagnostics.health.audio'), icon: Activity, status: checkStatus('audio') },
   { key: 'bluetooth', label: t('diagnostics.health.bluetooth'), icon: Bluetooth, status: checkStatus('bluetooth') },
@@ -101,6 +121,32 @@ const subsystems = computed<SubsystemCheck[]>(() => [
       <div class="flex items-center gap-3">
         <SbStatusDot :status="overallStatus" :label="overallLabel" size="md" />
         <span class="text-lg font-semibold text-text-primary">{{ overallLabel }}</span>
+      </div>
+
+      <div
+        v-if="verdictIssue"
+        data-health-cause
+        class="mt-3 rounded-(--radius-card) border border-warning/40 bg-warning/10 px-3 py-2"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <SbBadge :tone="issueTone(verdictIssue.severity)" size="sm" dot>{{ verdictIssue.severity }}</SbBadge>
+          <span class="text-sm font-medium text-text-primary">
+            {{ tServer('issue', verdictIssue, 'title', verdictIssue.title) }}
+          </span>
+        </div>
+        <p v-if="verdictIssue.summary" class="mt-1 text-sm text-text-secondary">
+          {{ tServer('issue', verdictIssue, 'summary', verdictIssue.summary) }}
+        </p>
+        <SbButton
+          v-if="verdictIssue.primary_action"
+          variant="outline"
+          size="sm"
+          data-health-cause-action
+          class="mt-2"
+          @click="run(verdictIssue.primary_action)"
+        >
+          {{ tAction(verdictIssue.primary_action) }}
+        </SbButton>
       </div>
     </SbCard>
 

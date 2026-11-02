@@ -7,8 +7,10 @@ import en from '@/i18n/locales/en.json'
 
 const api = vi.hoisted(() => ({ getLogs: vi.fn(), downloadLogs: vi.fn(), setLogLevel: vi.fn() }))
 const notes = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+const clipboard = vi.hoisted(() => ({ copyToClipboard: vi.fn() }))
 vi.mock('@/api/diagnostics', () => api)
 vi.mock('@/stores/notifications', () => ({ useNotificationStore: () => notes }))
+vi.mock('@/utils/clipboard', () => clipboard)
 
 async function mountViewer() {
   setActivePinia(createPinia())
@@ -49,5 +51,27 @@ describe('LogsViewer', () => {
     await apply.trigger('click')
     await flushPromises()
     expect(notes.error).toHaveBeenCalled()
+  })
+})
+
+describe('LogsViewer line actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.getLogs.mockResolvedValue({ logs: ['2025-01-01 12:00:00 ERROR boom'] })
+    clipboard.copyToClipboard.mockResolvedValue(true)
+  })
+
+  it('copies the raw line from its copy button', async () => {
+    const w = await mountViewer()
+    await w.get('[data-copy-line]').trigger('click')
+    await flushPromises()
+    expect(clipboard.copyToClipboard).toHaveBeenCalledWith('2025-01-01 12:00:00 ERROR boom')
+  })
+
+  it('exposes the level filters as pressed toggles', async () => {
+    const w = await mountViewer()
+    expect(w.findAll('[aria-pressed]').every((b) => b.attributes('aria-pressed') === 'true')).toBe(true)
+    await w.findAll('[aria-pressed]')[0]!.trigger('click')
+    expect(w.findAll('[aria-pressed]')[0]!.attributes('aria-pressed')).toBe('false')
   })
 })

@@ -310,7 +310,8 @@
       "noLogs": "No log entries",
       "loadFailed": "Could not load the logs.",
       "levelApplied": "Now logging at {level}",
-      "levelFailed": "Could not change the log level"
+      "levelFailed": "Could not change the log level",
+      "copyLine": "Copy line"
     },
     "timeline": {
       "title": "Recent events"

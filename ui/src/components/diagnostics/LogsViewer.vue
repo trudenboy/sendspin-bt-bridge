@@ -2,7 +2,8 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbButton, SbBadge, SbSpinner, SbEmptyState } from '@/kit'
-import { RefreshCw, Download, Search, ArrowDownToLine } from 'lucide-vue-next'
+import { RefreshCw, Download, Search, ArrowDownToLine, ClipboardCopy, Check } from 'lucide-vue-next'
+import { copyToClipboard } from '@/utils/clipboard'
 import { getLogs, downloadLogs, setLogLevel } from '@/api/diagnostics'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
@@ -27,6 +28,7 @@ const lines = ref<ParsedLine[]>([])
 const searchQuery = ref('')
 const autoScroll = ref(true)
 const logContainer = ref<HTMLElement | null>(null)
+const copiedIndex = ref<number | null>(null)
 
 const visibleLevels = ref<Set<LogLevel>>(new Set(['ERROR', 'WARNING', 'INFO', 'DEBUG']))
 const selectedLevel = ref('INFO')
@@ -78,6 +80,15 @@ const filteredLines = computed(() => {
   }
   return result
 })
+
+async function copyLine(line: ParsedLine, index: number) {
+  const ok = await copyToClipboard(line.raw)
+  if (!ok) return
+  copiedIndex.value = index
+  setTimeout(() => {
+    if (copiedIndex.value === index) copiedIndex.value = null
+  }, 1500)
+}
 
 function toggleLevel(level: LogLevel) {
   const next = new Set(visibleLevels.value)
@@ -162,6 +173,7 @@ onMounted(fetchLogs)
       <!-- Level filters -->
       <template v-for="lvl in levelOrder" :key="lvl">
         <button
+          :aria-pressed="visibleLevels.has(lvl)"
           class="rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors"
           :class="
             visibleLevels.has(lvl)
@@ -259,7 +271,7 @@ onMounted(fetchLogs)
         <div
           v-for="(line, idx) in filteredLines"
           :key="idx"
-          class="flex gap-2 px-3 py-1 font-mono text-sm"
+          class="group flex gap-2 px-3 py-1.5 font-mono text-sm"
           :class="idx % 2 === 0 ? 'bg-surface-secondary' : 'bg-surface-primary/40'"
         >
           <!-- Timestamp -->
@@ -279,6 +291,18 @@ onMounted(fetchLogs)
           <span :class="levelColors[line.level]" class="min-w-0 break-all">
             {{ line.message }}
           </span>
+
+          <!-- Copy the raw line, for pasting into a ticket without the surrounding noise. -->
+          <button
+            type="button"
+            data-copy-line
+            class="ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded-(--radius-button) text-text-tertiary opacity-0 transition-opacity hover:bg-surface-card hover:text-text-primary focus:opacity-100 group-hover:opacity-100"
+            :aria-label="t('diagnostics.logs.copyLine')"
+            @click="copyLine(line, idx)"
+          >
+            <Check v-if="copiedIndex === idx" class="size-3.5 text-success" aria-hidden="true" />
+            <ClipboardCopy v-else class="size-3.5" aria-hidden="true" />
+          </button>
         </div>
       </div>
     </div>
