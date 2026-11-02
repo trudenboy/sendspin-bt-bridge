@@ -39,11 +39,11 @@ component named `Web UI` (slug `web-ui`):
 | Push on commit | on |
 | Translation licence | MIT |
 
-After the first pull, the component should show **nine** target languages:
-`de`, `es`, `fr`, `it`, `ja`, `ko`, `tr`, `zh-Hans` and `ru` if the filter did
-not exclude it. If `ru` is present, open the Russian translation, select all
-strings and use `Bulk edit` → `Add flags` → `read-only` under Translation
-flags, so nobody edits the reference file by accident.
+After the first pull, the component should show **eight** target languages:
+`de`, `es`, `fr`, `it`, `ja`, `ko`, `tr`, `zh-Hans`. `ru` must not appear; if
+the filter did not exclude it, open the Russian translation, select all strings
+and use `Bulk edit` → `Add flags` → `read-only` under Translation flags, so
+nobody edits the reference file by accident.
 
 `zh-Hans` must keep its hyphen: the app resolves `zh-CN`/`zh-Hans` to that file
 and rejects `zh-TW`/`zh-Hant`. Weblate reads either spelling, but the BCP style
