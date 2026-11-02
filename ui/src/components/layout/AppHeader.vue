@@ -89,7 +89,7 @@ const iconButton =
 <template>
   <header class="fixed top-0 right-0 left-0 z-30 border-b border-border bg-surface-card">
     <div class="flex items-center gap-2 px-4 sm:gap-3 sm:px-6" :class="embedded ? 'h-11' : 'h-16'">
-      <router-link v-if="!embedded" to="/" class="flex min-w-0 shrink items-center gap-2.5" :aria-label="t('app.title')">
+      <router-link v-if="!embedded" to="/" class="flex min-w-0 shrink items-center gap-2.5">
         <img :src="logoUrl" alt="" class="h-7 w-auto shrink-0" width="53" height="28" />
         <span class="min-w-0 truncate text-base font-semibold text-text-primary sm:shrink-0 sm:text-lg">{{ t('app.title') }}</span>
         <span

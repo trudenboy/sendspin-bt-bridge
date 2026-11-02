@@ -169,8 +169,8 @@
       },
       "group": {
         "title": "Music Assistant group {name}",
-        "open": "Open group {name} in Music Assistant",
-        "external": "{n} more on other bridges"
+        "external": "{n} more on other bridges",
+        "openAction": "Open in Music Assistant"
       },
       "adapter": {
         "title": "Adapter {name} ({hci}) · {state}",

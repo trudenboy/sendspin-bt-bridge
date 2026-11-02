@@ -23,6 +23,14 @@ const title = computed(() => {
   return lines.join('\n')
 })
 
+const openLabel = computed(() => {
+  if (!chip.value) return ''
+  // WCAG 2.5.3: the accessible name must contain the visible label text
+  // ("Main Floor +3") as one run, so the label leads and the action follows.
+  const visible = chip.value.external ? `${chip.value.label} +${chip.value.external}` : chip.value.label
+  return `${visible} — ${t('device.chips.group.openAction')}`
+})
+
 function onClick() {
   openExternal(chip.value?.url)
 }
@@ -36,7 +44,7 @@ function onClick() {
       data-chip="group"
       class="inline-flex max-w-full rounded-(--radius-badge)"
       :title="title"
-      :aria-label="t('device.chips.group.open', { name: chip.label })"
+      :aria-label="openLabel"
       @click.stop="onClick"
     >
       <SbBadge tone="neutral" size="sm" class="max-w-full hover:brightness-95">

@@ -60,17 +60,17 @@
   --sb-primary: #03a9f4;
   --sb-primary-fill: #0277bd;
   --sb-primary-fill-hover: #01579b;
-  --sb-primary-text: #0277bd;
+  --sb-primary-text: #025f97;
   --sb-on-primary: #ffffff;
-  --sb-focus-ring: #0277bd;
+  --sb-focus-ring: #025f97;
 
   /* Status colours as text on light surfaces: darker shades of HA's palette. */
-  --sb-success: #2e7d32;
+  --sb-success: #286d2c;
   --sb-warning: #ffa600;
   --sb-warning-text: #8a5a00;
-  --sb-error: #c62828;
+  --sb-error: #b22424;
   --sb-error-fill: #c62828;
-  --sb-info: #0277bd;
+  --sb-info: #025f97;
 
   --sb-background: #fafafa;
   --sb-card: #ffffff;
@@ -94,9 +94,9 @@
   color-scheme: dark;
   --sb-primary-text: #4fc3f7;
   --sb-focus-ring: #4fc3f7;
-  --sb-success: #43a047;
+  --sb-success: #66bb6a;
   --sb-warning-text: #ffb74d;
-  --sb-error: #ef5350;
+  --sb-error: #ff8a80;
   --sb-info: #29b6f6;
 
   --sb-background: #111111;
@@ -106,7 +106,7 @@
 
   --sb-text: #e1e1e1;
   --sb-text-secondary: #aaaaaa;
-  --sb-text-tertiary: #939393;
+  --sb-text-tertiary: #9e9e9e;
   --sb-text-disabled: #5e5e5e;
 
   --sb-divider: rgb(225 225 225 / 0.12);

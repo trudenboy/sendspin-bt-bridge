@@ -66,3 +66,67 @@ describe('secondary and tertiary text', () => {
         expect(contrast(token(scope, name, fb), bg), `${name} on ${bg}`).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+describe('status tones on their tinted fills', () => {
+  /** Chrome's color-mix(in srgb, fg p%, bg) in 8-bit channels. */
+  function mix(fg: string, bg: string, p: number): string {
+    const f = fg.slice(1)
+    const b = bg.slice(1)
+    let out = '#'
+    for (let i = 0; i < 6; i += 2) {
+      const fv = parseInt(f.slice(i, i + 2), 16)
+      const bv = parseInt(b.slice(i, i + 2), 16)
+      out += Math.round(fv * p + bv * (1 - p))
+        .toString(16)
+        .padStart(2, '0')
+    }
+    return out
+  }
+
+  const surfaces = [
+    ['card', '#ffffff'],
+    ['page', '#fafafa'],
+    ['fill', '#f0f0f0'],
+  ] as const
+  const darkSurfaces = [
+    ['card', '#1c1c1c'],
+    ['page', '#111111'],
+    ['fill', '#282828'],
+  ] as const
+
+  it.each([
+    ['success', 'sb-success', light, surfaces, undefined],
+    ['info', 'sb-info', light, surfaces, undefined],
+    ['error', 'sb-error', light, surfaces, undefined],
+    ['primary text on info', 'sb-primary-text', light, surfaces, undefined],
+  ] as const)('--%s keeps AA on a 14%% tint in light (%s)', (_label, name, scope, bgs, fb) => {
+    const fg = token(scope, name, fb)
+    for (const [surface, bg] of bgs) {
+      expect(contrast(fg, mix(fg, bg, 0.14)), `${name} on ${surface}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it.each([
+    ['success', 'sb-success', dark, darkSurfaces, light],
+    ['info', 'sb-info', dark, darkSurfaces, light],
+    ['error', 'sb-error', dark, darkSurfaces, light],
+    ['primary text on info', 'sb-primary-text', dark, darkSurfaces, light],
+  ] as const)('--%s keeps AA on a 14%% tint in dark (%s)', (_label, name, scope, bgs, fb) => {
+    const fg = token(scope, name, fb)
+    for (const [surface, bg] of bgs) {
+      expect(contrast(fg, mix(fg, bg, 0.14)), `${name} on ${surface}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('primary text keeps AA on plain surfaces in both themes', () => {
+    for (const [scope, bgs, fb] of [
+      [light, surfaces, undefined],
+      [dark, darkSurfaces, light],
+    ] as const) {
+      const fg = token(scope, 'sb-primary-text', fb)
+      for (const [surface, bg] of bgs) {
+        expect(contrast(fg, bg), `primary text on ${surface}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+})

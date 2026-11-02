@@ -169,8 +169,8 @@
       },
       "group": {
         "title": "Группа Music Assistant {name}",
-        "open": "Открыть группу {name} в Music Assistant",
-        "external": "Ещё {n} на других мостах"
+        "external": "Ещё {n} на других мостах",
+        "openAction": "Открыть в Music Assistant"
       },
       "adapter": {
         "title": "Адаптер {name} ({hci}) · {state}",

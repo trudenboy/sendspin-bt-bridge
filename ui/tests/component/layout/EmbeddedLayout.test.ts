@@ -70,7 +70,8 @@ describe('outside Home Assistant', () => {
     const w = mountHeader()
     expect(w.find('img').exists()).toBe(true)
     expect(w.find('a[href*="support"]').exists()).toBe(true)
-    expect(mount(RuntimeRow, { global: { plugins: plugins() } }).find('[role="group"]').exists()).toBe(true)
+    // A landmark region, so the runtime line is not orphaned content (axe "region").
+    expect(mount(RuntimeRow, { global: { plugins: plugins() } }).find('[role="region"]').exists()).toBe(true)
     expect(mount(AppSidebar, { global: { plugins: plugins() } }).get('[data-testid="app-sidebar"]').classes()).toContain('w-60')
   })
 })

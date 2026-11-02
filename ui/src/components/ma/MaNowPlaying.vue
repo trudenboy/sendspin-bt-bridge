@@ -80,7 +80,7 @@ function next() {
       <p v-if="track?.artist" class="truncate text-xs text-text-secondary">
         {{ track.artist }}
       </p>
-      <p v-if="track?.album" class="truncate text-xs text-text-disabled">
+      <p v-if="track?.album" class="truncate text-xs text-text-tertiary">
         {{ track.album }}
       </p>
       <p v-if="track && !isPlaying" class="mt-0.5 text-xs text-text-tertiary">{{ t('ma.nowPlaying.notPlaying') }}</p>

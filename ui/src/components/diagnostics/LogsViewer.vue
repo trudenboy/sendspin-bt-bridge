@@ -138,13 +138,15 @@ onMounted(fetchLogs)
       </h2>
       <div class="flex flex-wrap items-center gap-2">
         <!-- Backend log level -->
-        <label class="text-sm text-text-secondary">{{ t('diagnostics.logs.logLevel') }}</label>
-        <select
-          v-model="selectedLevel"
-          class="h-8 rounded-md border border-border bg-surface-primary px-2 text-sm text-text-primary"
-        >
-          <option v-for="lvl in levelOrder" :key="lvl" :value="lvl">{{ lvl }}</option>
-        </select>
+        <label class="flex items-center gap-2 text-sm text-text-secondary">
+          {{ t('diagnostics.logs.logLevel') }}
+          <select
+            v-model="selectedLevel"
+            class="h-8 rounded-md border border-border bg-surface-primary px-2 text-sm text-text-primary"
+          >
+            <option v-for="lvl in levelOrder" :key="lvl" :value="lvl">{{ lvl }}</option>
+          </select>
+        </label>
         <SbButton variant="outline" size="sm" :loading="applyingLevel" @click="applyLogLevel">
           {{ t('diagnostics.logs.apply') }}
         </SbButton>
@@ -249,6 +251,8 @@ onMounted(fetchLogs)
     <div
       v-else
       ref="logContainer"
+      tabindex="0"
+      :aria-label="t('diagnostics.logs.title')"
       class="max-h-[600px] overflow-y-auto rounded-lg border border-border bg-surface-secondary"
     >
       <div class="divide-y divide-border/40">

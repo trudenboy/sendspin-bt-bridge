@@ -80,7 +80,7 @@ const rssi = computed(() => {
         :title="t('hardware.roleEvidence', { evidence: role.evidence })"
       >
         {{ role.role === 'input' ? t('hardware.roleInput') : t('hardware.roleOutput') }}
-        <span class="font-normal opacity-80">· {{ role.evidence }}</span>
+        <span class="font-normal">· {{ role.evidence }}</span>
       </SbBadge>
     </div>
 

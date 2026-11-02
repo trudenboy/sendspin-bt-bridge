@@ -1,0 +1,66 @@
+[
+  {
+    "label": "desktop-light",
+    "route": "logs",
+    "id": "select-name",
+    "impact": "critical",
+    "help": "Select element must have an accessible name",
+    "count": 1,
+    "nodes": [
+      {
+        "target": [
+          "select"
+        ],
+        "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+      }
+    ]
+  },
+  {
+    "label": "desktop-dark",
+    "route": "logs",
+    "id": "select-name",
+    "impact": "critical",
+    "help": "Select element must have an accessible name",
+    "count": 1,
+    "nodes": [
+      {
+        "target": [
+          "select"
+        ],
+        "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+      }
+    ]
+  },
+  {
+    "label": "mobile-light",
+    "route": "logs",
+    "id": "scrollable-region-focusable",
+    "impact": "serious",
+    "help": "Scrollable region must have keyboard access",
+    "count": 1,
+    "nodes": [
+      {
+        "target": [
+          ".max-h-\\[600px\\]"
+        ],
+        "summary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+      }
+    ]
+  },
+  {
+    "label": "mobile-light",
+    "route": "logs",
+    "id": "select-name",
+    "impact": "critical",
+    "help": "Select element must have an accessible name",
+    "count": 1,
+    "nodes": [
+      {
+        "target": [
+          "select"
+        ],
+        "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+      }
+    ]
+  }
+]

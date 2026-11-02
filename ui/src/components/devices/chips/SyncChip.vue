@@ -94,7 +94,7 @@ const countTitle = computed(() =>
           aria-hidden="true"
         />
         {{ labelText }}
-        <span v-if="technicalDetails && badge.errorMs != null" class="tabular-nums opacity-80">{{ t('device.chips.sync.errorMs', { ms: badge.errorMs }) }}</span>
+        <span v-if="technicalDetails && badge.errorMs != null" class="tabular-nums">{{ t('device.chips.sync.errorMs', { ms: badge.errorMs }) }}</span>
       </SbBadge>
     </span>
     <span v-if="technicalDetails && badge.count > 0" :data-chip="isPlayout ? 'jumps' : 'reanchors'" class="inline-flex" :title="countTitle">

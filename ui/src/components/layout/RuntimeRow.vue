@@ -42,7 +42,7 @@ const pill = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-x
     v-if="info && !embedded"
     class="border-b border-border bg-surface-card px-4 py-1.5 text-xs text-text-secondary sm:px-6"
     :aria-label="t('header.runtimeRow')"
-    role="group"
+    role="region"
   >
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span v-if="runtimeLabel" data-runtime="runtime" :class="[pill, 'tone-neutral uppercase tracking-wide']">{{ runtimeLabel }}</span>

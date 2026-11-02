@@ -98,9 +98,9 @@ describe('RecoveryPanel', () => {
     store.loading = false
     store.recovery = { issues: [] }
     const wrapper = mount(RecoveryPanel, { global: { plugins: [buildI18n()] } })
-    const header = wrapper.find('h3').element.parentElement!
+    const header = wrapper.find('h2').element.parentElement!  // section heading, in order under the page h1
     expect(header.classList.contains('flex-wrap')).toBe(true)
-    expect(wrapper.find('h3 + div').classes()).toContain('flex-wrap')
+    expect(wrapper.find('h2 + div').classes()).toContain('flex-wrap')
   })
 
   it('copy label follows the UI language', async () => {

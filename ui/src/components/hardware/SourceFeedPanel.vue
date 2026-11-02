@@ -160,7 +160,7 @@ const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
             <RouterLink
               :to="settingsPairingHref"
               data-source-ma-settings
-              class="text-primary-text underline-offset-2 hover:underline"
+              class="text-primary-text underline underline-offset-2"
             >
               {{ t('hardware.source.maSettingsAction') }}
             </RouterLink>
@@ -168,7 +168,7 @@ const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
 
           <p class="mt-2 text-xs text-text-secondary">
             {{ t('hardware.source.maRouting') }}
-            <a v-if="maLink" :href="maLink" target="_blank" rel="noopener noreferrer" class="text-primary-text underline-offset-2 hover:underline">
+            <a v-if="maLink" :href="maLink" target="_blank" rel="noopener noreferrer" class="text-primary-text underline underline-offset-2">
               {{ t('hardware.source.maOpen') }}
             </a>
           </p>
@@ -224,7 +224,7 @@ const failureNextStep = computed(() => t('hardware.source.failureNextStep'))
             <p class="text-sm text-text-primary">{{ t('hardware.source.phonePairedNeedMa') }}</p>
             <RouterLink
               :to="settingsPairingHref"
-              class="mt-1 inline-block text-sm text-primary-text underline-offset-2 hover:underline"
+              class="mt-1 inline-block text-sm text-primary-text underline underline-offset-2"
             >
               {{ t('hardware.source.phonePairedNeedMaAction') }}
             </RouterLink>

@@ -55,9 +55,9 @@ async function runChecks() {
 <template>
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-lg font-semibold text-text-primary">
+      <h2 class="text-lg font-semibold text-text-primary">
         {{ t('diagnostics.recovery.title') }}
-      </h3>
+      </h2>
       <div class="flex flex-wrap items-center gap-2">
         <SbButton variant="outline" size="sm" :loading="diagnostics.loading" @click="runChecks">
           <template #icon-left>
