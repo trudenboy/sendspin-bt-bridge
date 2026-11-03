@@ -203,7 +203,9 @@ def test_local_sources_and_active_choice_survive_addon_restart(tmp_path):
     _write_json(
         tmp_path / "config.json",
         {
-            "SENDSPIN_SOURCES": [{"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Line"}],
+            "SENDSPIN_SOURCES": [
+                {"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Line"}
+            ],
             "SENDSPIN_SOURCE_ACTIVE": "local:alsa_input.line",
         },
     )
