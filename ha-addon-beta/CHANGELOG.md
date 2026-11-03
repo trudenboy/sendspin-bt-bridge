@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.18] - 2026-11-03
+
+### Added
+
+- Headset microphones now appear as an audio source input. Selecting one switches the headset from A2DP music to the HFP profile, captures the microphone into Music Assistant, and returns it to A2DP when the source stops.
+- A headset microphone cannot be selected as the Music Assistant playback target while it is capturing, preventing an acoustic feedback loop.
+
+### Changed
+
+- Per-device settings now use **Allow call mode** instead of the old headset-profile switch. It controls whether the HFP profile may be used for the microphone or an external call.
+
+### Removed
+
+- The old per-device `allow_hfp_profile` setting is gone. Existing values are ignored; music playback continues on A2DP.
+
 ## [3.2.0-beta.17] - 2026-11-03
 
 ### Fixed
