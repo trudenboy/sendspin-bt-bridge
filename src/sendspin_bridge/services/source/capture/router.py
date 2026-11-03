@@ -68,18 +68,28 @@ class SourceInputRouter:
         active_input: str | None = None,
         *,
         probe: Any = local_input_present,
+        headset: Any = None,
     ) -> None:
         self._base = base
         self._active = str(active_input or "").strip() or None
         self._probe = probe
+        self._headset = headset
 
     @property
     def active_input(self) -> str | None:
         return self._active
 
     def set_active(self, source_id: str | None) -> None:
+        previous = parse_source_id(self._active) if self._active else None
         self._active = str(source_id or "").strip() or None
         parsed = parse_source_id(self._active) if self._active else None
+        if previous is not None and previous[0] == "headset_microphone" and parsed != previous and self._headset:
+            import asyncio
+
+            try:
+                asyncio.get_running_loop().create_task(self._headset.release_microphone(previous[1]))
+            except RuntimeError:
+                pass
         if parsed is not None and parsed[0] == "bluetooth":
             self._set_base_mac(parsed[1])
         else:
@@ -100,6 +110,20 @@ class SourceInputRouter:
         if self._active == "none":
             return None
         parsed = parse_source_id(self._active) if self._active else None
+        if parsed is not None and parsed[0] == "headset_microphone":
+            mac = parsed[1]
+            if self._headset is None or not await self._headset.acquire_microphone(mac):
+                return None
+            self._set_base_mac(mac)
+            for _ in range(16):
+                endpoint = await self._base.find()
+                if endpoint is not None:
+                    return endpoint
+                import asyncio
+
+                await asyncio.sleep(0.5)
+            await self._headset.release_microphone(mac)
+            return None
         if parsed is not None and parsed[0] == "local":
             node = parsed[1]
             if not await self._probe(self._base.name, node):
@@ -112,3 +136,11 @@ class SourceInputRouter:
 
     async def open(self, endpoint: CaptureEndpoint) -> CaptureStream:
         return await self._base.open(endpoint)
+
+    async def release_active(self) -> None:
+        """Return a headset to A2DP after its microphone input stops being used."""
+        if self._headset is None or not self._active:
+            return
+        parsed = parse_source_id(self._active)
+        if parsed is not None and parsed[0] == "headset_microphone":
+            await self._headset.release_microphone(parsed[1])

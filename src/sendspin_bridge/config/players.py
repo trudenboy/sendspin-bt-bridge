@@ -193,10 +193,10 @@ class Player(BaseModel):
     # false = this speaker runs the way it did before playout sync (legacy player,
     # not held warm, no automatic offset); null / true follow PLAYOUT_SYNC.
     playout_sync_enabled: StrictBool | None = None
-    # Allow this speaker's headset (HFP/HSP) card profile, e.g. for calls. Off by
-    # default: playback is A2DP-only and the bridge switches the card back when
-    # PipeWire restores a saved headset profile (#476 follow-up).
-    allow_hfp_profile: StrictBool | None = None
+    # Allow the coordinator to use this device's HFP/HSP profile for its
+    # microphone or for an external call. None means "decide from the device
+    # class": headsets yes, speakers with a microphone no.
+    allow_call_mode: StrictBool | None = None
     # Keep this speaker's amplifier awake with a quiet noise stream while group tuning runs:
     # some speakers never un-mute for the calibration clicks after silence (#tuning).
     calibration_bed: StrictBool | None = None

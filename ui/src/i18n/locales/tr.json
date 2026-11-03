@@ -83,6 +83,8 @@
     "speakersTitle": "Hoparlörler"
   },
   "device": {
+    "microphone": "Mikrofon",
+    "microphoneMode": "Mikrofon modu — A2DP oynatma duraklatıldı",
     "a2dpUnavailable": "A2DP sesi kullanılamıyor",
     "a2dpUnavailableHint": "Ana makine yalnızca HFP/arama profili kaydetti. A2DP geri gelene kadar müzik çalamaz.",
     "retryA2dp": "A2DP’yi yeniden dene",
@@ -455,6 +457,7 @@
       "empty": "Henüz bir ses kaynağı yapılandırılmadı. Bir Bluetooth kaynağı veya yerel ses girişi ekle.",
       "bluetooth": "Bluetooth",
       "local": "Yerel giriş",
+      "headsetMicrophone": "Kulaklık mikrofonu",
       "available": "Kullanılabilir",
       "off": "Kapalı",
       "pairing": "Eşleştirme",
@@ -1459,7 +1462,7 @@
         "label": "Başlatma öncesi süre",
         "help": "Hoparlörün ilk ses çalmadan önce ihtiyaç duyduğu süre."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "Kulaklık profiline (aramalar) izin ver",
         "help": "Kapalı, hoparlörü müzik için A2DP’de tutar ve ana bilgisayar kulaklık profilini geri getirirse kartı yeniden değiştirir. Açık, başka bir uygulamanın aramalar için hoparlörün mikrofonunu kullanmasına izin verir; bu profil etkinken ses 8 kHz monoya düşer."
       },

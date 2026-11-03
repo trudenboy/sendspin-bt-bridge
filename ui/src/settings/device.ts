@@ -57,9 +57,8 @@ export const DEVICE_GROUPS: readonly DeviceGroup[] = [
       { key: 'room_name', kind: 'text' },
       { key: 'room_id', kind: 'text', advanced: true },
       { key: 'volume_controller', kind: 'select', options: ['pa', 'sendspin'], default: 'pa', advanced: true },
-      // Off by default: playback is A2DP-only and the bridge switches a saved
-      // headset profile back (calls are not part of the bridge's job).
-      { key: 'allow_hfp_profile', kind: 'toggle', default: false, backend: 'bluetooth_a2dp' },
+      // Off by default: HFP is used only for the microphone or an external call.
+      { key: 'allow_call_mode', kind: 'toggle', default: false, backend: 'bluetooth_a2dp' },
       // Off by default: only speakers whose amp sleeps through the clicks need the noise stream.
       { key: 'calibration_bed', kind: 'toggle', default: false, backend: 'bluetooth_a2dp' },
       { key: 'listen_port', kind: 'number', min: 1024, max: 65535, nullable: true, placeholder: 'auto', advanced: true },

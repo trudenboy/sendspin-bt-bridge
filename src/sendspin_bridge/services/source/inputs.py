@@ -15,12 +15,13 @@ __all__ = [
     "SourceInput",
     "bluetooth_id",
     "build_inputs",
+    "headset_mic_id",
     "local_candidates",
     "local_id",
     "parse_source_id",
 ]
 
-SourceKind = Literal["bluetooth", "local"]
+SourceKind = Literal["bluetooth", "local", "headset_microphone"]
 
 #: Explicit "no active source"; distinct from the legacy ``None`` auto-Bluetooth policy.
 NO_SOURCE = "none"
@@ -64,6 +65,10 @@ def local_id(node: str) -> str:
     return f"local:{node}"
 
 
+def headset_mic_id(mac: str) -> str:
+    return f"headset-mic:{mac.upper()}"
+
+
 def parse_source_id(source_id: str) -> tuple[SourceKind, str] | None:
     """Split ``bluetooth:<MAC>`` / ``local:<node>``; None when malformed."""
     raw = str(source_id or "").strip()
@@ -74,6 +79,8 @@ def parse_source_id(source_id: str) -> tuple[SourceKind, str] | None:
         return "bluetooth", value.upper()
     if kind == "local":
         return "local", value
+    if kind == "headset-mic":
+        return "headset_microphone", value.upper()
     return None
 
 
@@ -141,8 +148,9 @@ def build_inputs(
     audio_sources: Iterable[Any] | None = None,
     include_monitors: bool = False,
     include_candidates: bool = False,
+    headsets: Iterable[dict[str, Any]] | None = None,
 ) -> list[SourceInput]:
-    """All selectable source inputs: Bluetooth bonds first, then local profiles."""
+    """All selectable source inputs: Bluetooth bonds, headset microphones, then local profiles."""
     active = str(active_input or "")
     audio = _audio_by_name(audio_sources)
     inputs: list[SourceInput] = []
@@ -157,6 +165,21 @@ def build_inputs(
                 available=True,
                 connected=device.connected,
                 mac=device.mac,
+            )
+        )
+    for headset in headsets or ():
+        mac = str(headset.get("mac") or "").upper()
+        if not mac:
+            continue
+        inputs.append(
+            SourceInput(
+                id=headset_mic_id(mac),
+                kind="headset_microphone",
+                name=str(headset.get("name") or mac),
+                description="HFP microphone",
+                active=active == headset_mic_id(mac),
+                available=bool(headset.get("hfp_available", True)),
+                mac=mac,
             )
         )
     for profile in local_profiles(config):

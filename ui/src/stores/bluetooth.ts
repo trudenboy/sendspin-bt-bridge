@@ -121,7 +121,7 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     }
     if (extra.room?.trim()) player.room_name = extra.room.trim()
     // Persisted per speaker: off means playback stays on A2DP (#476 follow-up).
-    if (extra.allowHfpProfile) player.allow_hfp_profile = true
+    if (extra.allowHfpProfile) player.allow_call_mode = true
     await saveConfig({ ...config, players: [...players, player] } as never)
     return true
   }

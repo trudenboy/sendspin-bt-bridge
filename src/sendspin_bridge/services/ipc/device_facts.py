@@ -196,6 +196,11 @@ class DeviceFacts:
         return value if isinstance(value, bool) else None
 
     @property
+    def microphone_available(self) -> bool | None:
+        value = self._field("microphone_available", self._fact("microphone_available"))
+        return value if isinstance(value, bool) else None
+
+    @property
     def profile_mode(self) -> str | None:
         value = self._field("profile_mode", self._fact("profile_mode"))
         return str(value) if value else None

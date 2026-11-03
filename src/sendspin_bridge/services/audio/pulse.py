@@ -448,6 +448,7 @@ async def alist_cards() -> list[dict]:
                             "driver": getattr(c, "driver", "") or "",
                             "active_profile": active_name,
                             "profiles": [getattr(p, "name", "") for p in profile_list if getattr(p, "name", "")],
+                            "form_factor": (getattr(c, "proplist", {}) or {}).get("device.form_factor"),
                         }
                     )
                 return result

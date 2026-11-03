@@ -4680,6 +4680,11 @@ export interface components {
              */
             management_enabled: boolean;
             /**
+             * Microphone Available
+             * @description The headset microphone can be captured.
+             */
+            microphone_available: boolean | null;
+            /**
              * Never Paired
              * @default false
              */
@@ -4696,7 +4701,7 @@ export interface components {
             power_save: boolean;
             /**
              * Profile Mode
-             * @description a2dp, hfp, hfp_only, other or unknown.
+             * @description a2dp, hfp, hfp_only, microphone or unknown.
              */
             profile_mode: string | null;
             /**
@@ -5846,8 +5851,8 @@ export interface components {
             air_learned_latency?: components["schemas"]["AirLearnedEntry"][] | null;
             /** Air To Sound Latency */
             air_to_sound_latency?: components["schemas"]["AirLatencyEntry"][] | null;
-            /** Allow Hfp Profile */
-            allow_hfp_profile?: boolean | null;
+            /** Allow Call Mode */
+            allow_call_mode?: boolean | null;
             /** Backend */
             backend: components["schemas"]["BluetoothBackend"] | components["schemas"]["PulseSinkBackend"];
             /** Calibration Bed */
@@ -6976,7 +6981,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bluetooth" | "local";
+            kind: "bluetooth" | "local" | "headset_microphone";
             /** Mac */
             mac: string | null;
             /**

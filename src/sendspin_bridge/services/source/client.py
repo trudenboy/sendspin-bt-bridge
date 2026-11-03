@@ -204,6 +204,12 @@ class SourceClient:
 
     async def stop(self) -> dict[str, Any]:
         """Disconnect and release everything; a second call is a no-op."""
+        release = getattr(self._capture_backend, "release_active", None)
+        if callable(release):
+            try:
+                await release()
+            except Exception:
+                logger.warning("Source: could not restore the headset profile", exc_info=True)
         if not self.running and self._client is None:
             source_state.publish(enabled=False, state="off", ma_connected=False, streaming=False)
             return {"started": False, "already": True}
@@ -438,6 +444,10 @@ class SourceClient:
             return None
         old = self._active_input
         was_streaming = self._stream is not None
+        if old and old.startswith("headset-mic:"):
+            release = getattr(self._capture_backend, "release_active", None)
+            if callable(release):
+                await release()
         self._active_input = chosen
         self._set_backend_active(chosen)
         source_state.publish(active_input=None if chosen == "none" else chosen, target_error=None, error=None)
@@ -513,6 +523,10 @@ class SourceClient:
         await asyncio.to_thread(bt_remove_device, address)
 
     async def _nudge_profile(self, endpoint: CaptureEndpoint | None) -> None:
+        if (self._active_input or "").startswith("headset-mic:"):
+            # The headset is deliberately on HFP for its microphone; asking
+            # for the A2DP source profile here would tear the capture down.
+            return
         nudge = getattr(self._capture_backend, "ensure_a2dp_source", None)
         if callable(nudge):
             with contextlib.suppress(Exception):

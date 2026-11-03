@@ -148,6 +148,7 @@ def status(config: dict[str, Any]) -> SourceStatus:
                 config,
                 active_input=_effective_active(current),
                 bluetooth=_source_devices(config, current.phone_mac, current.paired_phone_mac),
+                headsets=_headsets(config),
             )
         ),
         error=current.error,
@@ -228,7 +229,9 @@ async def start(*, config: dict[str, Any] | None = None, persist: bool = True) -
     if base_backend is None:
         raise UseCaseError(422, "capture_unavailable", "No audio server answers; the source cannot be captured.")
     active_input = str(config.get("SENDSPIN_SOURCE_ACTIVE") or "").strip() or None
-    backend = SourceInputRouter(base_backend, active_input)
+    from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+    backend = SourceInputRouter(base_backend, active_input, headset=get_headset_profiles())
     server_url = await resolve_server_url(config)
     if not server_url:
         raise UseCaseError(
@@ -353,18 +356,20 @@ async def targets() -> dict[str, Any]:
             "ma_api_available": True,
             "error": "ma_api_unreachable",
         }
+    found = [entry for entry in found if not _target_is_active_microphone(config, str(entry.get("name") or ""))]
     return {"targets": found, "selected": selected, "ma_api_available": True, "error": None}
 
 
 async def set_target(target: str | None) -> dict[str, Any]:
     """Pin automatic playback to one MA queue (or clear it), persisting the choice."""
-    from sendspin_bridge.config import update_config
+    from sendspin_bridge.config import load_config, update_config
     from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
     from sendspin_bridge.services.source.target import fetch_targets
 
     client = manager.client()
     if client is None:
         raise UseCaseError(409, "source_off", "The source is off; enable it first.")
+    config = await asyncio.to_thread(load_config)
     chosen = str(target or "").strip() or None
     name: str | None = None
     if chosen is not None:
@@ -388,6 +393,12 @@ async def set_target(target: str | None) -> dict[str, Any]:
                 "target_unsupported",
                 "That Music Assistant player does not accept live audio sources; choose another player or group.",
             )
+        if _target_is_active_microphone(config, str(match.get("name") or "")):
+            raise UseCaseError(
+                422,
+                "target_is_source",
+                "That player owns the active headset microphone and cannot also play it.",
+            )
         name = str(match.get("name") or chosen)
     await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE_TARGET", chosen))
     target_error = await client.set_target(chosen)
@@ -404,6 +415,39 @@ async def _hardware_audio() -> Any:
         logger.warning("Source: local audio inputs could not be read", exc_info=True)
         return None
     return snapshot
+
+
+def _active_headset_mac(config: dict[str, Any] | None, active_input: str | None) -> str | None:
+    raw = str(active_input or "")
+    if not raw.startswith("headset-mic:"):
+        return None
+    return raw.split(":", 1)[1].upper() or None
+
+
+def _headset_player_name(config: dict[str, Any] | None, mac: str) -> str | None:
+    for player in (config or {}).get("players") or ():
+        backend = player.get("backend") if isinstance(player, dict) else None
+        if isinstance(backend, dict) and str(backend.get("mac") or "").upper() == mac.upper():
+            return str(player.get("name") or "").strip() or None
+    return None
+
+
+def _target_is_active_microphone(config: dict[str, Any] | None, target_name: str) -> bool:
+    mac = _active_headset_mac(config, _active_id(config or {}, source_state.snapshot()))
+    if mac is None:
+        return False
+    name = _headset_player_name(config, mac)
+    return bool(name and name.casefold() == str(target_name or "").strip().casefold())
+
+
+def _headsets(config: dict[str, Any] | None) -> list[dict[str, Any]]:
+    from sendspin_bridge.services.bluetooth.headset import headset_inputs
+
+    try:
+        return headset_inputs(config)
+    except Exception:
+        logger.debug("Source: headset inputs could not be read", exc_info=True)
+        return []
 
 
 def _effective_active(current: Any) -> str | None:
@@ -429,6 +473,7 @@ def _configured_inputs(config: dict[str, Any], current: Any, snapshot: Any) -> t
         active_input=active,
         bluetooth=bluetooth,
         audio_sources=audio,
+        headsets=_headsets(config),
     )
     return configured, list(audio or ())
 
@@ -447,6 +492,7 @@ async def inputs(*, include_monitors: bool = False) -> dict[str, Any]:
             config,
             active_input=active,
             bluetooth=_source_devices(config, current.phone_mac, current.paired_phone_mac),
+            headsets=_headsets(config),
         )
         return {
             "active_input": active,
@@ -606,6 +652,10 @@ async def select_input(source_id: str) -> dict[str, Any]:
         known = {entry["node"] for entry in source_inputs.local_profiles(config)}
         if value not in known:
             raise UseCaseError(404, "input_unknown", "That local audio input is not saved.")
+    elif kind == "headset_microphone":
+        known = {str(entry["mac"]).upper() for entry in _headsets(config)}
+        if value not in known:
+            raise UseCaseError(404, "input_unknown", "That headset microphone is not available.")
     else:
         known_macs = {
             device.mac for device in source_devices.list_source_devices(excluded_macs=_configured_player_macs(config))

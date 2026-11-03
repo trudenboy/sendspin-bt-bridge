@@ -83,6 +83,8 @@
     "speakersTitle": "Altavoces"
   },
   "device": {
+    "microphone": "Micrófono",
+    "microphoneMode": "Modo micrófono: reproducción A2DP en pausa",
     "a2dpUnavailable": "El audio A2DP no está disponible",
     "a2dpUnavailableHint": "El host solo registró un perfil HFP/llamada. La música no sonará hasta que vuelva A2DP.",
     "retryA2dp": "Reintentar A2DP",
@@ -455,6 +457,7 @@
       "empty": "Aún no hay ninguna fuente de audio configurada. Añade una fuente Bluetooth o una entrada de audio local.",
       "bluetooth": "Bluetooth",
       "local": "Entrada local",
+      "headsetMicrophone": "Micrófono del auricular",
       "available": "Disponible",
       "off": "Apagado",
       "pairing": "Emparejamiento",
@@ -1459,7 +1462,7 @@
         "label": "Tiempo de antelación al iniciar",
         "help": "Tiempo que necesita el altavoz antes de que suene el primer audio."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "Permitir el perfil de auricular (llamadas)",
         "help": "Desactivado mantiene el altavoz en A2DP para música y devuelve la tarjeta si el host restaura un perfil de auricular. Activado permite que otra aplicación use el micrófono del altavoz para llamadas; el sonido baja a 8 kHz mono mientras ese perfil está activo."
       },

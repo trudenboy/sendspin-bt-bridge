@@ -83,6 +83,8 @@
     "speakersTitle": "스피커"
   },
   "device": {
+    "microphone": "마이크",
+    "microphoneMode": "마이크 모드 — A2DP 재생 일시 중지",
     "a2dpUnavailable": "A2DP 오디오를 사용할 수 없음",
     "a2dpUnavailableHint": "호스트가 HFP/통화 프로필만 등록했습니다. A2DP가 돌아올 때까지 음악을 재생할 수 없습니다.",
     "retryA2dp": "A2DP 다시 시도",
@@ -455,6 +457,7 @@
       "empty": "아직 구성된 오디오 소스가 없습니다. Bluetooth 소스 또는 로컬 오디오 입력을 추가하십시오.",
       "bluetooth": "Bluetooth",
       "local": "로컬 입력",
+      "headsetMicrophone": "헤드셋 마이크",
       "available": "사용 가능",
       "off": "꺼짐",
       "pairing": "페어링",
@@ -1459,7 +1462,7 @@
         "label": "시작 준비 시간",
         "help": "첫 소리가 나기 전에 스피커가 필요한 시간입니다."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "헤드셋 프로파일(통화) 허용",
         "help": "끄면 음악 재생 시 스피커를 A2DP로 유지하고, 호스트가 헤드셋 프로파일을 되살리면 카드를 다시 전환합니다. 켜면 다른 앱이 통화용으로 스피커의 마이크를 사용할 수 있으며, 해당 프로파일이 활성화된 동안 소리는 8 kHz 모노로 떨어집니다."
       },

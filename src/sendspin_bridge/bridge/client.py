@@ -436,6 +436,7 @@ class DeviceStatus:
     # reported a card yet, so an absent field must not block playback.
     a2dp_available: bool | None = None
     hfp_available: bool | None = None
+    microphone_available: bool | None = None
     profile_mode: str | None = None
     audio_format: str | None = None
     bt_transport_path: str | None = None
@@ -2162,8 +2163,10 @@ class SendspinClient:
         if manager is None:
             return
         updates: dict[str, Any] = {}
-        for name in ("a2dp_available", "hfp_available", "profile_mode"):
+        for name in ("a2dp_available", "hfp_available", "microphone_available", "profile_mode"):
             value = getattr(manager, name, None)
+            if name == "microphone_available":
+                value = getattr(manager, "hfp_available", None)
             if value is not None and self.status.get(name) != value:
                 updates[name] = value
         if updates:
@@ -2964,14 +2967,6 @@ class SendspinClient:
                 explicit_keepalive = bool(fields_payload.get("keepalive_enabled", False))
                 self.keepalive_enabled = new_mode == "keep_alive" or explicit_keepalive
                 self._update_status({"idle_mode": new_mode})
-                applied.append(key)
-            elif key == "allow_hfp_profile":
-                # Parent-only: the Bluetooth manager reads it on its next
-                # connect, so the card profile is re-checked without a restart.
-                manager = getattr(self, "bt_manager", None)
-                if manager is not None:
-                    manager.allow_hfp = bool(value)
-                self._update_status({key: bool(value)})
                 applied.append(key)
             elif key in {"static_delay_source", "static_delay_calibrated_at", "static_delay_codec"}:
                 self._update_status({key: value})

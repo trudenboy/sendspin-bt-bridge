@@ -83,6 +83,8 @@
     "speakersTitle": "Altoparlanti"
   },
   "device": {
+    "microphone": "Microfono",
+    "microphoneMode": "Modalità microfono — riproduzione A2DP in pausa",
     "a2dpUnavailable": "Audio A2DP non disponibile",
     "a2dpUnavailableHint": "L host ha registrato solo un profilo HFP/chiamata. La musica non può suonare finché A2DP non torna.",
     "retryA2dp": "Riprova A2DP",
@@ -455,6 +457,7 @@
       "empty": "Nessuna sorgente audio è ancora configurata. Aggiungi una sorgente Bluetooth o un ingresso audio locale.",
       "bluetooth": "Bluetooth",
       "local": "Ingresso locale",
+      "headsetMicrophone": "Microfono dell cuffie",
       "available": "Disponibile",
       "off": "Spento",
       "pairing": "Associazione",
@@ -1459,7 +1462,7 @@
         "label": "Tempo di anticipo all’avvio",
         "help": "Tempo necessario all’altoparlante prima che parta il primo suono."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "Consenti il profilo cuffie (chiamate)",
         "help": "Disattivato mantiene l’altoparlante su A2DP per la musica e riporta la scheda indietro se l’host ripristina un profilo cuffie. Attivato consente a un’altra app di usare il microfono dell’altoparlante per le chiamate; il suono scende a 8 kHz mono mentre quel profilo è attivo."
       },

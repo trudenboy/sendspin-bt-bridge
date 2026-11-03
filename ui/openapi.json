@@ -4211,6 +4211,18 @@
             "title": "Management Enabled",
             "type": "boolean"
           },
+          "microphone_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The headset microphone can be captured.",
+            "title": "Microphone Available"
+          },
           "never_paired": {
             "default": false,
             "title": "Never Paired",
@@ -4262,7 +4274,7 @@
                 "type": "null"
               }
             ],
-            "description": "a2dp, hfp, hfp_only, other or unknown.",
+            "description": "a2dp, hfp, hfp_only, microphone or unknown.",
             "title": "Profile Mode"
           },
           "reconnect_attempt": {
@@ -4391,6 +4403,7 @@
           "transport_state",
           "a2dp_available",
           "hfp_available",
+          "microphone_available",
           "profile_mode",
           "reported_delay_ms",
           "delay_reporting_supported",
@@ -7088,7 +7101,7 @@
             ],
             "title": "Air To Sound Latency"
           },
-          "allow_hfp_profile": {
+          "allow_call_mode": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -7097,7 +7110,7 @@
                 "type": "null"
               }
             ],
-            "title": "Allow Hfp Profile"
+            "title": "Allow Call Mode"
           },
           "backend": {
             "discriminator": {
@@ -9792,7 +9805,8 @@
           "kind": {
             "enum": [
               "bluetooth",
-              "local"
+              "local",
+              "headset_microphone"
             ],
             "title": "Kind",
             "type": "string"

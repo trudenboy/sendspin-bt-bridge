@@ -83,6 +83,8 @@
     "speakersTitle": "Speakers"
   },
   "device": {
+    "microphone": "Microphone",
+    "microphoneMode": "Microphone mode — A2DP playback is paused",
     "a2dpUnavailable": "A2DP audio is unavailable",
     "a2dpUnavailableHint": "The host registered only an HFP/call profile for this device. Music cannot play until A2DP returns.",
     "retryA2dp": "Retry A2DP",
@@ -455,6 +457,7 @@
       "empty": "No audio source is configured yet. Add a Bluetooth source or a local audio input.",
       "bluetooth": "Bluetooth",
       "local": "Local input",
+      "headsetMicrophone": "Headset microphone",
       "available": "Available",
       "off": "Off",
       "pairing": "Pairing",
@@ -1459,7 +1462,7 @@
         "label": "Start-up lead time",
         "help": "Time the speaker needs before the first sound plays."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "Allow the headset profile (calls)",
         "help": "Off keeps the speaker on A2DP for music and switches the card back if the host restores a headset profile. On lets another app use the speaker's microphone for calls; sound drops to 8 kHz mono while that profile is active."
       },

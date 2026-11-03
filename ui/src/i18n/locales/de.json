@@ -83,6 +83,8 @@
     "speakersTitle": "Lautsprecher"
   },
   "device": {
+    "microphone": "Mikrofon",
+    "microphoneMode": "Mikrofonmodus — A2DP-Wiedergabe pausiert",
     "a2dpUnavailable": "A2DP-Audio ist nicht verfügbar",
     "a2dpUnavailableHint": "Der Host hat nur ein HFP-/Anrufprofil registriert. Musik kann erst spielen, wenn A2DP zurück ist.",
     "retryA2dp": "A2DP erneut versuchen",
@@ -455,6 +457,7 @@
       "empty": "Es ist noch keine Audioquelle eingerichtet. Füge eine Bluetooth-Quelle oder einen lokalen Audioeingang hinzu.",
       "bluetooth": "Bluetooth",
       "local": "Lokaler Eingang",
+      "headsetMicrophone": "Headset-Mikrofon",
       "available": "Verfügbar",
       "off": "Aus",
       "pairing": "Kopplung",
@@ -1459,7 +1462,7 @@
         "label": "Vorlaufzeit beim Start",
         "help": "Zeit, die der Lautsprecher vor dem ersten Ton benötigt."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "Headset-Profil (Anrufe) erlauben",
         "help": "Aus hält den Lautsprecher für Musik auf A2DP und schaltet die Karte zurück, wenn der Host ein Headset-Profil wiederherstellt. An erlaubt einer anderen App, das Mikrofon des Lautsprechers für Anrufe zu nutzen; solange dieses Profil aktiv ist, fällt der Ton auf 8 kHz mono."
       },

@@ -44,6 +44,7 @@ const displayName = computed(() => speakerName(props.device.name, props.device.b
 const connected = computed(() => isDeviceConnected(props.device))
 const isStreaming = computed(() => props.device.playback.playing && props.device.audio.streaming)
 const a2dpUnavailable = computed(() => props.device.health?.code === 'a2dp_unavailable')
+const microphoneMode = computed(() => props.device.bluetooth?.profile_mode === 'microphone')
 
 /** Title/artist: the daemon's track metadata, else Music Assistant's now-playing. */
 const nowPlaying = computed(() => {
@@ -255,6 +256,14 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     @update:volume="onVolumeUpdate"
     @update:muted="onMuteUpdate"
   />
+
+  <div v-if="device.bluetooth?.microphone_available" class="relative z-10 flex flex-wrap items-center gap-1.5">
+    <SbBadge size="sm" tone="info">{{ t('device.microphone') }}</SbBadge>
+  </div>
+
+  <p v-if="microphoneMode" class="relative z-10 text-xs font-medium text-warning-text">
+    {{ t('device.microphoneMode') }}
+  </p>
 
   <BlockedHints :device="device" class="relative z-10" />
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bluetooth, Pencil, Play, Radio, Trash2 } from 'lucide-vue-next'
+import { Bluetooth, Pencil, Play, Radio, Trash2, Mic } from 'lucide-vue-next'
 import { SbBadge, SbButton } from '@/kit'
 import type { SourceInputStatus, SourceState } from '@/api/types'
 
@@ -31,9 +31,11 @@ const { t } = useI18n()
 const renaming = ref(false)
 const draft = ref('')
 
-const kindLabel = computed(() =>
-  props.input.kind === 'bluetooth' ? t('devices.sources.bluetooth') : t('devices.sources.local'),
-)
+const kindLabel = computed(() => {
+  if (props.input.kind === 'bluetooth') return t('devices.sources.bluetooth')
+  if (props.input.kind === 'headset_microphone') return t('devices.sources.headsetMicrophone')
+  return t('devices.sources.local')
+})
 const stateLabel = computed(() => {
   if (!props.input.active) return t('devices.sources.available')
   const labels = {
@@ -79,6 +81,7 @@ function saveRename() {
     <header class="flex items-start gap-3">
       <span class="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-text">
         <Bluetooth v-if="input.kind === 'bluetooth'" class="size-5" aria-hidden="true" />
+        <Mic v-else-if="input.kind === 'headset_microphone'" class="size-5" aria-hidden="true" />
         <Radio v-else class="size-5" aria-hidden="true" />
       </span>
       <div class="min-w-0 flex-1">
@@ -88,7 +91,7 @@ function saveRename() {
         <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-text-secondary">
           <span>{{ kindLabel }}</span>
           <span aria-hidden="true">·</span>
-          <span class="truncate font-mono">{{ input.kind === 'bluetooth' ? input.mac : input.node }}</span>
+          <span class="truncate font-mono">{{ input.kind === 'bluetooth' || input.kind === 'headset_microphone' ? input.mac : input.node }}</span>
         </p>
       </div>
       <SbBadge data-source-state :tone="stateTone" size="sm">{{ stateLabel }}</SbBadge>
@@ -132,7 +135,7 @@ function saveRename() {
         <template #icon-left><Pencil class="h-3.5 w-3.5" aria-hidden="true" /></template>
         {{ t('devices.sources.rename') }}
       </SbButton>
-      <SbButton size="sm" variant="ghost" data-source-remove :disabled="busy" @click="emit('remove', input.id)">
+      <SbButton v-if="input.kind !== 'headset_microphone'" size="sm" variant="ghost" data-source-remove :disabled="busy" @click="emit('remove', input.id)">
         <template #icon-left><Trash2 class="h-3.5 w-3.5" aria-hidden="true" /></template>
         {{ input.kind === 'local' ? t('devices.sources.remove') : t('devices.sources.forget') }}
       </SbButton>

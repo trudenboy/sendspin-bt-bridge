@@ -83,6 +83,8 @@
     "speakersTitle": "音箱"
   },
   "device": {
+    "microphone": "麦克风",
+    "microphoneMode": "麦克风模式 — A2DP 播放已暂停",
     "a2dpUnavailable": "A2DP 音频不可用",
     "a2dpUnavailableHint": "主机仅注册了 HFP/通话配置文件。在 A2DP 恢复之前无法播放音乐。",
     "retryA2dp": "重试 A2DP",
@@ -455,6 +457,7 @@
       "empty": "尚未配置音频源。请添加 Bluetooth 源或本地音频输入。",
       "bluetooth": "Bluetooth",
       "local": "本地输入",
+      "headsetMicrophone": "耳机麦克风",
       "available": "可用",
       "off": "关闭",
       "pairing": "配对",
@@ -1459,7 +1462,7 @@
         "label": "启动提前量",
         "help": "音箱在首次发声前所需的时间。"
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "允许耳机配置文件（通话）",
         "help": "关闭时，音箱保持 A2DP 播放音乐；若主机恢复耳机配置文件，会将声卡切回。开启后，其他应用可使用音箱麦克风通话；该配置文件启用期间声音会降为 8 kHz 单声道。"
       },

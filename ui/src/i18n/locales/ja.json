@@ -83,6 +83,8 @@
     "speakersTitle": "スピーカー"
   },
   "device": {
+    "microphone": "マイク",
+    "microphoneMode": "マイクモード — A2DP再生は一時停止中",
     "a2dpUnavailable": "A2DPオーディオを利用できません",
     "a2dpUnavailableHint": "ホストはHFP/通話プロファイルのみを登録しています。A2DPが戻るまで音楽は再生できません。",
     "retryA2dp": "A2DPを再試行",
@@ -455,6 +457,7 @@
       "empty": "音声ソースがまだ設定されていません。Bluetooth ソースまたはローカル音声入力を追加してください。",
       "bluetooth": "Bluetooth",
       "local": "ローカル入力",
+      "headsetMicrophone": "ヘッドセットのマイク",
       "available": "利用可能",
       "off": "オフ",
       "pairing": "ペアリング",
@@ -1459,7 +1462,7 @@
         "label": "起動リードタイム",
         "help": "最初の音が再生されるまでにスピーカーが必要とする時間です。"
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "ヘッドセットプロファイル（通話）を許可",
         "help": "オフでは音楽用に A2DP を維持し、ホストがヘッドセットプロファイルを復元した場合はカードを戻します。オンでは他のアプリが通話用にスピーカーのマイクを使用できます。そのプロファイルが有効な間は 8 kHz モノラルになります。"
       },

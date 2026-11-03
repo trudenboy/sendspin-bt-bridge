@@ -91,7 +91,8 @@ class DeviceBluetooth(ResponseModel):
     transport_state: str | None = None
     a2dp_available: bool | None = Field(default=None, description="A2DP sink profile is registered on the host.")
     hfp_available: bool | None = Field(default=None, description="The card offers an HFP/HSP profile.")
-    profile_mode: str | None = Field(default=None, description="a2dp, hfp, hfp_only, other or unknown.")
+    microphone_available: bool | None = Field(default=None, description="The headset microphone can be captured.")
+    profile_mode: str | None = Field(default=None, description="a2dp, hfp, hfp_only, microphone or unknown.")
     reported_delay_ms: float | None = Field(
         default=None,
         description=(
@@ -604,6 +605,7 @@ class Device(ResponseModel):
                 transport_state=g("bt_transport_state"),
                 a2dp_available=g("a2dp_available"),
                 hfp_available=g("hfp_available"),
+                microphone_available=g("microphone_available"),
                 profile_mode=g("profile_mode"),
                 reported_delay_ms=g("bt_reported_delay_ms"),
                 delay_reporting_supported=bool(g("bt_delay_reporting_supported")),

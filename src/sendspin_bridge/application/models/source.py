@@ -43,7 +43,7 @@ class SourceInputStatus(ResponseModel):
     """One selectable source input: a Bluetooth bond or a local audio input."""
 
     id: str
-    kind: Literal["bluetooth", "local"]
+    kind: Literal["bluetooth", "local", "headset_microphone"]
     name: str
     description: str = ""
     active: bool = False

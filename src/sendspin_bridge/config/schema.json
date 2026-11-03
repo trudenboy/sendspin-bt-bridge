@@ -798,7 +798,7 @@
           "default": null,
           "description": "true plays a soft continuous noise into this speaker's output for the duration of a group tuning session, so an amplifier that sleeps through the silence between clicks is awake when the clicks arrive."
         },
-        "allow_hfp_profile": {
+        "allow_call_mode": {
           "anyOf": [
             {
               "type": "boolean"
@@ -808,7 +808,7 @@
             }
           ],
           "default": null,
-          "description": "true keeps this speaker's headset (HFP/HSP) card profile, e.g. for calls; false or null keeps playback on A2DP and switches the card back when the host restores a saved headset profile."
+          "description": "true allows this device's HFP/HSP profile to be used for its microphone or an external call; false blocks it. null decides from the device class."
         },
         "air_to_sound_latency": {
           "anyOf": [

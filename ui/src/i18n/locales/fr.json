@@ -83,6 +83,8 @@
     "speakersTitle": "Enceintes"
   },
   "device": {
+    "microphone": "Microphone",
+    "microphoneMode": "Mode microphone — lecture A2DP en pause",
     "a2dpUnavailable": "L'audio A2DP est indisponible",
     "a2dpUnavailableHint": "L'hôte n'a enregistré qu'un profil HFP/appel. La musique ne pourra jouer qu'au retour d'A2DP.",
     "retryA2dp": "Réessayer A2DP",
@@ -455,6 +457,7 @@
       "empty": "Aucune source audio n’est encore configurée. Ajoutez une source Bluetooth ou une entrée audio locale.",
       "bluetooth": "Bluetooth",
       "local": "Entrée locale",
+      "headsetMicrophone": "Microphone du casque",
       "available": "Disponible",
       "off": "Désactivé",
       "pairing": "Appairage",
@@ -1459,7 +1462,7 @@
         "label": "Délai de démarrage",
         "help": "Temps dont l’enceinte a besoin avant le premier son."
       },
-      "allow_hfp_profile": {
+      "allow_call_mode": {
         "label": "Autoriser le profil casque (appels)",
         "help": "Désactivé : garde l’enceinte en A2DP pour la musique et rebascule la carte si l’hôte rétablit un profil casque. Activé : permet à une autre application d’utiliser le micro de l’enceinte pour les appels ; le son passe en 8 kHz mono tant que ce profil est actif."
       },
