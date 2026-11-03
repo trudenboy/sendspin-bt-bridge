@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.19] - 2026-11-03
+
+### Fixed
+
+- Source status no longer reads the PulseAudio card list on the bridge event loop. The repeated "coroutine was never awaited" warnings are gone, and opening the Devices page cannot stall audio handling.
+
 ## [3.2.0-beta.18] - 2026-11-03
 
 ### Added

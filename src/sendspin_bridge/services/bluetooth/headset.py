@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,8 +28,6 @@ __all__ = [
 
 _HFP_MARKERS = ("headset_head_unit", "headset-head-unit", "handsfree", "headset_audio_gateway", "headset-audio-gateway")
 _A2DP = ("a2dp_sink", "a2dp-sink")
-_CACHE_TTL_S = 20.0
-
 
 @dataclass(frozen=True, slots=True)
 class HeadsetCapabilities:
@@ -203,15 +200,19 @@ def get_headset_profiles() -> HeadsetProfileService:
 
 # -- source-input discovery ---------------------------------------------------
 
-_cache: tuple[float, list[dict[str, Any]]] = (0.0, [])
-
-
 def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Configured Bluetooth players that currently expose an HFP microphone."""
-    global _cache
-    now = time.monotonic()
-    if now - _cache[0] < _CACHE_TTL_S:
-        return list(_cache[1])
+    """Configured Bluetooth players whose running client reports an HFP profile.
+
+    Reads the client's already-published status, never PulseAudio: the source
+    status is built on the bridge loop and must not block on a subprocess.
+    """
+    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+
+    clients = {
+        str(getattr(getattr(client, "bt_manager", None), "mac_address", "") or "").upper(): client
+        for client in get_device_registry_snapshot().active_clients
+        if getattr(client, "bt_manager", None) is not None
+    }
     found: list[dict[str, Any]] = []
     for player in (config or {}).get("players") or ():
         if not isinstance(player, dict):
@@ -220,20 +221,16 @@ def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
         if not isinstance(backend, dict) or backend.get("type") != "bluetooth_a2dp":
             continue
         mac = str(backend.get("mac") or "").strip().upper()
-        if not mac:
+        if not mac or player.get("allow_call_mode") is False:
             continue
-        try:
-            card = bt_audio.card_profile_state(bt_audio.DeviceAddress.require(mac).underscores)
-        except Exception:
-            card = None
-        if card is None or not card.hfp_available:
-            continue
-        if player.get("allow_call_mode") is False:
+        client = clients.get(mac)
+        status = getattr(client, "status", {}) if client is not None else {}
+        if status.get("hfp_available") is not True:
             continue
         caps = classify(
-            hfp_available=card.hfp_available,
-            a2dp_available=card.a2dp_available,
-            form_factor=_form_factor(bt_audio.DeviceAddress.require(mac).underscores),
+            hfp_available=True,
+            a2dp_available=status.get("a2dp_available") is not False,
+            form_factor=None,
         )
         found.append(
             {
@@ -241,8 +238,7 @@ def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
                 "name": str(player.get("name") or mac),
                 "kind": caps.kind,
                 "a2dp_available": caps.a2dp_available,
-                "hfp_available": caps.hfp_available,
+                "hfp_available": True,
             }
         )
-    _cache = (now, found)
-    return list(found)
+    return found
