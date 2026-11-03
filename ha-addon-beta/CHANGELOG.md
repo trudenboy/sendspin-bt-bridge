@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.15] - 2026-11-03
+
+### Added
+
+- Local audio inputs can now feed the source alongside Bluetooth devices: line-in, USB, microphone and virtual PulseAudio/PipeWire sources. System-audio monitor inputs are opt-in because they can create feedback.
+- The main page is now **Devices**, with separate **Sources** and **Outputs** sections. A source card can be selected, renamed (local only), or removed; Bluetooth removal forgets the bond while keeping the Music Assistant pairing.
+- The Add device dialog has an **Audio source** tab for pairing a Bluetooth source or saving a local input, independent of the source switch and Music Assistant pairing.
+- Source inputs and the active choice survive an add-on restart; a legacy Bluetooth source keeps the automatic phone selection until the operator picks an input explicitly.
+
+### Changed
+
+- Source pairing no longer lives on the Hardware page and no longer depends on Music Assistant having paired the bridge. Hardware now shows the physical layer only; a source-only phone is marked and no longer offers "Add as speaker".
+- Switching the active input keeps the same Music Assistant live input and target; if no target is pinned, the page asks the operator to start playback in Music Assistant.
+
 ## [3.2.0-beta.14] - 2026-11-03
 
 ### Fixed
