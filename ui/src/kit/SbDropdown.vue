@@ -46,8 +46,15 @@ function close() {
   isOpen.value = false
 }
 
-function onViewportChange() {
-  if (isOpen.value) close()
+function onViewportChange(event?: Event) {
+  if (!isOpen.value) return
+  // Scrolling the menu itself must not close it: with ten languages the list
+  // is taller than max-h-[60vh] and the wheel would otherwise dismiss it.
+  // A scroll anywhere else would leave the fixed menu detached from its
+  // trigger, so that still closes.
+  const target = event?.target as Node | null
+  if (target && (menuRef.value?.contains(target) || containerRef.value?.contains(target))) return
+  close()
 }
 
 function focusFirstItem() {

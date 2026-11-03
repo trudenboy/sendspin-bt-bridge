@@ -82,6 +82,19 @@ describe('SbDropdown', () => {
     const style = wrapper.find('[role="menu"]').attributes('style') ?? ''
     expect(style).toContain('300px')
   })
+
+  it('stays open while its own list scrolls and closes on a page scroll', async () => {
+    const wrapper = mount(SbDropdown, { slots: { default: '<button role="menuitem">Deutsch</button>' } })
+    await wrapper.find('button').trigger('click')
+    const menu = wrapper.find('[role="menu"]').element
+    menu.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('button').attributes('aria-expanded')).toBe('true')
+
+    window.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('button').attributes('aria-expanded')).toBe('false')
+  })
 })
 
 describe('SbDropdown keyboard', () => {
