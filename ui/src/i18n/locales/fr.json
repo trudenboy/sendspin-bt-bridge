@@ -1372,7 +1372,9 @@
         "loadFailed": "Impossible de charger les lecteurs Music Assistant.",
         "saveFailed": "Impossible d’enregistrer la destination.",
         "playFailed": "La source n’a pas pu démarrer sur la destination sélectionnée.",
-        "note": "La source démarre sur ce lecteur ou ce groupe lorsqu’un appareil commence à diffuser. Choisissez « Choisir dans Music Assistant » si vous préférez que le routage y reste."
+        "note": "La source démarre sur ce lecteur ou ce groupe lorsqu’un appareil commence à diffuser. Choisissez « Choisir dans Music Assistant » si vous préférez que le routage y reste.",
+        "unsupported": "non pris en charge",
+        "unsupportedSelected": "Ce lecteur n’accepte pas les sources audio en direct. Choisissez un autre lecteur ou groupe."
       }
     },
     "leaveConfirm": "Des paramètres ne sont pas enregistrés. Quitter quand même ?",

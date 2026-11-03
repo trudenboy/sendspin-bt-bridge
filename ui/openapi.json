@@ -9957,6 +9957,12 @@
             "title": "Player Id",
             "type": "string"
           },
+          "supported": {
+            "default": true,
+            "description": "The player accepts play_media/AudioSource playback.",
+            "title": "Supported",
+            "type": "boolean"
+          },
           "type": {
             "enum": [
               "player",
@@ -9970,7 +9976,8 @@
           "player_id",
           "name",
           "type",
-          "available"
+          "available",
+          "supported"
         ],
         "title": "SourceTarget",
         "type": "object"

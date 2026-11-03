@@ -1372,7 +1372,9 @@
         "loadFailed": "Music Assistant-Player konnten nicht geladen werden.",
         "saveFailed": "Das Ziel konnte nicht gespeichert werden.",
         "playFailed": "Die Quelle konnte auf dem ausgewählten Ziel nicht gestartet werden.",
-        "note": "Die Quelle startet auf diesem Player oder dieser Gruppe, sobald ein Gerät zu streamen beginnt. Wähle „In Music Assistant auswählen“, wenn Music Assistant das Routing übernehmen soll."
+        "note": "Die Quelle startet auf diesem Player oder dieser Gruppe, sobald ein Gerät zu streamen beginnt. Wähle „In Music Assistant auswählen“, wenn Music Assistant das Routing übernehmen soll.",
+        "unsupported": "nicht unterstützt",
+        "unsupportedSelected": "Dieser Player akzeptiert keine Live-Audioquellen. Wähle einen anderen Player oder eine Gruppe."
       }
     },
     "leaveConfirm": "Du hast nicht gespeicherte Einstellungen. Trotzdem verlassen?",

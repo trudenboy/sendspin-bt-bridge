@@ -59,12 +59,17 @@ def targets_from_players(players: list[dict[str, Any]], client_id: str | None) -
         if not player_id:
             continue
         name = str(player.get("display_name") or player.get("name") or player_id).strip()
+        features = player.get("supported_features")
+        # Older MA payloads may omit the list; only an explicit absence of
+        # play_media should hide a target, never a missing field.
+        supported = True if features is None else "play_media" in features
         targets.append(
             {
                 "player_id": player_id,
                 "name": name,
                 "type": _target_type(player),
                 "available": bool(player.get("available", True)),
+                "supported": supported,
             }
         )
     targets.sort(key=lambda target: (target["type"] != "group", target["name"].lower(), target["player_id"]))

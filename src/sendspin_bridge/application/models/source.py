@@ -61,6 +61,7 @@ class SourceTarget(ResponseModel):
     name: str
     type: Literal["player", "group"]
     available: bool = True
+    supported: bool = Field(default=True, description="The player accepts play_media/AudioSource playback.")
 
 
 class SourceTargets(ResponseModel):

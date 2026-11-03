@@ -1372,7 +1372,9 @@
         "loadFailed": "Could not load Music Assistant players.",
         "saveFailed": "Could not save the target.",
         "playFailed": "The source could not start on the selected target.",
-        "note": "The source starts on this player or group when a device begins streaming. Choose in Music Assistant if you prefer to route it there."
+        "note": "The source starts on this player or group when a device begins streaming. Choose in Music Assistant if you prefer to route it there.",
+        "unsupported": "unsupported",
+        "unsupportedSelected": "This player does not accept live audio sources. Choose another player or group."
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",

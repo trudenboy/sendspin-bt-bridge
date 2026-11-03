@@ -1372,7 +1372,9 @@
         "loadFailed": "Music Assistant oynatıcıları yüklenemedi.",
         "saveFailed": "Hedef kaydedilemedi.",
         "playFailed": "Kaynak seçilen hedefte başlatılamadı.",
-        "note": "Bir cihaz akış yapmaya başladığında kaynak bu oynatıcıda veya grupta başlar. Yönlendirmeyi Music Assistant’a bırakmak istersen “Music Assistant’ta seç” seçeneğini kullan."
+        "note": "Bir cihaz akış yapmaya başladığında kaynak bu oynatıcıda veya grupta başlar. Yönlendirmeyi Music Assistant’a bırakmak istersen “Music Assistant’ta seç” seçeneğini kullan.",
+        "unsupported": "desteklenmiyor",
+        "unsupportedSelected": "Bu oynatıcı canlı ses kaynaklarını kabul etmiyor. Başka bir oynatıcı veya grup seçin."
       }
     },
     "leaveConfirm": "Kaydedilmemiş ayarlar var. Yine de çıkılsın mı?",

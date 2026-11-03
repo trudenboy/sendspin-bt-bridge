@@ -1372,7 +1372,9 @@
         "loadFailed": "无法加载 Music Assistant 播放器。",
         "saveFailed": "无法保存目标。",
         "playFailed": "源无法在所选目标上启动。",
-        "note": "当设备开始传输音频时，源会在此播放器或组上启动。如果希望由 Music Assistant 负责路由，请选择“在 Music Assistant 中选择”。"
+        "note": "当设备开始传输音频时，源会在此播放器或组上启动。如果希望由 Music Assistant 负责路由，请选择“在 Music Assistant 中选择”。",
+        "unsupported": "不支持",
+        "unsupportedSelected": "此播放器不接受实时音频源。请选择其他播放器或组。"
       }
     },
     "leaveConfirm": "有未保存的设置。仍要离开吗？",

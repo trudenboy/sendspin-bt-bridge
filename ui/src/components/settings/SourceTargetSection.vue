@@ -30,6 +30,10 @@ const loaded = ref(false)
 const groups = computed(() => targets.value.filter((target) => target.type === 'group'))
 const players = computed(() => targets.value.filter((target) => target.type === 'player'))
 const targetError = computed(() => source.value?.target_error ?? null)
+const selectedUnsupported = computed(() => {
+  const found = targets.value.find((target) => target.player_id === selected.value)
+  return found?.supported === false
+})
 
 function apply(answer: { targets?: SourceTarget[]; ma_api_available?: boolean; selected?: string | null; error?: string | null }) {
   targets.value = answer.targets ?? []
@@ -136,18 +140,31 @@ watch(
       >
         <option value="">{{ t('settings.parts.sourceTarget.default') }}</option>
         <optgroup v-if="groups.length" :label="t('settings.parts.sourceTarget.groups')">
-          <option v-for="target in groups" :key="target.player_id" :value="target.player_id" :disabled="!target.available">
-            {{ target.name }}{{ target.available ? '' : ` — ${t('settings.parts.sourceTarget.unavailable')}` }}
+          <option
+            v-for="target in groups"
+            :key="target.player_id"
+            :value="target.player_id"
+            :disabled="!target.available || target.supported === false"
+          >
+            {{ target.name }}{{ target.available ? '' : ` — ${t('settings.parts.sourceTarget.unavailable')}` }}{{ target.supported === false ? ` — ${t('settings.parts.sourceTarget.unsupported')}` : '' }}
           </option>
         </optgroup>
         <optgroup v-if="players.length" :label="t('settings.parts.sourceTarget.players')">
-          <option v-for="target in players" :key="target.player_id" :value="target.player_id" :disabled="!target.available">
-            {{ target.name }}{{ target.available ? '' : ` — ${t('settings.parts.sourceTarget.unavailable')}` }}
+          <option
+            v-for="target in players"
+            :key="target.player_id"
+            :value="target.player_id"
+            :disabled="!target.available || target.supported === false"
+          >
+            {{ target.name }}{{ target.available ? '' : ` — ${t('settings.parts.sourceTarget.unavailable')}` }}{{ target.supported === false ? ` — ${t('settings.parts.sourceTarget.unsupported')}` : '' }}
           </option>
         </optgroup>
       </select>
     </SettingsRow>
 
+    <p v-if="selectedUnsupported" data-source-target-unsupported class="mb-4 rounded-(--radius-card) border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-text-secondary">
+      {{ t('settings.parts.sourceTarget.unsupportedSelected') }}
+    </p>
     <p v-if="!apiAvailable" data-source-target-api class="mb-4 text-sm text-text-secondary">
       {{ t('settings.parts.sourceTarget.apiUnavailable') }}
       <a href="#settings-musicAssistant" class="text-primary-text underline-offset-2 hover:underline">

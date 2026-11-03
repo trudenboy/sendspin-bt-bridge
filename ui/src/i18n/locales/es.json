@@ -1372,7 +1372,9 @@
         "loadFailed": "No se pudieron cargar los reproductores de Music Assistant.",
         "saveFailed": "No se pudo guardar el destino.",
         "playFailed": "La fuente no pudo iniciarse en el destino seleccionado.",
-        "note": "La fuente se inicia en este reproductor o grupo cuando un dispositivo empieza a transmitir. Elige «Elegir en Music Assistant» si prefieres que el enrutamiento quede allí."
+        "note": "La fuente se inicia en este reproductor o grupo cuando un dispositivo empieza a transmitir. Elige «Elegir en Music Assistant» si prefieres que el enrutamiento quede allí.",
+        "unsupported": "no compatible",
+        "unsupportedSelected": "Este reproductor no acepta fuentes de audio en directo. Elige otro reproductor o grupo."
       }
     },
     "leaveConfirm": "Tienes ajustes sin guardar. ¿Salir igualmente?",

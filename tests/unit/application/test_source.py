@@ -429,3 +429,33 @@ async def test_status_exposes_local_inputs_and_marks_the_active_one(monkeypatch)
         ("bluetooth", "Pixel", False),
         ("local", "Turntable", True),
     ]
+
+
+async def test_set_target_rejects_a_player_without_play_media(monkeypatch):
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+
+    async def fake_fetch(_url, _token, _client_id):
+        return (
+            [
+                {
+                    "player_id": "voice-pe",
+                    "name": "Voice PE",
+                    "type": "player",
+                    "available": True,
+                    "supported": False,
+                }
+            ],
+            "uri",
+        )
+
+    monkeypatch.setattr("sendspin_bridge.services.source.target.fetch_targets", fake_fetch)
+    monkeypatch.setattr(source_uc.manager, "client", lambda: _FakeSourceClient())
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.set_target("voice-pe")
+
+    assert raised.value.status == 422
+    assert raised.value.code == "target_unsupported"

@@ -7044,6 +7044,12 @@ export interface components {
             /** Player Id */
             player_id: string;
             /**
+             * Supported
+             * @description The player accepts play_media/AudioSource playback.
+             * @default true
+             */
+            supported: boolean;
+            /**
              * Type
              * @enum {string}
              */

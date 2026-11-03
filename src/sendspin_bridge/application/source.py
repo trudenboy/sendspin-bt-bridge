@@ -382,6 +382,12 @@ async def set_target(target: str | None) -> dict[str, Any]:
         match = next((entry for entry in found if entry["player_id"] == chosen), None)
         if match is None:
             raise UseCaseError(404, "unknown_target", "That Music Assistant player or group is not available.")
+        if not match.get("supported", True):
+            raise UseCaseError(
+                422,
+                "target_unsupported",
+                "That Music Assistant player does not accept live audio sources; choose another player or group.",
+            )
         name = str(match.get("name") or chosen)
     await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE_TARGET", chosen))
     target_error = await client.set_target(chosen)

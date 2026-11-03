@@ -1372,7 +1372,9 @@
         "loadFailed": "Music Assistant のプレーヤーを読み込めませんでした。",
         "saveFailed": "再生先を保存できませんでした。",
         "playFailed": "選択した再生先でソースを開始できませんでした。",
-        "note": "デバイスがストリーミングを開始すると、このプレーヤーまたはグループでソースが開始されます。ルーティングを Music Assistant に任せる場合は「Music Assistant で選択」を選んでください。"
+        "note": "デバイスがストリーミングを開始すると、このプレーヤーまたはグループでソースが開始されます。ルーティングを Music Assistant に任せる場合は「Music Assistant で選択」を選んでください。",
+        "unsupported": "非対応",
+        "unsupportedSelected": "このプレーヤーはライブ音声ソースに対応していません。別のプレーヤーまたはグループを選択してください。"
       }
     },
     "leaveConfirm": "未保存の設定があります。このまま離れますか？",

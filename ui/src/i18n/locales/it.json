@@ -1372,7 +1372,9 @@
         "loadFailed": "Impossibile caricare i lettori di Music Assistant.",
         "saveFailed": "Impossibile salvare la destinazione.",
         "playFailed": "Non è stato possibile avviare la sorgente sulla destinazione selezionata.",
-        "note": "La sorgente parte su questo lettore o gruppo quando un dispositivo inizia lo streaming. Scegli “Scegli in Music Assistant” se preferisci che il routing resti lì."
+        "note": "La sorgente parte su questo lettore o gruppo quando un dispositivo inizia lo streaming. Scegli “Scegli in Music Assistant” se preferisci che il routing resti lì.",
+        "unsupported": "non supportato",
+        "unsupportedSelected": "Questo lettore non accetta sorgenti audio live. Scegli un altro lettore o gruppo."
       }
     },
     "leaveConfirm": "Hai impostazioni non salvate. Uscire comunque?",

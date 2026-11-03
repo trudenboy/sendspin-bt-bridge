@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.16] - 2026-11-03
+
+### Fixed
+
+- The Music Assistant target list now marks players that cannot accept live audio sources, and choosing one is refused with a clear reason. This prevents the generic "feature not supported" failure from universal players.
+
 ## [3.2.0-beta.15] - 2026-11-03
 
 ### Added

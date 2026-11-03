@@ -1372,7 +1372,9 @@
         "loadFailed": "Music Assistant 플레이어를 불러오지 못했습니다.",
         "saveFailed": "재생 대상을 저장하지 못했습니다.",
         "playFailed": "선택한 재생 대상에서 소스를 시작하지 못했습니다.",
-        "note": "기기가 스트리밍을 시작하면 이 플레이어 또는 그룹에서 소스가 시작됩니다. 라우팅을 Music Assistant에 맡기려면 “Music Assistant에서 선택”을 고르십시오."
+        "note": "기기가 스트리밍을 시작하면 이 플레이어 또는 그룹에서 소스가 시작됩니다. 라우팅을 Music Assistant에 맡기려면 “Music Assistant에서 선택”을 고르십시오.",
+        "unsupported": "지원되지 않음",
+        "unsupportedSelected": "이 플레이어는 라이브 오디오 소스를 지원하지 않습니다. 다른 플레이어나 그룹을 선택하세요."
       }
     },
     "leaveConfirm": "저장하지 않은 설정이 있습니다. 그래도 나갈까요?",
