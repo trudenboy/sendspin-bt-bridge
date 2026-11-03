@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.14] - 2026-11-03
+
+### Fixed
+
+- The Music Assistant player list loads only when the target selector is opened, and a successful list is cached for a minute. Bridge status updates no longer restart the loading.
+- The Hardware page no longer offers "Add as speaker" for a source-only phone: a phone exposes A2DP Source, not a sink, so that action added a player that could not connect.
+
 ## [3.2.0-beta.13] - 2026-11-03
 
 ### Added
