@@ -84,7 +84,7 @@
   },
   "device": {
     "microphone": "Микрофон",
-    "microphoneMode": "Режим микрофона — воспроизведение A2DP приостановлено",
+    "microphoneMode": "Режим микрофона — воспроизведение A2DP на паузе",
     "a2dpUnavailable": "A2DP-звук недоступен",
     "a2dpUnavailableHint": "Хост зарегистрировал только HFP/call-профиль. Музыка не заиграет, пока A2DP не вернётся.",
     "retryA2dp": "Повторить A2DP",
