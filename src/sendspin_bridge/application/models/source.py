@@ -39,6 +39,24 @@ class SourceDevice(ResponseModel):
     active: bool = False
 
 
+class SourceTarget(ResponseModel):
+    """A Music Assistant player or group that can play the source."""
+
+    player_id: str
+    name: str
+    type: Literal["player", "group"]
+    available: bool = True
+
+
+class SourceTargets(ResponseModel):
+    """The automatic-play target choices and the saved one."""
+
+    targets: list[SourceTarget] = Field(default_factory=list)
+    selected: str | None = None
+    ma_api_available: bool = True
+    error: str | None = Field(default=None, description="Why the target list could not be read, if it could not.")
+
+
 class SourceFeed(ResponseModel):
     """The single Sendspin source: one capture, and the link to Music Assistant."""
 

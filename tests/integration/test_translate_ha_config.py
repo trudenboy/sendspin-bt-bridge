@@ -189,6 +189,16 @@ def test_sendspin_source_choice_survives_addon_restart(tmp_path):
     assert _read_json(tmp_path / "config.json")["SENDSPIN_SOURCE"] is True
 
 
+def test_sendspin_source_target_survives_addon_restart(tmp_path):
+    _write_json(tmp_path / "config.json", {"SENDSPIN_SOURCE_TARGET": "kitchen"})
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    assert _read_json(tmp_path / "config.json")["SENDSPIN_SOURCE_TARGET"] == "kitchen"
+
+
 def test_sendspin_source_option_overrides_the_saved_choice(tmp_path):
     _write_json(tmp_path / "config.json", {"SENDSPIN_SOURCE": True})
     _write_json(tmp_path / "options.json", _minimal_options(sendspin_source=False))

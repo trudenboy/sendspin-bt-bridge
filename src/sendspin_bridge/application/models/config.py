@@ -380,6 +380,10 @@ class BridgeConfig(BaseModel):
     """
     Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default.
     """
+    SENDSPIN_SOURCE_TARGET: str | None = None
+    """
+    Music Assistant player or group that should play the Bluetooth source automatically. Empty leaves the target choice to Music Assistant.
+    """
     EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE: bool | None = True
     """
     Ask for the speaker's A2DP sink profile first when the sink is missing after connect, and disconnect→reconnect once if that does not help. A speaker that is also an audio source (an Amazon Echo, bluez/bluez#1898) otherwise lands on the a2dp_source profile and exposes no sink. On by default since 3.1.0-beta.25; may cause extra churn on some devices, turn it off for those.

@@ -2325,6 +2325,18 @@
             "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default.",
             "title": "Sendspin Source"
           },
+          "SENDSPIN_SOURCE_TARGET": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Music Assistant player or group that should play the Bluetooth source automatically. Empty leaves the target choice to Music Assistant.",
+            "title": "Sendspin Source Target"
+          },
           "SESSION_TIMEOUT_HOURS": {
             "anyOf": [
               {
@@ -8744,6 +8756,30 @@
             "description": "The phone's audio is reaching Music Assistant.",
             "title": "Streaming",
             "type": "boolean"
+          },
+          "target_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last automatic target-play failure, if any.",
+            "title": "Target Error"
+          },
+          "target_player": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The MA player/group chosen to play the source automatically; null = choose in MA.",
+            "title": "Target Player"
           }
         },
         "required": [
@@ -8763,6 +8799,8 @@
           "pairing_seconds_left",
           "pairing_adapters",
           "devices",
+          "target_player",
+          "target_error",
           "error"
         ],
         "title": "SendspinSourceStatus",
@@ -9590,6 +9628,105 @@
           }
         },
         "title": "SourcePairingIn",
+        "type": "object"
+      },
+      "SourceTarget": {
+        "description": "A Music Assistant player or group that can play the source.",
+        "properties": {
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "player_id": {
+            "title": "Player Id",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "player",
+              "group"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "player_id",
+          "name",
+          "type",
+          "available"
+        ],
+        "title": "SourceTarget",
+        "type": "object"
+      },
+      "SourceTargetIn": {
+        "properties": {
+          "target_player": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Player"
+          }
+        },
+        "title": "SourceTargetIn",
+        "type": "object"
+      },
+      "SourceTargets": {
+        "description": "The automatic-play target choices and the saved one.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the target list could not be read, if it could not.",
+            "title": "Error"
+          },
+          "ma_api_available": {
+            "default": true,
+            "title": "Ma Api Available",
+            "type": "boolean"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/SourceTarget"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets",
+          "selected",
+          "ma_api_available",
+          "error"
+        ],
+        "title": "SourceTargets",
         "type": "object"
       },
       "StartupProgress": {
@@ -12631,6 +12768,106 @@
           }
         },
         "summary": "Open a Bluetooth pairing window for a phone",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/target": {
+      "put": {
+        "description": "Persist a target queue; null means \"choose in Music Assistant\".",
+        "operationId": "put_source_target_api_v1_bridge_source_target_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceTargetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Source Target Api V1 Bridge Source Target Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Choose the MA player that plays the source",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/targets": {
+      "get": {
+        "description": "The players/groups eligible for automatic source playback, and the saved choice.",
+        "operationId": "get_source_targets_api_v1_bridge_source_targets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceTargets"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "MA players that can play the source",
         "tags": [
           "bridge"
         ]

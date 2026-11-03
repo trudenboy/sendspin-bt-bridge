@@ -1359,6 +1359,21 @@
         "help": "Nimm Bluetooth-Audio von einem gekoppelten Gerät auf und biete es Music Assistant an. Standardmäßig aus; beim Aktivieren startet die Quelle sofort.",
         "off": "Die Quelle ist aus. Aktiviere sie, um Music Assistant und danach ein Bluetooth-Quellgerät zu koppeln.",
         "failed": "Die Quelle konnte nicht gestartet werden. Prüfe Music Assistant und den Audioserver des Hosts und versuche es erneut."
+      },
+      "sourceTarget": {
+        "label": "Quelle abspielen auf",
+        "help": "Wähle einen Player oder eine Gruppe von Music Assistant. „In Music Assistant auswählen“ überlässt Music Assistant das Routing; eine gewählte Warteschlange startet die Quelle dort automatisch.",
+        "default": "In Music Assistant auswählen",
+        "groups": "Gruppen",
+        "players": "Player",
+        "unavailable": "nicht verfügbar",
+        "apiUnavailable": "Füge einen API-Token für Music Assistant hinzu, um hier ein Ziel auszuwählen. Bis dahin wähle die Quelle in Music Assistant aus.",
+        "apiUnavailableAction": "Music Assistant-Einstellungen",
+        "loading": "Music Assistant-Player werden geladen…",
+        "loadFailed": "Music Assistant-Player konnten nicht geladen werden.",
+        "saveFailed": "Das Ziel konnte nicht gespeichert werden.",
+        "playFailed": "Die Quelle konnte auf dem ausgewählten Ziel nicht gestartet werden.",
+        "note": "Die Quelle startet auf diesem Player oder dieser Gruppe, sobald ein Gerät zu streamen beginnt. Wähle „In Music Assistant auswählen“, wenn Music Assistant das Routing übernehmen soll."
       }
     },
     "leaveConfirm": "Du hast nicht gespeicherte Einstellungen. Trotzdem verlassen?",

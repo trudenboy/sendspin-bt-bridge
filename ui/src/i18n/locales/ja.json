@@ -1359,6 +1359,21 @@
         "help": "ペアリング済みのデバイスから Bluetooth 音声を取り込み、Music Assistant に提供します。既定ではオフで、有効にするとソースがすぐに開始されます。",
         "off": "ソースはオフです。有効にすると、Music Assistant とペアリングし、続いて Bluetooth ソースデバイスとペアリングできます。",
         "failed": "ソースを開始できませんでした。Music Assistant とホストの音声サーバーを確認してから、もう一度お試しください。"
+      },
+      "sourceTarget": {
+        "label": "ソースの再生先",
+        "help": "Music Assistant のプレーヤーまたはグループを選択します。「Music Assistant で選択」を選ぶと、ルーティングは Music Assistant に任されます。特定のキューを選ぶと、そのキューでソースが自動的に開始されます。",
+        "default": "Music Assistant で選択",
+        "groups": "グループ",
+        "players": "プレーヤー",
+        "unavailable": "利用不可",
+        "apiUnavailable": "Music Assistant の API トークンを追加すると、ここで再生先を選択できます。それまでは Music Assistant でソースを選択してください。",
+        "apiUnavailableAction": "Music Assistant 設定",
+        "loading": "Music Assistant のプレーヤーを読み込んでいます…",
+        "loadFailed": "Music Assistant のプレーヤーを読み込めませんでした。",
+        "saveFailed": "再生先を保存できませんでした。",
+        "playFailed": "選択した再生先でソースを開始できませんでした。",
+        "note": "デバイスがストリーミングを開始すると、このプレーヤーまたはグループでソースが開始されます。ルーティングを Music Assistant に任せる場合は「Music Assistant で選択」を選んでください。"
       }
     },
     "leaveConfirm": "未保存の設定があります。このまま離れますか？",

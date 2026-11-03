@@ -1359,6 +1359,21 @@
         "help": "Captura el audio Bluetooth de un dispositivo emparejado y ofrécelo a Music Assistant. Desactivado de forma predeterminada; al activarlo, la fuente se inicia de inmediato.",
         "off": "La fuente está apagada. Actívala para emparejar Music Assistant y después un dispositivo de origen Bluetooth.",
         "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo."
+      },
+      "sourceTarget": {
+        "label": "Reproducir la fuente en",
+        "help": "Elige un reproductor o un grupo de Music Assistant. «Elegir en Music Assistant» deja el enrutamiento en Music Assistant; si eliges una cola concreta, la fuente se inicia allí automáticamente.",
+        "default": "Elegir en Music Assistant",
+        "groups": "Grupos",
+        "players": "Reproductores",
+        "unavailable": "no disponible",
+        "apiUnavailable": "Añade un token de API de Music Assistant para elegir un destino aquí. Mientras tanto, elige la fuente en Music Assistant.",
+        "apiUnavailableAction": "Ajustes de Music Assistant",
+        "loading": "Cargando reproductores de Music Assistant…",
+        "loadFailed": "No se pudieron cargar los reproductores de Music Assistant.",
+        "saveFailed": "No se pudo guardar el destino.",
+        "playFailed": "La fuente no pudo iniciarse en el destino seleccionado.",
+        "note": "La fuente se inicia en este reproductor o grupo cuando un dispositivo empieza a transmitir. Elige «Elegir en Music Assistant» si prefieres que el enrutamiento quede allí."
       }
     },
     "leaveConfirm": "Tienes ajustes sin guardar. ¿Salir igualmente?",

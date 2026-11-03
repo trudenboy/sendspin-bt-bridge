@@ -38,6 +38,7 @@ import MaConnectionSection from '@/components/settings/MaConnectionSection.vue'
 import MaPairingSection from '@/components/settings/MaPairingSection.vue'
 import SendspinTestSection from '@/components/settings/SendspinTestSection.vue'
 import SourceModeSection from '@/components/settings/SourceModeSection.vue'
+import SourceTargetSection from '@/components/settings/SourceTargetSection.vue'
 import LatencyAssistantSection from '@/components/settings/LatencyAssistantSection.vue'
 import AdaptersSection from '@/components/settings/AdaptersSection.vue'
 import HaStatusSection from '@/components/settings/HaStatusSection.vue'
@@ -70,6 +71,7 @@ const PARTS: Record<SectionComponent, Component> = {
   maPairing: MaPairingSection,
   sendspinTest: SendspinTestSection,
   sourceMode: SourceModeSection,
+  sourceTarget: SourceTargetSection,
   latencyAssistant: LatencyAssistantSection,
   adapters: AdaptersSection,
   haStatus: HaStatusSection,

@@ -226,6 +226,8 @@ def main() -> None:
         config["SENDSPIN_SOURCE"] = bool(opts["sendspin_source"])
     elif isinstance(existing.get("SENDSPIN_SOURCE"), bool):
         config["SENDSPIN_SOURCE"] = existing["SENDSPIN_SOURCE"]
+    if "SENDSPIN_SOURCE_TARGET" in existing:
+        config["SENDSPIN_SOURCE_TARGET"] = existing["SENDSPIN_SOURCE_TARGET"]
 
     # Speakers: once config.json holds v6 ``players`` it is the only source of
     # truth and the add-on's ``bluetooth_devices`` option is ignored.  Otherwise

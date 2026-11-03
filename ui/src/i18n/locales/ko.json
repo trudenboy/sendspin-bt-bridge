@@ -1359,6 +1359,21 @@
         "help": "페어링된 기기에서 Bluetooth 오디오를 캡처하여 Music Assistant에 제공합니다. 기본적으로 꺼져 있으며, 활성화하면 소스가 즉시 시작됩니다.",
         "off": "소스가 꺼져 있습니다. 활성화하면 Music Assistant를 먼저 페어링한 다음 Bluetooth 소스 기기를 페어링할 수 있습니다.",
         "failed": "소스를 시작하지 못했습니다. Music Assistant와 호스트 오디오 서버를 확인한 뒤 다시 시도하십시오."
+      },
+      "sourceTarget": {
+        "label": "소스 재생 대상",
+        "help": "Music Assistant 플레이어 또는 그룹을 선택하십시오. “Music Assistant에서 선택”은 라우팅을 Music Assistant에 그대로 두며, 대기열을 선택하면 그 대기열에서 소스가 자동으로 시작됩니다.",
+        "default": "Music Assistant에서 선택",
+        "groups": "그룹",
+        "players": "플레이어",
+        "unavailable": "사용 불가",
+        "apiUnavailable": "Music Assistant API 토큰을 추가하면 여기에서 재생 대상을 선택할 수 있습니다. 그 전까지는 Music Assistant에서 소스를 선택하십시오.",
+        "apiUnavailableAction": "Music Assistant 설정",
+        "loading": "Music Assistant 플레이어를 불러오는 중…",
+        "loadFailed": "Music Assistant 플레이어를 불러오지 못했습니다.",
+        "saveFailed": "재생 대상을 저장하지 못했습니다.",
+        "playFailed": "선택한 재생 대상에서 소스를 시작하지 못했습니다.",
+        "note": "기기가 스트리밍을 시작하면 이 플레이어 또는 그룹에서 소스가 시작됩니다. 라우팅을 Music Assistant에 맡기려면 “Music Assistant에서 선택”을 고르십시오."
       }
     },
     "leaveConfirm": "저장하지 않은 설정이 있습니다. 그래도 나갈까요?",

@@ -1359,6 +1359,21 @@
         "help": "Eşleştirilmiş bir cihazdan Bluetooth sesi yakalanır ve Music Assistant’a sunulur. Varsayılan olarak kapalıdır; etkinleştirildiğinde kaynak hemen başlar.",
         "off": "Kaynak kapalıdır. Etkinleştirildiğinde Music Assistant ve ardından bir Bluetooth kaynak cihazı eşleştirilebilir.",
         "failed": "Kaynak başlatılamadı. Music Assistant’ı ve ana bilgisayarın ses sunucusunu denetledikten sonra yeniden deneyin."
+      },
+      "sourceTarget": {
+        "label": "Kaynağı oynatacağın yer",
+        "help": "Bir Music Assistant oynatıcısı veya grubu seç. “Music Assistant’ta seç” seçeneği yönlendirmeyi Music Assistant’a bırakır; seçilen bir kuyrukta kaynak otomatik olarak başlar.",
+        "default": "Music Assistant’ta seç",
+        "groups": "Gruplar",
+        "players": "Oynatıcılar",
+        "unavailable": "kullanılamıyor",
+        "apiUnavailable": "Burada bir hedef seçmek için Music Assistant API belirteci ekle. O zamana kadar kaynağı Music Assistant’ta seç.",
+        "apiUnavailableAction": "Music Assistant ayarları",
+        "loading": "Music Assistant oynatıcıları yükleniyor…",
+        "loadFailed": "Music Assistant oynatıcıları yüklenemedi.",
+        "saveFailed": "Hedef kaydedilemedi.",
+        "playFailed": "Kaynak seçilen hedefte başlatılamadı.",
+        "note": "Bir cihaz akış yapmaya başladığında kaynak bu oynatıcıda veya grupta başlar. Yönlendirmeyi Music Assistant’a bırakmak istersen “Music Assistant’ta seç” seçeneğini kullan."
       }
     },
     "leaveConfirm": "Kaydedilmemiş ayarlar var. Yine de çıkılsın mı?",

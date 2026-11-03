@@ -1359,6 +1359,21 @@
         "help": "Capture Bluetooth audio from a paired device and offer it to Music Assistant. Off by default; enabling starts the source immediately.",
         "off": "The source is off. Enable it to pair Music Assistant and then a Bluetooth source device.",
         "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again."
+      },
+      "sourceTarget": {
+        "label": "Play source on",
+        "help": "Choose a Music Assistant player or group. “Choose in Music Assistant” keeps routing in MA; a chosen queue starts the source there automatically.",
+        "default": "Choose in Music Assistant",
+        "groups": "Groups",
+        "players": "Players",
+        "unavailable": "unavailable",
+        "apiUnavailable": "Add a Music Assistant API token to choose a target here. Until then, pick the source in Music Assistant.",
+        "apiUnavailableAction": "Music Assistant settings",
+        "loading": "Loading Music Assistant players…",
+        "loadFailed": "Could not load Music Assistant players.",
+        "saveFailed": "Could not save the target.",
+        "playFailed": "The source could not start on the selected target.",
+        "note": "The source starts on this player or group when a device begins streaming. Choose in Music Assistant if you prefer to route it there."
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",

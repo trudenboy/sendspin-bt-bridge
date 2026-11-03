@@ -12,7 +12,7 @@ from sendspin_bridge.api.errors import PROBLEM_RESPONSES, ApiError
 from sendspin_bridge.application import diagnostics as diag
 from sendspin_bridge.application import source
 from sendspin_bridge.application.jobs import Job, jobs
-from sendspin_bridge.application.models import Bridge, BridgeStatus, Device, Group
+from sendspin_bridge.application.models import Bridge, BridgeStatus, Device, Group, SourceTargets
 from sendspin_bridge.application.status import build_status
 
 public = APIRouter(tags=["bridge"])
@@ -25,6 +25,10 @@ class SourcePairingIn(BaseModel):
 
 class SourceEnabledIn(BaseModel):
     enabled: bool
+
+
+class SourceTargetIn(BaseModel):
+    target_player: str | None = None
 
 
 class Health(BaseModel):
@@ -121,6 +125,18 @@ async def open_source_pairing(body: SourcePairingIn | None = None) -> dict[str, 
 async def close_source_pairing() -> Response:
     await source.close_pairing_window()
     return Response(status_code=204)
+
+
+@router.get("/bridge/source/targets", response_model=SourceTargets, summary="MA players that can play the source")
+async def get_source_targets() -> SourceTargets:
+    """The players/groups eligible for automatic source playback, and the saved choice."""
+    return SourceTargets(**await source.targets())
+
+
+@router.put("/bridge/source/target", summary="Choose the MA player that plays the source")
+async def put_source_target(body: SourceTargetIn) -> dict[str, Any]:
+    """Persist a target queue; null means "choose in Music Assistant"."""
+    return await source.set_target(body.target_player)
 
 
 @router.post("/bridge/source/devices/{mac}/use", summary="Use a paired source device")

@@ -1359,6 +1359,21 @@
         "help": "Capturez l’audio Bluetooth d’un appareil appairé et proposez-le à Music Assistant. Désactivé par défaut ; l’activation démarre immédiatement la source.",
         "off": "La source est désactivée. Activez-la pour effectuer l’appairage avec Music Assistant, puis avec un appareil source Bluetooth.",
         "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez."
+      },
+      "sourceTarget": {
+        "label": "Lire la source sur",
+        "help": "Choisissez un lecteur ou un groupe Music Assistant. « Choisir dans Music Assistant » laisse le routage à Music Assistant ; si vous choisissez une file d’attente précise, la source y démarre automatiquement.",
+        "default": "Choisir dans Music Assistant",
+        "groups": "Groupes",
+        "players": "Lecteurs",
+        "unavailable": "indisponible",
+        "apiUnavailable": "Ajoutez un jeton API Music Assistant pour choisir une destination ici. En attendant, choisissez la source dans Music Assistant.",
+        "apiUnavailableAction": "Paramètres Music Assistant",
+        "loading": "Chargement des lecteurs Music Assistant…",
+        "loadFailed": "Impossible de charger les lecteurs Music Assistant.",
+        "saveFailed": "Impossible d’enregistrer la destination.",
+        "playFailed": "La source n’a pas pu démarrer sur la destination sélectionnée.",
+        "note": "La source démarre sur ce lecteur ou ce groupe lorsqu’un appareil commence à diffuser. Choisissez « Choisir dans Music Assistant » si vous préférez que le routage y reste."
       }
     },
     "leaveConfirm": "Des paramètres ne sont pas enregistrés. Quitter quand même ?",

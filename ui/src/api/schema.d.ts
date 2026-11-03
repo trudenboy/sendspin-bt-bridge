@@ -628,6 +628,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bridge/source/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose the MA player that plays the source
+         * @description Persist a target queue; null means "choose in Music Assistant".
+         */
+        put: operations["put_source_target_api_v1_bridge_source_target_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * MA players that can play the source
+         * @description The players/groups eligible for automatic source playback, and the saved choice.
+         */
+        get: operations["get_source_targets_api_v1_bridge_source_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bridge/startup": {
         parameters: {
             query?: never;
@@ -3752,6 +3792,11 @@ export interface components {
              */
             SENDSPIN_SOURCE?: boolean | null;
             /**
+             * Sendspin Source Target
+             * @description Music Assistant player or group that should play the Bluetooth source automatically. Empty leaves the target choice to Music Assistant.
+             */
+            SENDSPIN_SOURCE_TARGET?: string | null;
+            /**
              * Session Timeout Hours
              * @description Authenticated session lifetime in hours.
              * @default 24
@@ -6403,6 +6448,16 @@ export interface components {
              * @default false
              */
             streaming: boolean;
+            /**
+             * Target Error
+             * @description The last automatic target-play failure, if any.
+             */
+            target_error: string | null;
+            /**
+             * Target Player
+             * @description The MA player/group chosen to play the source automatically; null = choose in MA.
+             */
+            target_player: string | null;
         };
         /** SendspinTestIn */
         SendspinTestIn: {
@@ -6779,6 +6834,51 @@ export interface components {
              * @default 120
              */
             seconds?: number;
+        };
+        /**
+         * SourceTarget
+         * @description A Music Assistant player or group that can play the source.
+         */
+        SourceTarget: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /** Name */
+            name: string;
+            /** Player Id */
+            player_id: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "player" | "group";
+        };
+        /** SourceTargetIn */
+        SourceTargetIn: {
+            /** Target Player */
+            target_player?: string | null;
+        };
+        /**
+         * SourceTargets
+         * @description The automatic-play target choices and the saved one.
+         */
+        SourceTargets: {
+            /**
+             * Error
+             * @description Why the target list could not be read, if it could not.
+             */
+            error: string | null;
+            /**
+             * Ma Api Available
+             * @default true
+             */
+            ma_api_available: boolean;
+            /** Selected */
+            selected: string | null;
+            /** Targets */
+            targets: components["schemas"]["SourceTarget"][];
         };
         /** StartupProgress */
         StartupProgress: {
@@ -8743,6 +8843,92 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    put_source_target_api_v1_bridge_source_target_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceTargetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_source_targets_api_v1_bridge_source_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceTargets"];
+                };
             };
             /** @description Client error */
             "4XX": {

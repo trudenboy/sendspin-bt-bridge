@@ -1,5 +1,6 @@
 /* The Sendspin source: the phone's capture offered to Music Assistant as a source client. */
 import { api, unwrap } from './client'
+import type { SourceTargets } from './types'
 
 /**
  * The window the bridge opens for a phone's Bluetooth pairing. The number lives here so the
@@ -62,6 +63,21 @@ export function forgetSourceDevice(mac: string) {
   return unwrap(
     api().DELETE('/api/v1/bridge/source/devices/{mac}', {
       params: { path: { mac } },
+    }),
+  )
+}
+
+/** The MA players/groups the source can be pinned to, plus the saved choice. */
+export async function getSourceTargets(): Promise<SourceTargets> {
+  const answer = await unwrap(api().GET('/api/v1/bridge/source/targets'))
+  return answer as unknown as SourceTargets
+}
+
+/** Pin automatic playback to one MA queue, or clear it to choose in Music Assistant. */
+export async function setSourceTarget(targetPlayer: string | null) {
+  return unwrap(
+    api().PUT('/api/v1/bridge/source/target', {
+      body: { target_player: targetPlayer },
     }),
   )
 }

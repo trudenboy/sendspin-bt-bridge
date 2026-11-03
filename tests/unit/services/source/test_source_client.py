@@ -257,6 +257,49 @@ async def test_use_device_refuses_a_device_that_is_not_streaming(harness):
     assert harness.backend.preferred_mac is None
 
 
+async def test_set_target_plays_the_live_input_when_streaming(harness, monkeypatch):
+    await harness.client.start()
+    harness.client._stream = object()
+    calls: list[tuple[str, str, str]] = []
+
+    async def fake_play(url, token, queue_id, uri):
+        calls.append((url, queue_id, uri))
+
+    monkeypatch.setattr("sendspin_bridge.services.source.target.play_source_on", fake_play)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+
+    error = await harness.client.set_target("kitchen")
+
+    assert error is None
+    assert calls == [("http://ma:8095", "kitchen", "sendspin_source://audio_source/peer")]
+    snapshot = source_state.snapshot()
+    assert snapshot.target_player == "kitchen"
+    assert snapshot.target_error is None
+
+
+async def test_a_failed_target_play_keeps_the_choice_and_reports_it(harness, monkeypatch):
+    await harness.client.start()
+    harness.client._stream = object()
+
+    async def fail(*_args):
+        raise OSError("MA is down")
+
+    monkeypatch.setattr("sendspin_bridge.services.source.target.play_source_on", fail)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+
+    error = await harness.client.set_target("kitchen")
+
+    assert error == "target_unreachable"
+    assert source_state.snapshot().target_player == "kitchen"
+    assert source_state.snapshot().target_error == "target_unreachable"
+
+
 async def test_forget_device_removes_the_bond(harness, monkeypatch):
     removed: list[str] = []
     monkeypatch.setattr("sendspin_bridge.services.bluetooth.bt_remove_device", removed.append)
@@ -327,6 +370,30 @@ async def test_the_servers_start_command_starts_the_capture(harness):
     await _wait_for(lambda: harness.fake.captures[0].stopped)
     assert source_state.snapshot().streaming is False
 
+    await harness.client.stop()
+
+
+async def test_the_servers_start_also_opens_the_chosen_target(harness, monkeypatch):
+    harness.backend.endpoint = CaptureEndpoint(
+        node="bluez_source.34_C7_E9_25_A3_A3", backend="fake", phone_mac="34:C7:E9:25:A3:A3"
+    )
+    calls: list[tuple[str, str, str]] = []
+
+    async def fake_play(url, token, queue_id, uri):
+        calls.append((url, queue_id, uri))
+
+    monkeypatch.setattr("sendspin_bridge.services.source.target.play_source_on", fake_play)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+    await harness.client.set_target("kitchen")
+    await harness.client.start()
+    await _wait_for(lambda: source_state.snapshot().ma_connected)
+    harness.fake.fire_command("start")
+    await _wait_for(lambda: bool(calls))
+
+    assert calls == [("http://ma:8095", "kitchen", "sendspin_source://audio_source/peer")]
     await harness.client.stop()
 
 

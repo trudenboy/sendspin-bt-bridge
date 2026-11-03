@@ -56,6 +56,7 @@ export type SectionComponent =
   | 'maPairing'
   | 'sendspinTest'
   | 'sourceMode'
+  | 'sourceTarget'
   | 'latencyAssistant'
   | 'adapters'
   | 'haStatus'
@@ -162,7 +163,7 @@ export const SECTIONS: readonly SectionDef[] = [
   {
     id: 'source',
     icon: 'radio',
-    before: ['sourceMode', 'maPairing'],
+    before: ['sourceMode', 'sourceTarget', 'maPairing'],
     fields: [],
   },
   {
@@ -294,6 +295,7 @@ export const COMPONENT_OWNED_KEYS: Readonly<Record<string, SectionComponent | 'd
   players: 'devices',
   MA_API_URL: 'maConnection',
   SENDSPIN_SOURCE: 'sourceMode',
+  SENDSPIN_SOURCE_TARGET: 'sourceTarget',
   AUTH_TOKENS: 'tokens',
   HA_ADAPTER_AREA_MAP: 'areaMap',
 }

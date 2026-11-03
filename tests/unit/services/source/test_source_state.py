@@ -37,6 +37,8 @@ def test_a_fresh_snapshot_is_off_and_keeps_the_status_keys_unchanged():
         "pairing_seconds_left": 0,
         "pairing_adapters": [],
         "devices": [],
+        "target_player": None,
+        "target_error": None,
         "error": None,
     }
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.13] - 2026-11-03
+
+### Added
+
+- The audio source can start automatically on a chosen Music Assistant player or group. The choice lives under Settings → Audio source; “Choose in Music Assistant” remains the default.
+- Changing the target while a device is streaming moves the live input there, and the choice survives an add-on restart.
+
+### Changed
+
+- Without a Music Assistant API token the target selector stays visible but disabled with a link to the Music Assistant settings, so the source itself keeps working and the target can be chosen inside Music Assistant.
+
 ## [3.2.0-beta.12] - 2026-11-03
 
 ### Added

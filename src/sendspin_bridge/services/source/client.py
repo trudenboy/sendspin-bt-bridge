@@ -75,6 +75,7 @@ class SourceSettings:
     client_name: str = "Sendspin Bluetooth Bridge"
     sample_rate: int = 48000
     channels: int = 2
+    target_player: str | None = None
 
 
 class SignalReporter(Protocol):
@@ -154,6 +155,7 @@ class SourceClient:
         self._capture_lock = asyncio.Lock()
         self._signal_lock = asyncio.Lock()
         self._preferred_mac: str | None = None
+        self._target_player: str | None = settings.target_player
 
     # -- lifecycle -------------------------------------------------------------------------
 
@@ -186,6 +188,8 @@ class SourceClient:
             paired_phone_mac=None,
             streaming=False,
             ma_paired=await self._psk_paired(),
+            target_player=self._target_player,
+            target_error=None,
         )
         if not await self._psk_paired():
             await self._open_pairing_window()
@@ -234,6 +238,8 @@ class SourceClient:
             ma_pairing_until=0.0,
             ma_error=None,
             error=None,
+            target_player=None,
+            target_error=None,
         )
         return {"started": False}
 
@@ -271,6 +277,15 @@ class SourceClient:
                 await self._client.disconnect()
         self._disconnected.set()
         await self._open_pairing_window()
+
+    @property
+    def client_id(self) -> str | None:
+        """The Sendspin peer id MA uses for this source client, when started."""
+        return getattr(self._identity, "peer_id", None)
+
+    @property
+    def target_player(self) -> str | None:
+        return self._target_player
 
     def status(self) -> dict[str, Any]:
         return source_state.snapshot().status_dict()
@@ -469,6 +484,45 @@ class SourceClient:
         self._feed_task = asyncio.create_task(self._feed(sendspin_capture, stream), name="source-feed")
         source_state.publish(streaming=True, state="streaming", error=None)
         logger.info("Source: streaming %s to Music Assistant", self._endpoint.node)
+        if self._target_player:
+            self._spawn(self._play_target_task())
+
+    async def set_target(self, target: str | None) -> str | None:
+        """Pin the source to an MA queue, or clear it. Returns an error code, if any."""
+        self._target_player = str(target or "").strip() or None
+        source_state.publish(target_player=self._target_player, target_error=None)
+        if self._target_player and self._stream is not None:
+            return await self._play_target()
+        return None
+
+    async def _play_target_task(self) -> None:
+        await self._play_target()
+
+    async def _play_target(self) -> str | None:
+        """Start the live input on the selected MA queue when capture is running."""
+        target = self._target_player
+        if not target or self._stream is None:
+            return None
+        from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
+        from sendspin_bridge.services.source.target import SOURCE_URI_TEMPLATE, play_source_on
+
+        ma_url, ma_token = get_ma_api_credentials()
+        if not (ma_url and ma_token) or not self.client_id:
+            source_state.publish(target_error="ma_api_unavailable")
+            return "ma_api_unavailable"
+        try:
+            await play_source_on(
+                ma_url,
+                ma_token,
+                target,
+                SOURCE_URI_TEMPLATE.format(client_id=self.client_id),
+            )
+        except Exception:
+            logger.warning("Source: could not start playback on MA target %s", target, exc_info=True)
+            source_state.publish(target_error="target_unreachable")
+            return "target_unreachable"
+        source_state.publish(target_error=None)
+        return None
 
     async def _feed(self, sendspin_capture: Any, stream: CaptureStream) -> None:
         try:

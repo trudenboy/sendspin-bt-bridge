@@ -1359,6 +1359,21 @@
         "help": "Cattura l’audio Bluetooth da un dispositivo associato e offrilo a Music Assistant. Disattivato per impostazione predefinita; attivandolo la sorgente parte subito.",
         "off": "La sorgente è spenta. Attivala per associare Music Assistant e poi un dispositivo sorgente Bluetooth.",
         "failed": "Non è stato possibile avviare la sorgente. Controlla Music Assistant e il server audio dell’host, poi riprova."
+      },
+      "sourceTarget": {
+        "label": "Riproduci la sorgente su",
+        "help": "Scegli un lettore o un gruppo di Music Assistant. “Scegli in Music Assistant” lascia il routing a Music Assistant; se scegli una coda, la sorgente parte lì automaticamente.",
+        "default": "Scegli in Music Assistant",
+        "groups": "Gruppi",
+        "players": "Lettori",
+        "unavailable": "non disponibile",
+        "apiUnavailable": "Aggiungi un token API di Music Assistant per scegliere una destinazione qui. Nel frattempo, scegli la sorgente in Music Assistant.",
+        "apiUnavailableAction": "Impostazioni Music Assistant",
+        "loading": "Caricamento dei lettori di Music Assistant…",
+        "loadFailed": "Impossibile caricare i lettori di Music Assistant.",
+        "saveFailed": "Impossibile salvare la destinazione.",
+        "playFailed": "Non è stato possibile avviare la sorgente sulla destinazione selezionata.",
+        "note": "La sorgente parte su questo lettore o gruppo quando un dispositivo inizia lo streaming. Scegli “Scegli in Music Assistant” se preferisci che il routing resti lì."
       }
     },
     "leaveConfirm": "Hai impostazioni non salvate. Uscire comunque?",

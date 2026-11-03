@@ -162,6 +162,7 @@ DEFAULT_CONFIG = {
     "PLAYOUT_DIAG": False,
     # A phone paired to the bridge becomes a Sendspin source players can play (#563).
     "SENDSPIN_SOURCE": False,
+    "SENDSPIN_SOURCE_TARGET": None,
     "PULSE_SINK_RESET_ON_START": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],

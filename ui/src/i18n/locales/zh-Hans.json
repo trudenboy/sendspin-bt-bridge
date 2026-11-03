@@ -1359,6 +1359,21 @@
         "help": "从已配对的设备采集 Bluetooth 音频，并将其提供给 Music Assistant。默认关闭；启用后源会立即启动。",
         "off": "源已关闭。启用后可先配对 Music Assistant，再配对 Bluetooth 源设备。",
         "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。"
+      },
+      "sourceTarget": {
+        "label": "源播放位置",
+        "help": "选择 Music Assistant 播放器或组。“在 Music Assistant 中选择”会将路由保留在 Music Assistant 中；选择特定队列后，源会在该队列上自动启动。",
+        "default": "在 Music Assistant 中选择",
+        "groups": "组",
+        "players": "播放器",
+        "unavailable": "不可用",
+        "apiUnavailable": "添加 Music Assistant API 令牌后即可在此选择目标。在此之前，请在 Music Assistant 中选择源。",
+        "apiUnavailableAction": "Music Assistant 设置",
+        "loading": "正在加载 Music Assistant 播放器…",
+        "loadFailed": "无法加载 Music Assistant 播放器。",
+        "saveFailed": "无法保存目标。",
+        "playFailed": "源无法在所选目标上启动。",
+        "note": "当设备开始传输音频时，源会在此播放器或组上启动。如果希望由 Music Assistant 负责路由，请选择“在 Music Assistant 中选择”。"
       }
     },
     "leaveConfirm": "有未保存的设置。仍要离开吗？",

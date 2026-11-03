@@ -53,6 +53,8 @@ class SourceState:
     pairing_adapters: tuple[str, ...] = ()
     pairing_error: str | None = None
     error: str | None = None
+    target_player: str | None = None
+    target_error: str | None = None
     devices: tuple[SourceDevice, ...] = ()
 
     def pairing_seconds_left(self, *, now: float | None = None) -> int:
@@ -83,6 +85,8 @@ class SourceState:
             "pairing_adapters": list(self.pairing_adapters),
             "devices": [device.as_dict() for device in self.devices],
             "error": self.error,
+            "target_player": self.target_player,
+            "target_error": self.target_error,
         }
 
 

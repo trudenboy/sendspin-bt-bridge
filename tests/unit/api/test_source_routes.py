@@ -122,3 +122,37 @@ def test_a_pairing_command_without_a_source_is_a_problem(api_client, monkeypatch
 
     assert response.status_code == 409
     assert response.json()["code"] == "source_off"
+
+
+def test_source_targets_are_served_with_the_saved_choice(api_client, monkeypatch):
+    async def fake_targets():
+        return {
+            "targets": [{"player_id": "kitchen", "name": "Kitchen", "type": "player", "available": True}],
+            "selected": "kitchen",
+            "ma_api_available": True,
+            "error": None,
+        }
+
+    monkeypatch.setattr(source_uc, "targets", fake_targets)
+
+    response = api_client.get("/api/v1/bridge/source/targets")
+
+    assert response.status_code == 200
+    assert response.json()["selected"] == "kitchen"
+    assert response.json()["targets"][0]["name"] == "Kitchen"
+
+
+def test_choosing_a_source_target_answers_with_its_name(api_client, monkeypatch):
+    seen: list[str | None] = []
+
+    async def fake_set_target(target):
+        seen.append(target)
+        return {"target_player": target, "target_name": "Kitchen", "target_error": None}
+
+    monkeypatch.setattr(source_uc, "set_target", fake_set_target)
+
+    response = api_client.put("/api/v1/bridge/source/target", json={"target_player": "kitchen"})
+
+    assert response.status_code == 200
+    assert response.json()["target_name"] == "Kitchen"
+    assert seen == ["kitchen"]

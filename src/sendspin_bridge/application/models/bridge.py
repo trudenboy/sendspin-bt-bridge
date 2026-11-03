@@ -114,6 +114,10 @@ class SendspinSourceStatus(ResponseModel):
     devices: list[SourceDeviceStatus] = Field(
         default_factory=list, description="Paired Bluetooth devices that can feed the source."
     )
+    target_player: str | None = Field(
+        default=None, description="The MA player/group chosen to play the source automatically; null = choose in MA."
+    )
+    target_error: str | None = Field(default=None, description="The last automatic target-play failure, if any.")
     error: str | None = Field(default=None, description="A terminal source error (capture_unavailable, …).")
 
 

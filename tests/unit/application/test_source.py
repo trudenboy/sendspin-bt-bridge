@@ -70,13 +70,16 @@ async def test_start_picks_the_backend_and_persists_the_choice(monkeypatch, tmp_
     monkeypatch.setattr("sendspin_bridge.config.update_config", record)
     monkeypatch.setattr(source_uc, "resolve_server_url", lambda _config: _async(SERVER_URL))
 
-    result = await source_uc.start(config={"SENDSPIN_SOURCE": False, "BRIDGE_NAME": "Flat"})
+    result = await source_uc.start(
+        config={"SENDSPIN_SOURCE": False, "BRIDGE_NAME": "Flat", "SENDSPIN_SOURCE_TARGET": "kitchen"}
+    )
 
     assert result["started"] is True
     assert recorded == [{"SENDSPIN_SOURCE": True}]
     settings, backend = started[0]
     assert settings.server_url == SERVER_URL
     assert settings.client_name == "Sendspin BT Bridge (Flat)"
+    assert settings.target_player == "kitchen"
     assert backend is not None
 
 
@@ -202,3 +205,122 @@ async def test_resolve_server_url_falls_back_to_discovery_for_auto(monkeypatch):
 
 async def _async(value):
     return value
+
+
+class _FakeSourceClient:
+    client_id = "peer-1"
+
+    def __init__(self) -> None:
+        self.targets: list[str | None] = []
+
+    async def set_target(self, target: str | None) -> str | None:
+        self.targets.append(target)
+        return None
+
+
+async def test_target_list_without_ma_api_credentials_keeps_the_saved_choice(monkeypatch):
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {"SENDSPIN_SOURCE_TARGET": "kitchen"})
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("", ""),
+    )
+
+    result = await source_uc.targets()
+
+    assert result == {"targets": [], "selected": "kitchen", "ma_api_available": False, "error": None}
+
+
+async def test_target_list_names_the_players_and_groups(monkeypatch):
+    async def fake_fetch(_url, _token, _client_id):
+        return ([{"player_id": "house", "name": "House", "type": "group", "available": True}], "uri")
+
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {})
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+    monkeypatch.setattr("sendspin_bridge.services.source.target.fetch_targets", fake_fetch)
+    monkeypatch.setattr(source_uc.manager, "client", lambda: _FakeSourceClient())
+
+    result = await source_uc.targets()
+
+    assert result["ma_api_available"] is True
+    assert result["targets"][0]["name"] == "House"
+
+
+async def test_set_target_validates_persists_and_asks_the_client_to_play(monkeypatch):
+    client = _FakeSourceClient()
+    saved: list[str | None] = []
+
+    async def fake_fetch(_url, _token, _client_id):
+        return ([{"player_id": "kitchen", "name": "Kitchen", "type": "player", "available": True}], "uri")
+
+    def save(mutator):
+        config: dict = {}
+        mutator(config)
+        saved.append(config["SENDSPIN_SOURCE_TARGET"])
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+    monkeypatch.setattr("sendspin_bridge.services.source.target.fetch_targets", fake_fetch)
+    monkeypatch.setattr("sendspin_bridge.config.update_config", save)
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+
+    result = await source_uc.set_target("kitchen")
+
+    assert result == {"target_player": "kitchen", "target_name": "Kitchen", "target_error": None}
+    assert saved == ["kitchen"]
+    assert client.targets == ["kitchen"]
+
+
+async def test_set_target_rejects_an_unknown_player(monkeypatch):
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+
+    async def fake_fetch(_url, _token, _client_id):
+        return ([{"player_id": "kitchen", "name": "Kitchen", "type": "player", "available": True}], "uri")
+
+    monkeypatch.setattr("sendspin_bridge.services.source.target.fetch_targets", fake_fetch)
+    monkeypatch.setattr(source_uc.manager, "client", lambda: _FakeSourceClient())
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.set_target("garage")
+
+    assert raised.value.status == 404
+    assert raised.value.code == "unknown_target"
+
+
+async def test_target_list_reports_an_unreachable_ma_api(monkeypatch):
+    async def fail(_url, _token, _client_id):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {})
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("http://ma:8095", "token"),
+    )
+    monkeypatch.setattr("sendspin_bridge.services.source.target.fetch_targets", fail)
+    monkeypatch.setattr(source_uc.manager, "client", lambda: None)
+
+    result = await source_uc.targets()
+
+    assert result["ma_api_available"] is True
+    assert result["error"] == "ma_api_unreachable"
+
+
+async def test_set_target_without_an_ma_token_is_refused(monkeypatch):
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_api_credentials",
+        lambda: ("", ""),
+    )
+    monkeypatch.setattr(source_uc.manager, "client", lambda: _FakeSourceClient())
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.set_target("kitchen")
+
+    assert raised.value.status == 409
+    assert raised.value.code == "ma_api_unavailable"

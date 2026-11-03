@@ -25,9 +25,11 @@ __all__ = [
     "open_ma_pairing",
     "open_pairing_window",
     "resolve_server_url",
+    "set_target",
     "start",
     "status",
     "stop",
+    "targets",
 ]
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,8 @@ class SourceStatus:
     pairing_seconds_left: int
     pairing_adapters: tuple[str, ...]
     devices: tuple[source_state.SourceDevice, ...]
+    target_player: str | None
+    target_error: str | None
     error: str | None
 
     def as_status_dict(self) -> dict[str, Any]:
@@ -77,6 +81,8 @@ class SourceStatus:
             "pairing_seconds_left": self.pairing_seconds_left,
             "pairing_adapters": list(self.pairing_adapters),
             "devices": [device.as_dict() for device in self.devices],
+            "target_player": self.target_player,
+            "target_error": self.target_error,
             "error": self.error,
         }
 
@@ -124,6 +130,8 @@ def status(config: dict[str, Any]) -> SourceStatus:
         pairing_seconds_left=current.pairing_seconds_left(),
         pairing_adapters=tuple(current.pairing_adapters),
         devices=_source_devices(config, current.phone_mac, current.paired_phone_mac) if current.enabled else (),
+        target_player=current.target_player,
+        target_error=current.target_error,
         error=current.error,
     )
 
@@ -207,10 +215,12 @@ async def start(*, config: dict[str, Any] | None = None, persist: bool = True) -
             "ma_unreachable",
             "Music Assistant's Sendspin address is unknown: set SENDSPIN_SERVER or connect a player first.",
         )
+    target_player = str(config.get("SENDSPIN_SOURCE_TARGET") or "").strip() or None
     settings = SourceSettings(
         server_url=server_url,
         state_dir=_resolve_config_dir(),
         client_name=f"Sendspin BT Bridge ({_bridge_name(config)})",
+        target_player=target_player,
     )
     if persist:
         await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE", True))
@@ -287,3 +297,70 @@ async def forget_device(mac: str) -> None:
 
         await asyncio.to_thread(bt_remove_device, address.colons)
     source_devices.invalidate()
+
+
+def _selected_target(config: dict[str, Any] | None) -> str | None:
+    return str((config or {}).get("SENDSPIN_SOURCE_TARGET") or "").strip() or None
+
+
+async def targets() -> dict[str, Any]:
+    """The Music Assistant players/groups the source can be pinned to.
+
+    No MA API token means the operator chooses the target inside Music
+    Assistant; the UI keeps the selector disabled rather than hiding the
+    feature, so the reason stays visible.
+    """
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
+    from sendspin_bridge.services.source.target import fetch_targets
+
+    config = await asyncio.to_thread(load_config)
+    selected = _selected_target(config)
+    ma_url, ma_token = get_ma_api_credentials()
+    if not (ma_url and ma_token):
+        return {"targets": [], "selected": selected, "ma_api_available": False, "error": None}
+    client = manager.client()
+    client_id = getattr(client, "client_id", None) if client is not None else None
+    try:
+        found, _uri = await fetch_targets(ma_url, ma_token, client_id)
+    except Exception:
+        logger.warning("Source: Music Assistant target list failed", exc_info=True)
+        return {
+            "targets": [],
+            "selected": selected,
+            "ma_api_available": True,
+            "error": "ma_api_unreachable",
+        }
+    return {"targets": found, "selected": selected, "ma_api_available": True, "error": None}
+
+
+async def set_target(target: str | None) -> dict[str, Any]:
+    """Pin automatic playback to one MA queue (or clear it), persisting the choice."""
+    from sendspin_bridge.config import update_config
+    from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
+    from sendspin_bridge.services.source.target import fetch_targets
+
+    client = manager.client()
+    if client is None:
+        raise UseCaseError(409, "source_off", "The source is off; enable it first.")
+    chosen = str(target or "").strip() or None
+    name: str | None = None
+    if chosen is not None:
+        ma_url, ma_token = get_ma_api_credentials()
+        if not (ma_url and ma_token):
+            raise UseCaseError(
+                409,
+                "ma_api_unavailable",
+                "Add a Music Assistant API token to choose the playback target; until then choose it in Music Assistant.",
+            )
+        try:
+            found, _uri = await fetch_targets(ma_url, ma_token, getattr(client, "client_id", None))
+        except Exception as exc:
+            raise UseCaseError(502, "ma_api_unreachable", "Music Assistant's API did not answer.") from exc
+        match = next((entry for entry in found if entry["player_id"] == chosen), None)
+        if match is None:
+            raise UseCaseError(404, "unknown_target", "That Music Assistant player or group is not available.")
+        name = str(match.get("name") or chosen)
+    await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE_TARGET", chosen))
+    target_error = await client.set_target(chosen)
+    return {"target_player": chosen, "target_name": name, "target_error": target_error}
