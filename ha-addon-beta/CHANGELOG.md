@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.17] - 2026-11-03
+
+### Fixed
+
+- A Bluetooth device that only registers a hands-free/call profile is no longer started as a music player. It now reports A2DP unavailable, stays visible in Devices, and offers Retry A2DP instead of silently playing to an HFP sink (#586).
+
 ## [3.2.0-beta.16] - 2026-11-03
 
 ### Fixed
