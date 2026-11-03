@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
@@ -48,6 +49,65 @@ _SINK_RETRY_COUNT = int(os.environ.get("SINK_RETRY_COUNT", "5"))
 # as equivalent here and pass through whichever the card actually
 # advertises. Issue #314.
 _A2DP_SINK_PROFILE_ALIASES = ("a2dp_sink", "a2dp-sink")
+_HFP_PROFILE_MARKERS = (
+    "headset-head-unit",
+    "headset_head_unit",
+    "headset-audio-gateway",
+    "headset_audio_gateway",
+    "handsfree",
+    "headset",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CardProfileState:
+    """The profiles a bluez card actually offers and the one it is using."""
+
+    active_profile: str
+    profiles: tuple[str, ...]
+    a2dp_available: bool
+    hfp_available: bool
+
+    @property
+    def hfp_only(self) -> bool:
+        return self.hfp_available and not self.a2dp_available
+
+    @property
+    def mode(self) -> str:
+        active = self.active_profile.lower()
+        if any(alias in active for alias in _A2DP_SINK_PROFILE_ALIASES):
+            return "a2dp"
+        if self.hfp_only:
+            return "hfp_only"
+        if any(marker in active for marker in _HFP_PROFILE_MARKERS):
+            return "hfp"
+        return "unknown" if not self.active_profile else "other"
+
+
+def card_profile_state(pa_mac: str) -> CardProfileState | None:
+    """Read the bluez card's profile set without switching anything.
+
+    ``None`` means the card is not registered yet (normal immediately after a
+    connect). An empty A2DP set with HFP profiles is the #586 shape: the peer
+    supports A2DP but BlueZ never registered a sink profile.
+    """
+    expected = f"bluez_card.{pa_mac}"
+    try:
+        cards = list_cards() or []
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("list_cards failed while reading profiles: %s", exc)
+        return None
+    card = next((entry for entry in cards if entry.get("name") == expected), None)
+    if card is None:
+        return None
+    profiles = tuple(str(profile) for profile in card.get("profiles") or ())
+    active = str(card.get("active_profile") or "")
+    return CardProfileState(
+        active_profile=active,
+        profiles=profiles,
+        a2dp_available=_pick_a2dp_sink_profile(list(profiles)) is not None,
+        hfp_available=any(marker in profile.lower() for profile in profiles for marker in _HFP_PROFILE_MARKERS),
+    )
 
 
 def _pick_a2dp_sink_profile(profiles: list[str]) -> str | None:
@@ -231,6 +291,16 @@ def configure_bluetooth_audio(
         from sendspin_bridge.config import load_player_state_for_mac
 
         cached_sink = load_player_state_for_mac(mac_address).get("sink")
+        profile_state = card_profile_state(pa_mac)
+        if profile_state is not None and not profile_state.a2dp_available and not allow_hfp:
+            logger.warning(
+                "BlueZ card %s has no A2DP sink profile (active=%s, profiles=%s); "
+                "refusing to play through the HFP profile (#586)",
+                f"bluez_card.{pa_mac}",
+                profile_state.active_profile or "—",
+                ", ".join(profile_state.profiles) or "—",
+            )
+            return False
 
         # Playback is A2DP-only unless this speaker is allowed the headset
         # profile (calls). PipeWire/WirePlumber restore the last profile it saw,
@@ -357,6 +427,21 @@ def configure_bluetooth_audio(
                         configured_sink = sink_name
                         success = True
                         break
+
+        final_profile = card_profile_state(pa_mac)
+        if (
+            success
+            and configured_sink
+            and final_profile is not None
+            and not final_profile.a2dp_available
+            and not allow_hfp
+        ):
+            logger.warning(
+                "BlueZ card %s exposed only HFP while looking for a sink; refusing to play through it (#586)",
+                f"bluez_card.{pa_mac}",
+            )
+            success = False
+            configured_sink = None
 
         if success and configured_sink:
             if prefer_sbc:

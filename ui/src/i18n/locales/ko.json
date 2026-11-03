@@ -83,6 +83,9 @@
     "speakersTitle": "스피커"
   },
   "device": {
+    "a2dpUnavailable": "A2DP 오디오를 사용할 수 없음",
+    "a2dpUnavailableHint": "호스트가 HFP/통화 프로필만 등록했습니다. A2DP가 돌아올 때까지 음악을 재생할 수 없습니다.",
+    "retryA2dp": "A2DP 다시 시도",
     "status": {
       "streaming": "재생 중",
       "ready": "준비됨",
@@ -1746,6 +1749,7 @@
     "close": "대화상자나 메뉴 닫기"
   },
   "speaker": {
+    "retryA2dp": "A2DP 다시 시도",
     "groups": {
       "connection": "연결",
       "bridge": "이 브리지에 있음"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "Bluetooth 스피커 연결이 끊겼습니다",
         "title": "연결 끊김"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "호스트가 HFP/통화 프로필만 등록했습니다. A2DP가 돌아올 때까지 음악을 재생할 수 없습니다.",
+        "title": "A2DP를 사용할 수 없음"
       },
       "health-daemon_disconnected": {
         "summary": "Sendspin 플레이어가 연결되어 있지 않습니다",

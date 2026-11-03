@@ -83,6 +83,9 @@
     "speakersTitle": "音箱"
   },
   "device": {
+    "a2dpUnavailable": "A2DP 音频不可用",
+    "a2dpUnavailableHint": "主机仅注册了 HFP/通话配置文件。在 A2DP 恢复之前无法播放音乐。",
+    "retryA2dp": "重试 A2DP",
     "status": {
       "streaming": "播放中",
       "ready": "就绪",
@@ -1746,6 +1749,7 @@
     "close": "关闭对话框或菜单"
   },
   "speaker": {
+    "retryA2dp": "重试 A2DP",
     "groups": {
       "connection": "连接",
       "bridge": "此桥接器上"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "Bluetooth 音箱已断开",
         "title": "已断开"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "主机仅注册了 HFP/通话配置文件；在 A2DP 恢复之前无法播放音乐。",
+        "title": "A2DP 不可用"
       },
       "health-daemon_disconnected": {
         "summary": "Sendspin 播放器未连接",

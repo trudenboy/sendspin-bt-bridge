@@ -403,6 +403,9 @@ def _build_transfer_readiness(
         # The daemon never starts without its output: the output is the reason.
         reason = "output_missing"
         severity = "error"
+    elif not facts.is_local_output and facts.a2dp_available is False:
+        reason = "a2dp_unavailable"
+        severity = "error"
     elif not device.connected:
         reason = "daemon_unavailable"
         severity = "error"

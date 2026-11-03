@@ -83,6 +83,9 @@
     "speakersTitle": "Enceintes"
   },
   "device": {
+    "a2dpUnavailable": "L'audio A2DP est indisponible",
+    "a2dpUnavailableHint": "L'hôte n'a enregistré qu'un profil HFP/appel. La musique ne pourra jouer qu'au retour d'A2DP.",
+    "retryA2dp": "Réessayer A2DP",
     "status": {
       "streaming": "Lecture en cours",
       "ready": "Prête",
@@ -1746,6 +1749,7 @@
     "close": "Fermer une boîte de dialogue ou un menu"
   },
   "speaker": {
+    "retryA2dp": "Réessayer A2DP",
     "groups": {
       "connection": "Connexion",
       "bridge": "Sur ce pont"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "L’enceinte Bluetooth est déconnectée",
         "title": "Déconnectée"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "L'hôte n'a enregistré qu'un profil HFP/appel ; la musique ne pourra jouer qu'au retour d'A2DP.",
+        "title": "A2DP indisponible"
       },
       "health-daemon_disconnected": {
         "summary": "Le lecteur Sendspin n’est pas connecté",

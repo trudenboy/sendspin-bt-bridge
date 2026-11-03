@@ -186,6 +186,21 @@ class DeviceFacts:
         return self._fact("sink_match_status")
 
     @property
+    def a2dp_available(self) -> bool | None:
+        value = self._field("a2dp_available", self._fact("a2dp_available"))
+        return value if isinstance(value, bool) else None
+
+    @property
+    def hfp_available(self) -> bool | None:
+        value = self._field("hfp_available", self._fact("hfp_available"))
+        return value if isinstance(value, bool) else None
+
+    @property
+    def profile_mode(self) -> str | None:
+        value = self._field("profile_mode", self._fact("profile_mode"))
+        return str(value) if value else None
+
+    @property
     def audio_sink(self) -> str | None:
         """The output a ``pulse_sink`` player plays to, as configured or matched."""
         return self._fact("audio_sink")

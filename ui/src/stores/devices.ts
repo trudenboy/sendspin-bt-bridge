@@ -4,6 +4,7 @@ import { useBridgeStore } from './bridge'
 import {
   reconnectDevice,
   removeDevice,
+  retryA2dp,
   setDeviceEnabled,
   setDevicePlayoutSync,
   setManagement,
@@ -290,6 +291,11 @@ export const useDeviceStore = defineStore('devices', () => {
     return useJobsStore().waitFor(await reconnectDevice(id))
   }
 
+  /** Retry the bounded A2DP profile path for a connected Bluetooth player (#586). */
+  async function retryA2dpProfile(id: string) {
+    await retryA2dp(id)
+  }
+
   async function wake(id: string) {
     await wakeDevice(id)
   }
@@ -336,6 +342,7 @@ export const useDeviceStore = defineStore('devices', () => {
     setVolume,
     setMute,
     reconnect,
+    retryA2dpProfile,
     wake,
     standby,
     setPowerSave,

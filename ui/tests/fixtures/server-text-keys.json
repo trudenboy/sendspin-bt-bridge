@@ -81,6 +81,8 @@
   "server.event.daemon-connected.title",
   "server.event.daemon-disconnected.summary",
   "server.event.daemon-disconnected.title",
+  "server.event.health-a2dp_unavailable.summary",
+  "server.event.health-a2dp_unavailable.title",
   "server.event.health-bluetooth_disconnected.summary",
   "server.event.health-bluetooth_disconnected.title",
   "server.event.health-daemon_disconnected.summary",

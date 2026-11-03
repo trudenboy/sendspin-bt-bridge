@@ -1,6 +1,6 @@
 import { ApiError } from '@/api/client'
 
-export type ActionKind = 'volume' | 'mute' | 'release' | 'claim'
+export type ActionKind = 'volume' | 'mute' | 'release' | 'claim' | 'reconnect'
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 

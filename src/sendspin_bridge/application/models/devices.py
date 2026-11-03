@@ -89,6 +89,9 @@ class DeviceBluetooth(ResponseModel):
     codec_id: int | None = None
     codec_name: str | None = None
     transport_state: str | None = None
+    a2dp_available: bool | None = Field(default=None, description="A2DP sink profile is registered on the host.")
+    hfp_available: bool | None = Field(default=None, description="The card offers an HFP/HSP profile.")
+    profile_mode: str | None = Field(default=None, description="a2dp, hfp, hfp_only, other or unknown.")
     reported_delay_ms: float | None = Field(
         default=None,
         description=(
@@ -599,6 +602,9 @@ class Device(ResponseModel):
                 codec_id=g("bt_codec_id"),
                 codec_name=g("bt_codec_name"),
                 transport_state=g("bt_transport_state"),
+                a2dp_available=g("a2dp_available"),
+                hfp_available=g("hfp_available"),
+                profile_mode=g("profile_mode"),
                 reported_delay_ms=g("bt_reported_delay_ms"),
                 delay_reporting_supported=bool(g("bt_delay_reporting_supported")),
                 never_paired=bool(g("never_paired")),

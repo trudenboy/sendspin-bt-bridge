@@ -106,6 +106,18 @@ def set_management(device_id: str, enabled: bool) -> dict[str, Any]:
     return {"management_enabled": enabled}
 
 
+def retry_a2dp(device_id: str) -> dict[str, Any]:
+    """Retry the bounded A2DP profile path for a connected Bluetooth player (#586)."""
+    client = find_client(device_id)
+    manager = getattr(client, "bt_manager", None)
+    if manager is None:
+        raise UseCaseError(409, "not_bluetooth", "This player is not a Bluetooth player")
+    if not getattr(manager, "connected", False):
+        raise UseCaseError(409, "not_connected", "The Bluetooth device is not connected")
+    threading.Thread(target=client.retry_a2dp, daemon=True).start()
+    return {"retrying": True}
+
+
 def wake(device_id: str) -> None:
     """Wake from idle standby: reconnect Bluetooth and restart the player."""
     client = find_client(device_id)

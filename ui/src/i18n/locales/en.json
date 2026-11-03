@@ -83,6 +83,9 @@
     "speakersTitle": "Speakers"
   },
   "device": {
+    "a2dpUnavailable": "A2DP audio is unavailable",
+    "a2dpUnavailableHint": "The host registered only an HFP/call profile for this device. Music cannot play until A2DP returns.",
+    "retryA2dp": "Retry A2DP",
     "status": {
       "streaming": "Playing",
       "ready": "Ready",
@@ -1746,6 +1749,7 @@
     "close": "Close a dialog or menu"
   },
   "speaker": {
+    "retryA2dp": "Retry A2DP",
     "groups": {
       "connection": "Connection",
       "bridge": "On this bridge"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "The Bluetooth speaker is disconnected",
         "title": "Disconnected"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "The host registered only an HFP/call profile; music cannot play until A2DP returns.",
+        "title": "A2DP unavailable"
       },
       "health-daemon_disconnected": {
         "summary": "The Sendspin player is not connected",

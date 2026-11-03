@@ -83,6 +83,9 @@
     "speakersTitle": "Колонки"
   },
   "device": {
+    "a2dpUnavailable": "A2DP-звук недоступен",
+    "a2dpUnavailableHint": "Хост зарегистрировал только HFP/call-профиль. Музыка не заиграет, пока A2DP не вернётся.",
+    "retryA2dp": "Повторить A2DP",
     "status": {
       "streaming": "Играет",
       "ready": "Готова",
@@ -1746,6 +1749,7 @@
     "close": "Закрыть диалог или меню"
   },
   "speaker": {
+    "retryA2dp": "Повторить A2DP",
     "groups": {
       "connection": "Связь",
       "bridge": "В мосте"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "Bluetooth-колонка отключена",
         "title": "Отключена"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "Хост зарегистрировал только HFP/call-профиль; музыка не заиграет, пока A2DP не вернётся.",
+        "title": "A2DP недоступен"
       },
       "health-daemon_disconnected": {
         "summary": "Плеер Sendspin не подключён",

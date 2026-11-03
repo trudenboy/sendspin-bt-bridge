@@ -83,6 +83,9 @@
     "speakersTitle": "スピーカー"
   },
   "device": {
+    "a2dpUnavailable": "A2DPオーディオを利用できません",
+    "a2dpUnavailableHint": "ホストはHFP/通話プロファイルのみを登録しています。A2DPが戻るまで音楽は再生できません。",
+    "retryA2dp": "A2DPを再試行",
     "status": {
       "streaming": "再生中",
       "ready": "準備完了",
@@ -1746,6 +1749,7 @@
     "close": "ダイアログまたはメニューを閉じる"
   },
   "speaker": {
+    "retryA2dp": "A2DPを再試行",
     "groups": {
       "connection": "接続",
       "bridge": "このブリッジ上"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "Bluetooth スピーカーが切断されています",
         "title": "切断"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "ホストはHFP/通話プロファイルのみを登録しています。A2DPが戻るまで音楽は再生できません。",
+        "title": "A2DPを利用できません"
       },
       "health-daemon_disconnected": {
         "summary": "Sendspin プレーヤーが接続されていません",

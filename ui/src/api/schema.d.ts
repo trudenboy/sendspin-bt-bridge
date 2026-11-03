@@ -990,6 +990,26 @@ export interface paths {
         patch: operations["patch_device_api_v1_devices__device_id__patch"];
         trace?: never;
     };
+    "/api/v1/devices/{device_id}/a2dp-retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry the A2DP profile for a Bluetooth player
+         * @description Bounded A2DP recovery (#586); a host that only exposes HFP stays unavailable.
+         */
+        post: operations["post_a2dp_retry_api_v1_devices__device_id__a2dp_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/{device_id}/air-calibrations": {
         parameters: {
             query?: never;
@@ -4617,6 +4637,11 @@ export interface components {
         };
         /** DeviceBluetooth */
         DeviceBluetooth: {
+            /**
+             * A2Dp Available
+             * @description A2DP sink profile is registered on the host.
+             */
+            a2dp_available: boolean | null;
             adapter: components["schemas"]["AdapterRef"];
             adapter_recovery: components["schemas"]["AdapterRecovery"];
             /**
@@ -4642,6 +4667,11 @@ export interface components {
              * @default false
              */
             delay_reporting_supported: boolean;
+            /**
+             * Hfp Available
+             * @description The card offers an HFP/HSP profile.
+             */
+            hfp_available: boolean | null;
             /** Mac */
             mac: string | null;
             /**
@@ -4664,6 +4694,11 @@ export interface components {
              * @default false
              */
             power_save: boolean;
+            /**
+             * Profile Mode
+             * @description a2dp, hfp, hfp_only, other or unknown.
+             */
+            profile_mode: string | null;
             /**
              * Reconnect Attempt
              * @default 0
@@ -10104,6 +10139,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DevicePatchOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    post_a2dp_retry_api_v1_devices__device_id__a2dp_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Client error */

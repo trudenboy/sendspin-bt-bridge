@@ -190,3 +190,53 @@ def test_a_card_without_an_a2dp_sink_profile_is_not_retried(monkeypatch):
 
     assert audio._switch_card_profile_to_a2dp(_MAC.replace(":", "_")) is False
     assert calls == []  # nothing to switch to: no pointless retries
+
+
+# ---------------------------------------------------------------------------
+# #586: a card that registers only HFP must never be used for music, even when
+# a stale A2DP-looking sink name is cached from an earlier session.
+# ---------------------------------------------------------------------------
+
+_HFP_ONLY_CARD = {
+    "name": "bluez_card.11_75_58_03_E9_31",
+    "active_profile": "headset-head-unit",
+    "profiles": ["off", "headset-head-unit-cvsd", "headset-head-unit"],
+}
+
+
+def test_hfp_only_card_is_refused_before_the_cached_sink_is_used(monkeypatch, caplog):
+    mac = "11:75:58:03:E9:31"
+    monkeypatch.setattr(audio, "list_cards", lambda: [dict(_HFP_ONLY_CARD)])
+    monkeypatch.setattr(audio, "list_sinks", lambda: [{"name": "bluez_output.11_75_58_03_E9_31.1"}])
+    monkeypatch.setattr(audio, "get_sink_volume", lambda _name: 50)
+    monkeypatch.setattr(audio, "sink_name_candidates", lambda _address: ["bluez_output.11_75_58_03_E9_31.1"])
+    monkeypatch.setattr(audio, "save_device_sink", lambda *_args, **_kwargs: None)
+
+    with caplog.at_level(logging.WARNING, logger=audio.logger.name):
+        assert (
+            audio.configure_bluetooth_audio(
+                mac_address=mac,
+                prefer_sbc=False,
+                on_sink_found=None,
+                host=None,
+                wait_with_cancel=lambda _seconds: True,
+                device=None,
+                allow_hfp=False,
+            )
+            is False
+        )
+
+    assert "no A2DP sink profile" in caplog.text
+    assert "refusing to play through the HFP profile" in caplog.text
+
+
+def test_card_profile_state_distinguishes_hfp_only(monkeypatch):
+    monkeypatch.setattr(audio, "list_cards", lambda: [dict(_HFP_ONLY_CARD)])
+
+    state = audio.card_profile_state("11_75_58_03_E9_31")
+
+    assert state is not None
+    assert state.a2dp_available is False
+    assert state.hfp_available is True
+    assert state.hfp_only is True
+    assert state.mode == "hfp_only"

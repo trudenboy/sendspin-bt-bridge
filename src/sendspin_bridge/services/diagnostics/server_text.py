@@ -332,6 +332,7 @@ _HEALTH_CODES = (
     "resyncing",
     "output_missing",
     "bluetooth_disconnected",
+    "a2dp_unavailable",
     "foreign_server",
     "ma_reconnecting",
     "daemon_disconnected",

@@ -30,6 +30,7 @@ const name = computed(() => speakerName(props.device.name, props.device.bluetoot
 const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
 const standby = computed(() => props.device.bluetooth?.standby === true)
 const connected = computed(() => isDeviceConnected(props.device))
+const a2dpUnavailable = computed(() => props.device.health?.code === 'a2dp_unavailable')
 
 async function run(action: () => Promise<unknown>) {
   try {
@@ -69,6 +70,7 @@ const heading = 'px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary'
 
     <template v-if="device.enabled && !handedOver && (canDo(device, 'reconnect') || canDo(device, 'standby') || canDo(device, 'claim'))">
       <p :class="heading">{{ t('speaker.groups.connection') }}</p>
+      <SbDropdownItem v-if="a2dpUnavailable && connected" @click="run(() => store.retryA2dpProfile(device.id))">{{ t('speaker.retryA2dp') }}</SbDropdownItem>
       <SbDropdownItem v-if="canDo(device, 'reconnect')" @click="run(() => store.reconnect(device.id))">{{ t('speaker.reconnect') }}</SbDropdownItem>
       <template v-if="canDo(device, 'standby')">
         <SbDropdownItem v-if="standby" @click="reversible.wake(device.id, name)">{{ t('speaker.wake') }}</SbDropdownItem>

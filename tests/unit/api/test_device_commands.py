@@ -377,3 +377,33 @@ def test_a_removed_disabled_sound_card_leaves_the_disabled_list(api_client, regi
         assert left == ["Garage"]
     finally:
         device_registry.set_disabled_devices([])
+
+
+# -- A2DP retry (#586) ------------------------------------------------------------------------
+
+
+def test_a2dp_retry_starts_the_bounded_retry(api_client, registry):
+    import threading
+
+    started = threading.Event()
+    speaker = _speaker(bluetooth_connected=True)
+    speaker.bt_manager.connected = True
+    speaker.retry_a2dp = lambda: started.set()
+    registry.append(speaker)
+
+    resp = api_client.post("/api/v1/devices/kitchen/a2dp-retry")
+
+    assert resp.status_code == 202
+    assert resp.json() == {"retrying": True}
+    assert started.wait(2.0)
+
+
+def test_a2dp_retry_requires_a_connected_device(api_client, registry):
+    speaker = _speaker()
+    speaker.bt_manager.connected = False
+    registry.append(speaker)
+
+    resp = api_client.post("/api/v1/devices/kitchen/a2dp-retry")
+
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "not_connected"

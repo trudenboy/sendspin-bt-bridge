@@ -83,6 +83,9 @@
     "speakersTitle": "Lautsprecher"
   },
   "device": {
+    "a2dpUnavailable": "A2DP-Audio ist nicht verfügbar",
+    "a2dpUnavailableHint": "Der Host hat nur ein HFP-/Anrufprofil registriert. Musik kann erst spielen, wenn A2DP zurück ist.",
+    "retryA2dp": "A2DP erneut versuchen",
     "status": {
       "streaming": "Wiedergabe",
       "ready": "Bereit",
@@ -1746,6 +1749,7 @@
     "close": "Dialog oder Menü schließen"
   },
   "speaker": {
+    "retryA2dp": "A2DP erneut versuchen",
     "groups": {
       "connection": "Verbindung",
       "bridge": "Auf dieser Bridge"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "Der Bluetooth-Lautsprecher ist getrennt",
         "title": "Getrennt"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "Der Host hat nur ein HFP-/Anrufprofil registriert; Musik kann erst spielen, wenn A2DP zurück ist.",
+        "title": "A2DP nicht verfügbar"
       },
       "health-daemon_disconnected": {
         "summary": "Der Sendspin-Player ist nicht verbunden",

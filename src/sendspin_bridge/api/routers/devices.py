@@ -181,6 +181,16 @@ def put_mute(device_id: str, body: MuteIn) -> MuteOut:
     return MuteOut(**playback.set_device_mute(device_id, body.muted))
 
 
+@router.post(
+    "/devices/{device_id}/a2dp-retry",
+    status_code=202,
+    summary="Retry the A2DP profile for a Bluetooth player",
+)
+def post_a2dp_retry(device_id: str) -> dict[str, Any]:
+    """Bounded A2DP recovery (#586); a host that only exposes HFP stays unavailable."""
+    return dev.retry_a2dp(device_id)
+
+
 @router.post("/devices/{device_id}/unmute-sink", status_code=204, summary="Recovery: unmute the audio sink itself")
 def post_unmute_sink(device_id: str) -> Response:
     playback.unmute_sink(device_id)

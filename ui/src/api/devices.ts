@@ -46,6 +46,11 @@ export function reconnectDevice(deviceId: string) {
   return unwrap(api().POST('/api/v1/devices/{device_id}/reconnect', path(deviceId)))
 }
 
+/** Retry the bounded A2DP profile path for a Bluetooth player (#586). */
+export function retryA2dp(deviceId: string) {
+  return unwrap(api().POST('/api/v1/devices/{device_id}/a2dp-retry', path(deviceId)))
+}
+
 export function repairDevice(deviceId: string, quiesceAdapter = false) {
   return unwrap(
     api().POST('/api/v1/devices/{device_id}/repair', { ...path(deviceId), body: { quiesce_adapter: quiesceAdapter } }),

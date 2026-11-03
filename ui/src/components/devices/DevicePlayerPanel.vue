@@ -43,6 +43,7 @@ const transportLoading = ref(false)
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const connected = computed(() => isDeviceConnected(props.device))
 const isStreaming = computed(() => props.device.playback.playing && props.device.audio.streaming)
+const a2dpUnavailable = computed(() => props.device.health?.code === 'a2dp_unavailable')
 
 /** Title/artist: the daemon's track metadata, else Music Assistant's now-playing. */
 const nowPlaying = computed(() => {
@@ -256,4 +257,16 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   />
 
   <BlockedHints :device="device" class="relative z-10" />
+
+  <div v-if="a2dpUnavailable" class="relative z-10 rounded-lg border border-warning-border bg-warning-soft p-3 text-sm">
+    <p class="font-medium text-text-primary">{{ t('device.a2dpUnavailable') }}</p>
+    <p class="mt-1 text-text-secondary">{{ t('device.a2dpUnavailableHint') }}</p>
+    <button
+      type="button"
+      class="mt-2 rounded-md border border-border bg-surface-card px-3 py-1.5 font-medium text-text-primary hover:bg-surface-secondary"
+      @click="run(() => deviceStore.retryA2dpProfile(device.id), 'reconnect')"
+    >
+      {{ t('device.retryA2dp') }}
+    </button>
+  </div>
 </template>

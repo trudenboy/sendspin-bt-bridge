@@ -83,6 +83,9 @@
     "speakersTitle": "Altavoces"
   },
   "device": {
+    "a2dpUnavailable": "El audio A2DP no está disponible",
+    "a2dpUnavailableHint": "El host solo registró un perfil HFP/llamada. La música no sonará hasta que vuelva A2DP.",
+    "retryA2dp": "Reintentar A2DP",
     "status": {
       "streaming": "En reproducción",
       "ready": "Listo",
@@ -1746,6 +1749,7 @@
     "close": "Cerrar un diálogo o menú"
   },
   "speaker": {
+    "retryA2dp": "Reintentar A2DP",
     "groups": {
       "connection": "Conexión",
       "bridge": "En este puente"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "El altavoz Bluetooth está desconectado",
         "title": "Desconectado"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "El host solo registró un perfil HFP/llamada; la música no sonará hasta que vuelva A2DP.",
+        "title": "A2DP no disponible"
       },
       "health-daemon_disconnected": {
         "summary": "El reproductor Sendspin no está conectado",

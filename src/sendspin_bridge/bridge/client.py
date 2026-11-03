@@ -432,6 +432,11 @@ class DeviceStatus:
     audio_sink: str | None = None
     sink_missing: bool = False
     sink_match_status: str | None = None
+    # Bluetooth A2DP/HFP profile evidence (#586). None means the host has not
+    # reported a card yet, so an absent field must not block playback.
+    a2dp_available: bool | None = None
+    hfp_available: bool | None = None
+    profile_mode: str | None = None
     audio_format: str | None = None
     bt_transport_path: str | None = None
     bt_transport_state: str | None = None
@@ -1968,6 +1973,7 @@ class SendspinClient:
                                 "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
+                    self._sync_bt_profile_status()
 
                 # Check daemon subprocess health
                 if self._daemon_proc is not None:
@@ -2150,6 +2156,39 @@ class SendspinClient:
             logger.debug("[%s] Could not work out the bridge's Music Assistant: %s", self.player_name, exc)
             return None
 
+    def _sync_bt_profile_status(self) -> None:
+        """Copy the Bluetooth manager's profile evidence into the device status."""
+        manager = getattr(self, "bt_manager", None)
+        if manager is None:
+            return
+        updates: dict[str, Any] = {}
+        for name in ("a2dp_available", "hfp_available", "profile_mode"):
+            value = getattr(manager, name, None)
+            if value is not None and self.status.get(name) != value:
+                updates[name] = value
+        if updates:
+            self._update_status(updates)
+
+    def retry_a2dp(self) -> bool:
+        """Retry the bounded A2DP path from a device action (thread-safe)."""
+        manager = getattr(self, "bt_manager", None)
+        if manager is None or not getattr(manager, "connected", False):
+            return False
+        manager.configure_bluetooth_audio()
+        self._sync_bt_profile_status()
+        if manager.audio_sink_ready:
+            schedule_on_bridge_loop(self.start_sendspin(), description="A2DP retry")
+            return True
+        self._update_status(
+            {
+                "a2dp_available": False,
+                "profile_mode": "hfp_only" if getattr(manager, "hfp_available", False) else "unavailable",
+                "sink_missing": True,
+                "playing": False,
+            }
+        )
+        return False
+
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
         is_pulse_sink = getattr(self, "backend_type", BLUETOOTH) == PULSE_SINK
@@ -2200,6 +2239,30 @@ class SendspinClient:
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self.bt_manager.configure_bluetooth_audio)
+            if not is_pulse_sink and self.bt_manager:
+                self._sync_bt_profile_status()
+                # #586: never start a Bluetooth player when the host only
+                # registered an HFP profile. The daemon would otherwise play
+                # into a call-mode sink and MA would claim playback.
+                if (
+                    getattr(self.bt_manager, "audio_sink_ready", None) is False
+                    and getattr(self.bt_manager, "a2dp_available", None) is False
+                ):
+                    self._update_status(
+                        {
+                            "a2dp_available": False,
+                            "profile_mode": "hfp_only"
+                            if getattr(self.bt_manager, "hfp_available", False)
+                            else "unavailable",
+                            "sink_missing": True,
+                            "playing": False,
+                        }
+                    )
+                    logger.warning(
+                        "[%s] A2DP sink is unavailable; not starting the player (#586)",
+                        self.player_name,
+                    )
+                    return
 
             # Phase 2 standby wake: daemon is alive on null sink — reroute streams
             # to the BT sink instead of spawning a new subprocess.

@@ -286,6 +286,9 @@ class BluetoothManager:
         # link without one is not a recovered speaker: a JBL PartyBox powered
         # off on mains accepts the ACL link and never offers A2DP (#414).
         self.audio_sink_ready = False
+        self.a2dp_available: bool | None = None
+        self.hfp_available: bool | None = None
+        self.profile_mode: str = "unknown"
         # Reconnect attempts since the speaker last had a sink. Lives here,
         # not in the monitor cycle, because a sinkless "successful" connect
         # ends the cycle and would otherwise restart the count every time.
@@ -789,6 +792,11 @@ class BluetoothManager:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         if self._reconnect_cancelled():
             return False
+        profile = bt_audio.card_profile_state(DeviceAddress.require(self.mac_address).underscores)
+        if profile is not None:
+            self.a2dp_available = profile.a2dp_available
+            self.hfp_available = profile.hfp_available
+            self.profile_mode = profile.mode
         # #476: with an Echo the card sits in ``a2dp_source`` (or ``off``) and
         # ``pactl set-card-profile a2dp_sink`` answers "Input/output error"
         # until BlueZ has connected the sink profile. Ask for it first — this
@@ -797,7 +805,7 @@ class BluetoothManager:
         # is proof enough that a sink is expected.
         if self.connected and self.early_role_flip_pending:
             self.early_a2dp_role_flip(allow_unknown_uuids=True)
-        self.audio_sink_ready = bt_audio.configure_bluetooth_audio(
+        ready = bt_audio.configure_bluetooth_audio(
             mac_address=self.mac_address,
             prefer_sbc=self.prefer_sbc,
             on_sink_found=self.on_sink_found,
@@ -808,6 +816,12 @@ class BluetoothManager:
             allow_hfp=self.allow_hfp,
             logger=logger,
         )
+        profile = bt_audio.card_profile_state(DeviceAddress.require(self.mac_address).underscores)
+        if profile is not None:
+            self.a2dp_available = profile.a2dp_available
+            self.hfp_available = profile.hfp_available
+            self.profile_mode = profile.mode
+        self.audio_sink_ready = bool(ready and (profile is None or profile.a2dp_available or self.allow_hfp))
         return self.audio_sink_ready
 
     def connect_device(self) -> bool:
@@ -1092,6 +1106,7 @@ class BluetoothManager:
             self.connected = value
             if not value:
                 self.audio_sink_ready = False
+                self.profile_mode = "unknown"
             self._transition_seq += 1
             sequence = self._transition_seq
             # A new connection gets a fresh early-flip retry ladder; a link

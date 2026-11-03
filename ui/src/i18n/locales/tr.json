@@ -83,6 +83,9 @@
     "speakersTitle": "Hoparlörler"
   },
   "device": {
+    "a2dpUnavailable": "A2DP sesi kullanılamıyor",
+    "a2dpUnavailableHint": "Ana makine yalnızca HFP/arama profili kaydetti. A2DP geri gelene kadar müzik çalamaz.",
+    "retryA2dp": "A2DP’yi yeniden dene",
     "status": {
       "streaming": "Çalıyor",
       "ready": "Hazır",
@@ -1746,6 +1749,7 @@
     "close": "İletişim kutusunu veya menüyü kapat"
   },
   "speaker": {
+    "retryA2dp": "A2DP’yi yeniden dene",
     "groups": {
       "connection": "Bağlantı",
       "bridge": "Bu köprüde"
@@ -2443,6 +2447,10 @@
       "health-bluetooth_disconnected": {
         "summary": "Bluetooth hoparlörün bağlantısı kesildi",
         "title": "Bağlı değil"
+      },
+      "health-a2dp_unavailable": {
+        "summary": "Ana makine yalnızca HFP/arama profili kaydetti. A2DP geri gelene kadar müzik çalamaz.",
+        "title": "A2DP kullanılamıyor"
       },
       "health-daemon_disconnected": {
         "summary": "Sendspin oynatıcısı bağlı değil",

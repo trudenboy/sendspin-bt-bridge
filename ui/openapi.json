@@ -4106,6 +4106,18 @@
       },
       "DeviceBluetooth": {
         "properties": {
+          "a2dp_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A2DP sink profile is registered on the host.",
+            "title": "A2Dp Available"
+          },
           "adapter": {
             "$ref": "#/components/schemas/AdapterRef"
           },
@@ -4171,6 +4183,18 @@
             "title": "Delay Reporting Supported",
             "type": "boolean"
           },
+          "hfp_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card offers an HFP/HSP profile.",
+            "title": "Hfp Available"
+          },
           "mac": {
             "anyOf": [
               {
@@ -4228,6 +4252,18 @@
             "default": false,
             "title": "Power Save",
             "type": "boolean"
+          },
+          "profile_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a2dp, hfp, hfp_only, other or unknown.",
+            "title": "Profile Mode"
           },
           "reconnect_attempt": {
             "default": 0,
@@ -4353,6 +4389,9 @@
           "codec_id",
           "codec_name",
           "transport_state",
+          "a2dp_available",
+          "hfp_available",
+          "profile_mode",
           "reported_delay_ms",
           "delay_reporting_supported",
           "never_paired",
@@ -14329,6 +14368,63 @@
           }
         },
         "summary": "Change a speaker's settings",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/a2dp-retry": {
+      "post": {
+        "description": "Bounded A2DP recovery (#586); a host that only exposes HFP stays unavailable.",
+        "operationId": "post_a2dp_retry_api_v1_devices__device_id__a2dp_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post A2Dp Retry Api V1 Devices  Device Id  A2Dp Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Retry the A2DP profile for a Bluetooth player",
         "tags": [
           "devices"
         ]

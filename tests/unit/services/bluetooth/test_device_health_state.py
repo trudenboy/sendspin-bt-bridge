@@ -122,3 +122,21 @@ def test_a_player_on_the_own_or_an_unknown_music_assistant_is_ready():
         state = compute_device_health_state(_connected(connected_server_own=own, connected_server_host="1.2.3.4"))
         assert state.state == "ready"
         assert state.summary == "Connected and ready"
+
+
+def test_device_health_state_reports_a2dp_unavailable_for_hfp_only_card():
+    state = compute_device_health_state(
+        SimpleNamespace(
+            bt_management_enabled=True,
+            bluetooth_connected=True,
+            server_connected=False,
+            playing=False,
+            recent_events=[],
+            extra={"a2dp_available": False, "hfp_available": True, "profile_mode": "hfp_only"},
+        )
+    )
+
+    assert state.code == "a2dp_unavailable"
+    assert state.severity == "error"
+    assert "a2dp_unavailable" in state.reasons
+    assert "hfp_only" in state.reasons
