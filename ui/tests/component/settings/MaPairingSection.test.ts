@@ -48,26 +48,15 @@ describe('Settings: Music Assistant pairing', () => {
     vi.mocked(cancelMaPairing).mockResolvedValue(undefined as never)
   })
 
-  it('explains that the source is off and points at Hardware, without offering a code', () => {
+  it('renders nothing while the source is off', () => {
     setSource({ enabled: false, state: 'off', ma_paired: false, ma_pairing_code: null })
 
     const wrapper = mountSection()
 
-    expect(wrapper.get('[data-ma-pairing-off]').text()).toContain(en.settings.parts.maPairing.off)
-    expect(wrapper.get('[data-ma-pairing-off] a').attributes('href')).toBe('/hardware')
-    expect(wrapper.find('[data-ma-pairing-pair]').exists()).toBe(false)
-    expect(wrapper.find('[data-ma-pairing-code]').exists()).toBe(false)
+    expect(wrapper.find('[data-ma-pairing]').exists()).toBe(false)
   })
 
-  it('opens the pairing window from Settings and shows the eight-digit code', async () => {
-    setSource({ enabled: true, state: 'pairing', ma_paired: false, ma_pairing_code: null })
-
-    const wrapper = mountSection()
-    await wrapper.get('[data-ma-pairing-pair]').trigger('click')
-    await flushPromises()
-
-    expect(openMaPairing).toHaveBeenCalledOnce()
-
+  it('shows the eight-digit code from the status', async () => {
     setSource({
       enabled: true,
       state: 'pairing',
@@ -75,11 +64,12 @@ describe('Settings: Music Assistant pairing', () => {
       ma_pairing_code: '12345678',
       ma_pairing_seconds_left: 47,
     })
+
+    const wrapper = mountSection()
     await flushPromises()
 
-    const code = wrapper.get('[data-ma-pairing-code]')
-    expect(code.text()).toContain('12345678')
-    expect(code.text()).toContain('0:47')
+    expect(wrapper.text()).toContain('12345678')
+    expect(wrapper.text()).toContain('0:47')
     expect(wrapper.get('[data-ma-pairing]').text()).toContain(en.settings.parts.maPairing.whereToEnter)
   })
 

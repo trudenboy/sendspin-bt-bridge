@@ -8590,6 +8590,14 @@
       "SendspinSourceStatus": {
         "description": "The phone-to-Music-Assistant source: capture, pairing and connection state.",
         "properties": {
+          "devices": {
+            "description": "Paired Bluetooth devices that can feed the source.",
+            "items": {
+              "$ref": "#/components/schemas/SourceDeviceStatus"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
           "enabled": {
             "default": false,
             "description": "The source client is enabled by the operator.",
@@ -8754,6 +8762,7 @@
           "ma_error",
           "pairing_seconds_left",
           "pairing_adapters",
+          "devices",
           "error"
         ],
         "title": "SendspinSourceStatus",
@@ -9330,6 +9339,72 @@
         "title": "SourceCapture",
         "type": "object"
       },
+      "SourceDevice": {
+        "description": "A paired Bluetooth device that can feed the source.",
+        "properties": {
+          "active": {
+            "default": false,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "connected": {
+            "default": false,
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "mac": {
+            "title": "Mac",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mac",
+          "name",
+          "connected",
+          "active"
+        ],
+        "title": "SourceDevice",
+        "type": "object"
+      },
+      "SourceDeviceStatus": {
+        "description": "A paired Bluetooth device that can stream into the bridge.",
+        "properties": {
+          "active": {
+            "default": false,
+            "description": "This device is the one currently being captured.",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "connected": {
+            "default": false,
+            "description": "BlueZ reports an active connection.",
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "mac": {
+            "title": "Mac",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mac",
+          "name",
+          "connected",
+          "active"
+        ],
+        "title": "SourceDeviceStatus",
+        "type": "object"
+      },
       "SourceEnabledIn": {
         "properties": {
           "enabled": {
@@ -9344,11 +9419,19 @@
         "type": "object"
       },
       "SourceFeed": {
-        "description": "The single Sendspin source: one phone, its capture, and the link to Music Assistant.",
+        "description": "The single Sendspin source: one capture, and the link to Music Assistant.",
         "properties": {
           "capture": {
             "$ref": "#/components/schemas/SourceCapture",
             "description": "The phone's capture node, or the reason there is none."
+          },
+          "devices": {
+            "description": "Paired devices that can feed the source.",
+            "items": {
+              "$ref": "#/components/schemas/SourceDevice"
+            },
+            "title": "Devices",
+            "type": "array"
           },
           "enabled": {
             "default": false,
@@ -9416,6 +9499,7 @@
           "paired_phone_mac",
           "capture",
           "ma",
+          "devices",
           "error"
         ],
         "title": "SourceFeed",
@@ -12264,6 +12348,111 @@
           }
         },
         "summary": "Start or stop the Bluetooth source now",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/devices/{mac}": {
+      "delete": {
+        "description": "Stop capturing the device and remove its Bluetooth bond; the MA pairing is kept.",
+        "operationId": "forget_source_device_api_v1_bridge_source_devices__mac__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mac",
+            "required": true,
+            "schema": {
+              "title": "Mac",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Forget a paired source device",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/devices/{mac}/use": {
+      "post": {
+        "description": "Make a paired Bluetooth device the source that is captured now.",
+        "operationId": "use_source_device_api_v1_bridge_source_devices__mac__use_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mac",
+            "required": true,
+            "schema": {
+              "title": "Mac",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Use Source Device Api V1 Bridge Source Devices  Mac  Use Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Use a paired source device",
         "tags": [
           "bridge"
         ]

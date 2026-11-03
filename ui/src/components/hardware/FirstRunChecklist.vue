@@ -17,16 +17,11 @@ const emit = defineEmits<{ addSpeaker: [] }>()
 const DISMISS_KEY = 'sendspin-ui:first-run-dismissed'
 const dismissed = ref(localStorage.getItem(DISMISS_KEY) === '1')
 
-const source = computed(() => bridge.bridge?.sendspin_source ?? null)
-const phoneReady = computed(
-  () => !!source.value?.enabled && !!source.value?.ma_paired && !!(source.value?.paired_phone_mac || source.value?.phone_mac),
-)
 
 type Step = { id: string; done: boolean; label: string; action: string; href?: string }
 const steps = computed<Step[]>(() => [
   { id: 'speaker', done: bridge.devices.length > 0, label: t('home.checklist.speaker'), action: t('home.checklist.speakerAction') },
   { id: 'ma', done: bridge.maConnected, label: t('home.checklist.ma'), action: t('home.checklist.maAction'), href: '/config#settings-musicAssistant' },
-  { id: 'phone', done: phoneReady.value, label: t('home.checklist.phone'), action: t('home.checklist.phoneAction'), href: '/hardware' },
 ])
 const doneCount = computed(() => steps.value.filter((step) => step.done).length)
 const show = computed(() => !dismissed.value && !bridge.loading && !!bridge.bridge && doneCount.value < steps.value.length)

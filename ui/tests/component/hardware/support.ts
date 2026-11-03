@@ -157,6 +157,7 @@ export const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
     pairing_seconds_left: 0,
     error: null,
   },
+  devices: [],
   error: null,
   ...overrides,
 })

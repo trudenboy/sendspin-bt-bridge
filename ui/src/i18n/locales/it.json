@@ -777,17 +777,11 @@
     "source": {
       "title": "Sorgente",
       "stateOff": "Spenta",
-      "stateWaiting": "In attesa di un telefono",
+      "stateWaiting": "In attesa di un dispositivo sorgente",
       "stateStreaming": "In streaming",
       "stateError": "Errore",
-      "offBody": "La sorgente del telefono è spenta. Attivala qui per offrire il telefono a Music Assistant.",
-      "phone": "Telefono",
-      "start": "Avvia sorgente",
       "stop": "Ferma sorgente",
-      "stopConfirmTitle": "Fermare la sorgente?",
-      "stopConsequence": "Questi altoparlanti tornano a Music Assistant: {players}.",
-      "stopped": "Sorgente fermata.",
-      "pair": "Associa un telefono",
+      "pair": "Associa un dispositivo",
       "stopPairing": "Interrompi associazione",
       "pairing": "Aperto all’associazione: {time} rimanenti.",
       "pairingHint": "Associa il telefono ora; se dice che il PIN è errato, prima dimentica questo bridge sul telefono (un’associazione vecchia).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "Non disponibile",
       "node": "Nodo",
       "noNode": "Nessun nodo di cattura",
-      "subtitle": "Il telefono trasmette al bridge; il bridge lo invia a Music Assistant come sorgente.",
+      "subtitle": "Un dispositivo Bluetooth trasmette al bridge; il bridge lo invia a Music Assistant come sorgente.",
       "statePairing": "In attesa del codice di associazione",
-      "maTitle": "Music Assistant",
       "maOff": "La sorgente è spenta. Attivala per offrire il telefono a Music Assistant.",
       "maError": "La connessione a Music Assistant non è riuscita.",
       "maConnected": "Connesso. Riproduzione e routing sono gestiti in Music Assistant.",
       "maReconnecting": "Associato. Riconnessione a Music Assistant…",
-      "maNotPaired": "Non ancora associato. Inserisci il codice qui sotto in Music Assistant.",
       "maConnectedShort": "connesso",
       "maPairedShort": "associato",
       "maUnpairedShort": "non associato",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Dimenticare l’associazione con Music Assistant?",
       "maForgetConfirmBody": "Il bridge avrà bisogno di un nuovo codice prima che Music Assistant possa riprodurre di nuovo il telefono.",
       "maForgetDone": "Associazione con Music Assistant dimenticata",
-      "maRouting": "Riproduci il telefono da Music Assistant; il bridge non lo instrada da solo agli altoparlanti.",
-      "maOpen": "Apri Music Assistant",
       "maUnreachable": "Music Assistant non è raggiungibile.",
       "maUnreachableNext": "Verifica che Music Assistant sia in esecuzione e che SENDSPIN_SERVER punti a esso; il bridge continua a riprovare.",
       "maPairingRequired": "Serve un codice di associazione.",
@@ -834,17 +824,16 @@
       "maUnsupported": "Questo Music Assistant non offre una sorgente Sendspin.",
       "maUnsupportedNext": "Aggiorna Music Assistant alla 2.10 o successiva e attiva il suo provider di sorgenti Sendspin.",
       "maPairingNext": "Apri una finestra di associazione e inserisci il codice in Music Assistant.",
-      "phoneTitle": "Telefono (Bluetooth)",
-      "phoneIdle": "non in streaming",
-      "phoneNoPhone": "Nessun telefono sta trasmettendo al bridge.",
-      "phoneHint": "Il telefono si associa al bridge via Bluetooth; Music Assistant riceve l’audio catturato.",
-      "phonePaired": "Telefono associato",
-      "phonePairedHint": "L’associazione è salvata; avvia la riproduzione sul telefono e il bridge la catturerà.",
-      "maSettingsHint": "L’associazione e il codice sono nelle Impostazioni.",
-      "maSettingsAction": "Apri le impostazioni di associazione",
-      "maNotPairedWhere": "Non associato. Associa il bridge a Music Assistant nelle Impostazioni.",
-      "phonePairedNeedMa": "Telefono associato. Associa il bridge a Music Assistant per ascoltarlo.",
-      "phonePairedNeedMaAction": "Associa a Music Assistant"
+      "phoneHint": "Associa un telefono, un tablet o un portatile via Bluetooth; Music Assistant riceve l’audio catturato.",
+      "devicesTitle": "Dispositivi sorgente Bluetooth",
+      "noDevices": "Nessun dispositivo sorgente è ancora associato.",
+      "deviceActive": "attivo",
+      "deviceConnected": "connesso",
+      "deviceUse": "Usa",
+      "deviceForget": "Dimentica",
+      "deviceForgetConfirmTitle": "Dimenticare questo dispositivo sorgente?",
+      "deviceForgetConfirmBody": "L’associazione Bluetooth di {mac} viene rimossa. Il dispositivo potrà essere associato di nuovo più tardi.",
+      "deviceForgotten": "Dispositivo sorgente dimenticato"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "Audio riattivato su {name}.",
     "audioVolume": "Volume impostato: {name}.",
     "audioResumed": "Riproduzione ripresa: {name}.",
-    "sourceStarted": "Sorgente avviata.",
     "sourcePairingOpen": "Finestra di associazione aperta: associa il telefono ora.",
     "sourcePairingClosed": "Finestra di associazione chiusa."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Backup",
         "description": "Esporta, importa o modifica il file di configurazione."
+      },
+      "source": {
+        "title": "Sorgente audio",
+        "description": "Accetta facoltativamente l’audio Bluetooth da un telefono, un tablet o un portatile e offrilo a Music Assistant come sorgente."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Periodo di grazia per il recupero",
         "help": "Attendi questo tempo prima di suggerire correzioni per un altoparlante caduto."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Accetta un telefono come sorgente",
-        "help": "Un telefono associato al bridge via Bluetooth trasmette al bridge, che offre quell’audio come sorgente Sendspin riproducibile da altri lettori. Funziona con PipeWire e, su Home Assistant OS, con PulseAudio."
       }
     },
     "sectionsNav": "Sezioni",
@@ -1359,19 +1347,18 @@
         "label": "Preset del buffer",
         "recommended": "consigliato"
       },
-      "sourceLink": {
-        "label": "Sorgente telefono",
-        "help": "Associa il telefono via Bluetooth e controlla lo stato di cattura nella pagina Hardware.",
-        "action": "Apri Hardware"
-      },
       "maPairing": {
-        "label": "Associazione della sorgente telefono",
-        "help": "Music Assistant deve considerare affidabile questo bridge prima di poter riprodurre l’audio del telefono.",
-        "off": "La sorgente del telefono è spenta. Attivala nella pagina Hardware, poi associala a Music Assistant qui.",
-        "offAction": "Apri Hardware",
+        "label": "Associazione con Music Assistant",
+        "help": "Music Assistant deve considerare affidabile questo bridge prima di poter riprodurre l’audio della sorgente.",
         "whereToEnter": "In Music Assistant: Impostazioni → Lettori → questo bridge → Configura → Codice di associazione statico.",
-        "routing": "Riproduzione e routing restano in Music Assistant; il bridge cattura solo il telefono.",
+        "routing": "Riproduzione e routing restano in Music Assistant; il bridge cattura solo l’audio.",
         "notPaired": "Non ancora associato. Apri una finestra di associazione, poi inserisci il codice in Music Assistant."
+      },
+      "sourceMode": {
+        "label": "Sorgente audio",
+        "help": "Cattura l’audio Bluetooth da un dispositivo associato e offrilo a Music Assistant. Disattivato per impostazione predefinita; attivandolo la sorgente parte subito.",
+        "off": "La sorgente è spenta. Attivala per associare Music Assistant e poi un dispositivo sorgente Bluetooth.",
+        "failed": "Non è stato possibile avviare la sorgente. Controlla Music Assistant e il server audio dell’host, poi riprova."
       }
     },
     "leaveConfirm": "Hai impostazioni non salvate. Uscire comunque?",
@@ -1648,7 +1635,7 @@
     "connected": "{n} di {total} connessi via Bluetooth",
     "playing": "{n} in riproduzione",
     "source": {
-      "title": "Telefono → Music Assistant",
+      "title": "Sorgente audio → Music Assistant",
       "streaming": "In riproduzione dal telefono",
       "pairing": "Associazione in corso",
       "waiting": "In attesa del telefono",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant connesso",
       "maPaired": "Music Assistant associato, riconnessione",
       "maUnpaired": "Music Assistant non è associato",
-      "openHardware": "Apri Hardware",
-      "pairAction": "Associa a Music Assistant"
+      "openHardware": "Apri Hardware"
     },
     "checklist": {
       "title": "Primi passi",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Aggiungi altoparlante",
       "ma": "Accedi a Music Assistant",
       "maAction": "Apri impostazioni",
-      "phone": "Attiva la sorgente telefono e associala",
-      "phoneAction": "Apri Hardware",
       "dismiss": "Nascondi i primi passi"
     }
   },

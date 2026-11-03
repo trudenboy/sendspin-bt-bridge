@@ -777,17 +777,11 @@
     "source": {
       "title": "Quelle",
       "stateOff": "Aus",
-      "stateWaiting": "Warten auf ein Smartphone",
+      "stateWaiting": "Warten auf ein Quellgerät",
       "stateStreaming": "Streaming",
       "stateError": "Fehler",
-      "offBody": "Die Smartphone-Quelle ist aus. Aktiviere sie hier, um das Smartphone Music Assistant anzubieten.",
-      "phone": "Smartphone",
-      "start": "Quelle starten",
       "stop": "Quelle stoppen",
-      "stopConfirmTitle": "Quelle stoppen?",
-      "stopConsequence": "Diese Lautsprecher gehen zurück an Music Assistant: {players}.",
-      "stopped": "Quelle gestoppt.",
-      "pair": "Smartphone koppeln",
+      "pair": "Gerät koppeln",
       "stopPairing": "Kopplung beenden",
       "pairing": "Offen für Kopplung: noch {time}.",
       "pairingHint": "Koppel jetzt das Smartphone; wenn es meldet, die PIN sei falsch, entferne zuerst auf dem Smartphone diese Bridge (veraltete Kopplung).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "Nicht verfügbar",
       "node": "Knoten",
       "noNode": "Kein Aufnahmeknoten",
-      "subtitle": "Das Smartphone streamt in die Bridge; die Bridge gibt es als Quelle an Music Assistant weiter.",
+      "subtitle": "Ein Bluetooth-Gerät streamt in die Bridge; die Bridge gibt es als Quelle an Music Assistant weiter.",
       "statePairing": "Warten auf den Kopplungscode",
-      "maTitle": "Music Assistant",
       "maOff": "Die Quelle ist aus. Aktiviere sie, um das Smartphone Music Assistant anzubieten.",
       "maError": "Die Verbindung zu Music Assistant ist fehlgeschlagen.",
       "maConnected": "Verbunden. Wiedergabe und Routing werden in Music Assistant verwaltet.",
       "maReconnecting": "Gekoppelt. Verbinde neu mit Music Assistant…",
-      "maNotPaired": "Noch nicht gekoppelt. Gib den Code unten in Music Assistant ein.",
       "maConnectedShort": "verbunden",
       "maPairedShort": "gekoppelt",
       "maUnpairedShort": "nicht gekoppelt",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Die Kopplung mit Music Assistant entfernen?",
       "maForgetConfirmBody": "Die Bridge benötigt einen neuen Code, bevor Music Assistant das Smartphone wieder abspielen kann.",
       "maForgetDone": "Kopplung mit Music Assistant entfernt",
-      "maRouting": "Spiele das Smartphone aus Music Assistant ab; die Bridge leitet es nicht selbst an Lautsprecher weiter.",
-      "maOpen": "Music Assistant öffnen",
       "maUnreachable": "Music Assistant ist nicht erreichbar.",
       "maUnreachableNext": "Prüfe, ob Music Assistant läuft und ob SENDSPIN_SERVER darauf zeigt; die Bridge versucht es weiter.",
       "maPairingRequired": "Ein Kopplungscode ist erforderlich.",
@@ -834,17 +824,16 @@
       "maUnsupported": "Dieser Music Assistant bietet keine Sendspin-Quelle an.",
       "maUnsupportedNext": "Aktualisiere Music Assistant auf 2.10 oder neuer und aktiviere den Sendspin-Quellenanbieter.",
       "maPairingNext": "Öffne ein Kopplungsfenster und gib den Code in Music Assistant ein.",
-      "phoneTitle": "Smartphone (Bluetooth)",
-      "phoneIdle": "kein Streaming",
-      "phoneNoPhone": "Kein Smartphone streamt in die Bridge.",
-      "phoneHint": "Das Smartphone koppelt sich per Bluetooth mit der Bridge; Music Assistant erhält das aufgenommene Audio.",
-      "phonePaired": "Smartphone gekoppelt",
-      "phonePairedHint": "Die Kopplung ist gespeichert; starte die Wiedergabe auf dem Smartphone und die Bridge nimmt sie auf.",
-      "maSettingsHint": "Kopplung und Code findest du in den Einstellungen.",
-      "maSettingsAction": "Kopplungseinstellungen öffnen",
-      "maNotPairedWhere": "Nicht gekoppelt. Koppel die Bridge in den Einstellungen mit Music Assistant.",
-      "phonePairedNeedMa": "Smartphone gekoppelt. Koppel die Bridge mit Music Assistant, um es zu hören.",
-      "phonePairedNeedMaAction": "Mit Music Assistant koppeln"
+      "phoneHint": "Koppel ein Smartphone, Tablet oder Notebook per Bluetooth; Music Assistant erhält das aufgenommene Audio.",
+      "devicesTitle": "Bluetooth-Quellgeräte",
+      "noDevices": "Noch kein Quellgerät gekoppelt.",
+      "deviceActive": "aktiv",
+      "deviceConnected": "verbunden",
+      "deviceUse": "Verwenden",
+      "deviceForget": "Entfernen",
+      "deviceForgetConfirmTitle": "Dieses Quellgerät entfernen?",
+      "deviceForgetConfirmBody": "Die Bluetooth-Kopplung mit {mac} wird entfernt. Das Gerät kann später erneut gekoppelt werden.",
+      "deviceForgotten": "Quellgerät entfernt"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "Stummschaltung für {name} aufgehoben.",
     "audioVolume": "Lautstärke gesetzt: {name}.",
     "audioResumed": "Fortgesetzt: {name}.",
-    "sourceStarted": "Quelle gestartet.",
     "sourcePairingOpen": "Kopplungsfenster offen: Koppel jetzt das Smartphone.",
     "sourcePairingClosed": "Kopplungsfenster geschlossen."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Sicherung",
         "description": "Konfigurationsdatei exportieren, importieren oder bearbeiten."
+      },
+      "source": {
+        "title": "Audioquelle",
+        "description": "Nimm optional Bluetooth-Audio von Smartphone, Tablet oder Notebook an und biete es Music Assistant als Quelle an."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Schonfrist für die Wiederherstellung",
         "help": "So lange warten, bevor Korrekturvorschläge für einen abgefallenen Lautsprecher erscheinen."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Smartphone als Quelle akzeptieren",
-        "help": "Ein per Bluetooth mit der Bridge gekoppeltes Smartphone streamt in die Bridge, und die Bridge bietet dieses Audio als Sendspin-Quelle an, die andere Player abspielen können. Funktioniert mit PipeWire und unter Home Assistant OS mit PulseAudio."
       }
     },
     "sectionsNav": "Bereiche",
@@ -1359,19 +1347,18 @@
         "label": "Puffer-Voreinstellungen",
         "recommended": "empfohlen"
       },
-      "sourceLink": {
-        "label": "Smartphone-Quelle",
-        "help": "Koppel das Smartphone per Bluetooth und sieh seinen Aufnahmestatus auf der Hardware-Seite.",
-        "action": "Hardware öffnen"
-      },
       "maPairing": {
-        "label": "Kopplung der Smartphone-Quelle",
-        "help": "Music Assistant muss dieser Bridge vertrauen, bevor es das Audio des Smartphones abspielen kann.",
-        "off": "Die Smartphone-Quelle ist aus. Aktiviere sie auf der Hardware-Seite und koppel sie dann hier mit Music Assistant.",
-        "offAction": "Hardware öffnen",
+        "label": "Kopplung mit Music Assistant",
+        "help": "Music Assistant muss dieser Bridge vertrauen, bevor es das Audio der Quelle abspielen kann.",
         "whereToEnter": "In Music Assistant: Einstellungen → Player → diese Bridge → Konfigurieren → Statischer Kopplungscode.",
-        "routing": "Wiedergabe und Routing bleiben in Music Assistant; die Bridge nimmt nur das Smartphone auf.",
+        "routing": "Wiedergabe und Routing bleiben in Music Assistant; die Bridge nimmt nur das Audio auf.",
         "notPaired": "Noch nicht gekoppelt. Öffne ein Kopplungsfenster und gib den Code dann in Music Assistant ein."
+      },
+      "sourceMode": {
+        "label": "Audioquelle",
+        "help": "Nimm Bluetooth-Audio von einem gekoppelten Gerät auf und biete es Music Assistant an. Standardmäßig aus; beim Aktivieren startet die Quelle sofort.",
+        "off": "Die Quelle ist aus. Aktiviere sie, um Music Assistant und danach ein Bluetooth-Quellgerät zu koppeln.",
+        "failed": "Die Quelle konnte nicht gestartet werden. Prüfe Music Assistant und den Audioserver des Hosts und versuche es erneut."
       }
     },
     "leaveConfirm": "Du hast nicht gespeicherte Einstellungen. Trotzdem verlassen?",
@@ -1648,7 +1635,7 @@
     "connected": "{n} von {total} Bluetooth verbunden",
     "playing": "{n} in Wiedergabe",
     "source": {
-      "title": "Smartphone → Music Assistant",
+      "title": "Audioquelle → Music Assistant",
       "streaming": "Wiedergabe vom Smartphone",
       "pairing": "Kopplung läuft",
       "waiting": "Warten auf das Smartphone",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant verbunden",
       "maPaired": "Music Assistant gekoppelt, verbinde neu",
       "maUnpaired": "Music Assistant ist nicht gekoppelt",
-      "openHardware": "Hardware öffnen",
-      "pairAction": "Mit Music Assistant koppeln"
+      "openHardware": "Hardware öffnen"
     },
     "checklist": {
       "title": "Erste Schritte",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Lautsprecher hinzufügen",
       "ma": "Bei Music Assistant anmelden",
       "maAction": "Einstellungen öffnen",
-      "phone": "Smartphone-Quelle aktivieren und koppeln",
-      "phoneAction": "Hardware öffnen",
       "dismiss": "Erste Schritte ausblenden"
     }
   },

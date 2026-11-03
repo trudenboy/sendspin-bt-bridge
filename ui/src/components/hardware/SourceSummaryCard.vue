@@ -14,7 +14,6 @@ const { t } = useI18n()
 const bridge = useBridgeStore()
 
 const source = computed(() => bridge.bridge?.sendspin_source ?? null)
-const settingsHref = '/config#settings-musicAssistant'
 
 const stateText = computed(() => {
   const state = source.value?.state ?? 'off'
@@ -39,7 +38,7 @@ const tone = computed(() => {
 
 <template>
   <section
-    v-if="source"
+    v-if="source?.enabled && source?.ma_paired"
     data-home-source
     class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-(--radius-card) border border-border bg-surface-card px-4 py-3"
   >
@@ -51,14 +50,6 @@ const tone = computed(() => {
       </p>
     </div>
     <SbBadge :tone="tone" size="sm">{{ stateText }}</SbBadge>
-    <RouterLink
-      v-if="!source.ma_paired"
-      :to="settingsHref"
-      data-home-source-pair
-      class="text-sm text-primary-text underline-offset-2 hover:underline"
-    >
-      {{ t('home.source.pairAction') }}
-    </RouterLink>
     <RouterLink
       to="/hardware"
       data-home-source-hardware

@@ -15,9 +15,22 @@ import time
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-__all__ = ["SourceState", "publish", "reset", "snapshot"]
+__all__ = ["SourceDevice", "SourceState", "publish", "reset", "snapshot"]
 
 SourceStateName = Literal["off", "pairing", "waiting", "streaming", "error"]
+
+
+@dataclass(frozen=True, slots=True)
+class SourceDevice:
+    """A paired Bluetooth device that can stream into the bridge."""
+
+    mac: str
+    name: str
+    connected: bool = False
+    active: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"mac": self.mac, "name": self.name, "connected": self.connected, "active": self.active}
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +53,7 @@ class SourceState:
     pairing_adapters: tuple[str, ...] = ()
     pairing_error: str | None = None
     error: str | None = None
+    devices: tuple[SourceDevice, ...] = ()
 
     def pairing_seconds_left(self, *, now: float | None = None) -> int:
         """Seconds the phone's pairing window stays open (0 when it is closed)."""
@@ -67,6 +81,7 @@ class SourceState:
             "ma_error": self.ma_error,
             "pairing_seconds_left": self.pairing_seconds_left(),
             "pairing_adapters": list(self.pairing_adapters),
+            "devices": [device.as_dict() for device in self.devices],
             "error": self.error,
         }
 

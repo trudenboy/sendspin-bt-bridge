@@ -19,6 +19,7 @@ import {
   Home,
   Lightbulb,
   Music2,
+  Radio,
   Search,
   Settings2,
   ShieldCheck,
@@ -36,7 +37,7 @@ import SettingField from '@/components/settings/SettingField.vue'
 import MaConnectionSection from '@/components/settings/MaConnectionSection.vue'
 import MaPairingSection from '@/components/settings/MaPairingSection.vue'
 import SendspinTestSection from '@/components/settings/SendspinTestSection.vue'
-import SourceLinkSection from '@/components/settings/SourceLinkSection.vue'
+import SourceModeSection from '@/components/settings/SourceModeSection.vue'
 import LatencyAssistantSection from '@/components/settings/LatencyAssistantSection.vue'
 import AdaptersSection from '@/components/settings/AdaptersSection.vue'
 import HaStatusSection from '@/components/settings/HaStatusSection.vue'
@@ -54,6 +55,7 @@ const notifications = useNotificationStore()
 const ICONS: Record<string, Component> = {
   settings: Settings2,
   music: Music2,
+  radio: Radio,
   audio: AudioLines,
   bluetooth: Bluetooth,
   home: Home,
@@ -67,7 +69,7 @@ const PARTS: Record<SectionComponent, Component> = {
   maConnection: MaConnectionSection,
   maPairing: MaPairingSection,
   sendspinTest: SendspinTestSection,
-  sourceLink: SourceLinkSection,
+  sourceMode: SourceModeSection,
   latencyAssistant: LatencyAssistantSection,
   adapters: AdaptersSection,
   haStatus: HaStatusSection,

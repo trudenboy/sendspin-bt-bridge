@@ -123,6 +123,19 @@ async def close_source_pairing() -> Response:
     return Response(status_code=204)
 
 
+@router.post("/bridge/source/devices/{mac}/use", summary="Use a paired source device")
+async def use_source_device(mac: str) -> dict[str, Any]:
+    """Make a paired Bluetooth device the source that is captured now."""
+    return await source.use_device(mac)
+
+
+@router.delete("/bridge/source/devices/{mac}", status_code=204, summary="Forget a paired source device")
+async def forget_source_device(mac: str) -> Response:
+    """Stop capturing the device and remove its Bluetooth bond; the MA pairing is kept."""
+    await source.forget_device(mac)
+    return Response(status_code=204)
+
+
 @router.get("/devices", response_model=list[Device], summary="Bridge speakers")
 def list_devices(request: Request) -> list[Device]:
     return _status(request).devices

@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { getHardware } from '@/api/hardware'
-import { closeSourcePairing, openSourcePairing, setSourceEnabled } from '@/api/source'
-import { useBridgeStore } from '@/stores/bridge'
-import { useHardwareStore } from '@/stores/hardware'
-import { useNotificationStore } from '@/stores/notifications'
+import { closeSourcePairing, forgetSourceDevice, openSourcePairing, useSourceDevice } from '@/api/source'
 import en from '@/i18n/locales/en.json'
 import { mountView, snapshot, sourceFeed } from './support'
 
@@ -23,6 +20,8 @@ vi.mock('@/api/source', () => ({
   cancelMaPairing: vi.fn(),
   openSourcePairing: vi.fn(),
   closeSourcePairing: vi.fn(),
+  useSourceDevice: vi.fn(),
+  forgetSourceDevice: vi.fn(),
 }))
 
 let wrapper: ReturnType<typeof mountView> | null = null
@@ -33,6 +32,11 @@ const phoneWindow = () => ({
   error: null,
 })
 
+const devices = [
+  { mac: '34:C7:E9:25:A3:A3', name: 'Pixel', connected: true, active: true },
+  { mac: 'FC:58:FA:EB:08:6C', name: 'Tablet', connected: false, active: false },
+]
+
 describe('Hardware page: source strip', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -40,9 +44,10 @@ describe('Hardware page: source strip', () => {
     localStorage.clear()
     confirm.confirmDialog.mockResolvedValue(true)
     vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed() }) as never)
-    vi.mocked(setSourceEnabled).mockResolvedValue({} as never)
     vi.mocked(openSourcePairing).mockResolvedValue(phoneWindow() as never)
     vi.mocked(closeSourcePairing).mockResolvedValue(undefined as never)
+    vi.mocked(useSourceDevice).mockResolvedValue({} as never)
+    vi.mocked(forgetSourceDevice).mockResolvedValue(undefined as never)
   })
 
   afterEach(() => {
@@ -52,140 +57,65 @@ describe('Hardware page: source strip', () => {
     vi.useRealTimers()
   })
 
-  it('says the source is off when the bridge reports none, and can enable it in place', async () => {
+  it('does not show the source strip when the source is off', async () => {
     vi.mocked(getHardware).mockResolvedValue(snapshot({ source: null }) as never)
 
     wrapper = mountView()
     await flushPromises()
 
-    const panel = wrapper.get('[data-source-panel]')
-    expect(panel.attributes('data-source-state')).toBe('off')
-    expect(panel.get('[data-source-off]').text()).toBe(en.hardware.source.offBody)
-    expect(panel.get('[data-source-start]').exists()).toBe(true)
-    expect(panel.find('[data-source-stop]').exists()).toBe(false)
-    expect(panel.find('[data-source-pair]').exists()).toBe(false)
-    expect(panel.find('[data-source-player]').exists()).toBe(false)
-
-    await wrapper.get('[data-source-start]').trigger('click')
-    await flushPromises()
-    expect(setSourceEnabled).toHaveBeenCalledWith(true)
+    expect(wrapper.find('[data-source-panel]').exists()).toBe(false)
   })
 
-  it('shows the Music Assistant status and sends pairing to Settings', async () => {
-    wrapper = mountView()
-    await flushPromises()
-
-    const panel = wrapper.get('[data-source-panel]')
-    expect(panel.attributes('data-source-state')).toBe('waiting')
-    expect(panel.get('[data-source-state-badge]').text()).toContain(en.hardware.source.stateWaiting)
-    expect(panel.get('[data-source-ma]').text()).toContain(en.hardware.source.maSettingsHint)
-    expect(panel.get('[data-source-ma-settings]').attributes('href')).toBe('/config#settings-musicAssistant')
-    expect(panel.find('[data-source-ma-pair]').exists()).toBe(false)
-    expect(panel.find('[data-source-ma-forget]').exists()).toBe(false)
-    expect(panel.find('[data-source-player]').exists()).toBe(false)
-    expect(panel.find('[data-source-relay]').exists()).toBe(false)
-    expect(panel.get('[data-source-phone-block]').exists()).toBe(true)
-    expect(panel.find('[data-source-pair]').exists()).toBe(true)
-    expect(panel.find('[data-source-stop]').exists()).toBe(true)
-  })
-
-  it('never shows the Music Assistant pairing code on the Hardware page', async () => {
+  it('does not show the source strip before Music Assistant pairing', async () => {
     vi.mocked(getHardware).mockResolvedValue(
-      snapshot({
-        source: sourceFeed({
-          state: 'pairing',
-          ma: {
-            server: 'ws://ma.local:8927/sendspin',
-            connected: true,
-            paired: false,
-            pairing_required: true,
-            pairing_code: '12345678',
-            pairing_seconds_left: 47,
-            error: null,
-          },
-        }),
-      }) as never,
+      snapshot({ source: sourceFeed({ enabled: true, ma: { paired: false, connected: false, pairing_required: true, pairing_code: '12345678', server: null, pairing_seconds_left: 0, error: null } }) }) as never,
     )
 
     wrapper = mountView()
     await flushPromises()
 
-    const panel = wrapper.get('[data-source-panel]')
-    expect(panel.find('[data-source-ma-code]').exists()).toBe(false)
-    expect(panel.text()).not.toContain('12345678')
-    expect(panel.get('[data-source-ma-settings]').attributes('href')).toBe('/config#settings-musicAssistant')
+    expect(wrapper.find('[data-source-panel]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('12345678')
   })
 
-  it('points at Settings when the phone is paired but Music Assistant is not', async () => {
-    vi.mocked(getHardware).mockResolvedValue(
-      snapshot({
-        source: sourceFeed({
-          state: 'waiting',
-          paired_phone_mac: '34:C7:E9:25:A3:A3',
-          ma: {
-            server: 'ws://ma.local:8927/sendspin',
-            connected: true,
-            paired: false,
-            pairing_required: true,
-            pairing_code: null,
-            pairing_seconds_left: 0,
-            error: null,
-          },
-        }),
-      }) as never,
-    )
-
-    wrapper = mountView()
-    await flushPromises()
-
-    const banner = wrapper.get('[data-source-phone-needs-ma]')
-    expect(banner.text()).toContain(en.hardware.source.phonePairedNeedMa)
-    expect(banner.get('a').attributes('href')).toBe('/config#settings-musicAssistant')
-  })
-
-  it('shows the streaming phone by name and MAC', async () => {
-    vi.mocked(getHardware).mockResolvedValue(
-      snapshot({ source: sourceFeed({ state: 'streaming', phone_mac: 'FC:58:FA:EB:08:6C' }) }) as never,
-    )
+  it('lists paired source devices and marks the active one', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed({ devices }) }) as never)
 
     wrapper = mountView()
     await flushPromises()
 
     const panel = wrapper.get('[data-source-panel]')
-    expect(panel.attributes('data-source-state')).toBe('streaming')
-    const phone = panel.get('[data-source-phone]')
-    expect(phone.text()).toContain('ENEBY20')
-    expect(phone.text()).toContain('FC:58:FA:EB:08:6C')
+    expect(panel.findAll('[data-source-device]')).toHaveLength(2)
+    expect(panel.get('[data-source-device="34:C7:E9:25:A3:A3"]').attributes('data-source-device-active')).toBe('true')
+    expect(panel.get('[data-source-device="FC:58:FA:EB:08:6C"] [data-source-use]').exists()).toBe(true)
   })
 
-  it('explains an unreachable Music Assistant with a next step', async () => {
-    vi.mocked(getHardware).mockResolvedValue(
-      snapshot({
-        source: sourceFeed({
-          state: 'waiting',
-          ma: {
-            server: 'ws://ma.local:8927/sendspin',
-            connected: false,
-            paired: true,
-            pairing_required: false,
-            pairing_code: null,
-            pairing_seconds_left: 0,
-            error: 'ma_unreachable',
-          },
-        }),
-      }) as never,
-    )
+  it('switches the active source device', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed({ devices }) }) as never)
 
     wrapper = mountView()
     await flushPromises()
 
-    const error = wrapper.get('[data-source-error]')
-    expect(error.text()).toContain(en.hardware.source.maUnreachable)
-    expect(error.text()).toContain(en.hardware.source.maUnreachableNext)
-    expect(error.text()).toContain('ma_unreachable')
+    await wrapper.get('[data-source-device="FC:58:FA:EB:08:6C"] [data-source-use]').trigger('click')
+    await flushPromises()
+
+    expect(useSourceDevice).toHaveBeenCalledWith('FC:58:FA:EB:08:6C')
   })
 
-  it('opens the phone pairing window and shows the server countdown, then closes it', async () => {
+  it('forgets a source device after confirmation', async () => {
+    vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed({ devices }) }) as never)
+
+    wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-source-device="FC:58:FA:EB:08:6C"] [data-source-forget]').trigger('click')
+    await flushPromises()
+
+    expect(confirm.confirmDialog).toHaveBeenCalled()
+    expect(forgetSourceDevice).toHaveBeenCalledWith('FC:58:FA:EB:08:6C')
+  })
+
+  it('opens the device pairing window and closes it', async () => {
     wrapper = mountView()
     await flushPromises()
 
@@ -193,81 +123,24 @@ describe('Hardware page: source strip', () => {
     await flushPromises()
 
     expect(openSourcePairing).toHaveBeenCalledWith(120)
-    const panel = wrapper.get('[data-source-panel]')
-    expect(panel.get('[data-source-pairing]').text()).toContain(
-      en.hardware.source.pairing.replace('{time}', '2:00'),
-    )
+    expect(wrapper.get('[data-source-pairing]').text()).toContain(en.hardware.source.pairing.replace('{time}', '2:00'))
 
     await wrapper.get('[data-source-pairing-stop]').trigger('click')
     await flushPromises()
 
     expect(closeSourcePairing).toHaveBeenCalledOnce()
-    expect(panel.find('[data-source-pairing]').exists()).toBe(false)
   })
 
-  it('treats a refused phone pairing window as a failure: inline reason, no toast', async () => {
-    vi.mocked(openSourcePairing).mockResolvedValue({
-      pairing_seconds_left: 0,
-      pairing_adapters: [],
-      error: 'no_adapter',
-    } as never)
+  it('shows a source error without a Music Assistant pairing block', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ source: sourceFeed({ state: 'error', error: 'capture_unavailable' }) }) as never,
+    )
 
     wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.get('[data-source-pair]').trigger('click')
     await flushPromises()
 
     const panel = wrapper.get('[data-source-panel]')
-    expect(panel.find('[data-source-pairing]').exists()).toBe(false)
-    expect(panel.get('[data-source-failure]').text()).toContain('no_adapter')
-    expect(panel.get('[data-source-failure]').text()).toContain(en.hardware.source.failureNextStep)
-
-    const toasts = useNotificationStore().toasts
-    expect(toasts.some((toast) => toast.type === 'success')).toBe(false)
-    expect(toasts.some((toast) => toast.type === 'error')).toBe(false)
-    expect(toasts.some((toast) => toast.action != null)).toBe(false)
-  })
-
-  it('clears a running countdown on unmount, so returning can pair again', async () => {
-    wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.get('[data-source-pair]').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('[data-source-pairing]').text()).toContain(
-      en.hardware.source.pairing.replace('{time}', '2:00'),
-    )
-
-    const store = useHardwareStore()
-    expect(store.pairingSecondsLeft).toBeGreaterThan(0)
-
-    wrapper.unmount()
-    wrapper = null
-
-    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 2000)
-    expect(store.pairingSecondsLeft).toBe(0)
-    now.mockRestore()
-
-    wrapper = mountView()
-    await flushPromises()
-
-    expect(wrapper.find('[data-source-pairing]').exists()).toBe(false)
-    expect(wrapper.find('[data-source-pair]').exists()).toBe(true)
-  })
-
-  it('picks the phone countdown up from the bridge status after a reload', async () => {
-    useBridgeStore().snapshot = {
-      bridge: { sendspin_source: { pairing_seconds_left: 47 } },
-      devices: [],
-      groups: [],
-    } as never
-
-    wrapper = mountView()
-    await flushPromises()
-
-    expect(wrapper.get('[data-source-pairing]').text()).toContain(
-      en.hardware.source.pairing.replace('{time}', '0:47'),
-    )
+    expect(panel.get('[data-source-error]').text()).toContain('capture_unavailable')
+    expect(panel.find('[data-ma-pairing], [data-source-ma-code]').exists()).toBe(false)
   })
 })

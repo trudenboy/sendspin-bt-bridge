@@ -777,17 +777,11 @@
     "source": {
       "title": "ソース",
       "stateOff": "オフ",
-      "stateWaiting": "スマートフォンを待機中",
+      "stateWaiting": "ソースデバイスを待機中",
       "stateStreaming": "ストリーミング中",
       "stateError": "エラー",
-      "offBody": "スマートフォンソースはオフです。ここで有効にすると、スマートフォンを Music Assistant に提供できます。",
-      "phone": "スマートフォン",
-      "start": "ソースを開始",
       "stop": "ソースを停止",
-      "stopConfirmTitle": "ソースを停止しますか？",
-      "stopConsequence": "これらのスピーカーは Music Assistant に戻ります: {players}。",
-      "stopped": "ソースを停止しました。",
-      "pair": "スマートフォンをペアリング",
+      "pair": "デバイスをペアリング",
       "stopPairing": "ペアリングを停止",
       "pairing": "ペアリング受付中: 残り {time}。",
       "pairingHint": "スマートフォンをペアリングしてください。PIN が間違っていると表示された場合は、先にスマートフォン側でこのブリッジを「削除」（古いペアリング）してください。",
@@ -807,14 +801,12 @@
       "captureUnavailable": "利用不可",
       "node": "ノード",
       "noNode": "キャプチャノードなし",
-      "subtitle": "スマートフォンからブリッジへストリームされ、ブリッジがソースとして Music Assistant に送信します。",
+      "subtitle": "Bluetooth デバイスからブリッジへストリームされ、ブリッジがソースとして Music Assistant に送信します。",
       "statePairing": "ペアリングコードを待機中",
-      "maTitle": "Music Assistant",
       "maOff": "ソースはオフです。有効にすると、スマートフォンを Music Assistant に提供できます。",
       "maError": "Music Assistant への接続に失敗しました。",
       "maConnected": "接続済みです。再生とルーティングは Music Assistant で管理されます。",
       "maReconnecting": "ペアリング済みです。Music Assistant に再接続しています…",
-      "maNotPaired": "まだペアリングされていません。下のコードを Music Assistant に入力してください。",
       "maConnectedShort": "接続済み",
       "maPairedShort": "ペアリング済み",
       "maUnpairedShort": "未ペアリング",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Music Assistant のペアリングを削除しますか？",
       "maForgetConfirmBody": "Music Assistant で再びスマートフォンを再生するには、新しいコードが必要です。",
       "maForgetDone": "Music Assistant のペアリングを削除しました",
-      "maRouting": "Music Assistant からスマートフォンを再生してください。ブリッジ自身がスピーカーにルーティングすることはありません。",
-      "maOpen": "Music Assistant を開く",
       "maUnreachable": "Music Assistant に接続できません。",
       "maUnreachableNext": "Music Assistant が実行中で、SENDSPIN_SERVER がそれを指していることを確認してください。ブリッジは再試行を続けます。",
       "maPairingRequired": "ペアリングコードが必要です。",
@@ -834,17 +824,16 @@
       "maUnsupported": "この Music Assistant は Sendspin ソースを提供していません。",
       "maUnsupportedNext": "Music Assistant を 2.10 以降にアップデートし、Sendspin ソースプロバイダーを有効にしてください。",
       "maPairingNext": "ペアリングウィンドウを開き、Music Assistant にコードを入力してください。",
-      "phoneTitle": "スマートフォン（Bluetooth）",
-      "phoneIdle": "ストリーミングしていません",
-      "phoneNoPhone": "ブリッジにストリーミングしているスマートフォンはありません。",
-      "phoneHint": "スマートフォンは Bluetooth 経由でブリッジとペアリングし、Music Assistant が取り込んだ音声を受信します。",
-      "phonePaired": "スマートフォンをペアリングしました",
-      "phonePairedHint": "ペアリング情報は保存されています。スマートフォンで再生を開始すると、ブリッジが音声を取り込みます。",
-      "maSettingsHint": "ペアリングとコードは設定にあります。",
-      "maSettingsAction": "ペアリング設定を開く",
-      "maNotPairedWhere": "未ペアリングです。設定でブリッジと Music Assistant をペアリングしてください。",
-      "phonePairedNeedMa": "スマートフォンはペアリング済みです。音声を聞くには、ブリッジと Music Assistant をペアリングしてください。",
-      "phonePairedNeedMaAction": "Music Assistant とペアリング"
+      "phoneHint": "スマートフォン、タブレット、ノートパソコンを Bluetooth でペアリングしてください。Music Assistant が取り込んだ音声を受信します。",
+      "devicesTitle": "Bluetooth ソースデバイス",
+      "noDevices": "ソースデバイスはまだペアリングされていません。",
+      "deviceActive": "使用中",
+      "deviceConnected": "接続済み",
+      "deviceUse": "使用",
+      "deviceForget": "削除",
+      "deviceForgetConfirmTitle": "このソースデバイスのペアリング情報を削除しますか？",
+      "deviceForgetConfirmBody": "{mac} の Bluetooth ペアリング情報が削除されます。デバイスは後で再度ペアリングできます。",
+      "deviceForgotten": "ソースデバイスのペアリング情報を削除しました"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "{name} のミュートを解除しました。",
     "audioVolume": "音量を設定: {name}。",
     "audioResumed": "再開: {name}。",
-    "sourceStarted": "ソースを開始しました。",
     "sourcePairingOpen": "ペアリング受付中: スマートフォンをペアリングしてください。",
     "sourcePairingClosed": "ペアリング受付を終了しました。"
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "バックアップ",
         "description": "設定ファイルのエクスポート、インポート、編集。"
+      },
+      "source": {
+        "title": "音声ソース",
+        "description": "スマートフォン、タブレット、ノートパソコンからの Bluetooth 音声を必要に応じて受け取り、Music Assistant にソースとして提供します。"
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "復旧の猶予期間",
         "help": "切断されたスピーカーの修正を提案するまでこの時間待ちます。"
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "スマートフォンをソースとして受け入れる",
-        "help": "Bluetooth でブリッジとペアリングしたスマートフォンからストリームされ、ブリッジがその音声を他のプレーヤーが再生できる Sendspin ソースとして提供します。PipeWire と、Home Assistant OS では PulseAudio で動作します。"
       }
     },
     "sectionsNav": "セクション",
@@ -1359,19 +1347,18 @@
         "label": "バッファープリセット",
         "recommended": "推奨"
       },
-      "sourceLink": {
-        "label": "スマートフォンソース",
-        "help": "スマートフォンを Bluetooth でペアリングし、取り込み状態をハードウェアページで確認します。",
-        "action": "ハードウェアを開く"
-      },
       "maPairing": {
-        "label": "スマートフォンソースのペアリング",
-        "help": "Music Assistant がスマートフォンの音声を再生するには、このブリッジを信頼している必要があります。",
-        "off": "スマートフォンソースはオフです。ハードウェアページで有効にしてから、ここで Music Assistant とペアリングしてください。",
-        "offAction": "ハードウェアを開く",
+        "label": "Music Assistant とのペアリング",
+        "help": "Music Assistant がソースの音声を再生するには、このブリッジを信頼している必要があります。",
         "whereToEnter": "Music Assistant で: 設定 → プレーヤー → このブリッジ → 設定 → 静的ペアリングコード。",
-        "routing": "再生とルーティングは Music Assistant に任せ、ブリッジはスマートフォンの音声を取り込むだけです。",
+        "routing": "再生とルーティングは Music Assistant に任せ、ブリッジは音声を取り込むだけです。",
         "notPaired": "まだペアリングされていません。ペアリングウィンドウを開き、Music Assistant にコードを入力してください。"
+      },
+      "sourceMode": {
+        "label": "音声ソース",
+        "help": "ペアリング済みのデバイスから Bluetooth 音声を取り込み、Music Assistant に提供します。既定ではオフで、有効にするとソースがすぐに開始されます。",
+        "off": "ソースはオフです。有効にすると、Music Assistant とペアリングし、続いて Bluetooth ソースデバイスとペアリングできます。",
+        "failed": "ソースを開始できませんでした。Music Assistant とホストの音声サーバーを確認してから、もう一度お試しください。"
       }
     },
     "leaveConfirm": "未保存の設定があります。このまま離れますか？",
@@ -1648,7 +1635,7 @@
     "connected": "{total} 台中 {n} 台が Bluetooth 接続済み",
     "playing": "{n} 台が再生中",
     "source": {
-      "title": "スマートフォン → Music Assistant",
+      "title": "音声ソース → Music Assistant",
       "streaming": "スマートフォンから再生中",
       "pairing": "ペアリング中",
       "waiting": "スマートフォンを待機中",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant 接続済み",
       "maPaired": "Music Assistant ペアリング済み、再接続中",
       "maUnpaired": "Music Assistant は未ペアリング",
-      "openHardware": "ハードウェアを開く",
-      "pairAction": "Music Assistant とペアリング"
+      "openHardware": "ハードウェアを開く"
     },
     "checklist": {
       "title": "最初のステップ",
@@ -1667,8 +1653,6 @@
       "speakerAction": "スピーカーを追加",
       "ma": "Music Assistant にサインイン",
       "maAction": "設定を開く",
-      "phone": "スマートフォンソースを有効にしてペアリング",
-      "phoneAction": "ハードウェアを開く",
       "dismiss": "最初のステップを隠す"
     }
   },

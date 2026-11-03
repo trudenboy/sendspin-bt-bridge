@@ -47,3 +47,21 @@ export async function openSourcePairing(seconds = SOURCE_PAIRING_WINDOW_S): Prom
 export function closeSourcePairing() {
   return unwrap(api().DELETE('/api/v1/bridge/source/pairing'))
 }
+
+/** Make a paired Bluetooth device the source that is captured now. */
+export function useSourceDevice(mac: string) {
+  return unwrap(
+    api().POST('/api/v1/bridge/source/devices/{mac}/use', {
+      params: { path: { mac } },
+    }),
+  )
+}
+
+/** Stop capturing a device (when active) and remove its Bluetooth bond. */
+export function forgetSourceDevice(mac: string) {
+  return unwrap(
+    api().DELETE('/api/v1/bridge/source/devices/{mac}', {
+      params: { path: { mac } },
+    }),
+  )
+}

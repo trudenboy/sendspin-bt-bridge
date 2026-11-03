@@ -16,7 +16,9 @@ import {
   closeSourcePairing,
   openMaPairing,
   openSourcePairing,
+  forgetSourceDevice as apiForgetSourceDevice,
   setSourceEnabled,
+  useSourceDevice as apiUseSourceDevice,
   SOURCE_PAIRING_WINDOW_S,
   type SourcePairingWindow,
 } from '@/api/source'
@@ -505,6 +507,20 @@ export const useHardwareStore = defineStore('hardware', () => {
     if (seconds > maPairingSecondsLeft.value) setMaPairingWindow(seconds)
   }
 
+  async function useSourceDevice(mac: string) {
+    return command(async () => {
+      await apiUseSourceDevice(mac)
+      await refresh()
+    })
+  }
+
+  async function forgetSourceDevice(mac: string) {
+    return command(async () => {
+      await apiForgetSourceDevice(mac)
+      await refresh()
+    })
+  }
+
   async function startSource() {
     return command(async () => {
       try {
@@ -659,6 +675,8 @@ export const useHardwareStore = defineStore('hardware', () => {
     chooseSinkPort,
     startSource,
     stopSource,
+    useSourceDevice,
+    forgetSourceDevice,
     openMaPairingWindow,
     forgetMaPairing,
     startPairingWindow,

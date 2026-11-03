@@ -57,9 +57,8 @@ export const ACTION_POLICY = {
   // Hardware → Source: starting and opening the phone's pairing window are
   // reversible (the undo is the opposite command); stopping disconnects Music
   // Assistant and forgetting the audio link needs a new code, so both ask.
-  'source.start': 'undo',
-  'source.stop': 'confirm',
   'source.maForget': 'confirm',
+  'source.deviceForget': 'confirm',
   'source.pairing': 'undo',
   'source.pairingStop': 'undo',
   // Hardware → Bluetooth link: bringing the link up or down is reversible (the

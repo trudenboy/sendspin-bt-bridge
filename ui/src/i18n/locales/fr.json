@@ -777,17 +777,11 @@
     "source": {
       "title": "Source",
       "stateOff": "Désactivée",
-      "stateWaiting": "En attente d’un téléphone",
+      "stateWaiting": "En attente d’un appareil source",
       "stateStreaming": "Diffusion en cours",
       "stateError": "Erreur",
-      "offBody": "La source est désactivée. Activez-la ici pour proposer le téléphone à Music Assistant.",
-      "phone": "Téléphone",
-      "start": "Démarrer la source",
       "stop": "Arrêter la source",
-      "stopConfirmTitle": "Arrêter la source ?",
-      "stopConsequence": "Ces enceintes reviennent à Music Assistant : {players}.",
-      "stopped": "Source arrêtée.",
-      "pair": "Appairer un téléphone",
+      "pair": "Appairer un appareil",
       "stopPairing": "Arrêter l’appairage",
       "pairing": "Ouvert à l’appairage : {time} restant.",
       "pairingHint": "Appairez le téléphone maintenant ; s’il considère le code PIN comme erroné, oubliez d’abord ce pont sur le téléphone (appairage obsolète).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "Indisponible",
       "node": "Nœud",
       "noNode": "Aucun nœud de capture",
-      "subtitle": "Le téléphone diffuse vers le pont ; le pont l’envoie à Music Assistant comme source.",
+      "subtitle": "Un appareil Bluetooth diffuse vers le pont ; le pont l’envoie à Music Assistant comme source.",
       "statePairing": "En attente du code d’appairage",
-      "maTitle": "Music Assistant",
       "maOff": "La source est désactivée. Activez-la pour proposer le téléphone à Music Assistant.",
       "maError": "La connexion à Music Assistant a échoué.",
       "maConnected": "Connecté. La lecture et le routage sont gérés dans Music Assistant.",
       "maReconnecting": "Appairé. Reconnexion à Music Assistant…",
-      "maNotPaired": "Pas encore appairé. Saisissez le code ci-dessous dans Music Assistant.",
       "maConnectedShort": "connecté",
       "maPairedShort": "appairé",
       "maUnpairedShort": "non appairé",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Oublier l’appairage Music Assistant ?",
       "maForgetConfirmBody": "Le pont aura besoin d’un nouveau code pour que Music Assistant puisse relire le téléphone.",
       "maForgetDone": "Appairage Music Assistant oublié",
-      "maRouting": "Lisez le téléphone depuis Music Assistant ; le pont ne le route pas lui-même vers les enceintes.",
-      "maOpen": "Ouvrir Music Assistant",
       "maUnreachable": "Music Assistant est injoignable.",
       "maUnreachableNext": "Vérifiez que Music Assistant est démarré et que SENDSPIN_SERVER pointe vers lui ; le pont continue de réessayer.",
       "maPairingRequired": "Un code d’appairage est requis.",
@@ -834,17 +824,16 @@
       "maUnsupported": "Ce Music Assistant ne propose pas de source Sendspin.",
       "maUnsupportedNext": "Mettez Music Assistant à jour vers 2.10 ou une version ultérieure et activez son fournisseur de source Sendspin.",
       "maPairingNext": "Ouvrez une fenêtre d’appairage et saisissez le code dans Music Assistant.",
-      "phoneTitle": "Téléphone (Bluetooth)",
-      "phoneIdle": "aucun flux",
-      "phoneNoPhone": "Aucun téléphone ne diffuse vers le pont.",
-      "phoneHint": "Le téléphone s’appaire avec le pont via Bluetooth ; Music Assistant reçoit l’audio capturé.",
-      "phonePaired": "Téléphone appairé",
-      "phonePairedHint": "L’appairage est enregistré ; lancez la lecture sur le téléphone et le pont la capturera.",
-      "maSettingsHint": "L’appairage et le code se trouvent dans les paramètres.",
-      "maSettingsAction": "Ouvrir les paramètres d’appairage",
-      "maNotPairedWhere": "Non appairé. Appairez le pont avec Music Assistant dans les paramètres.",
-      "phonePairedNeedMa": "Téléphone appairé. Appairez le pont avec Music Assistant pour l’entendre.",
-      "phonePairedNeedMaAction": "Appairer avec Music Assistant"
+      "phoneHint": "Appairez un téléphone, une tablette ou un ordinateur portable via Bluetooth ; Music Assistant reçoit l’audio capturé.",
+      "devicesTitle": "Appareils sources Bluetooth",
+      "noDevices": "Aucun appareil source n’est encore appairé.",
+      "deviceActive": "actif",
+      "deviceConnected": "connecté",
+      "deviceUse": "Utiliser",
+      "deviceForget": "Oublier",
+      "deviceForgetConfirmTitle": "Oublier cet appareil source ?",
+      "deviceForgetConfirmBody": "L’appairage Bluetooth de {mac} est supprimé. L’appareil pourra être appairé à nouveau plus tard.",
+      "deviceForgotten": "Appareil source oublié"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "Son rétabli : {name}.",
     "audioVolume": "Volume réglé : {name}.",
     "audioResumed": "Reprise : {name}.",
-    "sourceStarted": "Source démarrée.",
     "sourcePairingOpen": "Fenêtre d’appairage ouverte : appairez le téléphone maintenant.",
     "sourcePairingClosed": "Fenêtre d’appairage fermée."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Sauvegarde",
         "description": "Exporter, importer ou modifier le fichier de configuration."
+      },
+      "source": {
+        "title": "Source audio",
+        "description": "Vous pouvez accepter l’audio Bluetooth d’un téléphone, d’une tablette ou d’un ordinateur portable et le proposer à Music Assistant comme source."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Délai de grâce pour la récupération",
         "help": "Attend ce délai avant de proposer des correctifs pour une enceinte qui s’est déconnectée."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Accepter un téléphone comme source",
-        "help": "Un téléphone appairé au pont via Bluetooth diffuse vers lui, et le pont propose cet audio comme source Sendspin que d’autres lecteurs peuvent lire. Fonctionne avec PipeWire et, sur Home Assistant OS, avec PulseAudio."
       }
     },
     "sectionsNav": "Sections",
@@ -1359,19 +1347,18 @@
         "label": "Préréglages de tampon",
         "recommended": "recommandé"
       },
-      "sourceLink": {
-        "label": "Source téléphone",
-        "help": "Appairez le téléphone en Bluetooth et consultez son état de capture sur la page Matériel.",
-        "action": "Ouvrir Matériel"
-      },
       "maPairing": {
-        "label": "Appairage de la source téléphone",
-        "help": "Music Assistant doit faire confiance à ce pont avant de pouvoir lire l’audio du téléphone.",
-        "off": "La source téléphone est désactivée. Activez-la sur la page Matériel, puis appairez-la avec Music Assistant ici.",
-        "offAction": "Ouvrir Matériel",
+        "label": "Appairage avec Music Assistant",
+        "help": "Music Assistant doit faire confiance à ce pont avant de pouvoir lire l’audio de la source.",
         "whereToEnter": "Dans Music Assistant : Paramètres → Lecteurs → ce pont → Configurer → Code d’appairage statique.",
-        "routing": "La lecture et le routage restent dans Music Assistant ; le pont ne fait que capturer le téléphone.",
+        "routing": "La lecture et le routage restent dans Music Assistant ; le pont ne fait que capturer l’audio.",
         "notPaired": "Pas encore appairé. Ouvrez une fenêtre d’appairage, puis saisissez le code dans Music Assistant."
+      },
+      "sourceMode": {
+        "label": "Source audio",
+        "help": "Capturez l’audio Bluetooth d’un appareil appairé et proposez-le à Music Assistant. Désactivé par défaut ; l’activation démarre immédiatement la source.",
+        "off": "La source est désactivée. Activez-la pour effectuer l’appairage avec Music Assistant, puis avec un appareil source Bluetooth.",
+        "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez."
       }
     },
     "leaveConfirm": "Des paramètres ne sont pas enregistrés. Quitter quand même ?",
@@ -1648,7 +1635,7 @@
     "connected": "{n} sur {total} connectées en Bluetooth",
     "playing": "{n} en lecture",
     "source": {
-      "title": "Téléphone → Music Assistant",
+      "title": "Source audio → Music Assistant",
       "streaming": "Lecture depuis le téléphone",
       "pairing": "Appairage en cours",
       "waiting": "En attente du téléphone",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant connecté",
       "maPaired": "Music Assistant appairé, reconnexion",
       "maUnpaired": "Music Assistant n’est pas appairé",
-      "openHardware": "Ouvrir Matériel",
-      "pairAction": "Appairer avec Music Assistant"
+      "openHardware": "Ouvrir Matériel"
     },
     "checklist": {
       "title": "Premiers pas",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Ajouter une enceinte",
       "ma": "Connectez-vous à Music Assistant",
       "maAction": "Ouvrir les paramètres",
-      "phone": "Activez la source téléphone et appairez-la",
-      "phoneAction": "Ouvrir Matériel",
       "dismiss": "Masquer les premiers pas"
     }
   },

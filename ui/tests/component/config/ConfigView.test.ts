@@ -92,6 +92,7 @@ describe('ConfigView (settings)', () => {
     expect(titles).toEqual([
       'General',
       'Music Assistant',
+      'Audio source',
       'Audio',
       'Bluetooth',
       'Home Assistant',
@@ -102,11 +103,11 @@ describe('ConfigView (settings)', () => {
     ])
   })
 
-  it('points to the Hardware page instead of owning the source status row', async () => {
+  it('owns the source switch and keeps the Music Assistant pairing below it', async () => {
     const w = await mountView()
-    const link = w.get('[data-source-hardware-link]')
-    expect(link.attributes('href')).toBe('/hardware')
-    expect(link.text()).toBe('Open Hardware')
+    expect(w.find('[data-source-mode]').exists()).toBe(true)
+    expect(w.get('[data-source-mode] [role="switch"]').exists()).toBe(true)
+    expect(w.find('[data-source-hardware-link]').exists()).toBe(false)
   })
 
   it('hides advanced settings until asked', async () => {

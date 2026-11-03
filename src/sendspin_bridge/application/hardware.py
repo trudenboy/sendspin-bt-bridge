@@ -40,6 +40,7 @@ from sendspin_bridge.application.models.hardware import (
     SourceFeed,
     SourceMa,
 )
+from sendspin_bridge.application.models.source import SourceDevice as SourceDeviceModel
 from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.config import load_config
@@ -267,6 +268,7 @@ def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collecti
             pairing_seconds_left=view.ma_pairing_seconds_left,
             error=view.ma_error,
         ),
+        devices=[SourceDeviceModel(**device.as_dict()) for device in view.devices],
         error=view.error,
     )
 

@@ -86,6 +86,32 @@ def test_the_phone_pairing_window_is_still_available(api_client, monkeypatch):
     assert response.json()["pairing_seconds_left"] == 30
 
 
+def test_use_source_device_answers_with_the_active_address(api_client, monkeypatch):
+    async def fake_use(mac):
+        return {"active": mac.upper()}
+
+    monkeypatch.setattr(source_uc, "use_device", fake_use)
+
+    response = api_client.post("/api/v1/bridge/source/devices/34:c7:e9:25:a3:a3/use")
+
+    assert response.status_code == 200
+    assert response.json() == {"active": "34:C7:E9:25:A3:A3"}
+
+
+def test_forget_source_device_answers_204(api_client, monkeypatch):
+    seen: list[str] = []
+
+    async def fake_forget(mac):
+        seen.append(mac)
+
+    monkeypatch.setattr(source_uc, "forget_device", fake_forget)
+
+    response = api_client.delete("/api/v1/bridge/source/devices/34:c7:e9:25:a3:a3")
+
+    assert response.status_code == 204
+    assert seen == ["34:c7:e9:25:a3:a3"]
+
+
 def test_a_pairing_command_without_a_source_is_a_problem(api_client, monkeypatch):
     async def fake_open():
         raise UseCaseError(409, "source_off", "The source is off")

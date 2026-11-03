@@ -543,6 +543,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bridge/source/devices/{mac}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a paired source device
+         * @description Stop capturing the device and remove its Bluetooth bond; the MA pairing is kept.
+         */
+        delete: operations["forget_source_device_api_v1_bridge_source_devices__mac__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/devices/{mac}/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Use a paired source device
+         * @description Make a paired Bluetooth device the source that is captured now.
+         */
+        post: operations["use_source_device_api_v1_bridge_source_devices__mac__use_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bridge/source/ma-pairing": {
         parameters: {
             query?: never;
@@ -6270,6 +6310,11 @@ export interface components {
          */
         SendspinSourceStatus: {
             /**
+             * Devices
+             * @description Paired Bluetooth devices that can feed the source.
+             */
+            devices: components["schemas"]["SourceDeviceStatus"][];
+            /**
              * Enabled
              * @description The source client is enabled by the operator.
              * @default false
@@ -6589,6 +6634,54 @@ export interface components {
             /** Node */
             node: string | null;
         };
+        /**
+         * SourceDevice
+         * @description A paired Bluetooth device that can feed the source.
+         */
+        SourceDevice: {
+            /**
+             * Active
+             * @default false
+             */
+            active: boolean;
+            /**
+             * Connected
+             * @default false
+             */
+            connected: boolean;
+            /** Mac */
+            mac: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+        };
+        /**
+         * SourceDeviceStatus
+         * @description A paired Bluetooth device that can stream into the bridge.
+         */
+        SourceDeviceStatus: {
+            /**
+             * Active
+             * @description This device is the one currently being captured.
+             * @default false
+             */
+            active: boolean;
+            /**
+             * Connected
+             * @description BlueZ reports an active connection.
+             * @default false
+             */
+            connected: boolean;
+            /** Mac */
+            mac: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+        };
         /** SourceEnabledIn */
         SourceEnabledIn: {
             /** Enabled */
@@ -6596,11 +6689,16 @@ export interface components {
         };
         /**
          * SourceFeed
-         * @description The single Sendspin source: one phone, its capture, and the link to Music Assistant.
+         * @description The single Sendspin source: one capture, and the link to Music Assistant.
          */
         SourceFeed: {
             /** @description The phone's capture node, or the reason there is none. */
             capture: components["schemas"]["SourceCapture"];
+            /**
+             * Devices
+             * @description Paired devices that can feed the source.
+             */
+            devices: components["schemas"]["SourceDevice"][];
             /**
              * Enabled
              * @description The source client is enabled by the operator.
@@ -8386,6 +8484,90 @@ export interface operations {
                 "application/json": components["schemas"]["SourceEnabledIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    forget_source_device_api_v1_bridge_source_devices__mac__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mac: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    use_source_device_api_v1_bridge_source_devices__mac__use_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mac: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

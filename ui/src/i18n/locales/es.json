@@ -777,17 +777,11 @@
     "source": {
       "title": "Fuente",
       "stateOff": "Apagada",
-      "stateWaiting": "Esperando un teléfono",
+      "stateWaiting": "Esperando un dispositivo de origen",
       "stateStreaming": "Transmitiendo",
       "stateError": "Error",
-      "offBody": "La fuente del teléfono está apagada. Actívala aquí para ofrecer el teléfono a Music Assistant.",
-      "phone": "Teléfono",
-      "start": "Iniciar fuente",
       "stop": "Detener fuente",
-      "stopConfirmTitle": "¿Detener la fuente?",
-      "stopConsequence": "Estos altavoces vuelven a Music Assistant: {players}.",
-      "stopped": "Fuente detenida.",
-      "pair": "Emparejar un teléfono",
+      "pair": "Emparejar un dispositivo",
       "stopPairing": "Detener emparejamiento",
       "pairing": "Abierto para emparejar: quedan {time}.",
       "pairingHint": "Empareja el teléfono ahora; si dice que el PIN es incorrecto, olvida antes este puente en el teléfono (emparejamiento obsoleto).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "No disponible",
       "node": "Nodo",
       "noNode": "Sin nodo de captura",
-      "subtitle": "El teléfono transmite al puente; el puente lo envía a Music Assistant como fuente.",
+      "subtitle": "Un dispositivo Bluetooth transmite al puente; el puente lo envía a Music Assistant como fuente.",
       "statePairing": "Esperando el código de emparejamiento",
-      "maTitle": "Music Assistant",
       "maOff": "La fuente está apagada. Actívala para ofrecer el teléfono a Music Assistant.",
       "maError": "Falló la conexión con Music Assistant.",
       "maConnected": "Conectado. La reproducción y el enrutamiento se gestionan en Music Assistant.",
       "maReconnecting": "Emparejado. Reconectando con Music Assistant…",
-      "maNotPaired": "Aún no está emparejado. Introduce el código de abajo en Music Assistant.",
       "maConnectedShort": "conectado",
       "maPairedShort": "emparejado",
       "maUnpairedShort": "sin emparejar",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "¿Olvidar el emparejamiento con Music Assistant?",
       "maForgetConfirmBody": "El puente necesitará un código nuevo antes de que Music Assistant pueda reproducir el teléfono de nuevo.",
       "maForgetDone": "Emparejamiento con Music Assistant olvidado",
-      "maRouting": "Reproduce el teléfono desde Music Assistant; el puente no lo enruta por sí mismo a los altavoces.",
-      "maOpen": "Abrir Music Assistant",
       "maUnreachable": "Music Assistant no está accesible.",
       "maUnreachableNext": "Comprueba que Music Assistant esté en ejecución y que SENDSPIN_SERVER apunte a él; el puente seguirá reintentando.",
       "maPairingRequired": "Se necesita un código de emparejamiento.",
@@ -834,17 +824,16 @@
       "maUnsupported": "Este Music Assistant no ofrece una fuente Sendspin.",
       "maUnsupportedNext": "Actualiza Music Assistant a 2.10 o posterior y activa su proveedor de fuentes Sendspin.",
       "maPairingNext": "Abre una ventana de emparejamiento e introduce el código en Music Assistant.",
-      "phoneTitle": "Teléfono (Bluetooth)",
-      "phoneIdle": "sin transmitir",
-      "phoneNoPhone": "Ningún teléfono está transmitiendo al puente.",
-      "phoneHint": "El teléfono se empareja con el puente por Bluetooth; Music Assistant recibe el audio capturado.",
-      "phonePaired": "Teléfono emparejado",
-      "phonePairedHint": "El emparejamiento está guardado; empieza a reproducir en el teléfono y el puente lo capturará.",
-      "maSettingsHint": "El emparejamiento y el código están en Ajustes.",
-      "maSettingsAction": "Abrir ajustes de emparejamiento",
-      "maNotPairedWhere": "Sin emparejar. Empareja el puente con Music Assistant en Ajustes.",
-      "phonePairedNeedMa": "Teléfono emparejado. Empareja el puente con Music Assistant para escucharlo.",
-      "phonePairedNeedMaAction": "Emparejar con Music Assistant"
+      "phoneHint": "Empareja un teléfono, una tableta o un portátil por Bluetooth; Music Assistant recibe el audio capturado.",
+      "devicesTitle": "Dispositivos de origen Bluetooth",
+      "noDevices": "Aún no hay ningún dispositivo de origen emparejado.",
+      "deviceActive": "activo",
+      "deviceConnected": "conectado",
+      "deviceUse": "Usar",
+      "deviceForget": "Olvidar",
+      "deviceForgetConfirmTitle": "¿Olvidar este dispositivo de origen?",
+      "deviceForgetConfirmBody": "Se elimina el emparejamiento Bluetooth de {mac}. El dispositivo se puede volver a emparejar más tarde.",
+      "deviceForgotten": "Dispositivo de origen olvidado"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "{name}: sonido reactivado.",
     "audioVolume": "Volumen establecido: {name}.",
     "audioResumed": "Reanudado: {name}.",
-    "sourceStarted": "Fuente iniciada.",
     "sourcePairingOpen": "Ventana de emparejamiento abierta: empareja el teléfono ahora.",
     "sourcePairingClosed": "Ventana de emparejamiento cerrada."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Copia de seguridad",
         "description": "Exporta, importa o edita el archivo de configuración."
+      },
+      "source": {
+        "title": "Fuente de audio",
+        "description": "Acepta opcionalmente audio Bluetooth de un teléfono, una tableta o un portátil y ofrécelo a Music Assistant como fuente."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Periodo de gracia de recuperación",
         "help": "Espera este tiempo antes de sugerir soluciones para un altavoz que se ha desconectado."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Aceptar un teléfono como fuente",
-        "help": "Un teléfono emparejado con el puente por Bluetooth transmite hacia él, y el puente ofrece ese audio como fuente Sendspin que otros reproductores pueden reproducir. Funciona con PipeWire y, en Home Assistant OS, con PulseAudio."
       }
     },
     "sectionsNav": "Secciones",
@@ -1359,19 +1347,18 @@
         "label": "Perfiles de búfer",
         "recommended": "recomendado"
       },
-      "sourceLink": {
-        "label": "Fuente del teléfono",
-        "help": "Empareja el teléfono por Bluetooth y consulta el estado de captura en la página Hardware.",
-        "action": "Abrir Hardware"
-      },
       "maPairing": {
-        "label": "Emparejamiento de la fuente del teléfono",
-        "help": "Music Assistant debe confiar en este puente antes de poder reproducir el audio del teléfono.",
-        "off": "La fuente del teléfono está apagada. Actívala en la página Hardware y luego empareja con Music Assistant aquí.",
-        "offAction": "Abrir Hardware",
+        "label": "Emparejamiento con Music Assistant",
+        "help": "Music Assistant debe confiar en este puente antes de poder reproducir el audio de la fuente.",
         "whereToEnter": "En Music Assistant: Ajustes → Reproductores → este puente → Configurar → Código de emparejamiento estático.",
-        "routing": "La reproducción y el enrutamiento se quedan en Music Assistant; el puente solo captura el teléfono.",
+        "routing": "La reproducción y el enrutamiento se quedan en Music Assistant; el puente solo captura el audio.",
         "notPaired": "Aún no está emparejado. Abre una ventana de emparejamiento e introduce el código en Music Assistant."
+      },
+      "sourceMode": {
+        "label": "Fuente de audio",
+        "help": "Captura el audio Bluetooth de un dispositivo emparejado y ofrécelo a Music Assistant. Desactivado de forma predeterminada; al activarlo, la fuente se inicia de inmediato.",
+        "off": "La fuente está apagada. Actívala para emparejar Music Assistant y después un dispositivo de origen Bluetooth.",
+        "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo."
       }
     },
     "leaveConfirm": "Tienes ajustes sin guardar. ¿Salir igualmente?",
@@ -1648,7 +1635,7 @@
     "connected": "{n} de {total} conectados por Bluetooth",
     "playing": "{n} en reproducción",
     "source": {
-      "title": "Teléfono → Music Assistant",
+      "title": "Fuente de audio → Music Assistant",
       "streaming": "Reproduciendo desde el teléfono",
       "pairing": "Emparejamiento en curso",
       "waiting": "Esperando el teléfono",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant conectado",
       "maPaired": "Music Assistant emparejado, reconectando",
       "maUnpaired": "Music Assistant no está emparejado",
-      "openHardware": "Abrir Hardware",
-      "pairAction": "Emparejar con Music Assistant"
+      "openHardware": "Abrir Hardware"
     },
     "checklist": {
       "title": "Primeros pasos",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Añadir altavoz",
       "ma": "Inicia sesión en Music Assistant",
       "maAction": "Abrir ajustes",
-      "phone": "Activa la fuente del teléfono y emparéjala",
-      "phoneAction": "Abrir Hardware",
       "dismiss": "Ocultar primeros pasos"
     }
   },

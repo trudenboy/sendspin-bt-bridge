@@ -164,6 +164,10 @@ class PulseAudioBackend:
         self._spawn = spawn or asyncio.create_subprocess_exec
         self._sample_rate = sample_rate
         self._channels = channels
+        self.preferred_mac: str | None = None
+
+    def set_preferred_mac(self, mac: str | None) -> None:
+        self.preferred_mac = str(mac or "").upper() or None
 
     async def find(self) -> CaptureEndpoint | None:
         """The newest ``bluez_source`` PulseAudio exposes, if any."""
@@ -172,6 +176,10 @@ class PulseAudioBackend:
             logger.warning("pactl could not list sources: %s", result.stderr.strip()[:200])
             return None
         candidates = [source for source in parse_short_sources(result.stdout) if BLUEZ_SOURCE_RE.match(source.name)]
+        if self.preferred_mac:
+            candidates = [source for source in candidates if mac_from_node(source.name) == self.preferred_mac]
+            if not candidates:
+                return None
         if not candidates:
             return None
         if len(candidates) > 1:

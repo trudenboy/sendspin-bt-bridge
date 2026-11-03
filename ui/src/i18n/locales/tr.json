@@ -777,17 +777,11 @@
     "source": {
       "title": "Kaynak",
       "stateOff": "Kapalı",
-      "stateWaiting": "Telefon bekleniyor",
+      "stateWaiting": "Kaynak cihaz bekleniyor",
       "stateStreaming": "Akış yapılıyor",
       "stateError": "Hata",
-      "offBody": "Telefon kaynağı kapalı. Telefonu Music Assistant’a sunmak için burada etkinleştir.",
-      "phone": "Telefon",
-      "start": "Kaynağı başlat",
       "stop": "Kaynağı durdur",
-      "stopConfirmTitle": "Kaynak durdurulsun mu?",
-      "stopConsequence": "Bu hoparlörler Music Assistant’a geri döner: {players}.",
-      "stopped": "Kaynak durduruldu.",
-      "pair": "Telefon eşleştir",
+      "pair": "Cihaz eşleştir",
       "stopPairing": "Eşleştirmeyi durdur",
       "pairing": "Eşleştirmeye açık: {time} kaldı.",
       "pairingHint": "Telefonu şimdi eşleştir; PIN’in yanlış olduğunu söylüyorsa önce telefonda bu köprüyü unut (eski bir eşleşme).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "Kullanılamıyor",
       "node": "Düğüm",
       "noNode": "Yakalama düğümü yok",
-      "subtitle": "Telefon köprüye akış yapar; köprü bunu bir kaynak olarak Music Assistant’a gönderir.",
+      "subtitle": "Bluetooth cihazı köprüye akış yapar; köprü bunu bir kaynak olarak Music Assistant’a gönderir.",
       "statePairing": "Eşleştirme kodu bekleniyor",
-      "maTitle": "Music Assistant",
       "maOff": "Kaynak kapalı. Telefonu Music Assistant’a sunmak için etkinleştir.",
       "maError": "Music Assistant bağlantısı başarısız oldu.",
       "maConnected": "Bağlandı. Oynatma ve yönlendirme Music Assistant’ta yönetilir.",
       "maReconnecting": "Eşleştirildi. Music Assistant’a yeniden bağlanılıyor…",
-      "maNotPaired": "Henüz eşleştirilmedi. Aşağıdaki kodu Music Assistant’a gir.",
       "maConnectedShort": "bağlı",
       "maPairedShort": "eşleştirildi",
       "maUnpairedShort": "eşleştirilmedi",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Music Assistant eşleştirmesi unutulsun mu?",
       "maForgetConfirmBody": "Music Assistant’ın telefonu yeniden çalabilmesi için köprünün yeni bir koda ihtiyacı olacak.",
       "maForgetDone": "Music Assistant eşleştirmesi unutuldu",
-      "maRouting": "Telefonu Music Assistant’tan oynat; köprü onu hoparlörlere kendisi yönlendirmez.",
-      "maOpen": "Music Assistant’ı aç",
       "maUnreachable": "Music Assistant’a ulaşılamıyor.",
       "maUnreachableNext": "Music Assistant’ın çalıştığını ve SENDSPIN_SERVER’ın ona işaret ettiğini denetle; köprü yeniden denemeye devam eder.",
       "maPairingRequired": "Bir eşleştirme kodu gerekiyor.",
@@ -834,17 +824,16 @@
       "maUnsupported": "Bu Music Assistant bir Sendspin kaynağı sunmuyor.",
       "maUnsupportedNext": "Music Assistant’ı 2.10 veya daha yeni bir sürüme güncelle ve Sendspin kaynak sağlayıcısını etkinleştir.",
       "maPairingNext": "Bir eşleştirme penceresi aç ve kodu Music Assistant’a gir.",
-      "phoneTitle": "Telefon (Bluetooth)",
-      "phoneIdle": "akış yok",
-      "phoneNoPhone": "Köprüye akış yapan telefon yok.",
-      "phoneHint": "Telefon köprüyle Bluetooth üzerinden eşleşir; Music Assistant yakalanan sesi alır.",
-      "phonePaired": "Telefon eşleştirildi",
-      "phonePairedHint": "Eşleşme kaydedildi; telefonda oynatmayı başlat, köprü sesi yakalayacak.",
-      "maSettingsHint": "Eşleştirme ve kod Ayarlar bölümünde.",
-      "maSettingsAction": "Eşleştirme ayarlarını aç",
-      "maNotPairedWhere": "Eşleştirilmedi. Köprüyü Ayarlar bölümünde Music Assistant ile eşleştir.",
-      "phonePairedNeedMa": "Telefon eşleştirildi. Sesi duymak için köprüyü Music Assistant ile eşleştir.",
-      "phonePairedNeedMaAction": "Music Assistant ile eşleştir"
+      "phoneHint": "Bir telefon, tablet veya dizüstü bilgisayar Bluetooth üzerinden eşleştirilir; Music Assistant yakalanan sesi alır.",
+      "devicesTitle": "Bluetooth kaynak cihazları",
+      "noDevices": "Henüz eşleştirilmiş bir kaynak cihaz yok.",
+      "deviceActive": "etkin",
+      "deviceConnected": "bağlı",
+      "deviceUse": "Kullan",
+      "deviceForget": "Unut",
+      "deviceForgetConfirmTitle": "Bu kaynak cihaz unutulsun mu?",
+      "deviceForgetConfirmBody": "{mac} için Bluetooth eşleşmesi kaldırılır. Cihaz daha sonra yeniden eşleştirilebilir.",
+      "deviceForgotten": "Kaynak cihaz unutuldu"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "{name} sesi açıldı.",
     "audioVolume": "Ses düzeyi ayarlandı: {name}.",
     "audioResumed": "Sürdürüldü: {name}.",
-    "sourceStarted": "Kaynak başlatıldı.",
     "sourcePairingOpen": "Eşleştirme penceresi açık: telefonu şimdi eşleştir.",
     "sourcePairingClosed": "Eşleştirme penceresi kapandı."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Yedekleme",
         "description": "Yapılandırma dosyasını dışa aktar, içe aktar veya düzenle."
+      },
+      "source": {
+        "title": "Ses kaynağı",
+        "description": "Bir telefon, tablet veya dizüstü bilgisayardan Bluetooth sesi isteğe bağlı olarak kabul edilir ve Music Assistant’a kaynak olarak sunulur."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Kurtarma tolerans süresi",
         "help": "Bağlantısı düşen bir hoparlör için düzeltme önermeden önce bu kadar bekle."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Telefonu kaynak olarak kabul et",
-        "help": "Köprüyle Bluetooth üzerinden eşleştirilen bir telefon ona akış yapar ve köprü bu sesi diğer oynatıcıların çalabileceği bir Sendspin kaynağı olarak sunar. PipeWire ile ve Home Assistant OS’ta PulseAudio ile çalışır."
       }
     },
     "sectionsNav": "Bölümler",
@@ -1359,19 +1347,18 @@
         "label": "Tampon ön ayarları",
         "recommended": "önerilen"
       },
-      "sourceLink": {
-        "label": "Telefon kaynağı",
-        "help": "Telefonu Bluetooth üzerinden eşleştir ve yakalama durumunu Donanım sayfasında gör.",
-        "action": "Donanım’ı aç"
-      },
       "maPairing": {
-        "label": "Telefon kaynağı eşleştirmesi",
-        "help": "Music Assistant’ın telefonun sesini çalabilmesi için önce bu köprüye güvenmesi gerekir.",
-        "off": "Telefon kaynağı kapalı. Donanım sayfasında etkinleştir, sonra burada Music Assistant ile eşleştir.",
-        "offAction": "Donanım’ı aç",
+        "label": "Music Assistant eşleştirmesi",
+        "help": "Music Assistant’ın kaynak sesini çalabilmesi için önce bu köprüye güvenmesi gerekir.",
         "whereToEnter": "Music Assistant’ta: Ayarlar → Oynatıcılar → bu köprü → Yapılandır → Statik eşleştirme kodu.",
-        "routing": "Oynatma ve yönlendirme Music Assistant’ta kalır; köprü yalnızca telefonu yakalar.",
+        "routing": "Oynatma ve yönlendirme Music Assistant’ta kalır; köprü yalnızca sesi yakalar.",
         "notPaired": "Henüz eşleştirilmedi. Bir eşleştirme penceresi aç, sonra kodu Music Assistant’a gir."
+      },
+      "sourceMode": {
+        "label": "Ses kaynağı",
+        "help": "Eşleştirilmiş bir cihazdan Bluetooth sesi yakalanır ve Music Assistant’a sunulur. Varsayılan olarak kapalıdır; etkinleştirildiğinde kaynak hemen başlar.",
+        "off": "Kaynak kapalıdır. Etkinleştirildiğinde Music Assistant ve ardından bir Bluetooth kaynak cihazı eşleştirilebilir.",
+        "failed": "Kaynak başlatılamadı. Music Assistant’ı ve ana bilgisayarın ses sunucusunu denetledikten sonra yeniden deneyin."
       }
     },
     "leaveConfirm": "Kaydedilmemiş ayarlar var. Yine de çıkılsın mı?",
@@ -1648,7 +1635,7 @@
     "connected": "{total} cihazdan {n} tanesi Bluetooth bağlı",
     "playing": "{n} çalıyor",
     "source": {
-      "title": "Telefon → Music Assistant",
+      "title": "Ses kaynağı → Music Assistant",
       "streaming": "Telefondan çalıyor",
       "pairing": "Eşleştirme sürüyor",
       "waiting": "Telefon bekleniyor",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant bağlı",
       "maPaired": "Music Assistant eşleştirildi, yeniden bağlanılıyor",
       "maUnpaired": "Music Assistant eşleştirilmedi",
-      "openHardware": "Donanım’ı aç",
-      "pairAction": "Music Assistant ile eşleştir"
+      "openHardware": "Donanım’ı aç"
     },
     "checklist": {
       "title": "İlk adımlar",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Hoparlör ekle",
       "ma": "Music Assistant’ta oturum aç",
       "maAction": "Ayarları aç",
-      "phone": "Telefon kaynağını etkinleştir ve eşleştir",
-      "phoneAction": "Donanım’ı aç",
       "dismiss": "İlk adımları gizle"
     }
   },

@@ -775,19 +775,13 @@
       "identifierAlsaLongCardName": "Длинное имя ALSA-карты"
     },
     "source": {
-      "title": "Источник",
+      "title": "Источник звука",
       "stateOff": "Выключен",
-      "stateWaiting": "Ждёт телефон",
+      "stateWaiting": "Ожидание устройства-источника",
       "stateStreaming": "Передаёт",
       "stateError": "Ошибка",
-      "offBody": "Источник телефона выключен. Включите его здесь, чтобы отдать телефон в Music Assistant.",
-      "phone": "Телефон",
-      "start": "Запустить источник",
       "stop": "Остановить источник",
-      "stopConfirmTitle": "Остановить источник?",
-      "stopConsequence": "Эти колонки вернутся в Music Assistant: {players}.",
-      "stopped": "Источник остановлен.",
-      "pair": "Сопрячь телефон",
+      "pair": "Сопрячь устройство",
       "stopPairing": "Прекратить сопряжение",
       "pairing": "Открыто для сопряжения: осталось {time}.",
       "pairingHint": "Спарьте телефон; если он пишет «неверный PIN» — сначала «Забыть» этот мост на телефоне (старая пара).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "Недоступен",
       "node": "Узел",
       "noNode": "Нет узла захвата",
-      "subtitle": "Телефон стримит в мост, а мост передаёт его в Music Assistant как источник.",
+      "subtitle": "Bluetooth-устройство передаёт звук в мост; мост отправляет его в Music Assistant как источник.",
       "statePairing": "Ждёт код спаривания",
-      "maTitle": "Music Assistant",
       "maOff": "Источник выключен. Включите его, чтобы отдать телефон в Music Assistant.",
       "maError": "Не удалось подключиться к Music Assistant.",
       "maConnected": "Подключено. Воспроизведением и маршрутизацией управляет Music Assistant.",
       "maReconnecting": "Спарен. Переподключаемся к Music Assistant…",
-      "maNotPaired": "Ещё не спарен. Введите код ниже в Music Assistant.",
       "maConnectedShort": "подключено",
       "maPairedShort": "спарен",
       "maUnpairedShort": "не спарен",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Забыть спаривание с Music Assistant?",
       "maForgetConfirmBody": "Мосту понадобится новый код, прежде чем Music Assistant снова сможет играть телефон.",
       "maForgetDone": "Спаривание с Music Assistant забыто",
-      "maRouting": "Телефон запускается из Music Assistant; мост сам не выводит его на колонки.",
-      "maOpen": "Открыть Music Assistant",
       "maUnreachable": "Music Assistant недоступен.",
       "maUnreachableNext": "Проверьте, что Music Assistant запущен и SENDSPIN_SERVER указывает на него; мост продолжает попытки.",
       "maPairingRequired": "Нужен код спаривания.",
@@ -834,17 +824,16 @@
       "maUnsupported": "Этот Music Assistant не предлагает Sendspin-источник.",
       "maUnsupportedNext": "Обновите Music Assistant до 2.10 или новее и включите провайдер Sendspin-источника.",
       "maPairingNext": "Откройте окно спаривания и введите код в Music Assistant.",
-      "phoneTitle": "Телефон (Bluetooth)",
-      "phoneIdle": "не передаёт",
-      "phoneNoPhone": "В мост не стримит ни один телефон.",
-      "phoneHint": "Телефон спаривается с мостом по Bluetooth; Music Assistant получает захваченный звук.",
-      "phonePaired": "Телефон спарен",
-      "phonePairedHint": "Сопряжение сохранено; включите воспроизведение на телефоне, и мост начнёт захват.",
-      "maSettingsHint": "Сопряжение и код — в настройках.",
-      "maSettingsAction": "Открыть настройки сопряжения",
-      "maNotPairedWhere": "Не сопряжено. Сопрягите мост с Music Assistant в настройках.",
-      "phonePairedNeedMa": "Телефон спарен. Осталось сопрячь мост с Music Assistant, чтобы услышать его.",
-      "phonePairedNeedMaAction": "Сопрячь с Music Assistant"
+      "phoneHint": "Сопрягите телефон, планшет или ноутбук по Bluetooth; Music Assistant получит захваченный звук.",
+      "devicesTitle": "Bluetooth-устройства-источники",
+      "noDevices": "Пока не сопряжено ни одного устройства-источника.",
+      "deviceActive": "активно",
+      "deviceConnected": "подключено",
+      "deviceUse": "Использовать",
+      "deviceForget": "Забыть",
+      "deviceForgetConfirmTitle": "Забыть это устройство-источник?",
+      "deviceForgetConfirmBody": "Bluetooth-сопряжение {mac} будет удалено. Устройство можно сопрячь снова позже.",
+      "deviceForgotten": "Устройство-источник забыто"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "Звук на {name} включён.",
     "audioVolume": "Громкость задана: {name}.",
     "audioResumed": "Возобновлено: {name}.",
-    "sourceStarted": "Источник запущен.",
     "sourcePairingOpen": "Окно сопряжения открыто: спарьте телефон.",
     "sourcePairingClosed": "Окно сопряжения закрыто."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Резервная копия",
         "description": "Экспорт, импорт и правка файла конфигурации."
+      },
+      "source": {
+        "title": "Источник звука",
+        "description": "Опционально принимать Bluetooth-звук с телефона, планшета или ноутбука и отдавать его Music Assistant как источник."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Пауза перед восстановлением",
         "help": "Сколько ждать, прежде чем предлагать исправления для отвалившейся колонки."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Принимать телефон как источник",
-        "help": "Телефон, сопряжённый с мостом по Bluetooth, стримит в него звук, а мост отдаёт его как Sendspin-источник, который могут играть другие плееры. Работает с PipeWire, а на Home Assistant OS — и с PulseAudio."
       }
     },
     "sectionsNav": "Разделы",
@@ -1359,19 +1347,18 @@
         "label": "Готовые значения буфера",
         "recommended": "рекомендуется"
       },
-      "sourceLink": {
-        "label": "Источник телефона",
-        "help": "Сопряжение телефона по Bluetooth и состояние захвата — на странице «Оборудование».",
-        "action": "Открыть «Оборудование»"
-      },
       "maPairing": {
-        "label": "Сопряжение источника телефона",
-        "help": "Music Assistant должен доверять мосту, прежде чем сможет воспроизводить звук телефона.",
-        "off": "Источник телефона выключен. Включите его на странице «Оборудование», затем сопрягите здесь с Music Assistant.",
-        "offAction": "Открыть «Оборудование»",
+        "label": "Сопряжение с Music Assistant",
+        "help": "Music Assistant должен доверять этому мосту, прежде чем сможет воспроизводить звук источника.",
         "whereToEnter": "В Music Assistant: Настройки → Плееры → этот мост → Настроить → Статический код сопряжения.",
-        "routing": "Воспроизведением и маршрутизацией управляет Music Assistant; мост только захватывает звук телефона.",
+        "routing": "Воспроизведение и маршрутизация остаются в Music Assistant; мост только захватывает звук.",
         "notPaired": "Пока не сопряжено. Откройте окно сопряжения и введите код в Music Assistant."
+      },
+      "sourceMode": {
+        "label": "Источник звука",
+        "help": "Захватывать Bluetooth-звук сопряжённого устройства и отдавать его Music Assistant. По умолчанию выключено; включение сразу запускает источник.",
+        "off": "Источник выключен. Включите его, чтобы сопрячь Music Assistant, а затем Bluetooth-устройство-источник.",
+        "failed": "Не удалось запустить источник. Проверьте Music Assistant и аудиосервер хоста и попробуйте снова."
       }
     },
     "leaveConfirm": "Есть несохранённые настройки. Уйти?",
@@ -1648,7 +1635,7 @@
     "connected": "Bluetooth-соединение: {n} из {total}",
     "playing": "Играют: {n}",
     "source": {
-      "title": "Телефон → Music Assistant",
+      "title": "Источник звука → Music Assistant",
       "streaming": "Играет с телефона",
       "pairing": "Идёт сопряжение",
       "waiting": "Ждём телефон",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant подключён",
       "maPaired": "Music Assistant сопряжён, переподключение",
       "maUnpaired": "Music Assistant не сопряжён",
-      "openHardware": "Открыть «Оборудование»",
-      "pairAction": "Сопрячь с Music Assistant"
+      "openHardware": "Открыть «Оборудование»"
     },
     "checklist": {
       "title": "Первые шаги",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Добавить колонку",
       "ma": "Войдите в Music Assistant",
       "maAction": "Открыть настройки",
-      "phone": "Включите источник телефона и сопрягите его",
-      "phoneAction": "Открыть «Оборудование»",
       "dismiss": "Скрыть первые шаги"
     }
   },

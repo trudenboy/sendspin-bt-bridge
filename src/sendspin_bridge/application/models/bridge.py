@@ -79,6 +79,15 @@ class BridgeVerdict(ResponseModel):
     count: int = Field(description="Issues at warning or error.")
 
 
+class SourceDeviceStatus(ResponseModel):
+    """A paired Bluetooth device that can stream into the bridge."""
+
+    mac: str
+    name: str = ""
+    connected: bool = Field(default=False, description="BlueZ reports an active connection.")
+    active: bool = Field(default=False, description="This device is the one currently being captured.")
+
+
 class SendspinSourceStatus(ResponseModel):
     """The phone-to-Music-Assistant source: capture, pairing and connection state."""
 
@@ -102,6 +111,9 @@ class SendspinSourceStatus(ResponseModel):
     ma_error: str | None = Field(default=None, description="Stable code: ma_unreachable, ma_pairing_rejected, …")
     pairing_seconds_left: int = Field(default=0, description="Seconds the phone-pairing window stays open.")
     pairing_adapters: list[str] = Field(default_factory=list, description="Adapters the pairing window opened.")
+    devices: list[SourceDeviceStatus] = Field(
+        default_factory=list, description="Paired Bluetooth devices that can feed the source."
+    )
     error: str | None = Field(default=None, description="A terminal source error (capture_unavailable, …).")
 
 

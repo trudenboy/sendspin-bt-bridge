@@ -777,17 +777,11 @@
     "source": {
       "title": "源",
       "stateOff": "关闭",
-      "stateWaiting": "等待手机",
+      "stateWaiting": "等待源设备",
       "stateStreaming": "串流中",
       "stateError": "错误",
-      "offBody": "手机源已关闭。在此启用后即可将手机提供给 Music Assistant。",
-      "phone": "手机",
-      "start": "启动源",
       "stop": "停止源",
-      "stopConfirmTitle": "停止源？",
-      "stopConsequence": "以下音箱将交回 Music Assistant：{players}。",
-      "stopped": "源已停止。",
-      "pair": "配对手机",
+      "pair": "配对设备",
       "stopPairing": "停止配对",
       "pairing": "已开放配对：剩余 {time}。",
       "pairingHint": "现在配对手机；若提示 PIN 错误，请先在手机上忘记此桥接器（残留配对）。",
@@ -807,14 +801,12 @@
       "captureUnavailable": "不可用",
       "node": "节点",
       "noNode": "无采集节点",
-      "subtitle": "手机串流到桥接器；桥接器将其作为源发送给 Music Assistant。",
+      "subtitle": "Bluetooth 设备串流到桥接器；桥接器将其作为源发送给 Music Assistant。",
       "statePairing": "等待配对码",
-      "maTitle": "Music Assistant",
       "maOff": "源已关闭。启用后即可将手机提供给 Music Assistant。",
       "maError": "连接 Music Assistant 失败。",
       "maConnected": "已连接。播放和路由在 Music Assistant 中管理。",
       "maReconnecting": "已配对。正在重新连接 Music Assistant…",
-      "maNotPaired": "尚未配对。请在 Music Assistant 中输入下方代码。",
       "maConnectedShort": "已连接",
       "maPairedShort": "已配对",
       "maUnpairedShort": "未配对",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "忘记与 Music Assistant 的配对？",
       "maForgetConfirmBody": "需要新的配对码，Music Assistant 才能再次播放该手机。",
       "maForgetDone": "已忘记 Music Assistant 配对",
-      "maRouting": "请从 Music Assistant 播放手机；桥接器不会自行将其路由到音箱。",
-      "maOpen": "打开 Music Assistant",
       "maUnreachable": "无法连接 Music Assistant。",
       "maUnreachableNext": "请确认 Music Assistant 正在运行且 SENDSPIN_SERVER 指向它；桥接器会持续重试。",
       "maPairingRequired": "需要配对码。",
@@ -834,17 +824,16 @@
       "maUnsupported": "此 Music Assistant 未提供 Sendspin 源。",
       "maUnsupportedNext": "请将 Music Assistant 更新到 2.10 或更高版本，并启用其 Sendspin 源提供程序。",
       "maPairingNext": "请打开配对窗口，并在 Music Assistant 中输入配对码。",
-      "phoneTitle": "手机（Bluetooth）",
-      "phoneIdle": "未串流",
-      "phoneNoPhone": "没有手机正在向桥接器串流。",
-      "phoneHint": "手机通过 Bluetooth 与桥接器配对；Music Assistant 接收采集到的音频。",
-      "phonePaired": "手机已配对",
-      "phonePairedHint": "绑定已保存；在手机上开始播放，桥接器即会采集。",
-      "maSettingsHint": "配对和配对码位于设置中。",
-      "maSettingsAction": "打开配对设置",
-      "maNotPairedWhere": "未配对。请在设置中将桥接器与 Music Assistant 配对。",
-      "phonePairedNeedMa": "手机已配对。将桥接器与 Music Assistant 配对后即可收听。",
-      "phonePairedNeedMaAction": "与 Music Assistant 配对"
+      "phoneHint": "通过 Bluetooth 配对手机、平板电脑或笔记本电脑；Music Assistant 接收采集到的音频。",
+      "devicesTitle": "Bluetooth 源设备",
+      "noDevices": "尚未配对任何源设备。",
+      "deviceActive": "使用中",
+      "deviceConnected": "已连接",
+      "deviceUse": "使用",
+      "deviceForget": "忘记",
+      "deviceForgetConfirmTitle": "忘记此源设备？",
+      "deviceForgetConfirmBody": "将移除 {mac} 的 Bluetooth 绑定。该设备之后可以重新配对。",
+      "deviceForgotten": "已忘记源设备"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "{name} 已取消静音。",
     "audioVolume": "已设置音量：{name}。",
     "audioResumed": "已恢复：{name}。",
-    "sourceStarted": "源已启动。",
     "sourcePairingOpen": "配对窗口已打开：现在配对手机。",
     "sourcePairingClosed": "配对窗口已关闭。"
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "备份",
         "description": "导出、导入或编辑配置文件。"
+      },
+      "source": {
+        "title": "音频源",
+        "description": "可选择接收来自手机、平板电脑或笔记本电脑的 Bluetooth 音频，并将其作为源提供给 Music Assistant。"
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "恢复宽限期",
         "help": "等待这么久再为掉线的音箱建议修复方法。"
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "接受手机作为源",
-        "help": "通过 Bluetooth 与桥接器配对的手机可向其串流，桥接器将该音频作为 Sendspin 源提供给其他播放器播放。支持 PipeWire，在 Home Assistant OS 上支持 PulseAudio。"
       }
     },
     "sectionsNav": "分区",
@@ -1359,19 +1347,18 @@
         "label": "缓冲预设",
         "recommended": "推荐"
       },
-      "sourceLink": {
-        "label": "手机源",
-        "help": "通过 Bluetooth 配对手机，并在硬件页面查看其采集状态。",
-        "action": "打开硬件"
-      },
       "maPairing": {
-        "label": "手机源配对",
-        "help": "Music Assistant 必须信任此桥接器，才能播放手机音频。",
-        "off": "手机源已关闭。请在硬件页面启用，然后在此与 Music Assistant 配对。",
-        "offAction": "打开硬件",
+        "label": "Music Assistant 配对",
+        "help": "Music Assistant 必须信任此桥接器，才能播放源音频。",
         "whereToEnter": "在 Music Assistant 中：设置 → 播放器 → 此桥接器 → 配置 → 静态配对码。",
-        "routing": "播放和路由仍在 Music Assistant 中进行；桥接器仅采集手机音频。",
+        "routing": "播放和路由仍在 Music Assistant 中进行；桥接器仅采集音频。",
         "notPaired": "尚未配对。请打开配对窗口，然后在 Music Assistant 中输入配对码。"
+      },
+      "sourceMode": {
+        "label": "音频源",
+        "help": "从已配对的设备采集 Bluetooth 音频，并将其提供给 Music Assistant。默认关闭；启用后源会立即启动。",
+        "off": "源已关闭。启用后可先配对 Music Assistant，再配对 Bluetooth 源设备。",
+        "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。"
       }
     },
     "leaveConfirm": "有未保存的设置。仍要离开吗？",
@@ -1648,7 +1635,7 @@
     "connected": "{n}/{total} 台 Bluetooth 已连接",
     "playing": "{n} 个播放中",
     "source": {
-      "title": "手机 → Music Assistant",
+      "title": "音频源 → Music Assistant",
       "streaming": "正在播放手机音频",
       "pairing": "配对进行中",
       "waiting": "等待手机",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant 已连接",
       "maPaired": "Music Assistant 已配对，正在重新连接",
       "maUnpaired": "Music Assistant 未配对",
-      "openHardware": "打开硬件",
-      "pairAction": "与 Music Assistant 配对"
+      "openHardware": "打开硬件"
     },
     "checklist": {
       "title": "初始步骤",
@@ -1667,8 +1653,6 @@
       "speakerAction": "添加音箱",
       "ma": "登录 Music Assistant",
       "maAction": "打开设置",
-      "phone": "启用手机源并配对",
-      "phoneAction": "打开硬件",
       "dismiss": "隐藏初始步骤"
     }
   },

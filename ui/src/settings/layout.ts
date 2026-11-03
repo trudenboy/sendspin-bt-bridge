@@ -55,7 +55,7 @@ export type SectionComponent =
   | 'maConnection'
   | 'maPairing'
   | 'sendspinTest'
-  | 'sourceLink'
+  | 'sourceMode'
   | 'latencyAssistant'
   | 'adapters'
   | 'haStatus'
@@ -143,7 +143,7 @@ export const SECTIONS: readonly SectionDef[] = [
   {
     id: 'musicAssistant',
     icon: 'music',
-    before: ['maConnection', 'maPairing'],
+    before: ['maConnection'],
     fields: [
       { key: 'SENDSPIN_SERVER', kind: 'text', placeholder: 'auto' },
       { key: 'SENDSPIN_PORT', kind: 'number', min: 1, max: 65535 },
@@ -151,14 +151,19 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'SENDSPIN_PAIRING', kind: 'toggle' },
       { key: 'SENDSPIN_OWN_SERVER_ONLY', kind: 'toggle' },
       { key: 'VOLUME_VIA_MA', kind: 'toggle' },
-      { key: 'SENDSPIN_SOURCE', kind: 'toggle', advanced: true },
       { key: 'MUTE_VIA_MA', kind: 'toggle' },
       { key: 'MA_WEBSOCKET_MONITOR', kind: 'toggle', advanced: true },
       { key: 'MA_AUTO_SILENT_AUTH', kind: 'toggle', advanced: true },
       { key: 'MA_ADDON_SLUG', kind: 'text', advanced: true },
       { key: 'DUPLICATE_DEVICE_CHECK', kind: 'toggle', advanced: true },
     ],
-    after: ['sendspinTest', 'sourceLink'],
+    after: ['sendspinTest'],
+  },
+  {
+    id: 'source',
+    icon: 'radio',
+    before: ['sourceMode', 'maPairing'],
+    fields: [],
   },
   {
     id: 'audio',
@@ -288,6 +293,7 @@ export const COMPONENT_OWNED_KEYS: Readonly<Record<string, SectionComponent | 'd
   BLUETOOTH_ADAPTERS: 'adapters',
   players: 'devices',
   MA_API_URL: 'maConnection',
+  SENDSPIN_SOURCE: 'sourceMode',
   AUTH_TOKENS: 'tokens',
   HA_ADAPTER_AREA_MAP: 'areaMap',
 }

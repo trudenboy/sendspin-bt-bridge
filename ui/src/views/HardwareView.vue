@@ -56,35 +56,27 @@ const capabilities = computed(() => snapshot.value?.capabilities ?? null)
 // Source strip
 // ---------------------------------------------------------------------------
 
-/** The name the paired device carries, when the Bluetooth list has the streaming phone. */
-const sourcePhoneName = computed(() => {
-  const mac = store.source?.phone_mac ?? store.source?.paired_phone_mac
-  if (!mac) return null
-  const device = devices.value.find((entry) => entry.mac.toUpperCase() === mac.toUpperCase())
-  return device ? speakerName(device.alias || device.name) || mac : null
-})
-
+const showSourcePanel = computed(() => !!store.source?.enabled && !!store.source?.ma?.paired)
 const sourceCommandFailure = (e: unknown) => t('hardware.source.commandFailed', { reason: commandFailure(e) })
 
-function onSourceStart() {
-  void undoable('source.start', () => store.startSource(), () => store.stopSource(), {
-    doneKey: 'undo.sourceStarted',
-    name: '',
-    failure: sourceCommandFailure,
-  })
+async function onSourceUse(mac: string) {
+  try {
+    await store.useSourceDevice(mac)
+  } catch (e) {
+    notifications.error(sourceCommandFailure(e))
+  }
 }
 
-/** Stopping disconnects the source from Music Assistant, so it asks first. */
-async function onSourceStop() {
-  const ok = await confirmAction('source.stop', {
-    title: t('hardware.source.stopConfirmTitle'),
-    consequences: [t('hardware.source.stopConsequence')],
-    confirmLabel: t('hardware.source.stop'),
+async function onSourceForget(mac: string) {
+  const ok = await confirmAction('source.deviceForget', {
+    title: t('hardware.source.deviceForgetConfirmTitle'),
+    consequences: [t('hardware.source.deviceForgetConfirmBody', { mac })],
+    confirmLabel: t('hardware.source.deviceForget'),
   })
   if (!ok) return
   try {
-    await store.stopSource()
-    notifications.success(t('hardware.source.stopped'))
+    await store.forgetSourceDevice(mac)
+    notifications.success(t('hardware.source.deviceForgotten'))
   } catch (e) {
     notifications.error(sourceCommandFailure(e))
   }
@@ -629,15 +621,15 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
       <CapabilityBanner v-if="degradedReason" :reason="degradedReason" :detail="degradedDetail" />
 
       <SourceFeedPanel
+        v-if="showSourcePanel && store.source"
         :source="store.source"
         :pairing-seconds-left="store.pairingSecondsLeft"
-        :phone-name="sourcePhoneName"
         :failure="store.sourceError"
         :busy="store.sourceBusy"
-        @start="onSourceStart"
-        @stop="onSourceStop"
         @pair="onSourcePair"
         @stop-pairing="onSourceStopPairing"
+        @use="onSourceUse"
+        @forget="onSourceForget"
       />
 
       <section class="mb-8" data-controllers-section>

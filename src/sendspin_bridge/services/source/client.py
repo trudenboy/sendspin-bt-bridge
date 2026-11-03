@@ -26,6 +26,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from sendspin_bridge.services.source import devices as source_devices
 from sendspin_bridge.services.source import state as source_state
 from sendspin_bridge.services.source.capture import CHUNK_MS, CaptureBackend, CaptureEndpoint, CaptureStream
 from sendspin_bridge.services.source.identity import load_or_create_identity, open_pairing_store
@@ -152,6 +153,7 @@ class SourceClient:
         self._endpoint_lock = asyncio.Lock()
         self._capture_lock = asyncio.Lock()
         self._signal_lock = asyncio.Lock()
+        self._preferred_mac: str | None = None
 
     # -- lifecycle -------------------------------------------------------------------------
 
@@ -218,6 +220,8 @@ class SourceClient:
             self._client = None
         self._signal = None
         self._endpoint = None
+        self._preferred_mac = None
+        self._set_backend_preference(None)
         source_state.publish(
             enabled=False,
             state="off",
@@ -350,6 +354,12 @@ class SourceClient:
 
     async def _sync_endpoint_locked(self) -> None:
         endpoint = await self._capture_backend.find()
+        if endpoint is None and self._preferred_mac:
+            # The preferred device stopped streaming or disconnected: return to
+            # the normal "newest active" policy instead of staying blind.
+            self._preferred_mac = None
+            self._set_backend_preference(None)
+            endpoint = await self._capture_backend.find()
         if endpoint != self._endpoint:
             if self._stream is not None:
                 await self._stop_capture()
@@ -372,6 +382,54 @@ class SourceClient:
                 await self._start_capture()
             if endpoint is None:
                 source_state.publish(streaming=False, state=await self._idle_state())
+
+    def _set_backend_preference(self, mac: str | None) -> None:
+        setter = getattr(self._capture_backend, "set_preferred_mac", None)
+        if callable(setter):
+            setter(mac)
+
+    async def use_device(self, mac: str) -> None:
+        """Capture *mac* explicitly; it must already be streaming into the host."""
+        from sendspin_bridge.bluetooth.address import DeviceAddress
+
+        address = DeviceAddress.parse(mac)
+        if address is None:
+            raise SourceError("invalid_mac", "A source device address looks like AA:BB:CC:DD:EE:FF.")
+        if self._client is None or not self.running:
+            raise SourceError("source_off", "The source is off; enable it first.")
+        setter = getattr(self._capture_backend, "set_preferred_mac", None)
+        if not callable(setter):
+            raise SourceError("device_selection_unsupported", "This capture backend cannot select a device.")
+        old = self._preferred_mac
+        self._preferred_mac = address.colons
+        setter(address.colons)
+        endpoint = await self._capture_backend.find()
+        if endpoint is None or endpoint.phone_mac != address.colons:
+            self._preferred_mac = old
+            setter(old)
+            raise SourceError(
+                "device_not_streaming",
+                "Connect the device and start audio on it before selecting it as the source.",
+            )
+        await self._sync_endpoint()
+
+    async def forget_device(self, mac: str) -> None:
+        """Stop capturing *mac* (when active), then remove its Bluetooth bond."""
+        address = mac.upper()
+        if self._endpoint is not None and (self._endpoint.phone_mac or "").upper() == address:
+            self._stream_requested = False
+            await self._stop_capture()
+            self._endpoint = None
+            source_state.publish(phone=None, phone_mac=None, streaming=False)
+        if (self._preferred_mac or "").upper() == address:
+            self._preferred_mac = None
+            self._set_backend_preference(None)
+        if (source_state.snapshot().paired_phone_mac or "").upper() == address:
+            source_state.publish(paired_phone_mac=None)
+        source_devices.invalidate()
+        from sendspin_bridge.services.bluetooth import bt_remove_device
+
+        await asyncio.to_thread(bt_remove_device, address)
 
     async def _nudge_profile(self, endpoint: CaptureEndpoint | None) -> None:
         nudge = getattr(self._capture_backend, "ensure_a2dp_source", None)

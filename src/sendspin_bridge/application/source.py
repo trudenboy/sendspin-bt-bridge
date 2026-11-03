@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from sendspin_bridge.application.errors import UseCaseError
+from sendspin_bridge.services.source import devices as source_devices
 from sendspin_bridge.services.source import manager, pairing
 from sendspin_bridge.services.source import state as source_state
 
@@ -54,6 +55,7 @@ class SourceStatus:
     ma_error: str | None
     pairing_seconds_left: int
     pairing_adapters: tuple[str, ...]
+    devices: tuple[source_state.SourceDevice, ...]
     error: str | None
 
     def as_status_dict(self) -> dict[str, Any]:
@@ -74,13 +76,36 @@ class SourceStatus:
             "ma_error": self.ma_error,
             "pairing_seconds_left": self.pairing_seconds_left,
             "pairing_adapters": list(self.pairing_adapters),
+            "devices": [device.as_dict() for device in self.devices],
             "error": self.error,
         }
 
 
+def _configured_player_macs(config: dict[str, Any]) -> set[str]:
+    """MACs the bridge already plays to; they are not source devices."""
+    macs: set[str] = set()
+    for player in config.get("players") or ():
+        if not isinstance(player, dict):
+            continue
+        backend = player.get("backend")
+        if isinstance(backend, dict) and backend.get("type") == "bluetooth_a2dp":
+            mac = str(backend.get("mac") or "").strip().upper()
+            if mac:
+                macs.add(mac)
+    return macs
+
+
+def _source_devices(
+    config: dict[str, Any], phone_mac: str | None, paired_mac: str | None
+) -> tuple[source_state.SourceDevice, ...]:
+    devices = source_devices.list_source_devices(active_mac=phone_mac, excluded_macs=_configured_player_macs(config))
+    if paired_mac and not any(device.mac == paired_mac.upper() for device in devices):
+        devices = (*devices, source_state.SourceDevice(mac=paired_mac.upper(), name=paired_mac.upper(), active=False))
+    return devices
+
+
 def status(config: dict[str, Any]) -> SourceStatus:
     """The source's state, for the bridge status and the hardware read model."""
-    del config  # the snapshot carries everything; kept for the callers' signature
     current = source_state.snapshot()
     return SourceStatus(
         enabled=current.enabled,
@@ -98,6 +123,7 @@ def status(config: dict[str, Any]) -> SourceStatus:
         ma_error=current.ma_error,
         pairing_seconds_left=current.pairing_seconds_left(),
         pairing_adapters=tuple(current.pairing_adapters),
+        devices=_source_devices(config, current.phone_mac, current.paired_phone_mac) if current.enabled else (),
         error=current.error,
     )
 
@@ -230,3 +256,34 @@ async def open_pairing_window(seconds: int = DEFAULT_PAIRING_WINDOW_S) -> dict[s
 async def close_pairing_window() -> None:
     """Close the phone pairing window and stop being discoverable."""
     await pairing.close_window()
+
+
+async def use_device(mac: str) -> dict[str, Any]:
+    """Make a paired source device the one the source captures."""
+    client = manager.client()
+    if client is None:
+        raise UseCaseError(409, "source_off", "The source is off; enable it first.")
+    try:
+        await client.use_device(mac)
+    except Exception as exc:
+        code = getattr(exc, "code", None) or "device_not_streaming"
+        raise UseCaseError(409, code, str(exc)) from exc
+    source_devices.invalidate()
+    return {"active": mac.upper()}
+
+
+async def forget_device(mac: str) -> None:
+    """Forget a paired source device: stop its capture, then remove the bond."""
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+
+    address = DeviceAddress.parse(mac)
+    if address is None:
+        raise UseCaseError(422, "invalid_mac", "A source device address looks like AA:BB:CC:DD:EE:FF.")
+    client = manager.client()
+    if client is not None:
+        await client.forget_device(address.colons)
+    else:
+        from sendspin_bridge.services.bluetooth import bt_remove_device
+
+        await asyncio.to_thread(bt_remove_device, address.colons)
+    source_devices.invalidate()

@@ -101,7 +101,7 @@ async function forget() {
 </script>
 
 <template>
-  <div data-ma-pairing>
+  <div v-if="enabled" data-ma-pairing>
     <SettingsRow :label="t('settings.parts.maPairing.label')" :help="t('settings.parts.maPairing.help')">
       <div class="flex flex-wrap items-center gap-2">
         <SbBadge
@@ -133,16 +133,8 @@ async function forget() {
       </div>
     </SettingsRow>
 
-    <div v-if="!enabled" data-ma-pairing-off class="pb-4 text-sm text-text-secondary">
-      {{ t('settings.parts.maPairing.off') }}
-      <RouterLink to="/hardware" class="text-primary-text underline-offset-2 hover:underline">
-        {{ t('settings.parts.maPairing.offAction') }}
-      </RouterLink>
-    </div>
-
-    <template v-else>
-      <div
-        v-if="code"
+    <div
+      v-if="code"
         data-ma-pairing-code
         class="mb-4 rounded-(--radius-card) border border-info/40 bg-info/10 px-3 py-2"
       >
@@ -168,7 +160,6 @@ async function forget() {
         <p class="text-sm text-text-primary">{{ error.text }}</p>
         <p class="mt-1 text-sm text-text-secondary">{{ error.next }}</p>
         <p class="mt-1 font-mono text-xs text-text-secondary">{{ error.code }}</p>
-      </div>
-    </template>
+    </div>
   </div>
 </template>

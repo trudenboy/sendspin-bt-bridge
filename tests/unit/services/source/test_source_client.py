@@ -149,8 +149,14 @@ class FakeBackend:
         self.endpoint: CaptureEndpoint | None = None
         self.stream = FakeStream()
         self.nudged: list[str | None] = []
+        self.preferred_mac: str | None = None
+
+    def set_preferred_mac(self, mac: str | None) -> None:
+        self.preferred_mac = str(mac or "").upper() or None
 
     async def find(self):
+        if self.preferred_mac and (self.endpoint is None or self.endpoint.phone_mac != self.preferred_mac):
+            return None
         return self.endpoint
 
     async def open(self, _endpoint):
@@ -225,6 +231,40 @@ def harness(monkeypatch, tmp_path):
 
 async def _async(value):
     return value
+
+
+async def test_use_device_selects_the_streaming_device(harness):
+    await harness.client.start()
+    mac = "34:C7:E9:25:A3:A3"
+    harness.backend.endpoint = CaptureEndpoint(
+        node="bluez_source.34_C7_E9_25_A3_A3", backend="fake", phone_mac=mac, running=True
+    )
+
+    await harness.client.use_device(mac)
+
+    assert harness.backend.preferred_mac == mac
+    assert source_state.snapshot().phone_mac == mac
+
+
+async def test_use_device_refuses_a_device_that_is_not_streaming(harness):
+    await harness.client.start()
+    harness.backend.endpoint = None
+
+    with pytest.raises(client_module.SourceError) as error:
+        await harness.client.use_device("34:C7:E9:25:A3:A3")
+
+    assert error.value.code == "device_not_streaming"
+    assert harness.backend.preferred_mac is None
+
+
+async def test_forget_device_removes_the_bond(harness, monkeypatch):
+    removed: list[str] = []
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth.bt_remove_device", removed.append)
+    await harness.client.start()
+
+    await harness.client.forget_device("34:C7:E9:25:A3:A3")
+
+    assert removed == ["34:C7:E9:25:A3:A3"]
 
 
 async def test_start_shows_a_pairing_code_when_no_psk_exists(harness):

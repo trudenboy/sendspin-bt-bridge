@@ -775,19 +775,13 @@
       "identifierAlsaLongCardName": "ALSA long card name"
     },
     "source": {
-      "title": "Source",
+      "title": "Audio source",
       "stateOff": "Off",
-      "stateWaiting": "Waiting for a phone",
+      "stateWaiting": "Waiting for a source device",
       "stateStreaming": "Streaming",
       "stateError": "Error",
-      "offBody": "The phone source is off. Enable it here to offer the phone to Music Assistant.",
-      "phone": "Phone",
-      "start": "Start source",
       "stop": "Stop source",
-      "stopConfirmTitle": "Stop the source?",
-      "stopConsequence": "These speakers go back to Music Assistant: {players}.",
-      "stopped": "Source stopped.",
-      "pair": "Pair a phone",
+      "pair": "Pair a device",
       "stopPairing": "Stop pairing",
       "pairing": "Open for pairing: {time} left.",
       "pairingHint": "Pair the phone now; if it says the PIN is wrong, first Forget this bridge on the phone (a stale pairing).",
@@ -807,14 +801,12 @@
       "captureUnavailable": "Unavailable",
       "node": "Node",
       "noNode": "No capture node",
-      "subtitle": "The phone streams into the bridge; the bridge sends it to Music Assistant as a source.",
+      "subtitle": "A Bluetooth device streams into the bridge; the bridge sends it to Music Assistant as a source.",
       "statePairing": "Waiting for the pairing code",
-      "maTitle": "Music Assistant",
       "maOff": "The source is off. Enable it to offer the phone to Music Assistant.",
       "maError": "The connection to Music Assistant failed.",
       "maConnected": "Connected. Playback and routing are managed in Music Assistant.",
       "maReconnecting": "Paired. Reconnecting to Music Assistant…",
-      "maNotPaired": "Not paired yet. Enter the code below in Music Assistant.",
       "maConnectedShort": "connected",
       "maPairedShort": "paired",
       "maUnpairedShort": "not paired",
@@ -825,8 +817,6 @@
       "maForgetConfirmTitle": "Forget the Music Assistant pairing?",
       "maForgetConfirmBody": "The bridge will need a new code before Music Assistant can play the phone again.",
       "maForgetDone": "Music Assistant pairing forgotten",
-      "maRouting": "Play the phone from Music Assistant; the bridge does not route it to speakers itself.",
-      "maOpen": "Open Music Assistant",
       "maUnreachable": "Music Assistant is not reachable.",
       "maUnreachableNext": "Check that Music Assistant is running and that SENDSPIN_SERVER points at it; the bridge keeps retrying.",
       "maPairingRequired": "A pairing code is needed.",
@@ -834,17 +824,16 @@
       "maUnsupported": "This Music Assistant does not offer a Sendspin source.",
       "maUnsupportedNext": "Update Music Assistant to 2.10 or newer and enable its Sendspin source provider.",
       "maPairingNext": "Open a pairing window and enter the code in Music Assistant.",
-      "phoneTitle": "Phone (Bluetooth)",
-      "phoneIdle": "not streaming",
-      "phoneNoPhone": "No phone is streaming into the bridge.",
-      "phoneHint": "The phone pairs with the bridge over Bluetooth; Music Assistant receives the captured audio.",
-      "phonePaired": "Phone paired",
-      "phonePairedHint": "The bond is saved; start playing on the phone and the bridge will capture it.",
-      "maSettingsHint": "Pairing and the code are in Settings.",
-      "maSettingsAction": "Open pairing settings",
-      "maNotPairedWhere": "Not paired. Pair the bridge with Music Assistant in Settings.",
-      "phonePairedNeedMa": "Phone paired. Pair the bridge with Music Assistant to hear it.",
-      "phonePairedNeedMaAction": "Pair with Music Assistant"
+      "phoneHint": "Pair a phone, tablet or laptop over Bluetooth; Music Assistant receives the captured audio.",
+      "devicesTitle": "Bluetooth source devices",
+      "noDevices": "No source device is paired yet.",
+      "deviceActive": "active",
+      "deviceConnected": "connected",
+      "deviceUse": "Use",
+      "deviceForget": "Forget",
+      "deviceForgetConfirmTitle": "Forget this source device?",
+      "deviceForgetConfirmBody": "The Bluetooth bond for {mac} is removed. The device can be paired again later.",
+      "deviceForgotten": "Source device forgotten"
     }
   },
   "kit": {
@@ -876,7 +865,6 @@
     "audioUnmuted": "{name} unmuted.",
     "audioVolume": "Volume set: {name}.",
     "audioResumed": "Resumed: {name}.",
-    "sourceStarted": "Source started.",
     "sourcePairingOpen": "Pairing window open: pair the phone now.",
     "sourcePairingClosed": "Pairing window closed."
   },
@@ -990,6 +978,10 @@
       "backup": {
         "title": "Backup",
         "description": "Export, import or edit the configuration file."
+      },
+      "source": {
+        "title": "Audio source",
+        "description": "Optionally accept Bluetooth audio from a phone, tablet or laptop and offer it to Music Assistant as a source."
       }
     },
     "fields": {
@@ -1248,10 +1240,6 @@
       "RECOVERY_BANNER_GRACE_SECONDS": {
         "label": "Recovery grace period",
         "help": "Wait this long before suggesting fixes for a speaker that dropped."
-      },
-      "SENDSPIN_SOURCE": {
-        "label": "Accept a phone as a source",
-        "help": "A phone paired to the bridge over Bluetooth streams into it, and the bridge offers that audio as a Sendspin source other players can play. Works with PipeWire and, on Home Assistant OS, PulseAudio."
       }
     },
     "sectionsNav": "Sections",
@@ -1359,19 +1347,18 @@
         "label": "Buffer presets",
         "recommended": "recommended"
       },
-      "sourceLink": {
-        "label": "Phone source",
-        "help": "Pair the phone over Bluetooth and see its capture state on the Hardware page.",
-        "action": "Open Hardware"
-      },
       "maPairing": {
-        "label": "Phone source pairing",
-        "help": "Music Assistant must trust this bridge before it can play the phone's audio.",
-        "off": "The phone source is off. Enable it on the Hardware page, then pair it with Music Assistant here.",
-        "offAction": "Open Hardware",
+        "label": "Music Assistant pairing",
+        "help": "Music Assistant must trust this bridge before it can play the source audio.",
         "whereToEnter": "In Music Assistant: Settings → Players → this bridge → Configure → Static pairing code.",
-        "routing": "Playback and routing stay in Music Assistant; the bridge only captures the phone.",
+        "routing": "Playback and routing stay in Music Assistant; the bridge only captures the audio.",
         "notPaired": "Not paired yet. Open a pairing window, then enter the code in Music Assistant."
+      },
+      "sourceMode": {
+        "label": "Audio source",
+        "help": "Capture Bluetooth audio from a paired device and offer it to Music Assistant. Off by default; enabling starts the source immediately.",
+        "off": "The source is off. Enable it to pair Music Assistant and then a Bluetooth source device.",
+        "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again."
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",
@@ -1648,7 +1635,7 @@
     "connected": "{n} of {total} Bluetooth connected",
     "playing": "{n} playing",
     "source": {
-      "title": "Phone → Music Assistant",
+      "title": "Audio source → Music Assistant",
       "streaming": "Playing from the phone",
       "pairing": "Pairing in progress",
       "waiting": "Waiting for the phone",
@@ -1657,8 +1644,7 @@
       "maConnected": "Music Assistant connected",
       "maPaired": "Music Assistant paired, reconnecting",
       "maUnpaired": "Music Assistant is not paired",
-      "openHardware": "Open Hardware",
-      "pairAction": "Pair with Music Assistant"
+      "openHardware": "Open Hardware"
     },
     "checklist": {
       "title": "First steps",
@@ -1667,8 +1653,6 @@
       "speakerAction": "Add speaker",
       "ma": "Sign in to Music Assistant",
       "maAction": "Open settings",
-      "phone": "Enable the phone source and pair it",
-      "phoneAction": "Open Hardware",
       "dismiss": "Hide first steps"
     }
   },

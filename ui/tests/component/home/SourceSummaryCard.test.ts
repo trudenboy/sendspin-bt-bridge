@@ -21,7 +21,7 @@ function mountCard() {
   })
 }
 
-describe('Home: phone source card', () => {
+describe('Home: audio source card', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
   it('stays out of the way when the bridge has no source', () => {
@@ -29,18 +29,12 @@ describe('Home: phone source card', () => {
     expect(mountCard().find('[data-home-source]').exists()).toBe(false)
   })
 
-  it('shows the phone state and the two ways to act when Music Assistant is not paired', () => {
-    setSource({ enabled: true, state: 'waiting', ma_paired: false, ma_connected: false })
-
-    const card = mountCard().get('[data-home-source]')
-
-    expect(card.get('[data-home-source-status]').text()).toContain(en.home.source.waiting)
-    expect(card.get('[data-home-source-status]').text()).toContain(en.home.source.maUnpaired)
-    expect(card.get('[data-home-source-pair]').attributes('href')).toBe('/config#settings-musicAssistant')
-    expect(card.get('[data-home-source-hardware]').attributes('href')).toBe('/hardware')
+  it('stays out of the way before Music Assistant pairing', () => {
+    setSource({ enabled: true, state: 'pairing', ma_paired: false, ma_connected: false })
+    expect(mountCard().find('[data-home-source]').exists()).toBe(false)
   })
 
-  it('drops the pairing link once Music Assistant is connected', () => {
+  it('shows the source state after Music Assistant pairing, without a pairing link', () => {
     setSource({ enabled: true, state: 'streaming', ma_paired: true, ma_connected: true })
 
     const card = mountCard().get('[data-home-source]')
@@ -48,5 +42,6 @@ describe('Home: phone source card', () => {
     expect(card.get('[data-home-source-status]').text()).toContain(en.home.source.streaming)
     expect(card.get('[data-home-source-status]').text()).toContain(en.home.source.maConnected)
     expect(card.find('[data-home-source-pair]').exists()).toBe(false)
+    expect(card.get('[data-home-source-hardware]').attributes('href')).toBe('/hardware')
   })
 })

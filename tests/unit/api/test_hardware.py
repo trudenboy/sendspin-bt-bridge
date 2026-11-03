@@ -375,6 +375,7 @@ def test_the_source_feed_has_the_contract_shape(installed_bluez, monkeypatch, tm
             "pairing_seconds_left": 0,
             "error": None,
         },
+        "devices": [],
         "error": None,
     }
     phone = next(device for device in body["bluetooth_devices"] if device["mac"] == DEVICE)

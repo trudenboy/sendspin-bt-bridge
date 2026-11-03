@@ -36,27 +36,22 @@ describe('Home: first steps checklist', () => {
     setBridge()
     const list = mountChecklist()
     expect(list.find('[data-first-run]').exists()).toBe(true)
-    expect(list.get('[data-first-run-progress]').text()).toContain(en.home.checklist.progress.replace('{done}', '0').replace('{total}', '3'))
+    expect(list.get('[data-first-run-progress]').text()).toContain(en.home.checklist.progress.replace('{done}', '0').replace('{total}', '2'))
     expect(list.get('[data-step="speaker"]').text()).toContain(en.home.checklist.speaker)
     expect(list.get('[data-step="ma"]').text()).toContain(en.home.checklist.ma)
-    expect(list.get('[data-step="phone"]').text()).toContain(en.home.checklist.phone)
     expect(list.get('[data-step="speaker"]').attributes('data-done')).toBe('false')
   })
 
   it('marks a step done and counts it', () => {
-    setBridge({ devices: 2, maConnected: true })
+    setBridge({ devices: 2 })
     const list = mountChecklist()
     expect(list.get('[data-step="speaker"]').attributes('data-done')).toBe('true')
-    expect(list.get('[data-step="ma"]').attributes('data-done')).toBe('true')
-    expect(list.get('[data-first-run-progress]').text()).toContain('2')
+    expect(list.get('[data-step="ma"]').attributes('data-done')).toBe('false')
+    expect(list.get('[data-first-run-progress]').text()).toContain('1')
   })
 
   it('disappears when every step is done', () => {
-    setBridge({
-      devices: 1,
-      maConnected: true,
-      source: { enabled: true, ma_paired: true, paired_phone_mac: '34:C7:E9:25:A3:A3' },
-    })
+    setBridge({ devices: 1, maConnected: true })
     expect(mountChecklist().find('[data-first-run]').exists()).toBe(false)
   })
 

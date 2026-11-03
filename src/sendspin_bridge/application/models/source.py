@@ -30,8 +30,17 @@ class SourceMa(ResponseModel):
     error: str | None = Field(default=None, description="Stable code: ma_unreachable, ma_pairing_rejected, …")
 
 
+class SourceDevice(ResponseModel):
+    """A paired Bluetooth device that can feed the source."""
+
+    mac: str
+    name: str = ""
+    connected: bool = False
+    active: bool = False
+
+
 class SourceFeed(ResponseModel):
-    """The single Sendspin source: one phone, its capture, and the link to Music Assistant."""
+    """The single Sendspin source: one capture, and the link to Music Assistant."""
 
     enabled: bool = Field(default=False, description="The source client is enabled by the operator.")
     state: SourceStateName = Field(
@@ -43,4 +52,5 @@ class SourceFeed(ResponseModel):
     paired_phone_mac: str | None = Field(default=None, description="A phone paired for the source, before it streams.")
     capture: SourceCapture = Field(description="The phone's capture node, or the reason there is none.")
     ma: SourceMa = Field(default_factory=SourceMa, description="The link to the Music Assistant server.")
+    devices: list[SourceDevice] = Field(default_factory=list, description="Paired devices that can feed the source.")
     error: str | None = None

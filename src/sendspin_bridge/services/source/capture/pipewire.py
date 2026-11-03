@@ -28,10 +28,15 @@ logger = logging.getLogger(__name__)
 BLUEZ_INPUT_RE = re.compile(r"bluez_input\.[0-9A-Fa-f_]{17}\.\d+")
 
 
+def find_bluez_inputs(wpctl_status: str) -> list[str]:
+    """Every capture node ``wpctl status`` prints, in its order."""
+    return list(dict.fromkeys(match.group(0) for match in BLUEZ_INPUT_RE.finditer(wpctl_status)))
+
+
 def find_bluez_input(wpctl_status: str) -> str | None:
-    """The node to capture from, as ``wpctl status`` prints it (None: no phone streaming)."""
-    match = BLUEZ_INPUT_RE.search(wpctl_status)
-    return match.group(0) if match else None
+    """The first node to capture from, as ``wpctl status`` prints it."""
+    nodes = find_bluez_inputs(wpctl_status)
+    return nodes[0] if nodes else None
 
 
 async def find_bluez_input_on_host() -> str | None:
@@ -59,10 +64,16 @@ class PipeWireBackend:
         self._sample_rate = sample_rate
         self._channels = channels
         self._fixed_node = fixed_node
+        self.preferred_mac: str | None = None
+
+    def set_preferred_mac(self, mac: str | None) -> None:
+        self.preferred_mac = str(mac or "").upper() or None
 
     async def find(self) -> CaptureEndpoint | None:
         """The phone's capture node, when PipeWire reports one (or a fixed debug node)."""
         if self._fixed_node:
+            if self.preferred_mac and mac_from_node(self._fixed_node) != self.preferred_mac:
+                return None
             return CaptureEndpoint(
                 node=self._fixed_node,
                 backend=self.name,
@@ -70,7 +81,10 @@ class PipeWireBackend:
                 running=True,
             )
         result: CommandResult = await self._run(["wpctl", "status"])
-        node = find_bluez_input(result.stdout) if result.returncode == 0 else None
+        nodes = find_bluez_inputs(result.stdout) if result.returncode == 0 else []
+        if self.preferred_mac:
+            nodes = [node for node in nodes if mac_from_node(node) == self.preferred_mac]
+        node = nodes[0] if nodes else None
         if node is None:
             return None
         # ``wpctl`` lists the node only while the phone has a transport, so its presence is
