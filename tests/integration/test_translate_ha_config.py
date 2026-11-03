@@ -199,6 +199,24 @@ def test_sendspin_source_target_survives_addon_restart(tmp_path):
     assert _read_json(tmp_path / "config.json")["SENDSPIN_SOURCE_TARGET"] == "kitchen"
 
 
+def test_local_sources_and_active_choice_survive_addon_restart(tmp_path):
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "SENDSPIN_SOURCES": [{"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Line"}],
+            "SENDSPIN_SOURCE_ACTIVE": "local:alsa_input.line",
+        },
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["SENDSPIN_SOURCES"][0]["node"] == "alsa_input.line"
+    assert cfg["SENDSPIN_SOURCE_ACTIVE"] == "local:alsa_input.line"
+
+
 def test_sendspin_source_option_overrides_the_saved_choice(tmp_path):
     _write_json(tmp_path / "config.json", {"SENDSPIN_SOURCE": True})
     _write_json(tmp_path / "options.json", _minimal_options(sendspin_source=False))

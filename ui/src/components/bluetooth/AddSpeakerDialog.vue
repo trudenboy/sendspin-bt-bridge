@@ -7,6 +7,7 @@ import { playClick } from '@/api/calibration'
 import { ApiError } from '@/api/client'
 import { SbBadge, SbButton, SbDialog, SbInput, SbTabs } from '@/kit'
 import AudioOutputPicker from './AudioOutputPicker.vue'
+import SourcePicker from './SourcePicker.vue'
 import LongOperation from '@/components/LongOperation.vue'
 import { CheckCircle2, RotateCw, Speaker } from 'lucide-vue-next'
 import type { ScanDevice } from '@/api/types'
@@ -16,7 +17,7 @@ import type { ScanDevice } from '@/api/types'
  * hear it. The scan starts by itself; the compatibility switches and the
  * adapter choice stay out of the way until needed.
  */
-const props = defineProps<{ open: boolean }>()
+const props = withDefaults(defineProps<{ open: boolean; initialMode?: 'bluetooth' | 'audio' | 'source' }>(), { initialMode: 'bluetooth' })
 const emit = defineEmits<{ 'update:open': [value: boolean]; paired: [mac: string] }>()
 
 const { t } = useI18n()
@@ -26,13 +27,16 @@ const bridge = useBridgeStore()
 type Step = 'find' | 'name' | 'test' | 'paired'
 const step = ref<Step>('find')
 // A speaker over Bluetooth, or an audio output of this computer.
-const mode = ref<'bluetooth' | 'audio'>('bluetooth')
+const mode = ref<'bluetooth' | 'audio' | 'source'>('bluetooth')
 const audioStage = ref<'pick' | 'name' | 'done'>('pick')
 const tabs = computed(() => [
   { id: 'bluetooth', label: t('addSpeaker.tabs.bluetooth') },
   { id: 'audio', label: t('addSpeaker.tabs.audio') },
+  { id: 'source', label: t('addSpeaker.tabs.source') },
 ])
-const showTabs = computed(() => (mode.value === 'audio' ? audioStage.value === 'pick' : step.value === 'find'))
+const showTabs = computed(() =>
+  mode.value === 'source' ? true : mode.value === 'audio' ? audioStage.value === 'pick' : step.value === 'find',
+)
 const adapter = ref('')
 const audioOnly = ref(true)
 const options = ref({ quiesceAdapter: false, noInputNoOutputAgent: false, allowHfpProfile: false })
@@ -64,7 +68,7 @@ async function scan() {
 }
 
 function reset() {
-  mode.value = 'bluetooth'
+  mode.value = props.initialMode
   audioStage.value = 'pick'
   step.value = 'find'
   chosen.value = null
@@ -146,6 +150,8 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
     <SbTabs v-if="showTabs" :model-value="mode" :tabs="tabs" class="mb-4" @update:model-value="(v: unknown) => (mode = v as typeof mode)" />
 
     <AudioOutputPicker v-if="mode === 'audio'" @stage="(s) => (audioStage = s)" @close="close" />
+
+    <SourcePicker v-else-if="mode === 'source'" @close="close" />
 
     <!-- 1. Find -->
     <div v-else-if="step === 'find'" class="space-y-4">

@@ -324,3 +324,108 @@ async def test_set_target_without_an_ma_token_is_refused(monkeypatch):
 
     assert raised.value.status == 409
     assert raised.value.code == "ma_api_unavailable"
+
+
+def _snapshot(sources):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        audio=SimpleNamespace(sources=sources),
+        capabilities=SimpleNamespace(capture=True, audio_server="pulseaudio"),
+    )
+
+
+async def test_inputs_lists_configured_sources_and_local_candidates(monkeypatch):
+    from types import SimpleNamespace
+
+    local = SimpleNamespace(name="alsa_input.line", description="Line In", monitor_of=None)
+    monkeypatch.setattr(source_uc, "_hardware_audio", lambda: _async(_snapshot([local])))
+    monkeypatch.setattr(source_uc.source_devices, "list_source_devices", lambda **_kw: ())
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {})
+
+    result = await source_uc.inputs()
+
+    assert result["inputs"] == []
+    assert [entry["node"] for entry in result["local_candidates"]] == ["alsa_input.line"]
+    assert result["capture_available"] is True
+
+
+async def test_adding_a_local_input_makes_it_active_when_nothing_is_selected(monkeypatch):
+    from types import SimpleNamespace
+
+    local = SimpleNamespace(name="alsa_input.line", description="Line In", monitor_of=None)
+    saved: list[dict] = []
+    monkeypatch.setattr(source_uc, "_hardware_audio", lambda: _async(_snapshot([local])))
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {})
+    monkeypatch.setattr(
+        "sendspin_bridge.config.update_config",
+        lambda mutator: (lambda config: (mutator(config), saved.append(config)))(
+            {"SENDSPIN_SOURCES": [], "SENDSPIN_SOURCE_ACTIVE": None}
+        ),
+    )
+    monkeypatch.setattr(source_uc.manager, "client", lambda: None)
+
+    result = await source_uc.add_local_input("alsa_input.line", "Turntable")
+
+    assert result["id"] == "local:alsa_input.line"
+    assert saved[0]["SENDSPIN_SOURCE_ACTIVE"] == "local:alsa_input.line"
+    assert saved[0]["SENDSPIN_SOURCES"][0]["name"] == "Turntable"
+
+
+async def test_removing_the_active_local_input_selects_nothing(monkeypatch):
+    config = {
+        "SENDSPIN_SOURCES": [
+            {"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Line"}
+        ],
+        "SENDSPIN_SOURCE_ACTIVE": "local:alsa_input.line",
+    }
+    saved: list[dict] = []
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: config)
+    monkeypatch.setattr(
+        "sendspin_bridge.config.update_config",
+        lambda mutator: (lambda target: (mutator(target), saved.append(target)))(
+            {"SENDSPIN_SOURCES": config["SENDSPIN_SOURCES"], "SENDSPIN_SOURCE_ACTIVE": config["SENDSPIN_SOURCE_ACTIVE"]}
+        ),
+    )
+    monkeypatch.setattr(source_uc.manager, "client", lambda: None)
+
+    await source_uc.remove_input("local:alsa_input.line")
+
+    assert saved[0]["SENDSPIN_SOURCES"] == []
+    assert saved[0]["SENDSPIN_SOURCE_ACTIVE"] == "none"
+
+
+async def test_selecting_an_unknown_source_is_refused(monkeypatch):
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {"SENDSPIN_SOURCES": []})
+    monkeypatch.setattr(source_uc.manager, "client", lambda: None)
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.select_input("local:missing")
+
+    assert raised.value.status == 404
+
+
+async def test_status_exposes_local_inputs_and_marks_the_active_one(monkeypatch):
+    from sendspin_bridge.services.source.state import SourceDevice
+
+    monkeypatch.setattr(
+        source_uc.source_devices,
+        "list_source_devices",
+        lambda **_kw: (SourceDevice("34:C7:E9:25:A3:A3", "Pixel", True),),
+    )
+    source_state.publish(enabled=True, state="waiting", active_input="local:alsa_input.line")
+
+    view = source_uc.status(
+        {
+            "SENDSPIN_SOURCE": True,
+            "SENDSPIN_SOURCES": [
+                {"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Turntable"}
+            ],
+        }
+    )
+
+    assert view.active_input == "local:alsa_input.line"
+    assert [(entry.kind, entry.name, entry.active) for entry in view.inputs] == [
+        ("bluetooth", "Pixel", False),
+        ("local", "Turntable", True),
+    ]

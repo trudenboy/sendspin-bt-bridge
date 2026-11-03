@@ -296,6 +296,8 @@ export const COMPONENT_OWNED_KEYS: Readonly<Record<string, SectionComponent | 'd
   MA_API_URL: 'maConnection',
   SENDSPIN_SOURCE: 'sourceMode',
   SENDSPIN_SOURCE_TARGET: 'sourceTarget',
+  SENDSPIN_SOURCES: 'sourceMode',
+  SENDSPIN_SOURCE_ACTIVE: 'sourceMode',
   AUTH_TOKENS: 'tokens',
   HA_ADAPTER_AREA_MAP: 'areaMap',
 }

@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "Añadir altavoz",
+    "addDevice": "Añadir dispositivo",
     "empty": {
       "title": "Aún no hay reproductores",
       "description": "Busca altavoces Bluetooth o añade un reproductor manualmente."
@@ -445,7 +445,39 @@
       "all": "Todos los reproductores",
       "bluetooth": "Altavoces Bluetooth",
       "output": "Salidas de audio"
-    }
+    },
+    "sources": {
+      "title": "Fuentes",
+      "add": "Añadir fuente",
+      "empty": "Aún no hay ninguna fuente de audio configurada. Añade una fuente Bluetooth o una entrada de audio local.",
+      "bluetooth": "Bluetooth",
+      "local": "Entrada local",
+      "available": "Disponible",
+      "off": "Apagado",
+      "pairing": "Emparejamiento",
+      "waiting": "Esperando",
+      "streaming": "Transmitiendo",
+      "error": "Error",
+      "targetInMa": "Elegir en Music Assistant",
+      "active": "Activo",
+      "connected": "Conectado",
+      "monitor": "Audio del sistema",
+      "unavailable": "No disponible",
+      "paired": "Emparejado",
+      "playsOn": "Se reproduce en: {target}",
+      "rename": "Cambiar nombre",
+      "use": "Usar",
+      "remove": "Eliminar entrada",
+      "forget": "Olvidar dispositivo",
+      "removeTitle": "¿Eliminar {name}?",
+      "removeConsequence": "La fuente dejará de estar disponible aquí. El puente olvida el dispositivo Bluetooth, pero el emparejamiento con Music Assistant se conserva.",
+      "removed": "Fuente eliminada",
+      "removeFailed": "No se pudo eliminar la fuente.",
+      "useFailed": "No se pudo cambiar la fuente.",
+      "renameFailed": "No se pudo cambiar el nombre de la fuente.",
+      "pressPlay": "Fuente cambiada. Pulsa Reproducir en Music Assistant para iniciarla en la nueva entrada."
+    },
+    "outputs": "Salidas"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "Nombre largo de tarjeta ALSA"
     },
     "source": {
-      "title": "Fuente",
-      "stateOff": "Apagada",
-      "stateWaiting": "Esperando un dispositivo de origen",
-      "stateStreaming": "Transmitiendo",
-      "stateError": "Error",
-      "stop": "Detener fuente",
-      "pair": "Emparejar un dispositivo",
-      "stopPairing": "Detener emparejamiento",
-      "pairing": "Abierto para emparejar: quedan {time}.",
-      "pairingHint": "Empareja el teléfono ahora; si dice que el PIN es incorrecto, olvida antes este puente en el teléfono (emparejamiento obsoleto).",
-      "errorTitle": "La fuente falló",
       "errorCapture": "El audio del teléfono no se puede capturar en este host.",
       "errorCaptureNext": "El puente necesita nodos de captura de PipeWire para el teléfono; revisa el motor de audio del host.",
       "errorNoAdapter": "Ningún adaptador Bluetooth aceptó ponerse en modo detectable.",
       "errorNoAgent": "El puente no pudo registrar un agente de emparejamiento Bluetooth.",
       "errorBluetoothNext": "Revisa los controladores Bluetooth de arriba y vuelve a intentar el emparejamiento.",
       "errorNextStep": "Revisa los ajustes de la fuente en Ajustes → Music Assistant y vuelve a iniciar la fuente.",
-      "failureTitle": "Se rechazó el último comando de la fuente",
-      "failureNextStep": "Revisa la fuente y vuelve a intentarlo.",
-      "commandFailed": "No se pudo cambiar la fuente: {reason}",
-      "capture": "Captura",
-      "capturePipewire": "Nodo de PipeWire",
-      "capturePulse": "Fuente de PulseAudio",
-      "captureUnavailable": "No disponible",
-      "node": "Nodo",
-      "noNode": "Sin nodo de captura",
-      "subtitle": "Un dispositivo Bluetooth transmite al puente; el puente lo envía a Music Assistant como fuente.",
-      "statePairing": "Esperando el código de emparejamiento",
       "maOff": "La fuente está apagada. Actívala para ofrecer el teléfono a Music Assistant.",
       "maError": "Falló la conexión con Music Assistant.",
       "maConnected": "Conectado. La reproducción y el enrutamiento se gestionan en Music Assistant.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant rechazó el código de emparejamiento.",
       "maUnsupported": "Este Music Assistant no ofrece una fuente Sendspin.",
       "maUnsupportedNext": "Actualiza Music Assistant a 2.10 o posterior y activa su proveedor de fuentes Sendspin.",
-      "maPairingNext": "Abre una ventana de emparejamiento e introduce el código en Music Assistant.",
-      "phoneHint": "Empareja un teléfono, una tableta o un portátil por Bluetooth; Music Assistant recibe el audio capturado.",
-      "devicesTitle": "Dispositivos de origen Bluetooth",
-      "noDevices": "Aún no hay ningún dispositivo de origen emparejado.",
-      "deviceActive": "activo",
-      "deviceConnected": "conectado",
-      "deviceUse": "Usar",
-      "deviceForget": "Olvidar",
-      "deviceForgetConfirmTitle": "¿Olvidar este dispositivo de origen?",
-      "deviceForgetConfirmBody": "Se elimina el emparejamiento Bluetooth de {mac}. El dispositivo se puede volver a emparejar más tarde.",
-      "deviceForgotten": "Dispositivo de origen olvidado"
-    }
+      "maPairingNext": "Abre una ventana de emparejamiento e introduce el código en Music Assistant."
+    },
+    "sourceDevice": "Dispositivo de origen"
   },
   "kit": {
     "closeDialog": "Cerrar diálogo",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} silenciado.",
     "audioUnmuted": "{name}: sonido reactivado.",
     "audioVolume": "Volumen establecido: {name}.",
-    "audioResumed": "Reanudado: {name}.",
-    "sourcePairingOpen": "Ventana de emparejamiento abierta: empareja el teléfono ahora.",
-    "sourcePairingClosed": "Ventana de emparejamiento cerrada."
+    "audioResumed": "Reanudado: {name}."
   },
   "restart": {
     "stopping": "Deteniendo el puente…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "Fuente de audio",
         "help": "Captura el audio Bluetooth de un dispositivo emparejado y ofrécelo a Music Assistant. Desactivado de forma predeterminada; al activarlo, la fuente se inicia de inmediato.",
-        "off": "La fuente está apagada. Actívala para emparejar Music Assistant y después un dispositivo de origen Bluetooth.",
+        "off": "La fuente está desactivada. Actívala para empezar a capturar la entrada seleccionada.",
         "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "Hecho: {action}"
   },
   "nav": {
-    "home": "Altavoces",
-    "homeShort": "Altavoces",
+    "home": "Dispositivos",
+    "homeShort": "Dispositivos",
     "groups": "Grupos",
     "groupsShort": "Grupos",
     "settings": "Ajustes",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{n} de {total} conectados por Bluetooth",
     "playing": "{n} en reproducción",
-    "source": {
-      "title": "Fuente de audio → Music Assistant",
-      "streaming": "Reproduciendo desde el teléfono",
-      "pairing": "Emparejamiento en curso",
-      "waiting": "Esperando el teléfono",
-      "off": "La fuente está apagada",
-      "error": "Error de la fuente",
-      "maConnected": "Music Assistant conectado",
-      "maPaired": "Music Assistant emparejado, reconectando",
-      "maUnpaired": "Music Assistant no está emparejado",
-      "openHardware": "Abrir Hardware"
-    },
+    "source": {},
     "checklist": {
       "title": "Primeros pasos",
       "progress": "{done} de {total} hechos",
@@ -1676,7 +1664,7 @@
     "connectFirst": "Conecta el puente con Music Assistant para ver y controlar sus grupos."
   },
   "addSpeaker": {
-    "title": "Añadir altavoz",
+    "title": "Añadir dispositivo",
     "findHelp": "Pon el altavoz en modo de emparejamiento. Los altavoces cercanos aparecen abajo.",
     "scan": "Buscar",
     "scanAgain": "Buscar de nuevo",
@@ -1701,8 +1689,9 @@
     "testSound": "Reproducir sonido de prueba",
     "done": "Hecho",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "Salida de audio"
+      "bluetooth": "Altavoz",
+      "audio": "Salida de audio",
+      "source": "Fuente de audio"
     },
     "audio": {
       "intro": "Reproduce en una salida de audio de este equipo, como un DAC USB, una tarjeta de sonido o HDMI.",
@@ -1714,7 +1703,33 @@
       "taken": "Otro reproductor ya usa esta salida."
     },
     "pairing": "Emparejando {name}…",
-    "errorNext": "Comprueba que el altavoz esté en modo de emparejamiento y cerca del adaptador, y vuelve a intentarlo."
+    "errorNext": "Comprueba que el altavoz esté en modo de emparejamiento y cerca del adaptador, y vuelve a intentarlo.",
+    "source": {
+      "help": "Elige una entrada de audio local o empareja un dispositivo Bluetooth. Funciona aunque Music Assistant aún no esté emparejado.",
+      "bluetooth": "Fuente Bluetooth",
+      "local": "Entrada local",
+      "maHint": "Music Assistant aún no está emparejado; puedes añadir la fuente ahora y emparejar Music Assistant más tarde.",
+      "pairing": "Ventana de emparejamiento abierta: {time}",
+      "pairingHint": "En el teléfono, la tableta o el portátil, elige el puente en los ajustes de Bluetooth y permite el audio multimedia.",
+      "stopPairing": "Detener emparejamiento",
+      "pair": "Emparejar un dispositivo",
+      "pairHint": "El puente será detectable durante dos minutos.",
+      "noBluetooth": "Aún no hay ninguna fuente Bluetooth emparejada.",
+      "showMonitors": "Mostrar fuentes de audio del sistema",
+      "refresh": "Actualizar",
+      "captureUnavailable": "La captura de audio no está disponible en este host ({kind}); el emparejamiento sigue funcionando, pero no se pueden añadir entradas locales.",
+      "choose": "Elegir",
+      "noLocal": "No se encontró ninguna entrada de audio local.",
+      "node": "Entrada de audio",
+      "nodeHint": "Nombre de fuente de PulseAudio o node.name de PipeWire. Elige arriba una entrada detectada o introduce una manualmente.",
+      "name": "Nombre",
+      "add": "Añadir entrada",
+      "manualHint": "La entrada se guarda, pero no se activa: usa el interruptor de fuente en Ajustes cuando quieras empezar a capturar.",
+      "added": "Se añadió {name}.",
+      "localFailed": "No se pudieron cargar las entradas de audio locales.",
+      "pairFailed": "No se pudo abrir la ventana de emparejamiento.",
+      "addFailed": "No se pudo añadir esa entrada de audio."
+    }
   },
   "connection": {
     "lost": "Se perdió la conexión con el puente: reconectando. Lo que ves puede estar desactualizado.",

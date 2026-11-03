@@ -149,6 +149,15 @@ class BluetoothAdapter(BaseModel):
     """
 
 
+class SourceConfigEntry(BaseModel):
+    """A saved local input that can feed the Sendspin source."""
+
+    id: str
+    kind: Literal["local"] = "local"
+    node: str
+    name: str = ""
+
+
 class BridgeConfig(BaseModel):
     """
     Machine-readable schema for /config/config.json used by the Sendspin BT Bridge.
@@ -383,6 +392,14 @@ class BridgeConfig(BaseModel):
     SENDSPIN_SOURCE_TARGET: str | None = None
     """
     Music Assistant player or group that should play the Bluetooth source automatically. Empty leaves the target choice to Music Assistant.
+    """
+    SENDSPIN_SOURCES: list[SourceConfigEntry] | None = []
+    """
+    Saved local audio inputs that can feed the source. Bluetooth source bonds come from BlueZ and are not stored here.
+    """
+    SENDSPIN_SOURCE_ACTIVE: str | None = None
+    """
+    Selected source id (bluetooth:<MAC> or local:<node>); empty keeps the automatic Bluetooth policy.
     """
     EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE: bool | None = True
     """

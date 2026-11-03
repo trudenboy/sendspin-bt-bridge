@@ -248,6 +248,36 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["PLAYER_STATE"] == {player_id_for_mac("AA:BB:CC:DD:EE:FF"): {"volume": 55}}
 
 
+def test_load_config_normalizes_local_source_profiles(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "SENDSPIN_SOURCES": [
+                {"id": "local:stale", "kind": "local", "node": "alsa_input.line", "name": "  Line In "},
+                {"node": "alsa_input.line", "name": "duplicate"},
+                {"node": ""},
+                "not-a-dict",
+            ],
+            "SENDSPIN_SOURCE_ACTIVE": " local:alsa_input.line ",
+        },
+    )
+    from sendspin_bridge.config import load_config
+
+    loaded = load_config()
+
+    assert loaded["SENDSPIN_SOURCES"] == [
+        {"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Line In"}
+    ]
+    assert loaded["SENDSPIN_SOURCE_ACTIVE"] == "local:alsa_input.line"
+
+
+def test_load_config_keeps_a_null_source_active_for_auto_bluetooth(tmp_path):
+    _write_config(tmp_path, {"SENDSPIN_SOURCE_ACTIVE": None})
+    from sendspin_bridge.config import load_config
+
+    assert load_config()["SENDSPIN_SOURCE_ACTIVE"] is None
+
+
 def test_load_config_normalizes_room_metadata(tmp_path):
     _write_config(
         tmp_path,

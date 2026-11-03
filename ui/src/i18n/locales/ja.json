@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "スピーカーを追加",
+    "addDevice": "デバイスを追加",
     "empty": {
       "title": "プレーヤーはまだありません",
       "description": "Bluetooth スピーカーをスキャンするか、プレーヤーを手動で追加してください。"
@@ -445,7 +445,39 @@
       "all": "すべてのプレーヤー",
       "bluetooth": "Bluetooth スピーカー",
       "output": "音声出力"
-    }
+    },
+    "sources": {
+      "title": "ソース",
+      "add": "ソースを追加",
+      "empty": "音声ソースがまだ設定されていません。Bluetooth ソースまたはローカル音声入力を追加してください。",
+      "bluetooth": "Bluetooth",
+      "local": "ローカル入力",
+      "available": "利用可能",
+      "off": "オフ",
+      "pairing": "ペアリング",
+      "waiting": "待機中",
+      "streaming": "ストリーミング中",
+      "error": "エラー",
+      "targetInMa": "Music Assistant で選択",
+      "active": "使用中",
+      "connected": "接続済み",
+      "monitor": "システム音声",
+      "unavailable": "利用不可",
+      "paired": "ペアリング済み",
+      "playsOn": "再生先: {target}",
+      "rename": "名前を変更",
+      "use": "使用",
+      "remove": "入力を削除",
+      "forget": "デバイスを削除",
+      "removeTitle": "{name} を削除しますか？",
+      "removeConsequence": "このソースはここで利用できなくなります。Bluetooth デバイスのペアリング情報はブリッジから削除されますが、Music Assistant とのペアリングは保持されます。",
+      "removed": "ソースを削除しました",
+      "removeFailed": "ソースを削除できませんでした。",
+      "useFailed": "ソースを切り替えられませんでした。",
+      "renameFailed": "ソースの名前を変更できませんでした。",
+      "pressPlay": "ソースを切り替えました。Music Assistant で再生を押すと、新しい入力で開始します。"
+    },
+    "outputs": "出力"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "ALSA ロングカード名"
     },
     "source": {
-      "title": "ソース",
-      "stateOff": "オフ",
-      "stateWaiting": "ソースデバイスを待機中",
-      "stateStreaming": "ストリーミング中",
-      "stateError": "エラー",
-      "stop": "ソースを停止",
-      "pair": "デバイスをペアリング",
-      "stopPairing": "ペアリングを停止",
-      "pairing": "ペアリング受付中: 残り {time}。",
-      "pairingHint": "スマートフォンをペアリングしてください。PIN が間違っていると表示された場合は、先にスマートフォン側でこのブリッジを「削除」（古いペアリング）してください。",
-      "errorTitle": "ソースでエラーが発生しました",
       "errorCapture": "このホストではスマートフォンの音声を取り込めません。",
       "errorCaptureNext": "ブリッジはスマートフォン用の PipeWire キャプチャノードを必要とします。ホストの音声バックエンドを確認してください。",
       "errorNoAdapter": "検出可能モードを受け入れた Bluetooth アダプターがありません。",
       "errorNoAgent": "ブリッジは Bluetooth ペアリングエージェントを登録できませんでした。",
       "errorBluetoothNext": "上記の Bluetooth コントローラーを確認し、もう一度ペアリングしてください。",
       "errorNextStep": "設定 → Music Assistant でソース設定を確認し、ソースを再度開始してください。",
-      "failureTitle": "最後のソースコマンドは拒否されました",
-      "failureNextStep": "ソースを確認して、もう一度お試しください。",
-      "commandFailed": "ソースを変更できませんでした: {reason}",
-      "capture": "キャプチャ",
-      "capturePipewire": "PipeWire ノード",
-      "capturePulse": "PulseAudio ソース",
-      "captureUnavailable": "利用不可",
-      "node": "ノード",
-      "noNode": "キャプチャノードなし",
-      "subtitle": "Bluetooth デバイスからブリッジへストリームされ、ブリッジがソースとして Music Assistant に送信します。",
-      "statePairing": "ペアリングコードを待機中",
       "maOff": "ソースはオフです。有効にすると、スマートフォンを Music Assistant に提供できます。",
       "maError": "Music Assistant への接続に失敗しました。",
       "maConnected": "接続済みです。再生とルーティングは Music Assistant で管理されます。",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant がペアリングコードを拒否しました。",
       "maUnsupported": "この Music Assistant は Sendspin ソースを提供していません。",
       "maUnsupportedNext": "Music Assistant を 2.10 以降にアップデートし、Sendspin ソースプロバイダーを有効にしてください。",
-      "maPairingNext": "ペアリングウィンドウを開き、Music Assistant にコードを入力してください。",
-      "phoneHint": "スマートフォン、タブレット、ノートパソコンを Bluetooth でペアリングしてください。Music Assistant が取り込んだ音声を受信します。",
-      "devicesTitle": "Bluetooth ソースデバイス",
-      "noDevices": "ソースデバイスはまだペアリングされていません。",
-      "deviceActive": "使用中",
-      "deviceConnected": "接続済み",
-      "deviceUse": "使用",
-      "deviceForget": "削除",
-      "deviceForgetConfirmTitle": "このソースデバイスのペアリング情報を削除しますか？",
-      "deviceForgetConfirmBody": "{mac} の Bluetooth ペアリング情報が削除されます。デバイスは後で再度ペアリングできます。",
-      "deviceForgotten": "ソースデバイスのペアリング情報を削除しました"
-    }
+      "maPairingNext": "ペアリングウィンドウを開き、Music Assistant にコードを入力してください。"
+    },
+    "sourceDevice": "ソースデバイス"
   },
   "kit": {
     "closeDialog": "ダイアログを閉じる",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} をミュートしました。",
     "audioUnmuted": "{name} のミュートを解除しました。",
     "audioVolume": "音量を設定: {name}。",
-    "audioResumed": "再開: {name}。",
-    "sourcePairingOpen": "ペアリング受付中: スマートフォンをペアリングしてください。",
-    "sourcePairingClosed": "ペアリング受付を終了しました。"
+    "audioResumed": "再開: {name}。"
   },
   "restart": {
     "stopping": "ブリッジを停止しています…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "音声ソース",
         "help": "ペアリング済みのデバイスから Bluetooth 音声を取り込み、Music Assistant に提供します。既定ではオフで、有効にするとソースがすぐに開始されます。",
-        "off": "ソースはオフです。有効にすると、Music Assistant とペアリングし、続いて Bluetooth ソースデバイスとペアリングできます。",
+        "off": "ソースはオフです。有効にすると、選択した入力のキャプチャを開始します。",
         "failed": "ソースを開始できませんでした。Music Assistant とホストの音声サーバーを確認してから、もう一度お試しください。"
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "完了: {action}"
   },
   "nav": {
-    "home": "スピーカー",
-    "homeShort": "スピーカー",
+    "home": "デバイス",
+    "homeShort": "デバイス",
     "groups": "グループ",
     "groupsShort": "グループ",
     "settings": "設定",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{total} 台中 {n} 台が Bluetooth 接続済み",
     "playing": "{n} 台が再生中",
-    "source": {
-      "title": "音声ソース → Music Assistant",
-      "streaming": "スマートフォンから再生中",
-      "pairing": "ペアリング中",
-      "waiting": "スマートフォンを待機中",
-      "off": "ソースはオフ",
-      "error": "ソースエラー",
-      "maConnected": "Music Assistant 接続済み",
-      "maPaired": "Music Assistant ペアリング済み、再接続中",
-      "maUnpaired": "Music Assistant は未ペアリング",
-      "openHardware": "ハードウェアを開く"
-    },
+    "source": {},
     "checklist": {
       "title": "最初のステップ",
       "progress": "{total} 中 {done} 完了",
@@ -1676,7 +1664,7 @@
     "connectFirst": "グループを表示・操作するには、ブリッジを Music Assistant に接続してください。"
   },
   "addSpeaker": {
-    "title": "スピーカーを追加",
+    "title": "デバイスを追加",
     "findHelp": "スピーカーをペアリングモードにしてください。近くのスピーカーが下に表示されます。",
     "scan": "検索",
     "scanAgain": "再検索",
@@ -1701,8 +1689,9 @@
     "testSound": "テスト音を再生",
     "done": "完了",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "音声出力"
+      "bluetooth": "スピーカー",
+      "audio": "音声出力",
+      "source": "音声ソース"
     },
     "audio": {
       "intro": "このコンピューターの音声出力（USB DAC、サウンドカード、HDMI など）で再生します。",
@@ -1714,7 +1703,33 @@
       "taken": "別のプレーヤーがすでにこの出力を使用しています。"
     },
     "pairing": "{name} をペアリングしています…",
-    "errorNext": "スピーカーがペアリングモードにあり、アダプターの近くにあることを確認して、もう一度お試しください。"
+    "errorNext": "スピーカーがペアリングモードにあり、アダプターの近くにあることを確認して、もう一度お試しください。",
+    "source": {
+      "help": "ローカル音声入力を選ぶか、Bluetooth デバイスをペアリングしてください。Music Assistant がまだペアリングされていなくても機能します。",
+      "bluetooth": "Bluetooth ソース",
+      "local": "ローカル入力",
+      "maHint": "Music Assistant はまだペアリングされていません。今すぐソースを追加し、後で Music Assistant をペアリングできます。",
+      "pairing": "ペアリングウィンドウが開いています: {time}",
+      "pairingHint": "スマートフォン、タブレット、ノートパソコンの Bluetooth 設定でブリッジを選び、メディア音声を許可してください。",
+      "stopPairing": "ペアリングを停止",
+      "pair": "デバイスをペアリング",
+      "pairHint": "ブリッジは 2 分間検出可能になります。",
+      "noBluetooth": "Bluetooth ソースはまだペアリングされていません。",
+      "showMonitors": "システム音声ソースを表示",
+      "refresh": "更新",
+      "captureUnavailable": "このホストでは音声キャプチャを利用できません（{kind}）。ペアリングは可能ですが、ローカル入力は追加できません。",
+      "choose": "選択",
+      "noLocal": "ローカル音声入力が見つかりません。",
+      "node": "音声入力",
+      "nodeHint": "PulseAudio のソース名または PipeWire の node.name です。上で検出された入力を選ぶか、手動で入力してください。",
+      "name": "名前",
+      "add": "入力を追加",
+      "manualHint": "入力は保存されますが有効にはなりません。キャプチャを開始するときは、設定のソーススイッチを使用してください。",
+      "added": "{name} を追加しました。",
+      "localFailed": "ローカル音声入力を読み込めませんでした。",
+      "pairFailed": "ペアリングウィンドウを開けませんでした。",
+      "addFailed": "その音声入力を追加できませんでした。"
+    }
   },
   "connection": {
     "lost": "ブリッジへの接続が切れました — 再接続しています。表示が古い可能性があります。",

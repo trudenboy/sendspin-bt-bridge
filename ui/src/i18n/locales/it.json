@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "Aggiungi altoparlante",
+    "addDevice": "Aggiungi dispositivo",
     "empty": {
       "title": "Ancora nessun lettore",
       "description": "Cerca altoparlanti Bluetooth o aggiungi un lettore manualmente."
@@ -445,7 +445,39 @@
       "all": "Tutti i lettori",
       "bluetooth": "Altoparlanti Bluetooth",
       "output": "Uscite audio"
-    }
+    },
+    "sources": {
+      "title": "Sorgenti",
+      "add": "Aggiungi sorgente",
+      "empty": "Nessuna sorgente audio è ancora configurata. Aggiungi una sorgente Bluetooth o un ingresso audio locale.",
+      "bluetooth": "Bluetooth",
+      "local": "Ingresso locale",
+      "available": "Disponibile",
+      "off": "Spento",
+      "pairing": "Associazione",
+      "waiting": "In attesa",
+      "streaming": "In streaming",
+      "error": "Errore",
+      "targetInMa": "Scegli in Music Assistant",
+      "active": "Attivo",
+      "connected": "Connesso",
+      "monitor": "Audio di sistema",
+      "unavailable": "Non disponibile",
+      "paired": "Associato",
+      "playsOn": "Riproduzione su: {target}",
+      "rename": "Rinomina",
+      "use": "Usa",
+      "remove": "Rimuovi ingresso",
+      "forget": "Dimentica dispositivo",
+      "removeTitle": "Rimuovere {name}?",
+      "removeConsequence": "La sorgente non sarà più disponibile qui. Il bridge dimentica il dispositivo Bluetooth; l’associazione con Music Assistant resta invariata.",
+      "removed": "Sorgente rimossa",
+      "removeFailed": "Impossibile rimuovere la sorgente.",
+      "useFailed": "Impossibile cambiare la sorgente.",
+      "renameFailed": "Impossibile rinominare la sorgente.",
+      "pressPlay": "Sorgente cambiata. Premi Riproduci in Music Assistant per avviarla sul nuovo ingresso."
+    },
+    "outputs": "Uscite"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "Nome lungo della scheda ALSA"
     },
     "source": {
-      "title": "Sorgente",
-      "stateOff": "Spenta",
-      "stateWaiting": "In attesa di un dispositivo sorgente",
-      "stateStreaming": "In streaming",
-      "stateError": "Errore",
-      "stop": "Ferma sorgente",
-      "pair": "Associa un dispositivo",
-      "stopPairing": "Interrompi associazione",
-      "pairing": "Aperto all’associazione: {time} rimanenti.",
-      "pairingHint": "Associa il telefono ora; se dice che il PIN è errato, prima dimentica questo bridge sul telefono (un’associazione vecchia).",
-      "errorTitle": "La sorgente non è riuscita",
       "errorCapture": "L’audio del telefono non può essere catturato su questo host.",
       "errorCaptureNext": "Il bridge ha bisogno dei nodi di cattura PipeWire per il telefono; controlla il backend audio dell’host.",
       "errorNoAdapter": "Nessun adattatore Bluetooth ha accettato la visibilità.",
       "errorNoAgent": "Il bridge non è riuscito a registrare un agente di associazione Bluetooth.",
       "errorBluetoothNext": "Controlla i controller Bluetooth qui sopra, poi prova di nuovo ad associare.",
       "errorNextStep": "Controlla le impostazioni della sorgente in Impostazioni → Music Assistant, poi avvia di nuovo la sorgente.",
-      "failureTitle": "L’ultimo comando sulla sorgente è stato rifiutato",
-      "failureNextStep": "Controlla la sorgente e riprova.",
-      "commandFailed": "Impossibile modificare la sorgente: {reason}",
-      "capture": "Cattura",
-      "capturePipewire": "Nodo PipeWire",
-      "capturePulse": "Sorgente PulseAudio",
-      "captureUnavailable": "Non disponibile",
-      "node": "Nodo",
-      "noNode": "Nessun nodo di cattura",
-      "subtitle": "Un dispositivo Bluetooth trasmette al bridge; il bridge lo invia a Music Assistant come sorgente.",
-      "statePairing": "In attesa del codice di associazione",
       "maOff": "La sorgente è spenta. Attivala per offrire il telefono a Music Assistant.",
       "maError": "La connessione a Music Assistant non è riuscita.",
       "maConnected": "Connesso. Riproduzione e routing sono gestiti in Music Assistant.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant ha rifiutato il codice di associazione.",
       "maUnsupported": "Questo Music Assistant non offre una sorgente Sendspin.",
       "maUnsupportedNext": "Aggiorna Music Assistant alla 2.10 o successiva e attiva il suo provider di sorgenti Sendspin.",
-      "maPairingNext": "Apri una finestra di associazione e inserisci il codice in Music Assistant.",
-      "phoneHint": "Associa un telefono, un tablet o un portatile via Bluetooth; Music Assistant riceve l’audio catturato.",
-      "devicesTitle": "Dispositivi sorgente Bluetooth",
-      "noDevices": "Nessun dispositivo sorgente è ancora associato.",
-      "deviceActive": "attivo",
-      "deviceConnected": "connesso",
-      "deviceUse": "Usa",
-      "deviceForget": "Dimentica",
-      "deviceForgetConfirmTitle": "Dimenticare questo dispositivo sorgente?",
-      "deviceForgetConfirmBody": "L’associazione Bluetooth di {mac} viene rimossa. Il dispositivo potrà essere associato di nuovo più tardi.",
-      "deviceForgotten": "Dispositivo sorgente dimenticato"
-    }
+      "maPairingNext": "Apri una finestra di associazione e inserisci il codice in Music Assistant."
+    },
+    "sourceDevice": "Dispositivo sorgente"
   },
   "kit": {
     "closeDialog": "Chiudi finestra",
@@ -864,9 +865,7 @@
     "audioMuted": "Audio disattivato su {name}.",
     "audioUnmuted": "Audio riattivato su {name}.",
     "audioVolume": "Volume impostato: {name}.",
-    "audioResumed": "Riproduzione ripresa: {name}.",
-    "sourcePairingOpen": "Finestra di associazione aperta: associa il telefono ora.",
-    "sourcePairingClosed": "Finestra di associazione chiusa."
+    "audioResumed": "Riproduzione ripresa: {name}."
   },
   "restart": {
     "stopping": "Arresto del bridge…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "Sorgente audio",
         "help": "Cattura l’audio Bluetooth da un dispositivo associato e offrilo a Music Assistant. Disattivato per impostazione predefinita; attivandolo la sorgente parte subito.",
-        "off": "La sorgente è spenta. Attivala per associare Music Assistant e poi un dispositivo sorgente Bluetooth.",
+        "off": "La sorgente è spenta. Attivala per iniziare a catturare l’ingresso selezionato.",
         "failed": "Non è stato possibile avviare la sorgente. Controlla Music Assistant e il server audio dell’host, poi riprova."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "Fatto: {action}"
   },
   "nav": {
-    "home": "Altoparlanti",
-    "homeShort": "Altoparlanti",
+    "home": "Dispositivi",
+    "homeShort": "Dispositivi",
     "groups": "Gruppi",
     "groupsShort": "Gruppi",
     "settings": "Impostazioni",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{n} di {total} connessi via Bluetooth",
     "playing": "{n} in riproduzione",
-    "source": {
-      "title": "Sorgente audio → Music Assistant",
-      "streaming": "In riproduzione dal telefono",
-      "pairing": "Associazione in corso",
-      "waiting": "In attesa del telefono",
-      "off": "Sorgente spenta",
-      "error": "Errore della sorgente",
-      "maConnected": "Music Assistant connesso",
-      "maPaired": "Music Assistant associato, riconnessione",
-      "maUnpaired": "Music Assistant non è associato",
-      "openHardware": "Apri Hardware"
-    },
+    "source": {},
     "checklist": {
       "title": "Primi passi",
       "progress": "{done} di {total} completati",
@@ -1676,7 +1664,7 @@
     "connectFirst": "Connetti il bridge a Music Assistant per vedere e controllare i suoi gruppi."
   },
   "addSpeaker": {
-    "title": "Aggiungi altoparlante",
+    "title": "Aggiungi dispositivo",
     "findHelp": "Metti l’altoparlante in modalità associazione. Gli altoparlanti vicini compaiono qui sotto.",
     "scan": "Cerca",
     "scanAgain": "Cerca di nuovo",
@@ -1701,8 +1689,9 @@
     "testSound": "Riproduci suono di prova",
     "done": "Fatto",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "Uscita audio"
+      "bluetooth": "Diffusore",
+      "audio": "Uscita audio",
+      "source": "Sorgente audio"
     },
     "audio": {
       "intro": "Riproduci su un’uscita audio di questo computer, come un DAC USB, una scheda audio o l’HDMI.",
@@ -1714,7 +1703,33 @@
       "taken": "Un altro lettore usa già questa uscita."
     },
     "pairing": "Associazione di {name}…",
-    "errorNext": "Verifica che l’altoparlante sia in modalità associazione e vicino all’adattatore, poi riprova."
+    "errorNext": "Verifica che l’altoparlante sia in modalità associazione e vicino all’adattatore, poi riprova.",
+    "source": {
+      "help": "Scegli un ingresso audio locale o associa un dispositivo Bluetooth. Funziona anche se Music Assistant non è ancora associato.",
+      "bluetooth": "Sorgente Bluetooth",
+      "local": "Ingresso locale",
+      "maHint": "Music Assistant non è ancora associato; puoi aggiungere la sorgente ora e associare Music Assistant più tardi.",
+      "pairing": "Finestra di associazione aperta: {time}",
+      "pairingHint": "Su telefono, tablet o portatile, scegli il bridge nelle impostazioni Bluetooth e consenti l’audio multimediale.",
+      "stopPairing": "Interrompi associazione",
+      "pair": "Associa un dispositivo",
+      "pairHint": "Il bridge diventa rilevabile per due minuti.",
+      "noBluetooth": "Nessuna sorgente Bluetooth è ancora associata.",
+      "showMonitors": "Mostra sorgenti audio di sistema",
+      "refresh": "Aggiorna",
+      "captureUnavailable": "La cattura audio non è disponibile su questo host ({kind}); l’associazione funziona comunque, ma non è possibile aggiungere ingressi locali.",
+      "choose": "Scegli",
+      "noLocal": "Nessun ingresso audio locale trovato.",
+      "node": "Ingresso audio",
+      "nodeHint": "Nome sorgente PulseAudio o node.name di PipeWire. Scegli un ingresso rilevato sopra o inseriscilo manualmente.",
+      "name": "Nome",
+      "add": "Aggiungi ingresso",
+      "manualHint": "L’ingresso viene salvato ma non attivato: usa l’interruttore della sorgente in Impostazioni quando vuoi iniziare la cattura.",
+      "added": "{name} aggiunto.",
+      "localFailed": "Impossibile caricare gli ingressi audio locali.",
+      "pairFailed": "Impossibile aprire la finestra di associazione.",
+      "addFailed": "Impossibile aggiungere quell’ingresso audio."
+    }
   },
   "connection": {
     "lost": "Connessione al bridge persa — riconnessione. Ciò che vedi potrebbe non essere aggiornato.",

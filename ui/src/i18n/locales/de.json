@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "Lautsprecher hinzufügen",
+    "addDevice": "Gerät hinzufügen",
     "empty": {
       "title": "Noch keine Player",
       "description": "Nach Bluetooth-Lautsprechern suchen oder einen Player manuell hinzufügen."
@@ -445,7 +445,39 @@
       "all": "Alle Player",
       "bluetooth": "Bluetooth-Lautsprecher",
       "output": "Audioausgänge"
-    }
+    },
+    "sources": {
+      "title": "Quellen",
+      "add": "Quelle hinzufügen",
+      "empty": "Es ist noch keine Audioquelle eingerichtet. Füge eine Bluetooth-Quelle oder einen lokalen Audioeingang hinzu.",
+      "bluetooth": "Bluetooth",
+      "local": "Lokaler Eingang",
+      "available": "Verfügbar",
+      "off": "Aus",
+      "pairing": "Kopplung",
+      "waiting": "Wartet",
+      "streaming": "Streaming",
+      "error": "Fehler",
+      "targetInMa": "In Music Assistant auswählen",
+      "active": "Aktiv",
+      "connected": "Verbunden",
+      "monitor": "Systemaudio",
+      "unavailable": "Nicht verfügbar",
+      "paired": "Gekoppelt",
+      "playsOn": "Wiedergabe auf: {target}",
+      "rename": "Umbenennen",
+      "use": "Verwenden",
+      "remove": "Eingang entfernen",
+      "forget": "Gerät entfernen",
+      "removeTitle": "{name} entfernen?",
+      "removeConsequence": "Die Quelle ist hier dann nicht mehr verfügbar. Die Bridge entfernt die Bluetooth-Kopplung; die Kopplung mit Music Assistant bleibt erhalten.",
+      "removed": "Quelle entfernt",
+      "removeFailed": "Die Quelle konnte nicht entfernt werden.",
+      "useFailed": "Die Quelle konnte nicht gewechselt werden.",
+      "renameFailed": "Die Quelle konnte nicht umbenannt werden.",
+      "pressPlay": "Quelle gewechselt. Drücke Play in Music Assistant, um sie am neuen Eingang zu starten."
+    },
+    "outputs": "Ausgänge"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "Langer ALSA-Kartenname"
     },
     "source": {
-      "title": "Quelle",
-      "stateOff": "Aus",
-      "stateWaiting": "Warten auf ein Quellgerät",
-      "stateStreaming": "Streaming",
-      "stateError": "Fehler",
-      "stop": "Quelle stoppen",
-      "pair": "Gerät koppeln",
-      "stopPairing": "Kopplung beenden",
-      "pairing": "Offen für Kopplung: noch {time}.",
-      "pairingHint": "Koppel jetzt das Smartphone; wenn es meldet, die PIN sei falsch, entferne zuerst auf dem Smartphone diese Bridge (veraltete Kopplung).",
-      "errorTitle": "Die Quelle ist fehlgeschlagen",
       "errorCapture": "Das Audio des Smartphones kann auf diesem Host nicht abgegriffen werden.",
       "errorCaptureNext": "Die Bridge benötigt PipeWire-Aufnahmeknoten für das Smartphone; prüfe das Audio-Backend des Hosts.",
       "errorNoAdapter": "Kein Bluetooth-Adapter hat die Sichtbarkeit akzeptiert.",
       "errorNoAgent": "Die Bridge konnte keinen Bluetooth-Kopplungsagenten registrieren.",
       "errorBluetoothNext": "Prüfe die Bluetooth-Controller oben und versuche die Kopplung erneut.",
       "errorNextStep": "Prüfe die Quelleneinstellungen unter Einstellungen → Music Assistant und starte die Quelle erneut.",
-      "failureTitle": "Der letzte Quellenbefehl wurde abgelehnt",
-      "failureNextStep": "Prüfe die Quelle und versuche es erneut.",
-      "commandFailed": "Die Quelle konnte nicht geändert werden: {reason}",
-      "capture": "Aufnahme",
-      "capturePipewire": "PipeWire-Knoten",
-      "capturePulse": "PulseAudio-Quelle",
-      "captureUnavailable": "Nicht verfügbar",
-      "node": "Knoten",
-      "noNode": "Kein Aufnahmeknoten",
-      "subtitle": "Ein Bluetooth-Gerät streamt in die Bridge; die Bridge gibt es als Quelle an Music Assistant weiter.",
-      "statePairing": "Warten auf den Kopplungscode",
       "maOff": "Die Quelle ist aus. Aktiviere sie, um das Smartphone Music Assistant anzubieten.",
       "maError": "Die Verbindung zu Music Assistant ist fehlgeschlagen.",
       "maConnected": "Verbunden. Wiedergabe und Routing werden in Music Assistant verwaltet.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant hat den Kopplungscode abgelehnt.",
       "maUnsupported": "Dieser Music Assistant bietet keine Sendspin-Quelle an.",
       "maUnsupportedNext": "Aktualisiere Music Assistant auf 2.10 oder neuer und aktiviere den Sendspin-Quellenanbieter.",
-      "maPairingNext": "Öffne ein Kopplungsfenster und gib den Code in Music Assistant ein.",
-      "phoneHint": "Koppel ein Smartphone, Tablet oder Notebook per Bluetooth; Music Assistant erhält das aufgenommene Audio.",
-      "devicesTitle": "Bluetooth-Quellgeräte",
-      "noDevices": "Noch kein Quellgerät gekoppelt.",
-      "deviceActive": "aktiv",
-      "deviceConnected": "verbunden",
-      "deviceUse": "Verwenden",
-      "deviceForget": "Entfernen",
-      "deviceForgetConfirmTitle": "Dieses Quellgerät entfernen?",
-      "deviceForgetConfirmBody": "Die Bluetooth-Kopplung mit {mac} wird entfernt. Das Gerät kann später erneut gekoppelt werden.",
-      "deviceForgotten": "Quellgerät entfernt"
-    }
+      "maPairingNext": "Öffne ein Kopplungsfenster und gib den Code in Music Assistant ein."
+    },
+    "sourceDevice": "Quellgerät"
   },
   "kit": {
     "closeDialog": "Dialog schließen",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} stummgeschaltet.",
     "audioUnmuted": "Stummschaltung für {name} aufgehoben.",
     "audioVolume": "Lautstärke gesetzt: {name}.",
-    "audioResumed": "Fortgesetzt: {name}.",
-    "sourcePairingOpen": "Kopplungsfenster offen: Koppel jetzt das Smartphone.",
-    "sourcePairingClosed": "Kopplungsfenster geschlossen."
+    "audioResumed": "Fortgesetzt: {name}."
   },
   "restart": {
     "stopping": "Bridge wird gestoppt…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "Audioquelle",
         "help": "Nimm Bluetooth-Audio von einem gekoppelten Gerät auf und biete es Music Assistant an. Standardmäßig aus; beim Aktivieren startet die Quelle sofort.",
-        "off": "Die Quelle ist aus. Aktiviere sie, um Music Assistant und danach ein Bluetooth-Quellgerät zu koppeln.",
+        "off": "Die Quelle ist aus. Aktiviere sie, um den gewählten Eingang aufzunehmen.",
         "failed": "Die Quelle konnte nicht gestartet werden. Prüfe Music Assistant und den Audioserver des Hosts und versuche es erneut."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "Erledigt: {action}"
   },
   "nav": {
-    "home": "Lautsprecher",
-    "homeShort": "Lautsprecher",
+    "home": "Geräte",
+    "homeShort": "Geräte",
     "groups": "Gruppen",
     "groupsShort": "Gruppen",
     "settings": "Einstellungen",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{n} von {total} Bluetooth verbunden",
     "playing": "{n} in Wiedergabe",
-    "source": {
-      "title": "Audioquelle → Music Assistant",
-      "streaming": "Wiedergabe vom Smartphone",
-      "pairing": "Kopplung läuft",
-      "waiting": "Warten auf das Smartphone",
-      "off": "Quelle ist aus",
-      "error": "Quellenfehler",
-      "maConnected": "Music Assistant verbunden",
-      "maPaired": "Music Assistant gekoppelt, verbinde neu",
-      "maUnpaired": "Music Assistant ist nicht gekoppelt",
-      "openHardware": "Hardware öffnen"
-    },
+    "source": {},
     "checklist": {
       "title": "Erste Schritte",
       "progress": "{done} von {total} erledigt",
@@ -1676,7 +1664,7 @@
     "connectFirst": "Verbinde die Bridge mit Music Assistant, um dessen Gruppen zu sehen und zu steuern."
   },
   "addSpeaker": {
-    "title": "Lautsprecher hinzufügen",
+    "title": "Gerät hinzufügen",
     "findHelp": "Setze den Lautsprecher in den Kopplungsmodus. Lautsprecher in der Nähe erscheinen unten.",
     "scan": "Suchen",
     "scanAgain": "Erneut suchen",
@@ -1701,8 +1689,9 @@
     "testSound": "Testton abspielen",
     "done": "Fertig",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "Audioausgang"
+      "bluetooth": "Lautsprecher",
+      "audio": "Audioausgang",
+      "source": "Audioquelle"
     },
     "audio": {
       "intro": "Gib auf einem Audioausgang dieses Computers wieder, etwa einem USB-DAC, einer Soundkarte oder HDMI.",
@@ -1714,7 +1703,33 @@
       "taken": "Ein anderer Player verwendet diesen Ausgang bereits."
     },
     "pairing": "Kopplung von {name}…",
-    "errorNext": "Prüfe, ob der Lautsprecher im Kopplungsmodus und nah am Adapter ist, und versuche es dann erneut."
+    "errorNext": "Prüfe, ob der Lautsprecher im Kopplungsmodus und nah am Adapter ist, und versuche es dann erneut.",
+    "source": {
+      "help": "Wähle einen lokalen Audioeingang oder kopple ein Bluetooth-Gerät. Das funktioniert auch, wenn Music Assistant noch nicht gekoppelt ist.",
+      "bluetooth": "Bluetooth-Quelle",
+      "local": "Lokaler Eingang",
+      "maHint": "Music Assistant ist noch nicht gekoppelt; du kannst die Quelle jetzt hinzufügen und Music Assistant später koppeln.",
+      "pairing": "Kopplungsfenster offen: {time}",
+      "pairingHint": "Wähle auf dem Smartphone, Tablet oder Notebook die Bridge in den Bluetooth-Einstellungen und erlaube Medienaudio.",
+      "stopPairing": "Kopplung beenden",
+      "pair": "Gerät koppeln",
+      "pairHint": "Die Bridge ist zwei Minuten lang sichtbar.",
+      "noBluetooth": "Es ist noch keine Bluetooth-Quelle gekoppelt.",
+      "showMonitors": "Systemaudio-Quellen anzeigen",
+      "refresh": "Aktualisieren",
+      "captureUnavailable": "Die Audioaufnahme ist auf diesem Host nicht verfügbar ({kind}); die Kopplung funktioniert trotzdem, lokale Eingänge können aber nicht hinzugefügt werden.",
+      "choose": "Auswählen",
+      "noLocal": "Kein lokaler Audioeingang gefunden.",
+      "node": "Audioeingang",
+      "nodeHint": "PulseAudio-Quellenname oder PipeWire-node.name. Wähle oben einen erkannten Eingang oder gib einen manuell ein.",
+      "name": "Name",
+      "add": "Eingang hinzufügen",
+      "manualHint": "Der Eingang wird gespeichert, aber nicht aktiviert: Nutze den Quellenschalter in den Einstellungen, wenn du die Aufnahme starten möchtest.",
+      "added": "{name} hinzugefügt.",
+      "localFailed": "Lokale Audioeingänge konnten nicht geladen werden.",
+      "pairFailed": "Das Kopplungsfenster konnte nicht geöffnet werden.",
+      "addFailed": "Dieser Audioeingang konnte nicht hinzugefügt werden."
+    }
   },
   "connection": {
     "lost": "Verbindung zur Bridge verloren – verbinde neu. Was du siehst, ist möglicherweise veraltet.",

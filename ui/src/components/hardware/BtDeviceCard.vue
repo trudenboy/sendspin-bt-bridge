@@ -74,7 +74,8 @@ const rssi = computed(() => {
       <SbBadge v-if="rssi" size="sm">{{ t('hardware.signal', { db: rssi }) }}</SbBadge>
     </div>
 
-    <div v-if="device.roles.length" class="flex flex-wrap items-center gap-1.5">
+    <div v-if="sourceDevice || device.roles.length" class="flex flex-wrap items-center gap-1.5">
+      <SbBadge v-if="sourceDevice" data-source-device tone="info" size="sm">{{ t('hardware.sourceDevice') }}</SbBadge>
       <SbBadge
         v-for="role in device.roles"
         :key="`${role.role}-${role.evidence}`"

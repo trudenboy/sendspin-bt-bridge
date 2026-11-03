@@ -2325,6 +2325,34 @@
             "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default.",
             "title": "Sendspin Source"
           },
+          "SENDSPIN_SOURCES": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SourceConfigEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "description": "Saved local audio inputs that can feed the source. Bluetooth source bonds come from BlueZ and are not stored here.",
+            "title": "Sendspin Sources"
+          },
+          "SENDSPIN_SOURCE_ACTIVE": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Selected source id (bluetooth:<MAC> or local:<node>); empty keeps the automatic Bluetooth policy.",
+            "title": "Sendspin Source Active"
+          },
           "SENDSPIN_SOURCE_TARGET": {
             "anyOf": [
               {
@@ -5486,10 +5514,10 @@
           "in_use_by",
           "active_port",
           "active_port_available",
+          "monitor_of",
           "is_default",
           "identifiers",
           "ports",
-          "monitor_of",
           "as_of",
           "stale"
         ],
@@ -5624,6 +5652,18 @@
             "title": "Kind",
             "type": "string"
           },
+          "monitor_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a monitor source: the sink it mirrors.",
+            "title": "Monitor Of"
+          },
           "muted": {
             "anyOf": [
               {
@@ -5687,6 +5727,7 @@
           "in_use_by",
           "active_port",
           "active_port_available",
+          "monitor_of",
           "is_default"
         ],
         "title": "EndpointSummary",
@@ -8616,6 +8657,18 @@
       "SendspinSourceStatus": {
         "description": "The phone-to-Music-Assistant source: capture, pairing and connection state.",
         "properties": {
+          "active_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The selected source id, if one is pinned.",
+            "title": "Active Input"
+          },
           "devices": {
             "description": "Paired Bluetooth devices that can feed the source.",
             "items": {
@@ -8641,6 +8694,14 @@
             ],
             "description": "A terminal source error (capture_unavailable, …).",
             "title": "Error"
+          },
+          "inputs": {
+            "description": "Bluetooth and local inputs the source can use.",
+            "items": {
+              "$ref": "#/components/schemas/SourceInputStatus"
+            },
+            "title": "Inputs",
+            "type": "array"
           },
           "ma_connected": {
             "default": false,
@@ -8815,6 +8876,8 @@
           "devices",
           "target_player",
           "target_error",
+          "active_input",
+          "inputs",
           "error"
         ],
         "title": "SendspinSourceStatus",
@@ -9360,6 +9423,19 @@
         "title": "SoundIn",
         "type": "object"
       },
+      "SourceActiveIn": {
+        "properties": {
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id"
+        ],
+        "title": "SourceActiveIn",
+        "type": "object"
+      },
       "SourceCapture": {
         "description": "How the phone's audio is captured, or why it cannot be.",
         "properties": {
@@ -9389,6 +9465,36 @@
           "node"
         ],
         "title": "SourceCapture",
+        "type": "object"
+      },
+      "SourceConfigEntry": {
+        "description": "A saved local input that can feed the Sendspin source.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "local",
+            "default": "local",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "node": {
+            "title": "Node",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "node"
+        ],
+        "title": "SourceConfigEntry",
         "type": "object"
       },
       "SourceDevice": {
@@ -9555,6 +9661,197 @@
           "error"
         ],
         "title": "SourceFeed",
+        "type": "object"
+      },
+      "SourceInputIn": {
+        "properties": {
+          "allow_monitor": {
+            "default": false,
+            "title": "Allow Monitor",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "node": {
+            "title": "Node",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node"
+        ],
+        "title": "SourceInputIn",
+        "type": "object"
+      },
+      "SourceInputNameIn": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "name"
+        ],
+        "title": "SourceInputNameIn",
+        "type": "object"
+      },
+      "SourceInputRemoveIn": {
+        "properties": {
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id"
+        ],
+        "title": "SourceInputRemoveIn",
+        "type": "object"
+      },
+      "SourceInputStatus": {
+        "description": "One selectable source input: a Bluetooth bond or a local audio input.",
+        "properties": {
+          "active": {
+            "default": false,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
+          "connected": {
+            "default": false,
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "bluetooth",
+              "local"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mac"
+          },
+          "monitor": {
+            "default": false,
+            "title": "Monitor",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "description",
+          "active",
+          "available",
+          "connected",
+          "monitor",
+          "mac",
+          "node"
+        ],
+        "title": "SourceInputStatus",
+        "type": "object"
+      },
+      "SourceInputs": {
+        "description": "Configured inputs and unconfigured local candidates for the add dialog.",
+        "properties": {
+          "active_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Input"
+          },
+          "capture_available": {
+            "default": true,
+            "title": "Capture Available",
+            "type": "boolean"
+          },
+          "capture_kind": {
+            "default": "unknown",
+            "title": "Capture Kind",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceInputStatus"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "local_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/SourceInputStatus"
+            },
+            "title": "Local Candidates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "active_input",
+          "inputs",
+          "local_candidates",
+          "capture_available",
+          "capture_kind"
+        ],
+        "title": "SourceInputs",
         "type": "object"
       },
       "SourceMa": {
@@ -12504,6 +12801,61 @@
         ]
       }
     },
+    "/api/v1/bridge/source/active": {
+      "put": {
+        "operationId": "select_source_input_api_v1_bridge_source_active_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceActiveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Select Source Input Api V1 Bridge Source Active Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Select the active source input",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
     "/api/v1/bridge/source/devices/{mac}": {
       "delete": {
         "description": "Stop capturing the device and remove its Bluetooth bond; the MA pairing is kept.",
@@ -12604,6 +12956,212 @@
           }
         },
         "summary": "Use a paired source device",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/inputs": {
+      "delete": {
+        "operationId": "remove_source_input_api_v1_bridge_source_inputs_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceInputRemoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove a source input",
+        "tags": [
+          "bridge"
+        ]
+      },
+      "get": {
+        "description": "Configured inputs plus local audio sources the add dialog can offer.",
+        "operationId": "get_source_inputs_api_v1_bridge_source_inputs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_monitors",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Monitors",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceInputs"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Bluetooth and local source inputs",
+        "tags": [
+          "bridge"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_source_input_api_v1_bridge_source_inputs_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceInputNameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rename Source Input Api V1 Bridge Source Inputs Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Rename a local audio input",
+        "tags": [
+          "bridge"
+        ]
+      },
+      "post": {
+        "operationId": "add_source_input_api_v1_bridge_source_inputs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceInputIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Source Input Api V1 Bridge Source Inputs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Save a local audio input",
         "tags": [
           "bridge"
         ]

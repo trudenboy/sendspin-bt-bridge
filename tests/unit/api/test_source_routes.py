@@ -156,3 +156,116 @@ def test_choosing_a_source_target_answers_with_its_name(api_client, monkeypatch)
     assert response.status_code == 200
     assert response.json()["target_name"] == "Kitchen"
     assert seen == ["kitchen"]
+
+
+def test_source_inputs_are_served_with_local_candidates(api_client, monkeypatch):
+    async def fake_inputs(include_monitors=False):
+        assert include_monitors is True
+        return {
+            "active_input": "local:alsa_input.line",
+            "inputs": [
+                {
+                    "id": "local:alsa_input.line",
+                    "kind": "local",
+                    "name": "Line In",
+                    "description": "Line In",
+                    "active": True,
+                    "available": True,
+                    "connected": False,
+                    "monitor": False,
+                    "mac": None,
+                    "node": "alsa_input.line",
+                }
+            ],
+            "local_candidates": [
+                {
+                    "id": "local:alsa_input.usb",
+                    "kind": "local",
+                    "name": "USB",
+                    "description": "USB",
+                    "active": False,
+                    "available": True,
+                    "connected": False,
+                    "monitor": False,
+                    "mac": None,
+                    "node": "alsa_input.usb",
+                }
+            ],
+            "capture_available": True,
+            "capture_kind": "pulseaudio",
+        }
+
+    monkeypatch.setattr(source_uc, "inputs", fake_inputs)
+
+    response = api_client.get("/api/v1/bridge/source/inputs?include_monitors=true")
+
+    assert response.status_code == 200
+    assert response.json()["local_candidates"][0]["node"] == "alsa_input.usb"
+
+
+def test_adding_a_local_source_answers_201(api_client, monkeypatch):
+    async def fake_add(node, name, *, allow_monitor=False):
+        assert (node, name, allow_monitor) == ("alsa_input.line", "Turntable", False)
+        return {"id": "local:alsa_input.line"}
+
+    monkeypatch.setattr(source_uc, "add_local_input", fake_add)
+
+    response = api_client.post(
+        "/api/v1/bridge/source/inputs",
+        json={"node": "alsa_input.line", "name": "Turntable"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == "local:alsa_input.line"
+
+
+def test_renaming_a_local_source_uses_the_path_id(api_client, monkeypatch):
+    seen: list[tuple[str, str]] = []
+
+    async def fake_rename(source_id, name):
+        seen.append((source_id, name))
+        return {"id": source_id, "name": name}
+
+    monkeypatch.setattr(source_uc, "rename_local_input", fake_rename)
+
+    response = api_client.patch(
+        "/api/v1/bridge/source/inputs",
+        json={"source_id": "local:alsa_input.line", "name": "Turntable"},
+    )
+
+    assert response.status_code == 200
+    assert seen == [("local:alsa_input.line", "Turntable")]
+
+
+def test_removing_a_source_answers_204(api_client, monkeypatch):
+    seen: list[str] = []
+
+    async def fake_remove(source_id):
+        seen.append(source_id)
+
+    monkeypatch.setattr(source_uc, "remove_input", fake_remove)
+
+    response = api_client.request(
+        "DELETE",
+        "/api/v1/bridge/source/inputs",
+        json={"source_id": "local:alsa_input.line"},
+    )
+
+    assert response.status_code == 204
+    assert seen == ["local:alsa_input.line"]
+
+
+def test_selecting_a_source_answers_with_the_active_id(api_client, monkeypatch):
+    seen: list[str] = []
+
+    async def fake_select(source_id):
+        seen.append(source_id)
+        return {"active_input": source_id, "target_error": None}
+
+    monkeypatch.setattr(source_uc, "select_input", fake_select)
+
+    response = api_client.put("/api/v1/bridge/source/active", json={"source_id": "local:alsa_input.line"})
+
+    assert response.status_code == 200
+    assert response.json()["active_input"] == "local:alsa_input.line"
+    assert seen == ["local:alsa_input.line"]

@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "Hoparlör ekle",
+    "addDevice": "Cihaz ekle",
     "empty": {
       "title": "Henüz oynatıcı yok",
       "description": "Bluetooth hoparlörlerini tara veya elle bir oynatıcı ekle."
@@ -445,7 +445,39 @@
       "all": "Tüm oynatıcılar",
       "bluetooth": "Bluetooth hoparlörler",
       "output": "Ses çıkışları"
-    }
+    },
+    "sources": {
+      "title": "Kaynaklar",
+      "add": "Kaynak ekle",
+      "empty": "Henüz bir ses kaynağı yapılandırılmadı. Bir Bluetooth kaynağı veya yerel ses girişi ekle.",
+      "bluetooth": "Bluetooth",
+      "local": "Yerel giriş",
+      "available": "Kullanılabilir",
+      "off": "Kapalı",
+      "pairing": "Eşleştirme",
+      "waiting": "Bekliyor",
+      "streaming": "Akış",
+      "error": "Hata",
+      "targetInMa": "Music Assistant’ta seç",
+      "active": "Etkin",
+      "connected": "Bağlı",
+      "monitor": "Sistem sesi",
+      "unavailable": "Kullanılamıyor",
+      "paired": "Eşleştirilmiş",
+      "playsOn": "Şurada çalıyor: {target}",
+      "rename": "Yeniden adlandır",
+      "use": "Kullan",
+      "remove": "Girişi kaldır",
+      "forget": "Cihazı unut",
+      "removeTitle": "{name} kaldırılsın mı?",
+      "removeConsequence": "Kaynak burada artık kullanılamaz. Bluetooth cihazının eşleşmesi köprüden unutulur; Music Assistant eşleştirmesi korunur.",
+      "removed": "Kaynak kaldırıldı",
+      "removeFailed": "Kaynak kaldırılamadı.",
+      "useFailed": "Kaynak değiştirilemedi.",
+      "renameFailed": "Kaynak yeniden adlandırılamadı.",
+      "pressPlay": "Kaynak değiştirildi. Yeni girişte başlatmak için Music Assistant'ta Oynat'a bas."
+    },
+    "outputs": "Çıkışlar"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "ALSA uzun kart adı"
     },
     "source": {
-      "title": "Kaynak",
-      "stateOff": "Kapalı",
-      "stateWaiting": "Kaynak cihaz bekleniyor",
-      "stateStreaming": "Akış yapılıyor",
-      "stateError": "Hata",
-      "stop": "Kaynağı durdur",
-      "pair": "Cihaz eşleştir",
-      "stopPairing": "Eşleştirmeyi durdur",
-      "pairing": "Eşleştirmeye açık: {time} kaldı.",
-      "pairingHint": "Telefonu şimdi eşleştir; PIN’in yanlış olduğunu söylüyorsa önce telefonda bu köprüyü unut (eski bir eşleşme).",
-      "errorTitle": "Kaynak başarısız oldu",
       "errorCapture": "Telefonun sesi bu ana bilgisayarda yakalanamıyor.",
       "errorCaptureNext": "Köprünün telefon için PipeWire yakalama düğümlerine ihtiyacı var; ana bilgisayarın ses altyapısını denetle.",
       "errorNoAdapter": "Hiçbir Bluetooth bağdaştırıcısı keşfedilebilirliği kabul etmedi.",
       "errorNoAgent": "Köprü bir Bluetooth eşleştirme aracısı kaydedemedi.",
       "errorBluetoothNext": "Yukarıdaki Bluetooth denetleyicilerini denetle, sonra eşleştirmeyi yeniden dene.",
       "errorNextStep": "Ayarlar → Music Assistant bölümündeki kaynak ayarlarını denetle, sonra kaynağı yeniden başlat.",
-      "failureTitle": "Son kaynak komutu reddedildi",
-      "failureNextStep": "Kaynağı denetle ve yeniden dene.",
-      "commandFailed": "Kaynak değiştirilemedi: {reason}",
-      "capture": "Yakalama",
-      "capturePipewire": "PipeWire düğümü",
-      "capturePulse": "PulseAudio kaynağı",
-      "captureUnavailable": "Kullanılamıyor",
-      "node": "Düğüm",
-      "noNode": "Yakalama düğümü yok",
-      "subtitle": "Bluetooth cihazı köprüye akış yapar; köprü bunu bir kaynak olarak Music Assistant’a gönderir.",
-      "statePairing": "Eşleştirme kodu bekleniyor",
       "maOff": "Kaynak kapalı. Telefonu Music Assistant’a sunmak için etkinleştir.",
       "maError": "Music Assistant bağlantısı başarısız oldu.",
       "maConnected": "Bağlandı. Oynatma ve yönlendirme Music Assistant’ta yönetilir.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant eşleştirme kodunu reddetti.",
       "maUnsupported": "Bu Music Assistant bir Sendspin kaynağı sunmuyor.",
       "maUnsupportedNext": "Music Assistant’ı 2.10 veya daha yeni bir sürüme güncelle ve Sendspin kaynak sağlayıcısını etkinleştir.",
-      "maPairingNext": "Bir eşleştirme penceresi aç ve kodu Music Assistant’a gir.",
-      "phoneHint": "Bir telefon, tablet veya dizüstü bilgisayar Bluetooth üzerinden eşleştirilir; Music Assistant yakalanan sesi alır.",
-      "devicesTitle": "Bluetooth kaynak cihazları",
-      "noDevices": "Henüz eşleştirilmiş bir kaynak cihaz yok.",
-      "deviceActive": "etkin",
-      "deviceConnected": "bağlı",
-      "deviceUse": "Kullan",
-      "deviceForget": "Unut",
-      "deviceForgetConfirmTitle": "Bu kaynak cihaz unutulsun mu?",
-      "deviceForgetConfirmBody": "{mac} için Bluetooth eşleşmesi kaldırılır. Cihaz daha sonra yeniden eşleştirilebilir.",
-      "deviceForgotten": "Kaynak cihaz unutuldu"
-    }
+      "maPairingNext": "Bir eşleştirme penceresi aç ve kodu Music Assistant’a gir."
+    },
+    "sourceDevice": "Kaynak cihazı"
   },
   "kit": {
     "closeDialog": "İletişim kutusunu kapat",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} sessize alındı.",
     "audioUnmuted": "{name} sesi açıldı.",
     "audioVolume": "Ses düzeyi ayarlandı: {name}.",
-    "audioResumed": "Sürdürüldü: {name}.",
-    "sourcePairingOpen": "Eşleştirme penceresi açık: telefonu şimdi eşleştir.",
-    "sourcePairingClosed": "Eşleştirme penceresi kapandı."
+    "audioResumed": "Sürdürüldü: {name}."
   },
   "restart": {
     "stopping": "Köprü durduruluyor…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "Ses kaynağı",
         "help": "Eşleştirilmiş bir cihazdan Bluetooth sesi yakalanır ve Music Assistant’a sunulur. Varsayılan olarak kapalıdır; etkinleştirildiğinde kaynak hemen başlar.",
-        "off": "Kaynak kapalıdır. Etkinleştirildiğinde Music Assistant ve ardından bir Bluetooth kaynak cihazı eşleştirilebilir.",
+        "off": "Kaynak kapalı. Seçili girişi yakalamaya başlamak için etkinleştirin.",
         "failed": "Kaynak başlatılamadı. Music Assistant’ı ve ana bilgisayarın ses sunucusunu denetledikten sonra yeniden deneyin."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "Tamamlandı: {action}"
   },
   "nav": {
-    "home": "Hoparlörler",
-    "homeShort": "Hoparlörler",
+    "home": "Cihazlar",
+    "homeShort": "Cihazlar",
     "groups": "Gruplar",
     "groupsShort": "Gruplar",
     "settings": "Ayarlar",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{total} cihazdan {n} tanesi Bluetooth bağlı",
     "playing": "{n} çalıyor",
-    "source": {
-      "title": "Ses kaynağı → Music Assistant",
-      "streaming": "Telefondan çalıyor",
-      "pairing": "Eşleştirme sürüyor",
-      "waiting": "Telefon bekleniyor",
-      "off": "Kaynak kapalı",
-      "error": "Kaynak hatası",
-      "maConnected": "Music Assistant bağlı",
-      "maPaired": "Music Assistant eşleştirildi, yeniden bağlanılıyor",
-      "maUnpaired": "Music Assistant eşleştirilmedi",
-      "openHardware": "Donanım’ı aç"
-    },
+    "source": {},
     "checklist": {
       "title": "İlk adımlar",
       "progress": "{total} adımdan {done} tanesi tamam",
@@ -1676,7 +1664,7 @@
     "connectFirst": "Gruplarını görmek ve denetlemek için köprüyü Music Assistant’a bağla."
   },
   "addSpeaker": {
-    "title": "Hoparlör ekle",
+    "title": "Cihaz ekle",
     "findHelp": "Hoparlörü eşleştirme moduna al. Yakındaki hoparlörler aşağıda görünür.",
     "scan": "Ara",
     "scanAgain": "Yeniden ara",
@@ -1701,8 +1689,9 @@
     "testSound": "Test sesi çal",
     "done": "Bitti",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "Ses çıkışı"
+      "bluetooth": "Hoparlör",
+      "audio": "Ses çıkışı",
+      "source": "Ses kaynağı"
     },
     "audio": {
       "intro": "Bu bilgisayarın USB DAC, ses kartı veya HDMI gibi bir ses çıkışına çal.",
@@ -1714,7 +1703,33 @@
       "taken": "Bu çıkışı zaten başka bir oynatıcı kullanıyor."
     },
     "pairing": "{name} eşleştiriliyor…",
-    "errorNext": "Hoparlörün eşleştirme modunda ve bağdaştırıcıya yakın olduğunu denetle, sonra yeniden dene."
+    "errorNext": "Hoparlörün eşleştirme modunda ve bağdaştırıcıya yakın olduğunu denetle, sonra yeniden dene.",
+    "source": {
+      "help": "Yerel bir ses girişi seç ya da bir Bluetooth cihazı eşleştir. Bu, Music Assistant henüz eşleştirilmemişken de çalışır.",
+      "bluetooth": "Bluetooth kaynağı",
+      "local": "Yerel giriş",
+      "maHint": "Music Assistant henüz eşleştirilmedi; kaynağı şimdi ekleyip Music Assistant’ı daha sonra eşleştirebilirsin.",
+      "pairing": "Eşleştirme penceresi açık: {time}",
+      "pairingHint": "Telefonda, tablette veya dizüstü bilgisayarda Bluetooth ayarlarından köprüyü seç ve medya sesine izin ver.",
+      "stopPairing": "Eşleştirmeyi durdur",
+      "pair": "Cihaz eşleştir",
+      "pairHint": "Köprü iki dakika boyunca keşfedilebilir olur.",
+      "noBluetooth": "Henüz eşleştirilmiş bir Bluetooth kaynağı yok.",
+      "showMonitors": "Sistem ses kaynaklarını göster",
+      "refresh": "Yenile",
+      "captureUnavailable": "Bu ana bilgisayarda ses yakalama kullanılamıyor ({kind}); eşleştirme yine çalışır, ancak yerel girişler eklenemez.",
+      "choose": "Seç",
+      "noLocal": "Yerel ses girişi bulunamadı.",
+      "node": "Ses girişi",
+      "nodeHint": "PulseAudio kaynak adı veya PipeWire node.name. Yukarıda bulunan bir girişi seç ya da elle gir.",
+      "name": "Ad",
+      "add": "Giriş ekle",
+      "manualHint": "Giriş kaydedilir ancak etkinleştirilmez: yakalamayı başlatmak istediğinde Ayarlar’daki kaynak anahtarını kullan.",
+      "added": "{name} eklendi.",
+      "localFailed": "Yerel ses girişleri yüklenemedi.",
+      "pairFailed": "Eşleştirme penceresi açılamadı.",
+      "addFailed": "Bu ses girişi eklenemedi."
+    }
   },
   "connection": {
     "lost": "Köprü bağlantısı kayboldu — yeniden bağlanılıyor. Gördüklerin güncel olmayabilir.",

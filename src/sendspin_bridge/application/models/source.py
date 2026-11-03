@@ -39,6 +39,21 @@ class SourceDevice(ResponseModel):
     active: bool = False
 
 
+class SourceInputStatus(ResponseModel):
+    """One selectable source input: a Bluetooth bond or a local audio input."""
+
+    id: str
+    kind: Literal["bluetooth", "local"]
+    name: str
+    description: str = ""
+    active: bool = False
+    available: bool = True
+    connected: bool = False
+    monitor: bool = False
+    mac: str | None = None
+    node: str | None = None
+
+
 class SourceTarget(ResponseModel):
     """A Music Assistant player or group that can play the source."""
 
@@ -55,6 +70,16 @@ class SourceTargets(ResponseModel):
     selected: str | None = None
     ma_api_available: bool = True
     error: str | None = Field(default=None, description="Why the target list could not be read, if it could not.")
+
+
+class SourceInputs(ResponseModel):
+    """Configured inputs and unconfigured local candidates for the add dialog."""
+
+    active_input: str | None = None
+    inputs: list[SourceInputStatus] = Field(default_factory=list)
+    local_candidates: list[SourceInputStatus] = Field(default_factory=list)
+    capture_available: bool = True
+    capture_kind: str = "unknown"
 
 
 class SourceFeed(ResponseModel):

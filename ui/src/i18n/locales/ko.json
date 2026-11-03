@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "스피커 추가",
+    "addDevice": "기기 추가",
     "empty": {
       "title": "플레이어 없음",
       "description": "Bluetooth 스피커를 검색하거나 플레이어를 직접 추가하세요."
@@ -445,7 +445,39 @@
       "all": "모든 플레이어",
       "bluetooth": "Bluetooth 스피커",
       "output": "오디오 출력"
-    }
+    },
+    "sources": {
+      "title": "소스",
+      "add": "소스 추가",
+      "empty": "아직 구성된 오디오 소스가 없습니다. Bluetooth 소스 또는 로컬 오디오 입력을 추가하십시오.",
+      "bluetooth": "Bluetooth",
+      "local": "로컬 입력",
+      "available": "사용 가능",
+      "off": "꺼짐",
+      "pairing": "페어링",
+      "waiting": "대기 중",
+      "streaming": "스트리밍 중",
+      "error": "오류",
+      "targetInMa": "Music Assistant에서 선택",
+      "active": "사용 중",
+      "connected": "연결됨",
+      "monitor": "시스템 오디오",
+      "unavailable": "사용 불가",
+      "paired": "페어링됨",
+      "playsOn": "재생 대상: {target}",
+      "rename": "이름 변경",
+      "use": "사용",
+      "remove": "입력 제거",
+      "forget": "기기 삭제",
+      "removeTitle": "{name} 소스를 제거할까요?",
+      "removeConsequence": "이 소스는 여기에서 더 이상 사용할 수 없게 됩니다. Bluetooth 기기의 페어링은 브리지에서 삭제되지만 Music Assistant 페어링은 유지됩니다.",
+      "removed": "소스를 제거했습니다",
+      "removeFailed": "소스를 제거하지 못했습니다.",
+      "useFailed": "소스를 전환하지 못했습니다.",
+      "renameFailed": "소스 이름을 변경하지 못했습니다.",
+      "pressPlay": "소스를 전환했습니다. Music Assistant에서 재생을 누르면 새 입력에서 시작합니다."
+    },
+    "outputs": "출력"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "ALSA 긴 카드 이름"
     },
     "source": {
-      "title": "소스",
-      "stateOff": "꺼짐",
-      "stateWaiting": "소스 기기 대기 중",
-      "stateStreaming": "스트리밍 중",
-      "stateError": "오류",
-      "stop": "소스 중지",
-      "pair": "기기 페어링",
-      "stopPairing": "페어링 중지",
-      "pairing": "페어링 대기 중: {time} 남음.",
-      "pairingHint": "지금 스마트폰을 페어링하세요. PIN이 잘못되었다고 나오면 스마트폰에서 이 브리지의 페어링을 먼저 삭제하세요(오래된 페어링).",
-      "errorTitle": "소스에 문제가 발생했습니다",
       "errorCapture": "이 호스트에서는 스마트폰 오디오를 캡처할 수 없습니다.",
       "errorCaptureNext": "브리지가 스마트폰용 PipeWire 캡처 노드를 필요로 합니다. 호스트의 오디오 백엔드를 확인하세요.",
       "errorNoAdapter": "검색 가능 모드를 허용한 Bluetooth 어댑터가 없습니다.",
       "errorNoAgent": "브리지가 Bluetooth 페어링 에이전트를 등록하지 못했습니다.",
       "errorBluetoothNext": "위의 Bluetooth 컨트롤러를 확인한 뒤 다시 페어링하세요.",
       "errorNextStep": "설정 → Music Assistant에서 소스 설정을 확인한 뒤 소스를 다시 시작하세요.",
-      "failureTitle": "마지막 소스 명령이 거부되었습니다",
-      "failureNextStep": "소스를 확인한 뒤 다시 시도하세요.",
-      "commandFailed": "소스를 변경하지 못했습니다: {reason}",
-      "capture": "캡처",
-      "capturePipewire": "PipeWire 노드",
-      "capturePulse": "PulseAudio 소스",
-      "captureUnavailable": "사용 불가",
-      "node": "노드",
-      "noNode": "캡처 노드 없음",
-      "subtitle": "Bluetooth 기기가 브리지로 스트리밍되고, 브리지가 이를 소스로 Music Assistant에 보냅니다.",
-      "statePairing": "페어링 코드 대기 중",
       "maOff": "소스가 꺼져 있습니다. 켜면 Music Assistant에 스마트폰을 제공할 수 있습니다.",
       "maError": "Music Assistant 연결에 실패했습니다.",
       "maConnected": "연결되었습니다. 재생과 라우팅은 Music Assistant에서 관리합니다.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant가 페어링 코드를 거부했습니다.",
       "maUnsupported": "이 Music Assistant는 Sendspin 소스를 제공하지 않습니다.",
       "maUnsupportedNext": "Music Assistant를 2.10 이상으로 업데이트하고 Sendspin 소스 제공자를 활성화하세요.",
-      "maPairingNext": "페어링 대기 시간을 열고 Music Assistant에 코드를 입력하세요.",
-      "phoneHint": "스마트폰, 태블릿 또는 노트북을 Bluetooth로 페어링하십시오. Music Assistant가 캡처된 오디오를 받습니다.",
-      "devicesTitle": "Bluetooth 소스 기기",
-      "noDevices": "아직 페어링된 소스 기기가 없습니다.",
-      "deviceActive": "사용 중",
-      "deviceConnected": "연결됨",
-      "deviceUse": "사용",
-      "deviceForget": "삭제",
-      "deviceForgetConfirmTitle": "이 소스 기기를 삭제할까요?",
-      "deviceForgetConfirmBody": "{mac}의 Bluetooth 페어링이 삭제됩니다. 기기는 나중에 다시 페어링할 수 있습니다.",
-      "deviceForgotten": "소스 기기를 삭제했습니다"
-    }
+      "maPairingNext": "페어링 대기 시간을 열고 Music Assistant에 코드를 입력하세요."
+    },
+    "sourceDevice": "소스 기기"
   },
   "kit": {
     "closeDialog": "대화상자 닫기",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} 음소거됨.",
     "audioUnmuted": "{name} 음소거 해제됨.",
     "audioVolume": "볼륨 설정됨: {name}.",
-    "audioResumed": "재개됨: {name}.",
-    "sourcePairingOpen": "페어링 대기 시간이 열렸습니다. 지금 스마트폰을 페어링하세요.",
-    "sourcePairingClosed": "페어링 대기 시간이 닫혔습니다."
+    "audioResumed": "재개됨: {name}."
   },
   "restart": {
     "stopping": "브리지를 중지하는 중…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "오디오 소스",
         "help": "페어링된 기기에서 Bluetooth 오디오를 캡처하여 Music Assistant에 제공합니다. 기본적으로 꺼져 있으며, 활성화하면 소스가 즉시 시작됩니다.",
-        "off": "소스가 꺼져 있습니다. 활성화하면 Music Assistant를 먼저 페어링한 다음 Bluetooth 소스 기기를 페어링할 수 있습니다.",
+        "off": "소스가 꺼져 있습니다. 활성화하면 선택한 입력 캡처를 시작합니다.",
         "failed": "소스를 시작하지 못했습니다. Music Assistant와 호스트 오디오 서버를 확인한 뒤 다시 시도하십시오."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "완료: {action}"
   },
   "nav": {
-    "home": "스피커",
-    "homeShort": "스피커",
+    "home": "기기",
+    "homeShort": "기기",
     "groups": "그룹",
     "groupsShort": "그룹",
     "settings": "설정",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{total}개 중 {n}개 Bluetooth 연결됨",
     "playing": "{n}개 재생 중",
-    "source": {
-      "title": "오디오 소스 → Music Assistant",
-      "streaming": "스마트폰에서 재생 중",
-      "pairing": "페어링 진행 중",
-      "waiting": "스마트폰 대기 중",
-      "off": "소스 꺼짐",
-      "error": "소스 오류",
-      "maConnected": "Music Assistant 연결됨",
-      "maPaired": "Music Assistant 페어링됨, 다시 연결 중",
-      "maUnpaired": "Music Assistant가 페어링되지 않음",
-      "openHardware": "하드웨어 열기"
-    },
+    "source": {},
     "checklist": {
       "title": "첫 단계",
       "progress": "{total}개 중 {done}개 완료",
@@ -1676,7 +1664,7 @@
     "connectFirst": "브리지를 Music Assistant에 연결하면 그룹을 보고 제어할 수 있습니다."
   },
   "addSpeaker": {
-    "title": "스피커 추가",
+    "title": "기기 추가",
     "findHelp": "스피커를 페어링 모드로 전환하세요. 주변 스피커가 아래에 나타납니다.",
     "scan": "검색",
     "scanAgain": "다시 검색",
@@ -1701,8 +1689,9 @@
     "testSound": "테스트 소리 재생",
     "done": "완료",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "오디오 출력"
+      "bluetooth": "스피커",
+      "audio": "오디오 출력",
+      "source": "오디오 소스"
     },
     "audio": {
       "intro": "USB DAC, 사운드 카드, HDMI 등 이 컴퓨터의 오디오 출력으로 재생합니다.",
@@ -1714,7 +1703,33 @@
       "taken": "다른 플레이어가 이미 이 출력을 사용하고 있습니다."
     },
     "pairing": "{name} 페어링 중…",
-    "errorNext": "스피커가 페어링 모드이고 어댑터 가까이에 있는지 확인한 뒤 다시 시도하세요."
+    "errorNext": "스피커가 페어링 모드이고 어댑터 가까이에 있는지 확인한 뒤 다시 시도하세요.",
+    "source": {
+      "help": "로컬 오디오 입력을 선택하거나 Bluetooth 기기를 페어링하십시오. Music Assistant가 아직 페어링되지 않았어도 작동합니다.",
+      "bluetooth": "Bluetooth 소스",
+      "local": "로컬 입력",
+      "maHint": "Music Assistant가 아직 페어링되지 않았습니다. 지금 소스를 추가하고 나중에 Music Assistant를 페어링할 수 있습니다.",
+      "pairing": "페어링 대기 시간이 열렸습니다: {time}",
+      "pairingHint": "스마트폰, 태블릿 또는 노트북의 Bluetooth 설정에서 브리지를 선택하고 미디어 오디오를 허용하십시오.",
+      "stopPairing": "페어링 중지",
+      "pair": "기기 페어링",
+      "pairHint": "브리지는 2분 동안 검색 가능한 상태가 됩니다.",
+      "noBluetooth": "아직 페어링된 Bluetooth 소스가 없습니다.",
+      "showMonitors": "시스템 오디오 소스 표시",
+      "refresh": "새로 고침",
+      "captureUnavailable": "이 호스트에서는 오디오 캡처를 사용할 수 없습니다({kind}). 페어링은 계속 작동하지만 로컬 입력은 추가할 수 없습니다.",
+      "choose": "선택",
+      "noLocal": "로컬 오디오 입력을 찾지 못했습니다.",
+      "node": "오디오 입력",
+      "nodeHint": "PulseAudio 소스 이름 또는 PipeWire node.name입니다. 위에서 검색된 입력을 선택하거나 직접 입력하십시오.",
+      "name": "이름",
+      "add": "입력 추가",
+      "manualHint": "입력은 저장되지만 활성화되지는 않습니다. 캡처를 시작하려면 설정의 소스 스위치를 사용하십시오.",
+      "added": "{name}이(가) 추가되었습니다.",
+      "localFailed": "로컬 오디오 입력을 불러오지 못했습니다.",
+      "pairFailed": "페어링 대기 시간을 열지 못했습니다.",
+      "addFailed": "해당 오디오 입력을 추가하지 못했습니다."
+    }
   },
   "connection": {
     "lost": "브리지와의 연결이 끊어졌습니다 — 다시 연결하는 중입니다. 표시된 내용이 오래되었을 수 있습니다.",

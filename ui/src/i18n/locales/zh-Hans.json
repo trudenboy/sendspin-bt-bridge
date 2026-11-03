@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "添加音箱",
+    "addDevice": "添加设备",
     "empty": {
       "title": "尚无播放器",
       "description": "扫描 Bluetooth 音箱，或手动添加播放器。"
@@ -445,7 +445,39 @@
       "all": "所有播放器",
       "bluetooth": "Bluetooth 音箱",
       "output": "音频输出"
-    }
+    },
+    "sources": {
+      "title": "源",
+      "add": "添加源",
+      "empty": "尚未配置音频源。请添加 Bluetooth 源或本地音频输入。",
+      "bluetooth": "Bluetooth",
+      "local": "本地输入",
+      "available": "可用",
+      "off": "关闭",
+      "pairing": "配对",
+      "waiting": "等待中",
+      "streaming": "传输中",
+      "error": "错误",
+      "targetInMa": "在 Music Assistant 中选择",
+      "active": "使用中",
+      "connected": "已连接",
+      "monitor": "系统音频",
+      "unavailable": "不可用",
+      "paired": "已配对",
+      "playsOn": "播放于：{target}",
+      "rename": "重命名",
+      "use": "使用",
+      "remove": "移除输入",
+      "forget": "忘记设备",
+      "removeTitle": "移除 {name}？",
+      "removeConsequence": "此源在此处将不再可用。Bluetooth 设备的绑定会从桥接器中移除；与 Music Assistant 的配对会保留。",
+      "removed": "源已移除",
+      "removeFailed": "无法移除源。",
+      "useFailed": "无法切换源。",
+      "renameFailed": "无法重命名源。",
+      "pressPlay": "已切换源。请在 Music Assistant 中按播放，以在新输入上启动。"
+    },
+    "outputs": "输出"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "ALSA 长声卡名"
     },
     "source": {
-      "title": "源",
-      "stateOff": "关闭",
-      "stateWaiting": "等待源设备",
-      "stateStreaming": "串流中",
-      "stateError": "错误",
-      "stop": "停止源",
-      "pair": "配对设备",
-      "stopPairing": "停止配对",
-      "pairing": "已开放配对：剩余 {time}。",
-      "pairingHint": "现在配对手机；若提示 PIN 错误，请先在手机上忘记此桥接器（残留配对）。",
-      "errorTitle": "源出错",
       "errorCapture": "此主机无法采集手机的音频。",
       "errorCaptureNext": "桥接器需要手机的 PipeWire 采集节点；请检查主机的音频后端。",
       "errorNoAdapter": "没有 Bluetooth 适配器可进入可被发现状态。",
       "errorNoAgent": "桥接器无法注册 Bluetooth 配对代理。",
       "errorBluetoothNext": "请检查上方的 Bluetooth 控制器，然后再次尝试配对。",
       "errorNextStep": "请在 设置 → Music Assistant 中检查源设置，然后重新启动源。",
-      "failureTitle": "上一条源命令被拒绝",
-      "failureNextStep": "请检查源后重试。",
-      "commandFailed": "无法更改源：{reason}",
-      "capture": "采集",
-      "capturePipewire": "PipeWire 节点",
-      "capturePulse": "PulseAudio 源",
-      "captureUnavailable": "不可用",
-      "node": "节点",
-      "noNode": "无采集节点",
-      "subtitle": "Bluetooth 设备串流到桥接器；桥接器将其作为源发送给 Music Assistant。",
-      "statePairing": "等待配对码",
       "maOff": "源已关闭。启用后即可将手机提供给 Music Assistant。",
       "maError": "连接 Music Assistant 失败。",
       "maConnected": "已连接。播放和路由在 Music Assistant 中管理。",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant 拒绝了该配对码。",
       "maUnsupported": "此 Music Assistant 未提供 Sendspin 源。",
       "maUnsupportedNext": "请将 Music Assistant 更新到 2.10 或更高版本，并启用其 Sendspin 源提供程序。",
-      "maPairingNext": "请打开配对窗口，并在 Music Assistant 中输入配对码。",
-      "phoneHint": "通过 Bluetooth 配对手机、平板电脑或笔记本电脑；Music Assistant 接收采集到的音频。",
-      "devicesTitle": "Bluetooth 源设备",
-      "noDevices": "尚未配对任何源设备。",
-      "deviceActive": "使用中",
-      "deviceConnected": "已连接",
-      "deviceUse": "使用",
-      "deviceForget": "忘记",
-      "deviceForgetConfirmTitle": "忘记此源设备？",
-      "deviceForgetConfirmBody": "将移除 {mac} 的 Bluetooth 绑定。该设备之后可以重新配对。",
-      "deviceForgotten": "已忘记源设备"
-    }
+      "maPairingNext": "请打开配对窗口，并在 Music Assistant 中输入配对码。"
+    },
+    "sourceDevice": "源设备"
   },
   "kit": {
     "closeDialog": "关闭对话框",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} 已静音。",
     "audioUnmuted": "{name} 已取消静音。",
     "audioVolume": "已设置音量：{name}。",
-    "audioResumed": "已恢复：{name}。",
-    "sourcePairingOpen": "配对窗口已打开：现在配对手机。",
-    "sourcePairingClosed": "配对窗口已关闭。"
+    "audioResumed": "已恢复：{name}。"
   },
   "restart": {
     "stopping": "正在停止桥接器…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "音频源",
         "help": "从已配对的设备采集 Bluetooth 音频，并将其提供给 Music Assistant。默认关闭；启用后源会立即启动。",
-        "off": "源已关闭。启用后可先配对 Music Assistant，再配对 Bluetooth 源设备。",
+        "off": "源已关闭。启用后将开始采集所选输入。",
         "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。"
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "已完成：{action}"
   },
   "nav": {
-    "home": "音箱",
-    "homeShort": "音箱",
+    "home": "设备",
+    "homeShort": "设备",
     "groups": "组",
     "groupsShort": "组",
     "settings": "设置",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{n}/{total} 台 Bluetooth 已连接",
     "playing": "{n} 个播放中",
-    "source": {
-      "title": "音频源 → Music Assistant",
-      "streaming": "正在播放手机音频",
-      "pairing": "配对进行中",
-      "waiting": "等待手机",
-      "off": "源已关闭",
-      "error": "源错误",
-      "maConnected": "Music Assistant 已连接",
-      "maPaired": "Music Assistant 已配对，正在重新连接",
-      "maUnpaired": "Music Assistant 未配对",
-      "openHardware": "打开硬件"
-    },
+    "source": {},
     "checklist": {
       "title": "初始步骤",
       "progress": "已完成 {done}/{total}",
@@ -1676,7 +1664,7 @@
     "connectFirst": "将桥接器连接到 Music Assistant 后即可查看并控制其组。"
   },
   "addSpeaker": {
-    "title": "添加音箱",
+    "title": "添加设备",
     "findHelp": "将音箱置于配对模式。附近的音箱会显示在下方。",
     "scan": "搜索",
     "scanAgain": "重新搜索",
@@ -1701,8 +1689,9 @@
     "testSound": "播放测试声音",
     "done": "完成",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "音频输出"
+      "bluetooth": "扬声器",
+      "audio": "音频输出",
+      "source": "音频源"
     },
     "audio": {
       "intro": "播放到本机的音频输出，例如 USB DAC、声卡或 HDMI。",
@@ -1714,7 +1703,33 @@
       "taken": "其他播放器已在使用此输出。"
     },
     "pairing": "正在配对 {name}…",
-    "errorNext": "请确认音箱处于配对模式并靠近适配器，然后重试。"
+    "errorNext": "请确认音箱处于配对模式并靠近适配器，然后重试。",
+    "source": {
+      "help": "选择本地音频输入或配对 Bluetooth 设备。即使 Music Assistant 尚未配对，此操作也可用。",
+      "bluetooth": "Bluetooth 源",
+      "local": "本地输入",
+      "maHint": "Music Assistant 尚未配对；你可以现在添加源，稍后再配对 Music Assistant。",
+      "pairing": "配对窗口已打开：{time}",
+      "pairingHint": "在手机、平板电脑或笔记本电脑的 Bluetooth 设置中选择桥接器，并允许媒体音频。",
+      "stopPairing": "停止配对",
+      "pair": "配对设备",
+      "pairHint": "桥接器将在两分钟内可被发现。",
+      "noBluetooth": "尚未配对任何 Bluetooth 源。",
+      "showMonitors": "显示系统音频源",
+      "refresh": "刷新",
+      "captureUnavailable": "此主机无法采集音频（{kind}）；配对仍可使用，但无法添加本地输入。",
+      "choose": "选择",
+      "noLocal": "未找到本地音频输入。",
+      "node": "音频输入",
+      "nodeHint": "PulseAudio 源名称或 PipeWire node.name。请从上方选择检测到的输入，或手动输入。",
+      "name": "名称",
+      "add": "添加输入",
+      "manualHint": "输入会被保存但不会启用：想要开始采集时，请使用设置中的源开关。",
+      "added": "已添加 {name}。",
+      "localFailed": "无法加载本地音频输入。",
+      "pairFailed": "无法打开配对窗口。",
+      "addFailed": "无法添加该音频输入。"
+    }
   },
   "connection": {
     "lost": "与桥接器的连接已断开 — 正在重新连接。显示内容可能已过期。",

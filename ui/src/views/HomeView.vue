@@ -17,7 +17,7 @@ import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
-import SourceSummaryCard from '@/components/hardware/SourceSummaryCard.vue'
+import SourceSection from '@/components/devices/SourceSection.vue'
 import FirstRunChecklist from '@/components/hardware/FirstRunChecklist.vue'
 import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
 import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
@@ -37,12 +37,20 @@ const deviceStore = useDeviceStore()
 const drawerOpen = ref(false)
 const selectedId = ref<string | null>(null)
 const scanModalOpen = ref(false)
+const addMode = ref<'bluetooth' | 'audio' | 'source'>('bluetooth')
 const btStore = useBluetoothStore()
+const sourceEnabled = computed(() => !!bridge.bridge?.sendspin_source?.enabled)
+const sourceCount = computed(() => bridge.bridge?.sendspin_source?.inputs?.length ?? 0)
+
+function openAdd(mode: 'bluetooth' | 'audio' | 'source' = 'bluetooth') {
+  addMode.value = mode
+  scanModalOpen.value = true
+}
 watch(
   () => btStore.scanRequested,
   (requested) => {
     if (!requested) return
-    scanModalOpen.value = true
+    openAdd('bluetooth')
     btStore.scanRequested = false
   },
   { immediate: true },
@@ -87,7 +95,7 @@ const selectedDisabled = computed(() =>
 const showGroupBar = computed(() => playerCount.value >= 2)
 /* Search and filters earn their space only on larger setups. */
 const FILTER_FROM = 6
-const showFilters = computed(() => playerCount.value >= FILTER_FROM)
+const showFilters = computed(() => playerCount.value + sourceCount.value >= FILTER_FROM)
 /* Filters that outlive their bar would leave "No results" with no way out. */
 watch(showFilters, (shown) => {
   if (!shown) deviceStore.clearFilters()
@@ -292,9 +300,11 @@ watch(
     <template v-else>
       <GuidanceBanner />
 
-      <FirstRunChecklist @add-speaker="scanModalOpen = true" />
+      <FirstRunChecklist @add-speaker="openAdd('bluetooth')" />
 
-      <SourceSummaryCard />
+      <SourceSection v-if="sourceEnabled" :query="deviceStore.filter.search" @add="openAdd('source')" />
+
+      <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('devices.outputs') }}</h2>
 
       <!-- From md up the header's runtime row carries these. -->
       <p v-if="bridge.devices.length" data-home-summary class="mb-4 flex md:hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
@@ -428,12 +438,12 @@ watch(
 
       <!-- Empty state -->
       <SbEmptyState
-        v-if="playerCount === 0"
+        v-if="playerCount === 0 && !sourceEnabled"
         :title="t('devices.empty.title')"
         :description="t('devices.empty.description')"
       >
         <template #action>
-          <SbButton @click="scanModalOpen = true">
+          <SbButton @click="openAdd('bluetooth')">
             <template #icon-left>
               <Plus class="h-4 w-4" />
             </template>
@@ -528,6 +538,7 @@ watch(
     <!-- BT Scan modal -->
     <AddSpeakerDialog
       :open="scanModalOpen"
+      :initial-mode="addMode"
       @update:open="scanModalOpen = $event"
     />
   </div>

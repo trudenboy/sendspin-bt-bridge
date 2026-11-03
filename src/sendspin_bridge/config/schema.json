@@ -15,6 +15,27 @@
       "default": null,
       "description": "Music Assistant player or group that should play the Bluetooth source automatically. null leaves the choice to Music Assistant."
     },
+    "SENDSPIN_SOURCES": {
+      "type": "array",
+      "default": [],
+      "description": "Saved local audio inputs that can feed the Sendspin source. Bluetooth source bonds are discovered from BlueZ and are not stored here.",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "node"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "description": "Stable source id: local:<node name>."},
+          "kind": {"const": "local", "default": "local", "type": "string"},
+          "node": {"type": "string", "description": "PulseAudio source name or PipeWire node.name."},
+          "name": {"type": "string", "default": "", "description": "Operator-facing name; empty falls back to the node description."}
+        }
+      }
+    },
+    "SENDSPIN_SOURCE_ACTIVE": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Selected source id (bluetooth:<MAC> or local:<node>); null keeps the automatic Bluetooth policy."
+    },
     "CONFIG_SCHEMA_VERSION": {
       "type": "integer",
       "const": 6,

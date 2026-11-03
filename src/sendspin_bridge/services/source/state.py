@@ -54,6 +54,7 @@ class SourceState:
     pairing_error: str | None = None
     error: str | None = None
     target_player: str | None = None
+    active_input: str | None = None
     target_error: str | None = None
     devices: tuple[SourceDevice, ...] = ()
 
@@ -86,6 +87,7 @@ class SourceState:
             "devices": [device.as_dict() for device in self.devices],
             "error": self.error,
             "target_player": self.target_player,
+            "active_input": self.active_input,
             "target_error": self.target_error,
         }
 

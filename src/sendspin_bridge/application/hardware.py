@@ -305,6 +305,7 @@ def _endpoint_summary(
         in_use_by=sink_players.get(facts.name) if facts.kind == "sink" else None,
         active_port=facts.active_port,
         active_port_available=facts.active_port_available,
+        monitor_of=facts.monitor_of,
         is_default=facts.kind == "sink" and default_sink is not None and facts.name == default_sink,
     )
 
@@ -492,7 +493,6 @@ def build_endpoint_detail(
         **_endpoint_summary(facts, sink_players, audio.default_sink).model_dump(),
         identifiers=dict(facts.identifiers),
         ports=[_card_port(port) for port in ports],
-        monitor_of=facts.monitor_of,
         as_of=as_of,
         stale=stale,
     )

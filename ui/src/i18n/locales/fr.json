@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "Ajouter une enceinte",
+    "addDevice": "Ajouter un appareil",
     "empty": {
       "title": "Aucun lecteur pour l’instant",
       "description": "Lancez une recherche d’enceintes Bluetooth ou ajoutez un lecteur manuellement."
@@ -445,7 +445,39 @@
       "all": "Tous les lecteurs",
       "bluetooth": "Enceintes Bluetooth",
       "output": "Sorties audio"
-    }
+    },
+    "sources": {
+      "title": "Sources",
+      "add": "Ajouter une source",
+      "empty": "Aucune source audio n’est encore configurée. Ajoutez une source Bluetooth ou une entrée audio locale.",
+      "bluetooth": "Bluetooth",
+      "local": "Entrée locale",
+      "available": "Disponible",
+      "off": "Désactivé",
+      "pairing": "Appairage",
+      "waiting": "En attente",
+      "streaming": "Diffusion",
+      "error": "Erreur",
+      "targetInMa": "Choisir dans Music Assistant",
+      "active": "Actif",
+      "connected": "Connecté",
+      "monitor": "Audio du système",
+      "unavailable": "Indisponible",
+      "paired": "Appairé",
+      "playsOn": "Lecture sur : {target}",
+      "rename": "Renommer",
+      "use": "Utiliser",
+      "remove": "Retirer l’entrée",
+      "forget": "Oublier l’appareil",
+      "removeTitle": "Retirer {name} ?",
+      "removeConsequence": "La source n’est alors plus disponible ici. Le pont oublie l’appareil Bluetooth ; l’appairage avec Music Assistant est conservé.",
+      "removed": "Source retirée",
+      "removeFailed": "Impossible de retirer la source.",
+      "useFailed": "Impossible de changer de source.",
+      "renameFailed": "Impossible de renommer la source.",
+      "pressPlay": "Source changée. Appuyez sur Lecture dans Music Assistant pour la démarrer sur la nouvelle entrée."
+    },
+    "outputs": "Sorties"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "Nom long de carte ALSA"
     },
     "source": {
-      "title": "Source",
-      "stateOff": "Désactivée",
-      "stateWaiting": "En attente d’un appareil source",
-      "stateStreaming": "Diffusion en cours",
-      "stateError": "Erreur",
-      "stop": "Arrêter la source",
-      "pair": "Appairer un appareil",
-      "stopPairing": "Arrêter l’appairage",
-      "pairing": "Ouvert à l’appairage : {time} restant.",
-      "pairingHint": "Appairez le téléphone maintenant ; s’il considère le code PIN comme erroné, oubliez d’abord ce pont sur le téléphone (appairage obsolète).",
-      "errorTitle": "La source a échoué",
       "errorCapture": "L’audio du téléphone ne peut pas être capturé sur cet hôte.",
       "errorCaptureNext": "Le pont a besoin de nœuds de capture PipeWire pour le téléphone ; vérifiez le moteur audio de l’hôte.",
       "errorNoAdapter": "Aucun adaptateur Bluetooth n’a accepté le mode découvrable.",
       "errorNoAgent": "Le pont n’a pas pu enregistrer d’agent d’appairage Bluetooth.",
       "errorBluetoothNext": "Vérifiez les contrôleurs Bluetooth ci-dessus, puis réessayez l’appairage.",
       "errorNextStep": "Vérifiez les paramètres de la source dans Paramètres → Music Assistant, puis redémarrez la source.",
-      "failureTitle": "La dernière commande sur la source a été refusée",
-      "failureNextStep": "Vérifiez la source et réessayez.",
-      "commandFailed": "Impossible de modifier la source : {reason}",
-      "capture": "Capture",
-      "capturePipewire": "Nœud PipeWire",
-      "capturePulse": "Source PulseAudio",
-      "captureUnavailable": "Indisponible",
-      "node": "Nœud",
-      "noNode": "Aucun nœud de capture",
-      "subtitle": "Un appareil Bluetooth diffuse vers le pont ; le pont l’envoie à Music Assistant comme source.",
-      "statePairing": "En attente du code d’appairage",
       "maOff": "La source est désactivée. Activez-la pour proposer le téléphone à Music Assistant.",
       "maError": "La connexion à Music Assistant a échoué.",
       "maConnected": "Connecté. La lecture et le routage sont gérés dans Music Assistant.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant a refusé le code d’appairage.",
       "maUnsupported": "Ce Music Assistant ne propose pas de source Sendspin.",
       "maUnsupportedNext": "Mettez Music Assistant à jour vers 2.10 ou une version ultérieure et activez son fournisseur de source Sendspin.",
-      "maPairingNext": "Ouvrez une fenêtre d’appairage et saisissez le code dans Music Assistant.",
-      "phoneHint": "Appairez un téléphone, une tablette ou un ordinateur portable via Bluetooth ; Music Assistant reçoit l’audio capturé.",
-      "devicesTitle": "Appareils sources Bluetooth",
-      "noDevices": "Aucun appareil source n’est encore appairé.",
-      "deviceActive": "actif",
-      "deviceConnected": "connecté",
-      "deviceUse": "Utiliser",
-      "deviceForget": "Oublier",
-      "deviceForgetConfirmTitle": "Oublier cet appareil source ?",
-      "deviceForgetConfirmBody": "L’appairage Bluetooth de {mac} est supprimé. L’appareil pourra être appairé à nouveau plus tard.",
-      "deviceForgotten": "Appareil source oublié"
-    }
+      "maPairingNext": "Ouvrez une fenêtre d’appairage et saisissez le code dans Music Assistant."
+    },
+    "sourceDevice": "Appareil source"
   },
   "kit": {
     "closeDialog": "Fermer la boîte de dialogue",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} en muet.",
     "audioUnmuted": "Son rétabli : {name}.",
     "audioVolume": "Volume réglé : {name}.",
-    "audioResumed": "Reprise : {name}.",
-    "sourcePairingOpen": "Fenêtre d’appairage ouverte : appairez le téléphone maintenant.",
-    "sourcePairingClosed": "Fenêtre d’appairage fermée."
+    "audioResumed": "Reprise : {name}."
   },
   "restart": {
     "stopping": "Arrêt du pont…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "Source audio",
         "help": "Capturez l’audio Bluetooth d’un appareil appairé et proposez-le à Music Assistant. Désactivé par défaut ; l’activation démarre immédiatement la source.",
-        "off": "La source est désactivée. Activez-la pour effectuer l’appairage avec Music Assistant, puis avec un appareil source Bluetooth.",
+        "off": "La source est désactivée. Activez-la pour commencer à capturer l’entrée sélectionnée.",
         "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "Terminé : {action}"
   },
   "nav": {
-    "home": "Enceintes",
-    "homeShort": "Enceintes",
+    "home": "Appareils",
+    "homeShort": "Appareils",
     "groups": "Groupes",
     "groupsShort": "Groupes",
     "settings": "Paramètres",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{n} sur {total} connectées en Bluetooth",
     "playing": "{n} en lecture",
-    "source": {
-      "title": "Source audio → Music Assistant",
-      "streaming": "Lecture depuis le téléphone",
-      "pairing": "Appairage en cours",
-      "waiting": "En attente du téléphone",
-      "off": "Source désactivée",
-      "error": "Erreur de la source",
-      "maConnected": "Music Assistant connecté",
-      "maPaired": "Music Assistant appairé, reconnexion",
-      "maUnpaired": "Music Assistant n’est pas appairé",
-      "openHardware": "Ouvrir Matériel"
-    },
+    "source": {},
     "checklist": {
       "title": "Premiers pas",
       "progress": "{done} sur {total} terminés",
@@ -1676,7 +1664,7 @@
     "connectFirst": "Connectez le pont à Music Assistant pour voir et contrôler ses groupes."
   },
   "addSpeaker": {
-    "title": "Ajouter une enceinte",
+    "title": "Ajouter un appareil",
     "findHelp": "Mettez l’enceinte en mode appairage. Les enceintes à proximité apparaissent ci-dessous.",
     "scan": "Rechercher",
     "scanAgain": "Rechercher à nouveau",
@@ -1701,8 +1689,9 @@
     "testSound": "Lire le son de test",
     "done": "Terminé",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "Sortie audio"
+      "bluetooth": "Enceinte",
+      "audio": "Sortie audio",
+      "source": "Source audio"
     },
     "audio": {
       "intro": "Lisez vers une sortie audio de cet ordinateur, comme un DAC USB, une carte son ou HDMI.",
@@ -1714,7 +1703,33 @@
       "taken": "Un autre lecteur utilise déjà cette sortie."
     },
     "pairing": "Appairage de {name}…",
-    "errorNext": "Vérifiez que l’enceinte est en mode appairage et proche de l’adaptateur, puis réessayez."
+    "errorNext": "Vérifiez que l’enceinte est en mode appairage et proche de l’adaptateur, puis réessayez.",
+    "source": {
+      "help": "Choisissez une entrée audio locale ou appairez un appareil Bluetooth. Cela fonctionne même si Music Assistant n’est pas encore appairé.",
+      "bluetooth": "Source Bluetooth",
+      "local": "Entrée locale",
+      "maHint": "Music Assistant n’est pas encore appairé ; vous pouvez ajouter la source maintenant et appairer Music Assistant plus tard.",
+      "pairing": "Fenêtre d’appairage ouverte : {time}",
+      "pairingHint": "Sur le téléphone, la tablette ou l’ordinateur portable, choisissez le pont dans les réglages Bluetooth et autorisez l’audio multimédia.",
+      "stopPairing": "Arrêter l’appairage",
+      "pair": "Appairer un appareil",
+      "pairHint": "Le pont devient détectable pendant deux minutes.",
+      "noBluetooth": "Aucune source Bluetooth n’est encore appairée.",
+      "showMonitors": "Afficher les sources audio du système",
+      "refresh": "Actualiser",
+      "captureUnavailable": "La capture audio n’est pas disponible sur cet hôte ({kind}) ; l’appairage fonctionne toujours, mais les entrées locales ne peuvent pas être ajoutées.",
+      "choose": "Choisir",
+      "noLocal": "Aucune entrée audio locale trouvée.",
+      "node": "Entrée audio",
+      "nodeHint": "Nom de source PulseAudio ou node.name PipeWire. Choisissez une entrée détectée ci-dessus ou saisissez-en une manuellement.",
+      "name": "Nom",
+      "add": "Ajouter une entrée",
+      "manualHint": "L’entrée est enregistrée mais pas activée : utilisez l’interrupteur de source dans Paramètres lorsque vous voulez commencer la capture.",
+      "added": "{name} ajouté.",
+      "localFailed": "Impossible de charger les entrées audio locales.",
+      "pairFailed": "Impossible d’ouvrir la fenêtre d’appairage.",
+      "addFailed": "Impossible d’ajouter cette entrée audio."
+    }
   },
   "connection": {
     "lost": "Connexion au pont perdue — reconnexion en cours. Ce que vous voyez peut être obsolète.",

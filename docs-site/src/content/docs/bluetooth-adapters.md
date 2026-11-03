@@ -242,15 +242,14 @@ Proxmox Host
 See [Devices & Adapters](/sendspin-bt-bridge/devices/) for adapter naming,
 binding speakers to specific controllers, and managing the device fleet.
 
-## A phone as an audio source (experimental)
+## Audio sources: Bluetooth and local inputs
 
-The bridge can also be the other side of Sendspin: a phone paired to it over Bluetooth streams into the adapter, and the bridge offers that audio as a live stream other Sendspin players can play.
+The bridge can also be the other side of Sendspin: a phone, tablet or laptop paired over Bluetooth streams into the adapter, or the bridge captures a local audio input. The audio is offered to Music Assistant as a live source.
 
-```bash
-SENDSPIN_SOURCE=1 SENDSPIN_SOURCE_PORT=8940
-```
+- Open **Devices → Sources → Add source** (or **Add device → Audio source**).
+- Pair a Bluetooth device while the bridge is discoverable; the phone connects to the bridge. Pairing does not depend on Music Assistant being paired.
+- Local inputs are PulseAudio sources or PipeWire nodes: line-in, USB interfaces, microphones and virtual sources. System-audio (monitor) inputs are opt-in because they can feed the room back into themselves.
+- The source mode itself is off by default. Turn it on under **Settings → Audio source**; the selected input is captured and sent to Music Assistant.
+- Music Assistant pairing and the optional "play on" target are also in Settings. Without an MA API token, choose the live input inside Music Assistant.
 
-- Players connect to `ws://<bridge>:8940/sendspin`. The port must not collide with the players' own listen ports (they start at 8928).
-- It needs **PipeWire**: PulseAudio never exports the phone's input as a capture source, while PipeWire's `bluez_input.*` node is captured natively.
-- Pair the phone once while the adapter is discoverable and pairable. If the phone shows the bridge as "calls only", remove the pairing on both sides and pair again with **Media audio** enabled.
-- Settings → Music Assistant has **Accept a phone as a source** and the port; the **Hardware** page in the web UI shows the source's state, pairs the phone and lists the speakers that relay it. The logs say `Bluetooth source: a player connected, streaming to it` and `N s pushed to the stream` while audio flows.
+The source list, active input and local profiles are kept in the bridge config; an existing Bluetooth source keeps working after an upgrade.

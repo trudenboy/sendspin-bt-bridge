@@ -61,6 +61,9 @@ async function setEnabled(next: boolean) {
       {{ error }}
     </p>
 
-    <p v-if="!enabled" class="pb-4 text-sm text-text-secondary">{{ t('settings.parts.sourceMode.off') }}</p>
+    <p v-if="!enabled" class="pb-4 text-sm text-text-secondary">
+      {{ t('settings.parts.sourceMode.off') }}
+      <RouterLink to="/" class="text-primary-text underline-offset-2 hover:underline">{{ t('devices.sources.title') }}</RouterLink>
+    </p>
   </div>
 </template>

@@ -378,7 +378,7 @@
     }
   },
   "devices": {
-    "addDevice": "Add speaker",
+    "addDevice": "Add device",
     "empty": {
       "title": "No players yet",
       "description": "Scan for Bluetooth speakers or add a player manually."
@@ -445,7 +445,39 @@
       "all": "All players",
       "bluetooth": "Bluetooth speakers",
       "output": "Audio outputs"
-    }
+    },
+    "sources": {
+      "title": "Sources",
+      "add": "Add source",
+      "empty": "No audio source is configured yet. Add a Bluetooth source or a local audio input.",
+      "bluetooth": "Bluetooth",
+      "local": "Local input",
+      "available": "Available",
+      "off": "Off",
+      "pairing": "Pairing",
+      "waiting": "Waiting",
+      "streaming": "Streaming",
+      "error": "Error",
+      "targetInMa": "Choose in Music Assistant",
+      "active": "Active",
+      "connected": "Connected",
+      "monitor": "System audio",
+      "unavailable": "Unavailable",
+      "paired": "Paired",
+      "playsOn": "Plays on: {target}",
+      "rename": "Rename",
+      "use": "Use",
+      "remove": "Remove input",
+      "forget": "Forget device",
+      "removeTitle": "Remove {name}?",
+      "removeConsequence": "The source stops being available here. A Bluetooth device is forgotten from the bridge; Music Assistant pairing is kept.",
+      "removed": "Source removed",
+      "removeFailed": "Could not remove the source.",
+      "useFailed": "Could not switch the source.",
+      "renameFailed": "Could not rename the source.",
+      "pressPlay": "Source switched. Press Play in Music Assistant to start it on the new input."
+    },
+    "outputs": "Outputs"
   },
   "drawer": {
     "tabs": {
@@ -775,34 +807,12 @@
       "identifierAlsaLongCardName": "ALSA long card name"
     },
     "source": {
-      "title": "Audio source",
-      "stateOff": "Off",
-      "stateWaiting": "Waiting for a source device",
-      "stateStreaming": "Streaming",
-      "stateError": "Error",
-      "stop": "Stop source",
-      "pair": "Pair a device",
-      "stopPairing": "Stop pairing",
-      "pairing": "Open for pairing: {time} left.",
-      "pairingHint": "Pair the phone now; if it says the PIN is wrong, first Forget this bridge on the phone (a stale pairing).",
-      "errorTitle": "The source failed",
       "errorCapture": "The phone's audio cannot be captured on this host.",
       "errorCaptureNext": "The bridge needs PipeWire capture nodes for the phone; check the host's audio backend.",
       "errorNoAdapter": "No Bluetooth adapter accepted discoverability.",
       "errorNoAgent": "The bridge could not register a Bluetooth pairing agent.",
       "errorBluetoothNext": "Check the Bluetooth controllers above, then try pairing again.",
       "errorNextStep": "Check the source settings in Settings → Music Assistant, then start the source again.",
-      "failureTitle": "The last source command was refused",
-      "failureNextStep": "Check the source and try again.",
-      "commandFailed": "Could not change the source: {reason}",
-      "capture": "Capture",
-      "capturePipewire": "PipeWire node",
-      "capturePulse": "PulseAudio source",
-      "captureUnavailable": "Unavailable",
-      "node": "Node",
-      "noNode": "No capture node",
-      "subtitle": "A Bluetooth device streams into the bridge; the bridge sends it to Music Assistant as a source.",
-      "statePairing": "Waiting for the pairing code",
       "maOff": "The source is off. Enable it to offer the phone to Music Assistant.",
       "maError": "The connection to Music Assistant failed.",
       "maConnected": "Connected. Playback and routing are managed in Music Assistant.",
@@ -823,18 +833,9 @@
       "maRejected": "Music Assistant rejected the pairing code.",
       "maUnsupported": "This Music Assistant does not offer a Sendspin source.",
       "maUnsupportedNext": "Update Music Assistant to 2.10 or newer and enable its Sendspin source provider.",
-      "maPairingNext": "Open a pairing window and enter the code in Music Assistant.",
-      "phoneHint": "Pair a phone, tablet or laptop over Bluetooth; Music Assistant receives the captured audio.",
-      "devicesTitle": "Bluetooth source devices",
-      "noDevices": "No source device is paired yet.",
-      "deviceActive": "active",
-      "deviceConnected": "connected",
-      "deviceUse": "Use",
-      "deviceForget": "Forget",
-      "deviceForgetConfirmTitle": "Forget this source device?",
-      "deviceForgetConfirmBody": "The Bluetooth bond for {mac} is removed. The device can be paired again later.",
-      "deviceForgotten": "Source device forgotten"
-    }
+      "maPairingNext": "Open a pairing window and enter the code in Music Assistant."
+    },
+    "sourceDevice": "Source device"
   },
   "kit": {
     "closeDialog": "Close dialog",
@@ -864,9 +865,7 @@
     "audioMuted": "{name} muted.",
     "audioUnmuted": "{name} unmuted.",
     "audioVolume": "Volume set: {name}.",
-    "audioResumed": "Resumed: {name}.",
-    "sourcePairingOpen": "Pairing window open: pair the phone now.",
-    "sourcePairingClosed": "Pairing window closed."
+    "audioResumed": "Resumed: {name}."
   },
   "restart": {
     "stopping": "Stopping bridge…",
@@ -1357,7 +1356,7 @@
       "sourceMode": {
         "label": "Audio source",
         "help": "Capture Bluetooth audio from a paired device and offer it to Music Assistant. Off by default; enabling starts the source immediately.",
-        "off": "The source is off. Enable it to pair Music Assistant and then a Bluetooth source device.",
+        "off": "The source is off. Enable it to start capturing the selected source input.",
         "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again."
       },
       "sourceTarget": {
@@ -1634,8 +1633,8 @@
     "done": "Done: {action}"
   },
   "nav": {
-    "home": "Speakers",
-    "homeShort": "Speakers",
+    "home": "Devices",
+    "homeShort": "Devices",
     "groups": "Groups",
     "groupsShort": "Groups",
     "settings": "Settings",
@@ -1649,18 +1648,7 @@
   "home": {
     "connected": "{n} of {total} Bluetooth connected",
     "playing": "{n} playing",
-    "source": {
-      "title": "Audio source → Music Assistant",
-      "streaming": "Playing from the phone",
-      "pairing": "Pairing in progress",
-      "waiting": "Waiting for the phone",
-      "off": "Source is off",
-      "error": "Source error",
-      "maConnected": "Music Assistant connected",
-      "maPaired": "Music Assistant paired, reconnecting",
-      "maUnpaired": "Music Assistant is not paired",
-      "openHardware": "Open Hardware"
-    },
+    "source": {},
     "checklist": {
       "title": "First steps",
       "progress": "{done} of {total} done",
@@ -1676,7 +1664,7 @@
     "connectFirst": "Connect the bridge to Music Assistant to see and control its groups."
   },
   "addSpeaker": {
-    "title": "Add speaker",
+    "title": "Add device",
     "findHelp": "Put the speaker in pairing mode. Speakers nearby appear below.",
     "scan": "Search",
     "scanAgain": "Search again",
@@ -1701,8 +1689,9 @@
     "testSound": "Play test sound",
     "done": "Done",
     "tabs": {
-      "bluetooth": "Bluetooth",
-      "audio": "Audio output"
+      "bluetooth": "Speaker",
+      "audio": "Audio output",
+      "source": "Audio source"
     },
     "audio": {
       "intro": "Play to an audio output of this computer, such as a USB DAC, a sound card or HDMI.",
@@ -1714,7 +1703,33 @@
       "taken": "Another player already uses this output."
     },
     "pairing": "Pairing {name}…",
-    "errorNext": "Check that the speaker is in pairing mode and close to the adapter, then try again."
+    "errorNext": "Check that the speaker is in pairing mode and close to the adapter, then try again.",
+    "source": {
+      "help": "Choose a local audio input or pair a Bluetooth device. This works even while Music Assistant is not paired yet.",
+      "bluetooth": "Bluetooth source",
+      "local": "Local input",
+      "maHint": "Music Assistant is not paired yet; you can add the source now and pair Music Assistant later.",
+      "pairing": "Pairing window open: {time}",
+      "pairingHint": "On the phone, tablet or laptop, choose the bridge in Bluetooth settings and allow media audio.",
+      "stopPairing": "Stop pairing",
+      "pair": "Pair a device",
+      "pairHint": "The bridge becomes discoverable for two minutes.",
+      "noBluetooth": "No Bluetooth source is paired yet.",
+      "showMonitors": "Show system audio sources",
+      "refresh": "Refresh",
+      "captureUnavailable": "Audio capture is unavailable on this host ({kind}); pairing still works, local inputs cannot be added.",
+      "choose": "Choose",
+      "noLocal": "No local audio input found.",
+      "node": "Audio input",
+      "nodeHint": "PulseAudio source name or PipeWire node.name. Pick a discovered input above or enter one manually.",
+      "name": "Name",
+      "add": "Add input",
+      "manualHint": "The input is saved but not enabled: use the source switch in Settings when you want to start capturing.",
+      "added": "{name} added.",
+      "localFailed": "Could not load local audio inputs.",
+      "pairFailed": "Could not open the pairing window.",
+      "addFailed": "Could not add that audio input."
+    }
   },
   "connection": {
     "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date.",

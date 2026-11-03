@@ -58,7 +58,7 @@ describe('AppSidebar', () => {
   it('links the five places of the app', async () => {
     const wrapper = await mountSidebar()
     expect(wrapper.findAll('a').map((a) => [a.attributes('href'), a.text()])).toEqual([
-      ['/', 'Speakers'],
+      ['/', 'Devices'],
       ['/groups', 'Groups'],
       ['/config', 'Settings'],
       ['/diagnostics', 'Diagnostics'],
@@ -89,7 +89,7 @@ describe('AppSidebar', () => {
     const wrapper = await mountSidebar()
 
     // Initially labels visible
-    expect(wrapper.text()).toContain('Speakers')
+    expect(wrapper.text()).toContain('Devices')
 
     // Collapse
     await wrapper.find('[data-testid="sidebar-toggle"]').trigger('click')

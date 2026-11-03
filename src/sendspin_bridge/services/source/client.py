@@ -76,6 +76,7 @@ class SourceSettings:
     sample_rate: int = 48000
     channels: int = 2
     target_player: str | None = None
+    active_input: str | None = None
 
 
 class SignalReporter(Protocol):
@@ -156,6 +157,7 @@ class SourceClient:
         self._signal_lock = asyncio.Lock()
         self._preferred_mac: str | None = None
         self._target_player: str | None = settings.target_player
+        self._active_input: str | None = settings.active_input
 
     # -- lifecycle -------------------------------------------------------------------------
 
@@ -190,6 +192,7 @@ class SourceClient:
             ma_paired=await self._psk_paired(),
             target_player=self._target_player,
             target_error=None,
+            active_input=None if self._active_input == "none" else self._active_input,
         )
         if not await self._psk_paired():
             await self._open_pairing_window()
@@ -240,6 +243,7 @@ class SourceClient:
             error=None,
             target_player=None,
             target_error=None,
+            active_input=None,
         )
         return {"started": False}
 
@@ -287,6 +291,10 @@ class SourceClient:
     def target_player(self) -> str | None:
         return self._target_player
 
+    @property
+    def active_input(self) -> str | None:
+        return self._active_input
+
     def status(self) -> dict[str, Any]:
         return source_state.snapshot().status_dict()
 
@@ -327,6 +335,10 @@ class SourceClient:
             source_state.publish(ma_pairing_code=None, ma_pairing_until=0.0)
         await self._report_signal(force=True)
         await self._sync_endpoint()
+        if self._target_player and self._endpoint is not None and self._stream is None:
+            # A local input has no phone transport event to make MA ask for
+            # the capture; starting it on the pinned target is the trigger.
+            self._spawn(self._play_target_after_switch())
 
     async def _wait_for_disconnect(self) -> None:
         stop_task = asyncio.create_task(self._stop.wait())
@@ -369,12 +381,17 @@ class SourceClient:
 
     async def _sync_endpoint_locked(self) -> None:
         endpoint = await self._capture_backend.find()
-        if endpoint is None and self._preferred_mac:
+        if endpoint is None and self._preferred_mac and not self._active_input:
             # The preferred device stopped streaming or disconnected: return to
             # the normal "newest active" policy instead of staying blind.
             self._preferred_mac = None
             self._set_backend_preference(None)
             endpoint = await self._capture_backend.find()
+        if endpoint is None and self._active_input and self._active_input.startswith("local:"):
+            if source_state.snapshot().error != "input_missing":
+                source_state.publish(error="input_missing", state="error")
+        elif endpoint is not None and source_state.snapshot().error == "input_missing":
+            source_state.publish(error=None, state=await self._idle_state())
         if endpoint != self._endpoint:
             if self._stream is not None:
                 await self._stop_capture()
@@ -391,7 +408,8 @@ class SourceClient:
                     else source_state.snapshot().paired_phone_mac
                 ),
             )
-            await self._nudge_profile(endpoint)
+            if endpoint is not None and endpoint.phone_mac:
+                await self._nudge_profile(endpoint)
             await self._report_signal(force=True)
             if endpoint is not None and self._stream_requested and self._client is not None:
                 await self._start_capture()
@@ -402,6 +420,52 @@ class SourceClient:
         setter = getattr(self._capture_backend, "set_preferred_mac", None)
         if callable(setter):
             setter(mac)
+
+    def _set_backend_active(self, source_id: str | None) -> None:
+        setter = getattr(self._capture_backend, "set_active", None)
+        if callable(setter):
+            setter(source_id)
+            return
+        if source_id and source_id.startswith("bluetooth:"):
+            self._set_backend_preference(source_id.split(":", 1)[1])
+        else:
+            self._set_backend_preference(None)
+
+    async def set_active(self, source_id: str | None, *, play_target: bool = True) -> str | None:
+        """Switch the captured input; None means "no active input", not auto-Bluetooth."""
+        chosen = str(source_id or "").strip() or "none"
+        if chosen == self._active_input:
+            return None
+        old = self._active_input
+        was_streaming = self._stream is not None
+        self._active_input = chosen
+        self._set_backend_active(chosen)
+        source_state.publish(active_input=None if chosen == "none" else chosen, target_error=None, error=None)
+        if was_streaming:
+            # One server start authorises one capture opening; the switched
+            # input needs MA to ask again.
+            self._stream_requested = False
+            await self._stop_capture()
+            self._endpoint = None
+        await self._sync_endpoint()
+        if chosen.startswith("local:") and self._endpoint is None:
+            # The node vanished before we could open it: restore the previous
+            # choice so a failed switch does not lose the operator's source.
+            self._active_input = old
+            self._set_backend_active(old)
+            source_state.publish(active_input=None if old in (None, "none") else old)
+            await self._sync_endpoint()
+            raise SourceError("input_unavailable", "That local audio input is not present.")
+        if play_target and self._target_player and self._endpoint is not None:
+            return await self._play_target(allow_without_stream=True)
+        if was_streaming:
+            if not self._target_player:
+                source_state.publish(target_error="press_play")
+            source_state.publish(state=await self._idle_state(), streaming=False)
+        return None
+
+    async def _play_target_after_switch(self) -> None:
+        await self._play_target(allow_without_stream=True)
 
     async def use_device(self, mac: str) -> None:
         """Capture *mac* explicitly; it must already be streaming into the host."""
@@ -417,15 +481,17 @@ class SourceClient:
             raise SourceError("device_selection_unsupported", "This capture backend cannot select a device.")
         old = self._preferred_mac
         self._preferred_mac = address.colons
-        setter(address.colons)
+        self._set_backend_active(f"bluetooth:{address.colons}")
         endpoint = await self._capture_backend.find()
         if endpoint is None or endpoint.phone_mac != address.colons:
             self._preferred_mac = old
-            setter(old)
+            self._set_backend_preference(old)
             raise SourceError(
                 "device_not_streaming",
                 "Connect the device and start audio on it before selecting it as the source.",
             )
+        self._active_input = f"bluetooth:{address.colons}"
+        source_state.publish(active_input=self._active_input)
         await self._sync_endpoint()
 
     async def forget_device(self, mac: str) -> None:
@@ -482,7 +548,7 @@ class SourceClient:
         self._sendspin_capture = sendspin_capture
         self._stream = stream
         self._feed_task = asyncio.create_task(self._feed(sendspin_capture, stream), name="source-feed")
-        source_state.publish(streaming=True, state="streaming", error=None)
+        source_state.publish(streaming=True, state="streaming", error=None, target_error=None)
         logger.info("Source: streaming %s to Music Assistant", self._endpoint.node)
         if self._target_player:
             self._spawn(self._play_target_task())
@@ -491,17 +557,17 @@ class SourceClient:
         """Pin the source to an MA queue, or clear it. Returns an error code, if any."""
         self._target_player = str(target or "").strip() or None
         source_state.publish(target_player=self._target_player, target_error=None)
-        if self._target_player and self._stream is not None:
-            return await self._play_target()
+        if self._target_player and (self._stream is not None or self._endpoint is not None):
+            return await self._play_target(allow_without_stream=True)
         return None
 
     async def _play_target_task(self) -> None:
         await self._play_target()
 
-    async def _play_target(self) -> str | None:
+    async def _play_target(self, *, allow_without_stream: bool = False) -> str | None:
         """Start the live input on the selected MA queue when capture is running."""
         target = self._target_player
-        if not target or self._stream is None:
+        if not target or (self._stream is None and not allow_without_stream):
             return None
         from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
         from sendspin_bridge.services.source.target import SOURCE_URI_TEMPLATE, play_source_on

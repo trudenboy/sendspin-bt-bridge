@@ -162,8 +162,8 @@ watch(
       </a>
     </p>
     <p v-else-if="targetError" data-source-target-error role="alert" class="mb-4 text-sm text-error">
-      {{ t('settings.parts.sourceTarget.playFailed') }}
-      <span class="font-mono text-xs">{{ targetError }}</span>
+      {{ targetError === 'press_play' ? t('devices.sources.pressPlay') : t('settings.parts.sourceTarget.playFailed') }}
+      <span v-if="targetError !== 'press_play'" class="font-mono text-xs">{{ targetError }}</span>
     </p>
     <p v-else class="mb-4 text-xs text-text-secondary">{{ t('settings.parts.sourceTarget.note') }}</p>
   </div>

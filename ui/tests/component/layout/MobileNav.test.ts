@@ -47,7 +47,7 @@ describe('MobileNav', () => {
   it('renders short tab labels that fit a phone', async () => {
     const wrapper = await mountMobileNav()
     const labels = wrapper.findAll('a').map((a) => a.text())
-    expect(labels).toEqual(['Speakers', 'Groups', 'Settings', 'Health', 'Hardware'])
+    expect(labels).toEqual(['Devices', 'Groups', 'Settings', 'Health', 'Hardware'])
   })
 
   it('highlights active tab', async () => {

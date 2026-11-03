@@ -39,6 +39,7 @@ def test_a_fresh_snapshot_is_off_and_keeps_the_status_keys_unchanged():
         "devices": [],
         "target_player": None,
         "target_error": None,
+        "active_input": None,
         "error": None,
     }
 

@@ -58,9 +58,7 @@ export const ACTION_POLICY = {
   // reversible (the undo is the opposite command); stopping disconnects Music
   // Assistant and forgetting the audio link needs a new code, so both ask.
   'source.maForget': 'confirm',
-  'source.deviceForget': 'confirm',
-  'source.pairing': 'undo',
-  'source.pairingStop': 'undo',
+  'source.removeInput': 'confirm',
   // Hardware → Bluetooth link: bringing the link up or down is reversible (the
   // undo is the opposite command) and destroys nothing, so it runs at once.
   'bluetooth.connect': 'undo',

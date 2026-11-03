@@ -8,7 +8,7 @@ from pydantic import ConfigDict, Field
 
 from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.application.models.devices import Device, DisabledDevice, LinkStatus
-from sendspin_bridge.application.models.source import SourceStateName
+from sendspin_bridge.application.models.source import SourceInputStatus, SourceStateName
 
 
 class GroupMember(ResponseModel):
@@ -118,6 +118,10 @@ class SendspinSourceStatus(ResponseModel):
         default=None, description="The MA player/group chosen to play the source automatically; null = choose in MA."
     )
     target_error: str | None = Field(default=None, description="The last automatic target-play failure, if any.")
+    active_input: str | None = Field(default=None, description="The selected source id, if one is pinned.")
+    inputs: list[SourceInputStatus] = Field(
+        default_factory=list, description="Bluetooth and local inputs the source can use."
+    )
     error: str | None = Field(default=None, description="A terminal source error (capture_unavailable, …).")
 
 

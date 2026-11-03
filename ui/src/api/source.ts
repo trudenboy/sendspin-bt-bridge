@@ -1,6 +1,6 @@
 /* The Sendspin source: the phone's capture offered to Music Assistant as a source client. */
 import { api, unwrap } from './client'
-import type { SourceTargets } from './types'
+import type { SourceInputs, SourceTargets } from './types'
 
 /**
  * The window the bridge opens for a phone's Bluetooth pairing. The number lives here so the
@@ -102,6 +102,50 @@ export async function setSourceTarget(targetPlayer: string | null) {
   return unwrap(
     api().PUT('/api/v1/bridge/source/target', {
       body: { target_player: targetPlayer },
+    }),
+  )
+}
+
+/** Configured inputs plus local audio sources the Add device dialog can offer. */
+export async function getSourceInputs(includeMonitors = false): Promise<SourceInputs> {
+  const answer = await unwrap(
+    api().GET('/api/v1/bridge/source/inputs', { params: { query: { include_monitors: includeMonitors } } }),
+  )
+  return answer as unknown as SourceInputs
+}
+
+/** Save a local audio input; it never switches the active input by itself. */
+export function addLocalSource(node: string, name: string | null, allowMonitor = false) {
+  return unwrap(
+    api().POST('/api/v1/bridge/source/inputs', {
+      body: { node, name, allow_monitor: allowMonitor },
+    }),
+  )
+}
+
+/** Rename a saved local input. */
+export function renameSource(sourceId: string, name: string) {
+  return unwrap(
+    api().PATCH('/api/v1/bridge/source/inputs', {
+      body: { source_id: sourceId, name },
+    }),
+  )
+}
+
+/** Remove a local input, or forget a Bluetooth source bond. */
+export function removeSource(sourceId: string) {
+  return unwrap(
+    api().DELETE('/api/v1/bridge/source/inputs', {
+      body: { source_id: sourceId },
+    }),
+  )
+}
+
+/** Select the input the source captures. */
+export function selectSource(sourceId: string) {
+  return unwrap(
+    api().PUT('/api/v1/bridge/source/active', {
+      body: { source_id: sourceId },
     }),
   )
 }

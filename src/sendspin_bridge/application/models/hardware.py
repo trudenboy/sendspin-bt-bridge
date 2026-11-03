@@ -164,6 +164,7 @@ class EndpointSummary(ResponseModel):
     active_port_available: str | None = Field(
         default=None, description="available | not available | availability unknown"
     )
+    monitor_of: str | None = Field(default=None, description="For a monitor source: the sink it mirrors.")
     is_default: bool = Field(
         default=False,
         description="True only for the audio server's current default sink; always false for sources.",

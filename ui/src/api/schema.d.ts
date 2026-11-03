@@ -543,6 +543,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bridge/source/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Select the active source input */
+        put: operations["select_source_input_api_v1_bridge_source_active_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bridge/source/devices/{mac}": {
         parameters: {
             query?: never;
@@ -581,6 +598,29 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bluetooth and local source inputs
+         * @description Configured inputs plus local audio sources the add dialog can offer.
+         */
+        get: operations["get_source_inputs_api_v1_bridge_source_inputs_get"];
+        put?: never;
+        /** Save a local audio input */
+        post: operations["add_source_input_api_v1_bridge_source_inputs_post"];
+        /** Remove a source input */
+        delete: operations["remove_source_input_api_v1_bridge_source_inputs_delete"];
+        options?: never;
+        head?: never;
+        /** Rename a local audio input */
+        patch: operations["rename_source_input_api_v1_bridge_source_inputs_patch"];
         trace?: never;
     };
     "/api/v1/bridge/source/ma-pairing": {
@@ -3792,6 +3832,17 @@ export interface components {
              */
             SENDSPIN_SOURCE?: boolean | null;
             /**
+             * Sendspin Sources
+             * @description Saved local audio inputs that can feed the source. Bluetooth source bonds come from BlueZ and are not stored here.
+             * @default []
+             */
+            SENDSPIN_SOURCES?: components["schemas"]["SourceConfigEntry"][] | null;
+            /**
+             * Sendspin Source Active
+             * @description Selected source id (bluetooth:<MAC> or local:<node>); empty keeps the automatic Bluetooth policy.
+             */
+            SENDSPIN_SOURCE_ACTIVE?: string | null;
+            /**
              * Sendspin Source Target
              * @description Music Assistant player or group that should play the Bluetooth source automatically. Empty leaves the target choice to Music Assistant.
              */
@@ -5145,6 +5196,11 @@ export interface components {
              */
             kind: "sink" | "source";
             /**
+             * Monitor Of
+             * @description For a monitor source: the sink it mirrors.
+             */
+            monitor_of: string | null;
+            /**
              * Muted
              * @description Sinks only; null for sources.
              */
@@ -6367,6 +6423,11 @@ export interface components {
          */
         SendspinSourceStatus: {
             /**
+             * Active Input
+             * @description The selected source id, if one is pinned.
+             */
+            active_input: string | null;
+            /**
              * Devices
              * @description Paired Bluetooth devices that can feed the source.
              */
@@ -6382,6 +6443,11 @@ export interface components {
              * @description A terminal source error (capture_unavailable, …).
              */
             error: string | null;
+            /**
+             * Inputs
+             * @description Bluetooth and local inputs the source can use.
+             */
+            inputs: components["schemas"]["SourceInputStatus"][];
             /**
              * Ma Connected
              * @description The source client is admitted by Music Assistant.
@@ -6688,6 +6754,11 @@ export interface components {
              */
             sound: "clicks" | "accent" | "noise";
         };
+        /** SourceActiveIn */
+        SourceActiveIn: {
+            /** Source Id */
+            source_id: string;
+        };
         /**
          * SourceCapture
          * @description How the phone's audio is captured, or why it cannot be.
@@ -6700,6 +6771,27 @@ export interface components {
             kind: "pipewire_node" | "pulse_source" | "unavailable";
             /** Node */
             node: string | null;
+        };
+        /**
+         * SourceConfigEntry
+         * @description A saved local input that can feed the Sendspin source.
+         */
+        SourceConfigEntry: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @default local
+             * @constant
+             */
+            kind?: "local";
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Node */
+            node: string;
         };
         /**
          * SourceDevice
@@ -6793,6 +6885,96 @@ export interface components {
              * @enum {string}
              */
             state: "off" | "pairing" | "waiting" | "streaming" | "error";
+        };
+        /** SourceInputIn */
+        SourceInputIn: {
+            /**
+             * Allow Monitor
+             * @default false
+             */
+            allow_monitor?: boolean;
+            /** Name */
+            name?: string | null;
+            /** Node */
+            node: string;
+        };
+        /** SourceInputNameIn */
+        SourceInputNameIn: {
+            /** Name */
+            name: string;
+            /** Source Id */
+            source_id: string;
+        };
+        /** SourceInputRemoveIn */
+        SourceInputRemoveIn: {
+            /** Source Id */
+            source_id: string;
+        };
+        /**
+         * SourceInputStatus
+         * @description One selectable source input: a Bluetooth bond or a local audio input.
+         */
+        SourceInputStatus: {
+            /**
+             * Active
+             * @default false
+             */
+            active: boolean;
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /**
+             * Connected
+             * @default false
+             */
+            connected: boolean;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "bluetooth" | "local";
+            /** Mac */
+            mac: string | null;
+            /**
+             * Monitor
+             * @default false
+             */
+            monitor: boolean;
+            /** Name */
+            name: string;
+            /** Node */
+            node: string | null;
+        };
+        /**
+         * SourceInputs
+         * @description Configured inputs and unconfigured local candidates for the add dialog.
+         */
+        SourceInputs: {
+            /** Active Input */
+            active_input: string | null;
+            /**
+             * Capture Available
+             * @default true
+             */
+            capture_available: boolean;
+            /**
+             * Capture Kind
+             * @default unknown
+             */
+            capture_kind: string;
+            /** Inputs */
+            inputs: components["schemas"]["SourceInputStatus"][];
+            /** Local Candidates */
+            local_candidates: components["schemas"]["SourceInputStatus"][];
         };
         /**
          * SourceMa
@@ -8630,6 +8812,52 @@ export interface operations {
             };
         };
     };
+    select_source_input_api_v1_bridge_source_active_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceActiveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     forget_source_device_api_v1_bridge_source_devices__mac__delete: {
         parameters: {
             query?: never;
@@ -8680,6 +8908,182 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_source_inputs_api_v1_bridge_source_inputs_get: {
+        parameters: {
+            query?: {
+                include_monitors?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceInputs"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    add_source_input_api_v1_bridge_source_inputs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceInputIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    remove_source_input_api_v1_bridge_source_inputs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceInputRemoveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    rename_source_input_api_v1_bridge_source_inputs_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceInputNameIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

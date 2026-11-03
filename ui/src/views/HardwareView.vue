@@ -8,7 +8,6 @@ import BtDeviceCard from '@/components/hardware/BtDeviceCard.vue'
 import AudioCardPanel from '@/components/hardware/AudioCardPanel.vue'
 import AudioCaptureNotice from '@/components/hardware/AudioCaptureNotice.vue'
 import EndpointRow from '@/components/hardware/EndpointRow.vue'
-import SourceFeedPanel from '@/components/hardware/SourceFeedPanel.vue'
 import CapabilityBanner from '@/components/hardware/CapabilityBanner.vue'
 import EntityDrawer from '@/components/hardware/EntityDrawer.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
@@ -51,62 +50,6 @@ const snapshot = computed(() => store.snapshot)
 const controllers = computed(() => snapshot.value?.controllers ?? [])
 const devices = computed(() => snapshot.value?.bluetooth_devices ?? [])
 const capabilities = computed(() => snapshot.value?.capabilities ?? null)
-
-// ---------------------------------------------------------------------------
-// Source strip
-// ---------------------------------------------------------------------------
-
-const showSourcePanel = computed(() => !!store.source?.enabled && !!store.source?.ma?.paired)
-const sourceCommandFailure = (e: unknown) => t('hardware.source.commandFailed', { reason: commandFailure(e) })
-
-async function onSourceUse(mac: string) {
-  try {
-    await store.useSourceDevice(mac)
-  } catch (e) {
-    notifications.error(sourceCommandFailure(e))
-  }
-}
-
-async function onSourceForget(mac: string) {
-  const ok = await confirmAction('source.deviceForget', {
-    title: t('hardware.source.deviceForgetConfirmTitle'),
-    consequences: [t('hardware.source.deviceForgetConfirmBody', { mac })],
-    confirmLabel: t('hardware.source.deviceForget'),
-  })
-  if (!ok) return
-  try {
-    await store.forgetSourceDevice(mac)
-    notifications.success(t('hardware.source.deviceForgotten'))
-  } catch (e) {
-    notifications.error(sourceCommandFailure(e))
-  }
-}
-
-function onSourcePair() {
-  void undoable('source.pairing', () => store.startPairingWindow(), () => store.stopPairingWindow(), {
-    doneKey: 'undo.sourcePairingOpen',
-    name: '',
-    failure: sourceCommandFailure,
-    // A refused window answers 200 with its reason in the body; the strip shows
-    // it inline, so there is no success toast and no Undo for a window that never opened.
-    offerUndo: (result) => !(result as { error?: string | null } | null)?.error,
-  })
-}
-
-function onSourceStopPairing() {
-  // Undo restores the time that was left, not a brand-new 120 s window.
-  const remaining = store.pairingSecondsLeft
-  void undoable(
-    'source.pairingStop',
-    () => store.stopPairingWindow(),
-    () => store.startPairingWindow(Math.max(1, Math.ceil(remaining))),
-    {
-      doneKey: 'undo.sourcePairingClosed',
-      name: '',
-      failure: sourceCommandFailure,
-    },
-  )
-}
 
 /**
  * Four different answers, never the same screen: a bridge without the route,
@@ -623,18 +566,6 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
 
     <template v-else-if="snapshot">
       <CapabilityBanner v-if="degradedReason" :reason="degradedReason" :detail="degradedDetail" />
-
-      <SourceFeedPanel
-        v-if="showSourcePanel && store.source"
-        :source="store.source"
-        :pairing-seconds-left="store.pairingSecondsLeft"
-        :failure="store.sourceError"
-        :busy="store.sourceBusy"
-        @pair="onSourcePair"
-        @stop-pairing="onSourceStopPairing"
-        @use="onSourceUse"
-        @forget="onSourceForget"
-      />
 
       <section class="mb-8" data-controllers-section>
         <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('hardware.controllers') }}</h2>

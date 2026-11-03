@@ -12,7 +12,7 @@ from sendspin_bridge.api.errors import PROBLEM_RESPONSES, ApiError
 from sendspin_bridge.application import diagnostics as diag
 from sendspin_bridge.application import source
 from sendspin_bridge.application.jobs import Job, jobs
-from sendspin_bridge.application.models import Bridge, BridgeStatus, Device, Group, SourceTargets
+from sendspin_bridge.application.models import Bridge, BridgeStatus, Device, Group, SourceInputs, SourceTargets
 from sendspin_bridge.application.status import build_status
 
 public = APIRouter(tags=["bridge"])
@@ -29,6 +29,25 @@ class SourceEnabledIn(BaseModel):
 
 class SourceTargetIn(BaseModel):
     target_player: str | None = None
+
+
+class SourceInputIn(BaseModel):
+    node: str
+    name: str | None = None
+    allow_monitor: bool = False
+
+
+class SourceInputNameIn(BaseModel):
+    source_id: str
+    name: str
+
+
+class SourceInputRemoveIn(BaseModel):
+    source_id: str
+
+
+class SourceActiveIn(BaseModel):
+    source_id: str
 
 
 class Health(BaseModel):
@@ -125,6 +144,33 @@ async def open_source_pairing(body: SourcePairingIn | None = None) -> dict[str, 
 async def close_source_pairing() -> Response:
     await source.close_pairing_window()
     return Response(status_code=204)
+
+
+@router.get("/bridge/source/inputs", response_model=SourceInputs, summary="Bluetooth and local source inputs")
+async def get_source_inputs(include_monitors: bool = False) -> SourceInputs:
+    """Configured inputs plus local audio sources the add dialog can offer."""
+    return SourceInputs(**await source.inputs(include_monitors=include_monitors))
+
+
+@router.post("/bridge/source/inputs", status_code=201, summary="Save a local audio input")
+async def add_source_input(body: SourceInputIn) -> dict[str, Any]:
+    return await source.add_local_input(body.node, body.name, allow_monitor=body.allow_monitor)
+
+
+@router.patch("/bridge/source/inputs", summary="Rename a local audio input")
+async def rename_source_input(body: SourceInputNameIn) -> dict[str, Any]:
+    return await source.rename_local_input(body.source_id, body.name)
+
+
+@router.delete("/bridge/source/inputs", status_code=204, summary="Remove a source input")
+async def remove_source_input(body: SourceInputRemoveIn) -> Response:
+    await source.remove_input(body.source_id)
+    return Response(status_code=204)
+
+
+@router.put("/bridge/source/active", summary="Select the active source input")
+async def select_source_input(body: SourceActiveIn) -> dict[str, Any]:
+    return await source.select_input(body.source_id)
 
 
 @router.get("/bridge/source/targets", response_model=SourceTargets, summary="MA players that can play the source")

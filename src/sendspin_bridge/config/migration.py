@@ -582,6 +582,41 @@ def _normalize_ha_integration(config: dict, *, defaults: Mapping[str, Any]) -> N
         )
 
 
+def _normalize_source_profiles(config: dict, *, defaults: Mapping[str, Any]) -> None:
+    """Normalise saved local sources and the active source id.
+
+    Bluetooth source ids are deliberately not checked here: a bond can be
+    temporarily absent while its id stays in config, and the source reports
+    ``input_missing`` instead of silently forgetting the operator's choice.
+    """
+    raw = config.get("SENDSPIN_SOURCES", defaults.get("SENDSPIN_SOURCES", []))
+    normalized: list[dict[str, str]] = []
+    seen: set[str] = set()
+    if not isinstance(raw, list):
+        logger.warning("Invalid SENDSPIN_SOURCES value %r; using []", raw)
+        raw = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            logger.warning("Ignoring invalid local source entry %r", entry)
+            continue
+        node = str(entry.get("node") or "").strip()
+        if not node:
+            logger.warning("Ignoring local source without a node: %r", entry)
+            continue
+        if node in seen:
+            logger.warning("Ignoring duplicate local source %s", node)
+            continue
+        seen.add(node)
+        name = str(entry.get("name") or "").strip()
+        normalized.append({"id": f"local:{node}", "kind": "local", "node": node, "name": name})
+    config["SENDSPIN_SOURCES"] = normalized
+    active = config.get("SENDSPIN_SOURCE_ACTIVE", defaults.get("SENDSPIN_SOURCE_ACTIVE"))
+    if active is not None and not isinstance(active, str):
+        logger.warning("Invalid SENDSPIN_SOURCE_ACTIVE value %r; using null", active)
+        active = None
+    config["SENDSPIN_SOURCE_ACTIVE"] = active.strip() if isinstance(active, str) and active.strip() else None
+
+
 def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> None:
     _normalize_players(config)
     _normalize_ha_area_name_assist_enabled(config, defaults=defaults)
@@ -644,6 +679,8 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "EXPERIMENTAL_AIR_SENSOR",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
+
+    _normalize_source_profiles(config, defaults=defaults)
 
     for key in ("BLUETOOTH_ADAPTERS", "TRUSTED_PROXIES"):
         value = config.get(key, defaults.get(key, []))
