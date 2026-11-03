@@ -387,6 +387,10 @@ function deviceName(device: BtDeviceSummary) {
 }
 
 /** The config names an adapter by hciN; the snapshot knows the MACs holding the bond. */
+function isSourceDevice(mac: string) {
+  return (store.source?.devices ?? []).some((device) => device.mac.toUpperCase() === mac.toUpperCase())
+}
+
 function controllerIdFor(device: BtDeviceSummary) {
   for (const mac of device.controller_macs) {
     const controller = controllers.value.find((entry) => entry.mac.toUpperCase() === mac.toUpperCase())
@@ -664,6 +668,7 @@ watch([selectedController, selectedDevice, selectedAudio], ([controller, device,
           <li v-for="device in devices" :key="device.mac" class="min-w-0">
             <BtDeviceCard
               :device="device"
+              :source-device="device.source_device || isSourceDevice(device.mac)"
               :adding="busyFor(device.mac) === 'add'"
               :forgetting="busyFor(device.mac) === 'forget'"
               :connecting="busyFor(device.mac) === 'connect'"

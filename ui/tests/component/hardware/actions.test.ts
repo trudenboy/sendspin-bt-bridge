@@ -50,6 +50,17 @@ describe('Hardware page: device actions', () => {
     expect(toast(en.addSpeaker.addedTitle.replace('{name}', 'ENEBY20'))).toBe(true)
   })
 
+  it('offers no add button for a source-only phone', async () => {
+    vi.mocked(getHardware).mockResolvedValue(
+      snapshot({ bluetooth_devices: [btDevice({ player_id: null, source_device: true })] }) as never,
+    )
+
+    wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-add-speaker]').exists()).toBe(false)
+  })
+
   it('offers no add button once the device backs a player', async () => {
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
 

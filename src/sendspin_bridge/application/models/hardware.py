@@ -54,6 +54,10 @@ class BtDeviceSummary(ResponseModel):
     roles: list[RoleEvidence] = Field(default_factory=list)
     player_id: str | None = Field(default=None, description="Config id of the player this bond backs.")
     source_phone: bool = Field(default=False, description="The phone currently streaming into the bridge.")
+    source_device: bool = Field(
+        default=False,
+        description="An A2DP source-only bond (a phone/tablet), not a speaker that can be added as a player.",
+    )
 
 
 class BtDeviceDetail(BtDeviceSummary):

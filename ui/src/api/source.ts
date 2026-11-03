@@ -67,10 +67,34 @@ export function forgetSourceDevice(mac: string) {
   )
 }
 
+/**
+ * The target list changes when the operator adds players, not between status
+ * frames. Keep one successful answer for a minute so re-opening Settings (and
+ * the second component mount a route change causes) does not hammer MA.
+ */
+const TARGETS_TTL_MS = 60_000
+let targetsCache: { value: SourceTargets; at: number } | null = null
+
+export function peekSourceTargets(): SourceTargets | null {
+  if (targetsCache && Date.now() - targetsCache.at < TARGETS_TTL_MS) return targetsCache.value
+  return null
+}
+
+export function clearSourceTargetCache(): void {
+  targetsCache = null
+}
+
 /** The MA players/groups the source can be pinned to, plus the saved choice. */
-export async function getSourceTargets(): Promise<SourceTargets> {
-  const answer = await unwrap(api().GET('/api/v1/bridge/source/targets'))
-  return answer as unknown as SourceTargets
+export async function getSourceTargets(force = false): Promise<SourceTargets> {
+  if (!force) {
+    const cached = peekSourceTargets()
+    if (cached) return cached
+  }
+  const answer = (await unwrap(api().GET('/api/v1/bridge/source/targets'))) as unknown as SourceTargets
+  if (answer.ma_api_available !== false && !answer.error) {
+    targetsCache = { value: answer, at: Date.now() }
+  }
+  return answer
 }
 
 /** Pin automatic playback to one MA queue, or clear it to choose in Music Assistant. */

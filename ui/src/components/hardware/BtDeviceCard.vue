@@ -13,8 +13,10 @@ const props = withDefaults(
     disconnecting?: boolean
     /** A refused forget: the server's player id and its own remediation sentence. */
     refusal?: { playerId: string | null; remediation: string | null; detail: string | null } | null
+    /** An A2DP source-only bond: adding it as a speaker would target a phone, not a sink. */
+    sourceDevice?: boolean
   }>(),
-  { adding: false, forgetting: false, connecting: false, disconnecting: false, refusal: null },
+  { adding: false, forgetting: false, connecting: false, disconnecting: false, refusal: null, sourceDevice: false },
 )
 
 const emit = defineEmits<{
@@ -31,6 +33,8 @@ const displayName = computed(() => props.device.alias || props.device.name || pr
 const canConnect = computed(
   () => !props.device.connected && (props.device.paired === true || props.device.bonded === true),
 )
+/** A phone that only offers A2DP Source cannot be a speaker; offer its source role instead. */
+const canAddAsSpeaker = computed(() => !props.device.player_id && !props.sourceDevice)
 const playerHref = computed(() =>
   props.refusal?.playerId ? `/?player=${encodeURIComponent(props.refusal.playerId)}` : '/',
 )
@@ -113,7 +117,7 @@ const rssi = computed(() => {
         {{ t('hardware.disconnect') }}
       </SbButton>
       <SbButton
-        v-if="!device.player_id"
+        v-if="canAddAsSpeaker"
         size="sm"
         variant="outline"
         data-add-speaker

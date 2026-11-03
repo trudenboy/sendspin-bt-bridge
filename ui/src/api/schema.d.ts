@@ -3937,6 +3937,12 @@ export interface components {
             /** Services Resolved */
             services_resolved: boolean | null;
             /**
+             * Source Device
+             * @description An A2DP source-only bond (a phone/tablet), not a speaker that can be added as a player.
+             * @default false
+             */
+            source_device: boolean;
+            /**
              * Source Phone
              * @description The phone currently streaming into the bridge.
              * @default false
@@ -3986,6 +3992,12 @@ export interface components {
             /** Roles */
             roles: components["schemas"]["RoleEvidence"][];
             rssi: components["schemas"]["RssiSummary"] | null;
+            /**
+             * Source Device
+             * @description An A2DP source-only bond (a phone/tablet), not a speaker that can be added as a player.
+             * @default false
+             */
+            source_device: boolean;
             /**
              * Source Phone
              * @description The phone currently streaming into the bridge.

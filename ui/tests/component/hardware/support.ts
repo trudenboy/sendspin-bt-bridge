@@ -35,6 +35,7 @@ export const btDevice = (overrides: Record<string, unknown> = {}) => ({
   roles: [{ role: 'output', evidence: 'transport:active' }],
   player_id: 'eneby20',
   source_phone: false,
+  source_device: false,
   ...overrides,
 })
 

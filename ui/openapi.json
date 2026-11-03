@@ -2647,6 +2647,12 @@
             ],
             "title": "Services Resolved"
           },
+          "source_device": {
+            "default": false,
+            "description": "An A2DP source-only bond (a phone/tablet), not a speaker that can be added as a player.",
+            "title": "Source Device",
+            "type": "boolean"
+          },
           "source_phone": {
             "default": false,
             "description": "The phone currently streaming into the bridge.",
@@ -2697,6 +2703,7 @@
           "roles",
           "player_id",
           "source_phone",
+          "source_device",
           "uuids",
           "services_resolved",
           "modalias",
@@ -2797,6 +2804,12 @@
               }
             ]
           },
+          "source_device": {
+            "default": false,
+            "description": "An A2DP source-only bond (a phone/tablet), not a speaker that can be added as a player.",
+            "title": "Source Device",
+            "type": "boolean"
+          },
           "source_phone": {
             "default": false,
             "description": "The phone currently streaming into the bridge.",
@@ -2839,7 +2852,8 @@
           "transport",
           "roles",
           "player_id",
-          "source_phone"
+          "source_phone",
+          "source_device"
         ],
         "title": "BtDeviceSummary",
         "type": "object"

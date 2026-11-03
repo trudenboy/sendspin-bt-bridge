@@ -62,6 +62,31 @@ def _fresh_source_state():
     source_state.reset()
 
 
+PHONE = "34:C7:E9:25:A3:A3"
+PHONE_INFO = (
+    f"Device {PHONE} (public)\n"
+    "\tName: Pixel\n"
+    "\tAlias: Pixel\n"
+    "\tPaired: yes\n"
+    "\tBonded: yes\n"
+    "\tTrusted: yes\n"
+    "\tBlocked: no\n"
+    "\tConnected: no\n"
+    "\tUUID: Audio Source              (0000110a-0000-1000-8000-00805f9b34fb)\n"
+)
+
+
+def test_a_source_only_phone_is_flagged_and_not_a_speaker(installed_bluez):
+    installed_bluez.on("devices", stdout=f"Device {PHONE} Pixel\n")
+    installed_bluez.on(lambda text: f"info {PHONE}" in text, stdout=PHONE_INFO)
+
+    body = make_client().get("/api/v1/hardware").json()
+
+    phone = next(device for device in body["bluetooth_devices"] if device["mac"] == PHONE)
+    assert phone["source_device"] is True
+    assert phone["player_id"] is None
+
+
 def test_snapshot_lists_controllers_and_devices(installed_bluez):
     installed_bluez.on(lambda text: f"info {DEVICE}" in text, stdout=INFO)
 

@@ -42,6 +42,7 @@ from sendspin_bridge.application.models.hardware import (
 )
 from sendspin_bridge.application.models.source import SourceDevice as SourceDeviceModel
 from sendspin_bridge.bluetooth.address import DeviceAddress
+from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID, A2DP_SOURCE_UUID
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.config import load_config
 from sendspin_bridge.config.players import player_id_for_mac
@@ -178,6 +179,7 @@ def _device_summary(facts: DeviceFacts, players: dict[str, str], source: SourceF
         roles=roles,
         player_id=players.get(facts.mac),
         source_phone=source_phone,
+        source_device=A2DP_SOURCE_UUID in facts.uuids and A2DP_SINK_UUID not in facts.uuids,
     )
 
 
