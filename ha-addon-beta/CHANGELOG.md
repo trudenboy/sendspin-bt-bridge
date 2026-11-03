@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.12] - 2026-11-03
+
+### Added
+
+- An optional Audio source mode in Settings. It is off by default and starts or stops the source immediately, without a bridge restart.
+- The source settings pair the bridge with Music Assistant, list paired Bluetooth source devices (phone, tablet or laptop) and offer Use and Forget for each.
+
+### Changed
+
+- Music Assistant pairing now lives with the audio source and is hidden while the source is off. The Hardware page shows the Bluetooth source devices only after that pairing succeeds.
+- Source labels no longer assume a phone, and the source is no longer a required first-run step or a Home card before Music Assistant pairing.
+
 ## [3.2.0-beta.11] - 2026-11-03
 
 ### Fixed
