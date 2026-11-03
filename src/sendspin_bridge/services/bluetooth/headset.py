@@ -29,6 +29,7 @@ __all__ = [
 _HFP_MARKERS = ("headset_head_unit", "headset-head-unit", "handsfree", "headset_audio_gateway", "headset-audio-gateway")
 _A2DP = ("a2dp_sink", "a2dp-sink")
 
+
 @dataclass(frozen=True, slots=True)
 class HeadsetCapabilities:
     kind: str
@@ -199,6 +200,7 @@ def get_headset_profiles() -> HeadsetProfileService:
 
 
 # -- source-input discovery ---------------------------------------------------
+
 
 def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Configured Bluetooth players whose running client reports an HFP profile.
