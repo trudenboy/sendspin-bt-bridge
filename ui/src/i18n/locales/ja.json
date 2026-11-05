@@ -403,6 +403,12 @@
     "pauseAll": "すべて一時停止",
     "reconnectAll": "すべて再接続",
     "list": {
+      "name": "名前",
+      "status": "状態",
+      "volume": "音量",
+      "transport": "再生操作",
+      "adapter": "アダプター",
+      "actions": "操作",
       "expand": "{name} の詳細を表示",
       "collapse": "{name} の詳細を隠す",
       "quickActions": "クイック操作"

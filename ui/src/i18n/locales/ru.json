@@ -403,6 +403,12 @@
     "pauseAll": "Пауза у всех",
     "reconnectAll": "Переподключить все",
     "list": {
+      "name": "Имя",
+      "status": "Статус",
+      "volume": "Громкость",
+      "transport": "Управление",
+      "adapter": "Адаптер",
+      "actions": "Действия",
       "expand": "Показать подробности: {name}",
       "collapse": "Скрыть подробности: {name}",
       "quickActions": "Быстрые действия"

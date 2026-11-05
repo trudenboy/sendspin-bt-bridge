@@ -19,8 +19,8 @@ const stubs = {
   DeviceDetailDrawer: true,
   AddSpeakerDialog: true,
   GuidanceBanner: true,
-  DeviceCard: { props: ['device', 'density'], template: '<div data-card :data-density="density">{{ device.name }}</div>' },
-  DisabledPlayerCard: { props: ['player', 'density'], template: '<div data-card data-disabled :data-density="density">{{ player.name }}</div>' },
+  DeviceCard: { props: ['device'], template: '<div data-card>{{ device.name }}</div>' },
+  DisabledPlayerCard: { props: ['player'], template: '<div data-card data-disabled>{{ player.name }}</div>' },
   DisabledPlayerRow: { props: ['player'], template: '<tr data-disabled-row><td>{{ player.name }}</td></tr>' },
 }
 
@@ -135,18 +135,23 @@ describe('HomeView summary', () => {
   })
 })
 
-describe('HomeView compact list', () => {
+describe('HomeView list rows', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
   })
 
-  it('renders the same cards in compact density and opens details on click', async () => {
-    const w = mountHome([idle('a', 'Alpha'), streaming('b', 'Bravo')], 'list')
+  it('opens the first streaming row on load and keeps one row open at a time', async () => {
+    const w = mountHome([idle('a', 'Alpha'), streaming('b', 'Bravo'), idle('c', 'Charlie')], 'list')
     await flushPromises()
-    const cards = w.findAll('[data-density="compact"]')
-    expect(cards).toHaveLength(2)
-    expect(cards.map((c) => c.get('[data-name]').text())).toEqual(['Bravo', 'Alpha'])
+    const details = () => w.findAll('[data-row-detail]').map((d) => d.attributes('id'))
+    expect(details()).toEqual(['device-row-detail-b'])
+    const toggles = w.findAll('[data-row-toggle]')
+    // activity order: Bravo, Alpha, Charlie
+    await toggles[1]!.trigger('click')
+    expect(details()).toEqual(['device-row-detail-a'])
+    await w.findAll('[data-row-toggle]')[1]!.trigger('click')
+    expect(details()).toEqual([])
   })
 })
 
@@ -192,7 +197,7 @@ describe('HomeView view toggle', () => {
     await list.trigger('click')
     expect(list.attributes('aria-pressed')).toBe('true')
     expect(localStorage.getItem('sb-view-mode')).toBe('list')
-    expect(w.findAll('[data-density="compact"]').length).toBeGreaterThan(0)
+    expect(w.find('table').exists()).toBe(true)
   })
 
   it('is there with only disabled players too', () => {
@@ -214,7 +219,8 @@ describe('HomeView view toggle', () => {
     })) as unknown as typeof window.matchMedia
     try {
       const w = mountHome([idle('a', 'Alpha')], 'list')
-      expect(w.text()).toContain('Alpha')
+      expect(w.find('table').exists()).toBe(false)
+      expect(cardNames(w)).toEqual(['Alpha'])
       expect(localStorage.getItem('sb-view-mode')).toBe('list')
     } finally {
       window.matchMedia = original
@@ -237,7 +243,7 @@ describe('HomeView disabled players', () => {
 
   it('shows them as rows in the list', () => {
     const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')], 'list')
-    expect(w.findAll('[data-density="compact"][data-disabled]').map((r) => r.text()).join(' ')).toContain('Xray')
+    expect(w.findAll('[data-disabled-row]').map((r) => r.text())).toEqual(['Xray'])
   })
 
   it('shows them instead of the empty state when every player is disabled', () => {

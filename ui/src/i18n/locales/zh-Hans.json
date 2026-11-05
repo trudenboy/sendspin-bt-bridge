@@ -403,6 +403,12 @@
     "pauseAll": "全部暂停",
     "reconnectAll": "全部重新连接",
     "list": {
+      "name": "名称",
+      "status": "状态",
+      "volume": "音量",
+      "transport": "播放控制",
+      "adapter": "适配器",
+      "actions": "操作",
       "expand": "显示 {name} 的详情",
       "collapse": "隐藏 {name} 的详情",
       "quickActions": "快捷操作"

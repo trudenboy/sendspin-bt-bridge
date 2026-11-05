@@ -403,6 +403,12 @@
     "pauseAll": "Pausar todo",
     "reconnectAll": "Reconectar todo",
     "list": {
+      "name": "Nombre",
+      "status": "Estado",
+      "volume": "Volumen",
+      "transport": "Reproducción",
+      "adapter": "Adaptador",
+      "actions": "Acciones",
       "expand": "Mostrar detalles de {name}",
       "collapse": "Ocultar detalles de {name}",
       "quickActions": "Acciones rápidas"
