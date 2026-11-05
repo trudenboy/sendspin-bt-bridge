@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import DeviceCard from '@/components/devices/DeviceCard.vue'
+import DevicePlayerPanel from '@/components/devices/DevicePlayerPanel.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import { useBridgeStore } from '@/stores/bridge'
 import en from '@/i18n/locales/en.json'
@@ -43,7 +43,7 @@ async function mountCard(device: Device) {
   useBridgeStore().snapshot = makeStatus([device])
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
   await router.push('/')
-  return mount(DeviceCard, { props: { device }, global: { plugins: [i18n(), router] } })
+  return mount(DevicePlayerPanel, { props: { device }, global: { plugins: [i18n(), router] } })
 }
 
 const shuffleBtn = (w: Awaited<ReturnType<typeof mountCard>>) => w.find('button[data-queue="shuffle"]')

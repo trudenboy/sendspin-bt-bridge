@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useNotificationStore } from "@/stores/notifications";
+import { isDeviceConnected } from "@/utils/deviceBackend";
 import { transport } from "@/api/playback";
 import { Play, Pause } from "lucide-vue-next";
 import type { Device } from "@/api/types";
@@ -26,6 +27,7 @@ const nowPlaying = computed(() => {
 const isStreaming = computed(
   () => props.device.playback.playing && props.device.audio.streaming,
 );
+const connected = computed(() => isDeviceConnected(props.device));
 const supports = (command: string) => {
   const list = props.device.playback.supported_commands ?? [];
   return list.length === 0 || list.includes(command);
@@ -45,17 +47,22 @@ async function toggle() {
 </script>
 
 <template>
-  <div v-if="nowPlaying" class="flex min-w-0 items-center gap-3">
+  <div class="flex min-w-0 items-center gap-3">
     <div class="min-w-0 flex-1">
-      <p class="truncate text-sm font-medium text-text-primary">
-        {{ nowPlaying.title }}
-      </p>
-      <p v-if="nowPlaying.artist" class="truncate text-xs text-text-secondary">
-        {{ nowPlaying.artist }}
+      <template v-if="nowPlaying">
+        <p class="truncate text-sm font-medium text-text-primary">
+          {{ nowPlaying.title }}
+        </p>
+        <p v-if="nowPlaying.artist" class="truncate text-xs text-text-secondary">
+          {{ nowPlaying.artist }}
+        </p>
+      </template>
+      <p v-else class="truncate text-sm text-text-secondary">
+        {{ t("device.context.nothingPlaying") }}
       </p>
     </div>
     <button
-      v-if="canToggle"
+      v-if="canToggle && connected && !selectable"
       type="button"
       class="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-fill text-on-primary transition-colors hover:bg-primary-dark disabled:opacity-50"
       :aria-label="isStreaming ? t('transport.pause') : t('transport.play')"
@@ -66,7 +73,4 @@ async function toggle() {
       <Play v-else class="size-5" />
     </button>
   </div>
-  <p v-else class="truncate text-sm text-text-secondary">
-    {{ t("device.context.nothingPlaying") }}
-  </p>
 </template>

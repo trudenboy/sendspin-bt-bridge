@@ -113,6 +113,7 @@ function activate() {
         </p>
       </div>
       <DeviceCardStatus
+        data-status
         :label-key="view.status.labelKey"
         :params="view.status.params"
         :tone="view.status.tone"
