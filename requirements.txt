@@ -173,7 +173,7 @@ winrt-windows-devices-enumeration==3.2.1 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-devices-radios==3.2.1 ; sys_platform == 'win32'
     # via bleak
-winrt-windows-foundation==3.2.1 ; sys_platform == 'win32'
+winrt-windows-foundation==4!10.0.28000.2957 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-foundation-collections==3.2.1 ; sys_platform == 'win32'
     # via bleak
