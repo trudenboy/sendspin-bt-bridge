@@ -46,8 +46,8 @@
       "bluetooth": "La connexion Bluetooth relie le pont à l’enceinte"
     },
     "audio_link": {
+      "connected": "Connecté",
       "streaming": "Lecture en cours",
-      "connected": "Actif",
       "foreign": "Autre serveur",
       "disconnected": "Inactif",
       "unavailable": "Indisponible"
@@ -83,12 +83,15 @@
     "speakersTitle": "Enceintes"
   },
   "device": {
+    "role": {"output": "Sortie", "input": "Entrée", "bluetooth": "Bluetooth", "disabled": "Désactivé"},
+    "context": {"playing": "Lecture", "nothingPlaying": "Rien en lecture", "disabled": "Ce lecteur est désactivé"},
     "microphone": "Microphone",
     "microphoneMode": "Mode microphone — lecture A2DP en pause",
     "a2dpUnavailable": "L'audio A2DP est indisponible",
     "a2dpUnavailableHint": "L'hôte n'a enregistré qu'un profil HFP/appel. La musique ne pourra jouer qu'au retour d'A2DP.",
     "retryA2dp": "Réessayer A2DP",
     "status": {
+      "connected": "Connecté",
       "streaming": "Lecture en cours",
       "ready": "Prête",
       "connecting": "Connexion…",
@@ -643,6 +646,9 @@
     "openInHardware": "Ouvrir dans Matériel"
   },
   "hardware": {
+    "notConnected": "Non connecté",
+    "openDetailsShort": "Détails",
+    "context": {"sourceOnly": "Appareil Bluetooth source uniquement", "bond": "Appairage Bluetooth"},
     "subtitle": "Les adaptateurs Bluetooth, les appareils qui leur sont associés et l’audio de cet hôte.",
     "refresh": "Actualiser",
     "stale": "Les données peuvent être obsolètes",

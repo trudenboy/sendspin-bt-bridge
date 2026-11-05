@@ -46,8 +46,8 @@
       "bluetooth": "Bluetooth bağlantısı, köprü ile hoparlör arasındaki bağdır"
     },
     "audio_link": {
+      "connected": "Bağlı",
       "streaming": "Çalıyor",
-      "connected": "Açık",
       "foreign": "Başka sunucu",
       "disconnected": "Kapalı",
       "unavailable": "Kullanılamıyor"
@@ -83,12 +83,15 @@
     "speakersTitle": "Hoparlörler"
   },
   "device": {
+    "role": {"output": "Çıkış", "input": "Giriş", "bluetooth": "Bluetooth", "disabled": "Devre dışı"},
+    "context": {"playing": "Oynatılıyor", "nothingPlaying": "Oynatılan bir şey yok", "disabled": "Bu oynatıcı devre dışı"},
     "microphone": "Mikrofon",
     "microphoneMode": "Mikrofon modu — A2DP oynatma duraklatıldı",
     "a2dpUnavailable": "A2DP sesi kullanılamıyor",
     "a2dpUnavailableHint": "Ana makine yalnızca HFP/arama profili kaydetti. A2DP geri gelene kadar müzik çalamaz.",
     "retryA2dp": "A2DP’yi yeniden dene",
     "status": {
+      "connected": "Bağlı",
       "streaming": "Çalıyor",
       "ready": "Hazır",
       "connecting": "Bağlanıyor",
@@ -643,6 +646,9 @@
     "openInHardware": "Donanım’da aç"
   },
   "hardware": {
+    "notConnected": "Bağlı değil",
+    "openDetailsShort": "Ayrıntılar",
+    "context": {"sourceOnly": "Yalnızca Bluetooth kaynağı", "bond": "Bluetooth eşleştirme"},
     "subtitle": "Bluetooth bağdaştırıcıları, bunlara eşleştirilmiş cihazlar ve bu ana bilgisayarın sesi.",
     "refresh": "Yenile",
     "stale": "Veriler güncel olmayabilir",

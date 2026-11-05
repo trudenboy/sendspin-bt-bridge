@@ -46,8 +46,8 @@
       "bluetooth": "La conexión Bluetooth es el enlace entre el puente y el altavoz"
     },
     "audio_link": {
+      "connected": "Conectado",
       "streaming": "En reproducción",
-      "connected": "Activo",
       "foreign": "Otro servidor",
       "disconnected": "Caído",
       "unavailable": "No disponible"
@@ -83,12 +83,15 @@
     "speakersTitle": "Altavoces"
   },
   "device": {
+    "role": {"output": "Salida", "input": "Entrada", "bluetooth": "Bluetooth", "disabled": "Desactivado"},
+    "context": {"playing": "Reproduciendo", "nothingPlaying": "Nada en reproducción", "disabled": "Este reproductor está desactivado"},
     "microphone": "Micrófono",
     "microphoneMode": "Modo micrófono: reproducción A2DP en pausa",
     "a2dpUnavailable": "El audio A2DP no está disponible",
     "a2dpUnavailableHint": "El host solo registró un perfil HFP/llamada. La música no sonará hasta que vuelva A2DP.",
     "retryA2dp": "Reintentar A2DP",
     "status": {
+      "connected": "Conectado",
       "streaming": "En reproducción",
       "ready": "Listo",
       "connecting": "Conectando",
@@ -643,6 +646,9 @@
     "openInHardware": "Abrir en Hardware"
   },
   "hardware": {
+    "notConnected": "No conectado",
+    "openDetailsShort": "Detalles",
+    "context": {"sourceOnly": "Dispositivo solo fuente Bluetooth", "bond": "Emparejamiento Bluetooth"},
     "subtitle": "Los adaptadores Bluetooth, los dispositivos emparejados con ellos y el audio de este host.",
     "refresh": "Actualizar",
     "stale": "Los datos pueden estar desactualizados",

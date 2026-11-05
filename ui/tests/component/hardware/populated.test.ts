@@ -68,14 +68,11 @@ describe('Hardware page: controllers and devices', () => {
 
     const card = wrapper.get('[data-device-card]')
     expect(card.text()).toContain('ENEBY20')
-    expect(card.text()).toContain('FC:58:FA:EB:08:6C')
+    expect(card.text()).toContain('#086C')
     expect(card.text()).toContain(en.hardware.connected)
-    expect(card.text()).toContain(en.hardware.paired)
-    expect(card.text()).toContain(en.hardware.trusted)
     expect(card.text()).toContain('Battery: 80%')
     expect(card.text()).toContain('Signal: -4 dB')
-    expect(card.text()).toContain(en.hardware.roleOutput)
-    expect(card.text()).toContain('transport:active')
+    expect(card.text()).toContain('Output')
 
     const link = card.get('[data-player-link]')
     expect(link.attributes('href')).toBe('/')

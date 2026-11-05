@@ -46,8 +46,8 @@
       "bluetooth": "Bluetooth 接続は、ブリッジとスピーカーの間のリンクです"
     },
     "audio_link": {
+      "connected": "接続済み",
       "streaming": "再生中",
-      "connected": "稼働中",
       "foreign": "他のサーバー",
       "disconnected": "停止",
       "unavailable": "利用不可"
@@ -83,12 +83,15 @@
     "speakersTitle": "スピーカー"
   },
   "device": {
+    "role": {"output": "出力", "input": "入力", "bluetooth": "Bluetooth", "disabled": "無効"},
+    "context": {"playing": "再生中", "nothingPlaying": "再生していません", "disabled": "このプレーヤーは無効です"},
     "microphone": "マイク",
     "microphoneMode": "マイクモード — A2DP再生は一時停止中",
     "a2dpUnavailable": "A2DPオーディオを利用できません",
     "a2dpUnavailableHint": "ホストはHFP/通話プロファイルのみを登録しています。A2DPが戻るまで音楽は再生できません。",
     "retryA2dp": "A2DPを再試行",
     "status": {
+      "connected": "接続済み",
       "streaming": "再生中",
       "ready": "準備完了",
       "connecting": "接続中",
@@ -643,6 +646,9 @@
     "openInHardware": "ハードウェアで開く"
   },
   "hardware": {
+    "notConnected": "未接続",
+    "openDetailsShort": "詳細",
+    "context": {"sourceOnly": "Bluetoothソース専用デバイス", "bond": "Bluetoothペアリング"},
     "subtitle": "このホストの Bluetooth アダプター、接続されているデバイス、音声デバイスです。",
     "refresh": "更新",
     "stale": "データが古い可能性があります",

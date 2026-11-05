@@ -46,8 +46,8 @@
       "bluetooth": "Die Bluetooth-Verbindung ist die Verbindung zwischen der Bridge und dem Lautsprecher"
     },
     "audio_link": {
+      "connected": "Verbunden",
       "streaming": "Wiedergabe",
-      "connected": "Aktiv",
       "foreign": "Anderer Server",
       "disconnected": "Inaktiv",
       "unavailable": "Nicht verfügbar"
@@ -83,12 +83,15 @@
     "speakersTitle": "Lautsprecher"
   },
   "device": {
+    "role": {"output": "Ausgabe", "input": "Eingabe", "bluetooth": "Bluetooth", "disabled": "Deaktiviert"},
+    "context": {"playing": "Wiedergabe", "nothingPlaying": "Nichts wird abgespielt", "disabled": "Dieser Player ist deaktiviert"},
     "microphone": "Mikrofon",
     "microphoneMode": "Mikrofonmodus — A2DP-Wiedergabe pausiert",
     "a2dpUnavailable": "A2DP-Audio ist nicht verfügbar",
     "a2dpUnavailableHint": "Der Host hat nur ein HFP-/Anrufprofil registriert. Musik kann erst spielen, wenn A2DP zurück ist.",
     "retryA2dp": "A2DP erneut versuchen",
     "status": {
+      "connected": "Verbunden",
       "streaming": "Wiedergabe",
       "ready": "Bereit",
       "connecting": "Verbinde…",
@@ -643,6 +646,9 @@
     "openInHardware": "In der Hardware öffnen"
   },
   "hardware": {
+    "notConnected": "Nicht verbunden",
+    "openDetailsShort": "Details",
+    "context": {"sourceOnly": "Nur Bluetooth-Quelle", "bond": "Bluetooth-Kopplung"},
     "subtitle": "Die Bluetooth-Adapter, die mit ihnen gekoppelten Geräte und das Audio dieses Hosts.",
     "refresh": "Aktualisieren",
     "stale": "Daten sind möglicherweise veraltet",

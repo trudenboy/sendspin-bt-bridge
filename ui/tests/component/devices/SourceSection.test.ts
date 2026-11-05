@@ -45,6 +45,11 @@ function mountSection() {
   return mount(SourceSection, { global: { plugins: [i18n] } })
 }
 
+async function openSourceMenu(card: ReturnType<ReturnType<typeof mountSection>['get']>) {
+  await card.get('button[aria-label^="More actions"]').trigger('click')
+  await flushPromises()
+}
+
 describe('Devices: source section', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -73,6 +78,7 @@ describe('Devices: source section', () => {
     await flushPromises()
 
     const active = wrapper.get('[data-source-id="local:alsa_input.line"]')
+    await openSourceMenu(active)
     await active.get('[data-source-rename]').trigger('click')
     await active.get('[data-source-rename-input]').setValue('Record player')
     await active.get('form').trigger('submit')
@@ -85,7 +91,9 @@ describe('Devices: source section', () => {
     const wrapper = mountSection()
     await flushPromises()
 
-    await wrapper.get('[data-source-id="bluetooth:34:C7:E9:25:A3:A3"] [data-source-remove]').trigger('click')
+    const card = wrapper.get('[data-source-id="bluetooth:34:C7:E9:25:A3:A3"]')
+    await openSourceMenu(card)
+    await card.get('[data-source-remove]').trigger('click')
     await flushPromises()
 
     expect(confirm.confirmDialog).toHaveBeenCalled()

@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import DeviceCard from '@/components/devices/DeviceCard.vue'
+import DevicePlayerPanel from '@/components/devices/DevicePlayerPanel.vue'
 import { useBridgeStore } from '@/stores/bridge'
 import { useAudioStore } from '@/stores/audio'
 import en from '@/i18n/locales/en.json'
@@ -41,7 +41,7 @@ async function mountCard(device: Device, opts: { groups?: Group[]; maWebUrl?: st
   bridge.snapshot = status
   const router = makeRouter()
   await router.push('/')
-  const wrapper = mount(DeviceCard, {
+  const wrapper = mount(DevicePlayerPanel, {
     props: { device },
     global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router] },
   })

@@ -46,8 +46,8 @@
       "bluetooth": "Bluetooth-соединение — это связь между мостом и колонкой"
     },
     "audio_link": {
+      "connected": "Подключено",
       "streaming": "Играет",
-      "connected": "Работает",
       "foreign": "Другой сервер",
       "disconnected": "Нет связи",
       "unavailable": "Недоступен"
@@ -83,12 +83,15 @@
     "speakersTitle": "Колонки"
   },
   "device": {
+    "role": {"output": "Выход", "input": "Вход", "bluetooth": "Bluetooth", "disabled": "Отключено"},
+    "context": {"playing": "Играет", "nothingPlaying": "Ничего не играет", "disabled": "Плеер отключён"},
     "microphone": "Микрофон",
     "microphoneMode": "Режим микрофона — воспроизведение A2DP на паузе",
     "a2dpUnavailable": "A2DP-звук недоступен",
     "a2dpUnavailableHint": "Хост зарегистрировал только HFP/call-профиль. Музыка не заиграет, пока A2DP не вернётся.",
     "retryA2dp": "Повторить A2DP",
     "status": {
+      "connected": "Подключено",
       "streaming": "Играет",
       "ready": "Готова",
       "connecting": "Подключение",
@@ -643,6 +646,9 @@
     "openInHardware": "Открыть в «Оборудование»"
   },
   "hardware": {
+    "notConnected": "Не подключено",
+    "openDetailsShort": "Подробнее",
+    "context": {"sourceOnly": "Bluetooth-устройство только как источник", "bond": "Bluetooth-сопряжение"},
     "subtitle": "Bluetooth-адаптеры, привязанные к ним устройства и аудио этого хоста.",
     "refresh": "Обновить",
     "stale": "Данные могут быть устаревшими",

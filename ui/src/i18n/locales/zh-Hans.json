@@ -46,8 +46,8 @@
       "bluetooth": "Bluetooth 连接是桥接器与音箱之间的链路"
     },
     "audio_link": {
-      "streaming": "播放中",
       "connected": "已连接",
+      "streaming": "播放中",
       "foreign": "其他服务器",
       "disconnected": "已断开",
       "unavailable": "不可用"
@@ -83,12 +83,15 @@
     "speakersTitle": "音箱"
   },
   "device": {
+    "role": {"output": "输出", "input": "输入", "bluetooth": "Bluetooth", "disabled": "已禁用"},
+    "context": {"playing": "播放中", "nothingPlaying": "没有正在播放的内容", "disabled": "此播放器已禁用"},
     "microphone": "麦克风",
     "microphoneMode": "麦克风模式 — A2DP 播放已暂停",
     "a2dpUnavailable": "A2DP 音频不可用",
     "a2dpUnavailableHint": "主机仅注册了 HFP/通话配置文件。在 A2DP 恢复之前无法播放音乐。",
     "retryA2dp": "重试 A2DP",
     "status": {
+      "connected": "已连接",
       "streaming": "播放中",
       "ready": "就绪",
       "connecting": "连接中",
@@ -643,6 +646,9 @@
     "openInHardware": "在硬件中打开"
   },
   "hardware": {
+    "notConnected": "未连接",
+    "openDetailsShort": "详情",
+    "context": {"sourceOnly": "仅蓝牙音源设备", "bond": "蓝牙配对"},
     "subtitle": "Bluetooth 适配器、与其绑定的设备，以及此主机的音频。",
     "refresh": "刷新",
     "stale": "数据可能已过期",

@@ -46,8 +46,8 @@
       "bluetooth": "La connessione Bluetooth è il collegamento tra il bridge e l’altoparlante"
     },
     "audio_link": {
+      "connected": "Connesso",
       "streaming": "In riproduzione",
-      "connected": "Attivo",
       "foreign": "Altro server",
       "disconnected": "Inattivo",
       "unavailable": "Non disponibile"
@@ -83,12 +83,15 @@
     "speakersTitle": "Altoparlanti"
   },
   "device": {
+    "role": {"output": "Uscita", "input": "Ingresso", "bluetooth": "Bluetooth", "disabled": "Disattivato"},
+    "context": {"playing": "In riproduzione", "nothingPlaying": "Niente in riproduzione", "disabled": "Questo lettore è disattivato"},
     "microphone": "Microfono",
     "microphoneMode": "Modalità microfono — riproduzione A2DP in pausa",
     "a2dpUnavailable": "Audio A2DP non disponibile",
     "a2dpUnavailableHint": "L host ha registrato solo un profilo HFP/chiamata. La musica non può suonare finché A2DP non torna.",
     "retryA2dp": "Riprova A2DP",
     "status": {
+      "connected": "Connesso",
       "streaming": "In riproduzione",
       "ready": "Pronto",
       "connecting": "Connessione in corso",
@@ -643,6 +646,9 @@
     "openInHardware": "Apri in Hardware"
   },
   "hardware": {
+    "notConnected": "Non connesso",
+    "openDetailsShort": "Dettagli",
+    "context": {"sourceOnly": "Dispositivo solo sorgente Bluetooth", "bond": "Accoppiamento Bluetooth"},
     "subtitle": "Gli adattatori Bluetooth, i dispositivi associati e l’audio di questo host.",
     "refresh": "Aggiorna",
     "stale": "I dati potrebbero non essere aggiornati",

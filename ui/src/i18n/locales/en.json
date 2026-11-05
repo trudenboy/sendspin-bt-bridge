@@ -46,8 +46,8 @@
       "bluetooth": "The Bluetooth connection is the link between the bridge and the speaker"
     },
     "audio_link": {
+      "connected": "Connected",
       "streaming": "Playing",
-      "connected": "Up",
       "foreign": "Other server",
       "disconnected": "Down",
       "unavailable": "Unavailable"
@@ -83,12 +83,15 @@
     "speakersTitle": "Speakers"
   },
   "device": {
+    "role": {"output": "Output", "input": "Input", "bluetooth": "Bluetooth", "disabled": "Disabled"},
+    "context": {"playing": "Playing", "nothingPlaying": "Nothing playing", "disabled": "This player is disabled"},
     "microphone": "Microphone",
     "microphoneMode": "Microphone mode — A2DP playback is paused",
     "a2dpUnavailable": "A2DP audio is unavailable",
     "a2dpUnavailableHint": "The host registered only an HFP/call profile for this device. Music cannot play until A2DP returns.",
     "retryA2dp": "Retry A2DP",
     "status": {
+      "connected": "Connected",
       "streaming": "Playing",
       "ready": "Ready",
       "connecting": "Connecting",
@@ -643,6 +646,9 @@
     "openInHardware": "Open in Hardware"
   },
   "hardware": {
+    "notConnected": "Not connected",
+    "openDetailsShort": "Details",
+    "context": {"sourceOnly": "Source-only Bluetooth device", "bond": "Bluetooth bonding"},
     "subtitle": "The Bluetooth adapters, the devices bonded to them, and this host's audio.",
     "refresh": "Refresh",
     "stale": "Data may be out of date",

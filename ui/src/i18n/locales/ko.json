@@ -46,8 +46,8 @@
       "bluetooth": "Bluetooth 연결은 브리지와 스피커 사이의 링크입니다"
     },
     "audio_link": {
-      "streaming": "재생 중",
       "connected": "연결됨",
+      "streaming": "재생 중",
       "foreign": "다른 서버",
       "disconnected": "중단됨",
       "unavailable": "사용 불가"
@@ -83,12 +83,15 @@
     "speakersTitle": "스피커"
   },
   "device": {
+    "role": {"output": "출력", "input": "입력", "bluetooth": "Bluetooth", "disabled": "비활성화됨"},
+    "context": {"playing": "재생 중", "nothingPlaying": "재생 중인 항목 없음", "disabled": "이 플레이어는 비활성화되어 있습니다"},
     "microphone": "마이크",
     "microphoneMode": "마이크 모드 — A2DP 재생 일시 중지",
     "a2dpUnavailable": "A2DP 오디오를 사용할 수 없음",
     "a2dpUnavailableHint": "호스트가 HFP/통화 프로필만 등록했습니다. A2DP가 돌아올 때까지 음악을 재생할 수 없습니다.",
     "retryA2dp": "A2DP 다시 시도",
     "status": {
+      "connected": "연결됨",
       "streaming": "재생 중",
       "ready": "준비됨",
       "connecting": "연결 중",
@@ -643,6 +646,9 @@
     "openInHardware": "하드웨어에서 열기"
   },
   "hardware": {
+    "notConnected": "연결되지 않음",
+    "openDetailsShort": "세부 정보",
+    "context": {"sourceOnly": "Bluetooth 소스 전용 기기", "bond": "Bluetooth 페어링"},
     "subtitle": "Bluetooth 어댑터와 연결된 기기, 그리고 이 호스트의 오디오입니다.",
     "refresh": "새로 고침",
     "stale": "데이터가 오래되었을 수 있습니다",

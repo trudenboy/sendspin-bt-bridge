@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bluetooth, Pencil, Play, Radio, Trash2, Mic } from 'lucide-vue-next'
-import { SbBadge, SbButton } from '@/kit'
+import { MoreVertical } from 'lucide-vue-next'
+import { SbBadge, SbButton, SbDropdown, SbDropdownItem } from '@/kit'
+import DeviceCardShell from './card/DeviceCardShell.vue'
+import { sourceCardView } from './card/viewModels'
 import type { SourceInputStatus, SourceState } from '@/api/types'
 
-/**
- * One configured source: a Bluetooth bond or a saved local input.  Start/Stop
- * belongs to the whole source mode in Settings; this card only chooses which
- * input feeds it and removes the input.
- */
 const props = withDefaults(
   defineProps<{
     input: SourceInputStatus
-    /** The bridge's source state, shown only on the active card. */
     state?: SourceState
     targetPlayer?: string | null
     busy?: boolean
@@ -30,96 +26,64 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const renaming = ref(false)
 const draft = ref('')
-
-const kindLabel = computed(() => {
-  if (props.input.kind === 'bluetooth') return t('devices.sources.bluetooth')
-  if (props.input.kind === 'headset_microphone') return t('devices.sources.headsetMicrophone')
-  return t('devices.sources.local')
-})
-const stateLabel = computed(() => {
-  if (!props.input.active) return t('devices.sources.available')
-  const labels = {
-    off: t('devices.sources.off'),
-    pairing: t('devices.sources.pairing'),
-    waiting: t('devices.sources.waiting'),
-    streaming: t('devices.sources.streaming'),
-    error: t('devices.sources.error'),
-  } as const
-  return labels[props.state ?? 'off']
-})
-const stateTone = computed(() => {
-  if (!props.input.active) return 'neutral'
-  if (props.state === 'streaming') return 'success'
-  if (props.state === 'error') return 'error'
-  if (props.state === 'pairing' || props.state === 'waiting') return 'warning'
-  return 'neutral'
-})
-const targetLabel = computed(() =>
-  props.input.active ? props.targetPlayer || t('devices.sources.targetInMa') : '',
-)
+const view = computed(() => sourceCardView(props.input, props.state))
 
 function startRename() {
   draft.value = props.input.name
   renaming.value = true
 }
-
 function saveRename() {
   const name = draft.value.trim()
   if (name) emit('rename', props.input.id, name)
   renaming.value = false
 }
+function action(id: string) {
+  if (id === 'use') emit('use', props.input.id)
+  if (id === 'rename') startRename()
+  if (id === 'remove') emit('remove', props.input.id)
+}
 </script>
 
 <template>
-  <article
-    data-source-card
+  <DeviceCardShell
+    :view="view"
+    :data-source-card="''"
     :data-source-id="input.id"
     :data-source-active="String(input.active)"
-    class="relative flex flex-col gap-3 rounded-(--radius-card) border bg-surface-card p-4"
-    :class="input.active ? 'border-primary/50' : 'border-border'"
+    @action="action"
   >
-    <header class="flex items-start gap-3">
-      <span class="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-text">
-        <Bluetooth v-if="input.kind === 'bluetooth'" class="size-5" aria-hidden="true" />
-        <Mic v-else-if="input.kind === 'headset_microphone'" class="size-5" aria-hidden="true" />
-        <Radio v-else class="size-5" aria-hidden="true" />
-      </span>
-      <div class="min-w-0 flex-1">
-        <h3 class="break-words text-base font-medium leading-snug text-text-primary">
-          {{ input.name || input.description || input.id }}
-        </h3>
-        <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-text-secondary">
-          <span>{{ kindLabel }}</span>
-          <span aria-hidden="true">·</span>
-          <span class="truncate font-mono">{{ input.kind === 'bluetooth' || input.kind === 'headset_microphone' ? input.mac : input.node }}</span>
-        </p>
-      </div>
-      <SbBadge data-source-state :tone="stateTone" size="sm">{{ stateLabel }}</SbBadge>
-    </header>
+    <template #menu>
+      <SbDropdown align="right">
+        <template #trigger>
+          <button
+            type="button"
+            class="inline-flex size-10 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+            :aria-label="t('device.actions.more', { name: input.name || input.id })"
+            aria-haspopup="true"
+          >
+            <MoreVertical class="size-4" />
+          </button>
+        </template>
+        <SbDropdownItem v-if="input.kind === 'local'" data-source-rename @click="startRename">
+          {{ t('devices.sources.rename') }}
+        </SbDropdownItem>
+        <SbDropdownItem v-if="input.kind !== 'headset_microphone'" destructive data-source-remove @click="emit('remove', input.id)">
+          {{ input.kind === 'local' ? t('devices.sources.remove') : t('devices.sources.forget') }}
+        </SbDropdownItem>
+      </SbDropdown>
+    </template>
 
-    <div class="flex flex-wrap items-center gap-1.5">
-      <SbBadge v-if="input.active" size="sm" tone="info">{{ t('devices.sources.active') }}</SbBadge>
-      <SbBadge v-if="input.kind === 'bluetooth' && input.connected" size="sm">{{ t('devices.sources.connected') }}</SbBadge>
+    <template #badges>
       <SbBadge v-if="input.monitor" size="sm" tone="warning">{{ t('devices.sources.monitor') }}</SbBadge>
       <SbBadge v-if="!input.available" size="sm" tone="error">{{ t('devices.sources.unavailable') }}</SbBadge>
-    </div>
+    </template>
 
-    <p v-if="targetLabel" data-source-target class="text-xs text-text-secondary">
-      {{ t('devices.sources.playsOn', { target: targetLabel }) }}
-    </p>
+    <template #context>
+      <span v-if="input.active && targetPlayer" data-source-target>{{ t('devices.sources.playsOn', { target: targetPlayer }) }}</span>
+      <span v-else>{{ t(input.kind === 'headset_microphone' ? 'devices.sources.headsetMicrophone' : input.kind === 'bluetooth' ? 'devices.sources.bluetooth' : 'devices.sources.local') }}</span>
+    </template>
 
-    <form v-if="renaming" class="flex flex-wrap items-center gap-2" @submit.prevent="saveRename">
-      <input
-        v-model="draft"
-        data-source-rename-input
-        class="min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 py-1 text-sm text-text-primary"
-        :aria-label="t('devices.sources.rename')"
-      />
-      <SbButton size="sm" type="submit" :disabled="!draft.trim()">{{ t('common.save') }}</SbButton>
-      <SbButton size="sm" variant="ghost" type="button" @click="renaming = false">{{ t('common.cancel') }}</SbButton>
-    </form>
-
-    <div class="mt-auto flex flex-wrap items-center gap-2">
+    <template #footer>
       <SbButton
         v-if="!input.active"
         size="sm"
@@ -128,17 +92,21 @@ function saveRename() {
         :disabled="busy || !input.available"
         @click="emit('use', input.id)"
       >
-        <template #icon-left><Play class="h-3.5 w-3.5" aria-hidden="true" /></template>
         {{ t('devices.sources.use') }}
       </SbButton>
-      <SbButton v-if="input.kind === 'local'" size="sm" variant="ghost" data-source-rename :disabled="busy" @click="startRename">
-        <template #icon-left><Pencil class="h-3.5 w-3.5" aria-hidden="true" /></template>
-        {{ t('devices.sources.rename') }}
-      </SbButton>
-      <SbButton v-if="input.kind !== 'headset_microphone'" size="sm" variant="ghost" data-source-remove :disabled="busy" @click="emit('remove', input.id)">
-        <template #icon-left><Trash2 class="h-3.5 w-3.5" aria-hidden="true" /></template>
-        {{ input.kind === 'local' ? t('devices.sources.remove') : t('devices.sources.forget') }}
-      </SbButton>
-    </div>
-  </article>
+    </template>
+
+    <template #extra>
+      <form v-if="renaming" class="relative z-10 flex flex-wrap items-center gap-2" @submit.prevent="saveRename">
+        <input
+          v-model="draft"
+          data-source-rename-input
+          class="min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-2 py-1 text-sm text-text-primary"
+          :aria-label="t('devices.sources.rename')"
+        />
+        <SbButton size="sm" type="submit" :disabled="!draft.trim()">{{ t('common.save') }}</SbButton>
+        <SbButton size="sm" variant="ghost" type="button" @click="renaming = false">{{ t('common.cancel') }}</SbButton>
+      </form>
+    </template>
+  </DeviceCardShell>
 </template>

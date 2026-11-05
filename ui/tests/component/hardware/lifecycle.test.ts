@@ -52,6 +52,11 @@ function problem(status: number, code: string, detail: string) {
   return new ApiError({ status, code, detail })
 }
 
+async function openDeviceMenu(w: NonNullable<typeof wrapper>) {
+  await w.get('button[aria-label^="More actions"]').trigger('click')
+  await flushPromises()
+}
+
 describe('Hardware page: Bluetooth lifecycle', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -81,6 +86,7 @@ describe('Hardware page: Bluetooth lifecycle', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu(wrapper)
     expect(wrapper.find('[data-disconnect-device]').exists()).toBe(true)
     expect(wrapper.find('[data-connect-device]').exists()).toBe(false)
   })
@@ -114,6 +120,7 @@ describe('Hardware page: Bluetooth lifecycle', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu(wrapper)
     await wrapper.get('[data-disconnect-device]').trigger('click')
     await flushPromises()
 
@@ -160,6 +167,7 @@ describe('Hardware page: Bluetooth lifecycle', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu(wrapper)
     await wrapper.get('[data-disconnect-device]').trigger('click')
     await flushPromises()
 
@@ -215,6 +223,7 @@ describe('Hardware page: Bluetooth lifecycle', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu(wrapper)
     await wrapper.get('[data-forget-bond]').trigger('click')
     await flushPromises()
 
