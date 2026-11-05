@@ -67,7 +67,7 @@ function action(id: string) {
         <SbDropdownItem v-if="input.kind === 'local'" data-source-rename @click="startRename">
           {{ t('devices.sources.rename') }}
         </SbDropdownItem>
-        <SbDropdownItem v-if="input.kind !== 'headset_microphone'" destructive data-source-remove @click="emit('remove', input.id)">
+        <SbDropdownItem v-if="input.kind !== 'headset_microphone'" data-source-remove @click="emit('remove', input.id)">
           {{ input.kind === 'local' ? t('devices.sources.remove') : t('devices.sources.forget') }}
         </SbDropdownItem>
       </SbDropdown>
