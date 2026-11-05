@@ -60,6 +60,7 @@ function activate() {
 
 <template>
   <article
+    data-card
     data-device-card
     :data-role="view.role"
     :data-disabled="view.role === 'disabled' ? '' : undefined"

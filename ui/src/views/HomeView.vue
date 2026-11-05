@@ -9,11 +9,9 @@ import { fleetSummary } from '@/utils/fleetSummary'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
-import { useRowExpansion } from '@/composables/useRowExpansion'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceCardSkeleton from '@/components/devices/card/DeviceCardSkeleton.vue'
-import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
@@ -21,7 +19,6 @@ import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import SourceSection from '@/components/devices/SourceSection.vue'
 import FirstRunChecklist from '@/components/hardware/FirstRunChecklist.vue'
 import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
-import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
 import StatusState from '@/components/StatusState.vue'
 import { useMediaQuery } from '@/composables/useMediaQuery'
 import { Plus, LayoutGrid, List, ChevronDown, ArrowUpDown } from 'lucide-vue-next'
@@ -142,9 +139,6 @@ const backendLabel = computed(() =>
 )
 const triggerClass =
   'inline-flex cursor-pointer items-center gap-1 rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary'
-
-/* List view: one expanded row, the first streaming one on load. */
-const expansion = useRowExpansion(computed(() => deviceStore.filteredDevices))
 
 /** Only the states some device is in right now, so every chip filters something. */
 const statusFilters = computed(() => {
@@ -478,46 +472,31 @@ watch(
         </template>
       </div>
 
-      <!-- Device list -->
+      <!-- Device list: the same shell in compact density, never a horizontally scrolling table -->
       <div
         v-else-if="shownView === 'list' && deviceStore.filteredPlayers.length > 0"
-        class="overflow-x-auto rounded-lg border border-border"
+        class="flex flex-col gap-2"
       >
-        <table class="w-full text-left text-sm">
-          <thead>
-            <tr class="border-b border-border bg-surface-secondary text-xs uppercase tracking-wider text-text-secondary">
-              <th v-if="selectable" class="w-10 py-2 pl-3 pr-1 font-medium" />
-              <th class="py-2 pl-3 pr-2 font-medium">{{ t('devices.list.name') }}</th>
-              <th class="px-2 py-2 font-medium">{{ t('devices.list.status') }}</th>
-              <th class="px-2 py-2 font-medium">{{ t('devices.list.volume') }}</th>
-              <th class="px-2 py-2 font-medium">{{ t('devices.list.transport') }}</th>
-              <th class="hidden px-2 py-2 font-medium md:table-cell">{{ t('devices.list.adapter') }}</th>
-              <th class="py-2 pl-2 pr-3 text-right font-medium">{{ t('devices.list.actions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="entry in deviceStore.filteredPlayers" :key="entry.id">
-              <DeviceListRow
-                v-if="entry.kind === 'device'"
-                :device="entry.device"
-                :selectable="selectable"
-                :selected="selection.selected.value.has(entry.id)"
-                :expanded="expansion.expandedId.value === entry.id"
-                @open-detail="openDetail"
-                @toggle-select="selection.toggle($event)"
-                @toggle-expand="expansion.toggle($event)"
-              />
-              <DisabledPlayerRow
-                v-else
-                :player="entry.player"
-                :selectable="selectable"
-                :selected="selection.selected.value.has(entry.id)"
-                @open-detail="openDetail"
-                @toggle-select="selection.toggle($event)"
-              />
-            </template>
-          </tbody>
-        </table>
+        <template v-for="entry in deviceStore.filteredPlayers" :key="entry.id">
+          <DeviceCard
+            v-if="entry.kind === 'device'"
+            :device="entry.device"
+            density="compact"
+            :selectable="selectable"
+            :selected="selection.selected.value.has(entry.id)"
+            @open-detail="openDetail"
+            @toggle-select="selection.toggle($event)"
+          />
+          <DisabledPlayerCard
+            v-else
+            :player="entry.player"
+            density="compact"
+            :selectable="selectable"
+            :selected="selection.selected.value.has(entry.id)"
+            @open-detail="openDetail"
+            @toggle-select="selection.toggle($event)"
+          />
+        </template>
       </div>
 
       <!-- No filter results -->

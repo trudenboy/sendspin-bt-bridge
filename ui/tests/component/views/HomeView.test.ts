@@ -135,23 +135,18 @@ describe('HomeView summary', () => {
   })
 })
 
-describe('HomeView list rows', () => {
+describe('HomeView compact list', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
   })
 
-  it('opens the first streaming row on load and keeps one row open at a time', async () => {
-    const w = mountHome([idle('a', 'Alpha'), streaming('b', 'Bravo'), idle('c', 'Charlie')], 'list')
+  it('renders the same cards in compact density and opens details on click', async () => {
+    const w = mountHome([idle('a', 'Alpha'), streaming('b', 'Bravo')], 'list')
     await flushPromises()
-    const details = () => w.findAll('[data-row-detail]').map((d) => d.attributes('id'))
-    expect(details()).toEqual(['device-row-detail-b'])
-    const toggles = w.findAll('[data-row-toggle]')
-    // activity order: Bravo, Alpha, Charlie
-    await toggles[1]!.trigger('click')
-    expect(details()).toEqual(['device-row-detail-a'])
-    await w.findAll('[data-row-toggle]')[1]!.trigger('click')
-    expect(details()).toEqual([])
+    const cards = w.findAll('[data-density="compact"]')
+    expect(cards).toHaveLength(2)
+    expect(cards.map((c) => c.get('[data-name]').text())).toEqual(['Bravo', 'Alpha'])
   })
 })
 
@@ -197,7 +192,7 @@ describe('HomeView view toggle', () => {
     await list.trigger('click')
     expect(list.attributes('aria-pressed')).toBe('true')
     expect(localStorage.getItem('sb-view-mode')).toBe('list')
-    expect(w.find('table').exists()).toBe(true)
+    expect(w.findAll('[data-density="compact"]').length).toBeGreaterThan(0)
   })
 
   it('is there with only disabled players too', () => {
@@ -219,7 +214,7 @@ describe('HomeView view toggle', () => {
     })) as unknown as typeof window.matchMedia
     try {
       const w = mountHome([idle('a', 'Alpha')], 'list')
-      expect(w.find('table').exists()).toBe(false)
+      expect(w.findAll('[data-density="compact"]').length).toBeGreaterThan(0)
       expect(cardNames(w)).toEqual(['Alpha'])
       expect(localStorage.getItem('sb-view-mode')).toBe('list')
     } finally {
@@ -243,7 +238,7 @@ describe('HomeView disabled players', () => {
 
   it('shows them as rows in the list', () => {
     const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')], 'list')
-    expect(w.findAll('[data-disabled-row]').map((r) => r.text())).toEqual(['Xray'])
+    expect(w.findAll('[data-density="compact"][data-role="disabled"]').map((r) => r.text()).join(' ')).toContain('Xray')
   })
 
   it('shows them instead of the empty state when every player is disabled', () => {

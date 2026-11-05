@@ -12,6 +12,8 @@ import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
 import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
+import DeviceDrawerHeader from './card/DeviceDrawerHeader.vue'
+import { disabledCardView, playerCardView } from './card/viewModels'
 import StatusState from '@/components/StatusState.vue'
 import { openPairingWindow, reconnectDevice, repairDevice, setPowerSave, unmuteSink } from '@/api/devices'
 import { ApiError } from '@/api/client'
@@ -59,6 +61,9 @@ const drawerTitle = computed(() =>
     : speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''),
 )
 const events = computed(() => device.value?.recent_events ?? [])
+const cardView = computed(() =>
+  device.value ? playerCardView(device.value) : disabledPlayer.value ? disabledCardView(disabledPlayer.value) : null,
+)
 
 // A speaker that disappears (removed) takes its panel with it.
 watch(() => device.value ?? disabledPlayer.value, (now, before) => {
@@ -209,6 +214,9 @@ function onPrimary() {
     width="max-w-lg"
     @update:model-value="onDrawerUpdate"
   >
+    <template v-if="cardView" #header>
+      <DeviceDrawerHeader :view="cardView" />
+    </template>
     <template v-if="device">
       <SbTabs v-model="activeTab" :tabs="tabs" fit>
         <!-- Overview: state, the one thing to do, the audio path, the latest events -->
