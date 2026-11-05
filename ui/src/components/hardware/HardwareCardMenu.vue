@@ -48,7 +48,6 @@ const { t } = useI18n();
     </SbDropdownItem>
     <div class="my-1 border-t border-border" />
     <SbDropdownItem
-      destructive
       data-forget-bond
       @click="emit('forget', device)"
       >{{ t("device.actions.forget") }}</SbDropdownItem
