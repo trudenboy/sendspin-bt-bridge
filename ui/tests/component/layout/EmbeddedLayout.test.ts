@@ -40,7 +40,9 @@ describe('Home Assistant embedded layout', () => {
   beforeEach(() => setup(true))
 
   it('has no brand header, but keeps sponsor, help and the status pill with runtime facts', () => {
-    const w = mountHeader()
+    const w = mount(AppHeader, {
+      global: { plugins: plugins(), stubs: { BugReportDialog: true } },
+    })
     expect(w.find('img').exists()).toBe(false)
     expect(w.text()).not.toContain('Sendspin Bluetooth Bridge')
     expect(w.find('[data-sponsor-link]').exists()).toBe(true)
