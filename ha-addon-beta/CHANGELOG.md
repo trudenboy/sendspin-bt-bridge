@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.21] - 2026-11-05
+
+### Changed
+
+- Player, disabled, Bluetooth and source cards now share one visual shell: identity, a single semantic status, one role badge, room/adapter/short id, one reserved context line and consistent actions.
+- Player cards are summary-first: now playing and play/pause stay on the card, while volume, seek, queue controls and technical chips live in the detail drawer.
+- Bluetooth device actions (Add as speaker, Disconnect, Forget) moved to the card's overflow menu; the primary action is Connect or Details.
+- Source cards use the same shell and keep Use/Active as the primary action.
+
+### Fixed
+
+- Selecting cards for bulk actions no longer conflicts with opening device details.
+
 ## [3.2.0-beta.20] - 2026-11-05
 
 ### Changed
