@@ -193,7 +193,7 @@ describe('Hardware page: Bluetooth lifecycle', () => {
     wrapper = mountView()
     await flushPromises()
 
-    await wrapper.get('[data-device-details]').trigger('click')
+    await wrapper.get('[data-name]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-drawer-connect]').trigger('click')
     await flushPromises()

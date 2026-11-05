@@ -70,6 +70,7 @@ function activate() {
         ? 'border-primary ring-1 ring-primary'
         : 'border-border hover:border-border-strong',
       compact ? 'gap-2 p-3' : 'gap-3 p-4',
+      view.role === 'disabled' ? 'opacity-60' : '',
       loading ? 'pointer-events-none opacity-70' : '',
     ]"
   >

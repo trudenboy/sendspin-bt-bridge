@@ -20,6 +20,11 @@ vi.mock('@/api/bluetooth', () => ({ setAdapterPower: vi.fn(), forgetBtDevice: vi
 
 let wrapper: ReturnType<typeof mountView> | null = null
 
+async function openDeviceMenu() {
+  await wrapper!.get('button[aria-label^="More actions"]').trigger('click')
+  await flushPromises()
+}
+
 const toast = (message: string) => useNotificationStore().toasts.some((entry) => entry.message === message)
 
 describe('Hardware page: device actions', () => {
@@ -42,6 +47,7 @@ describe('Hardware page: device actions', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu()
     await wrapper.get('[data-add-speaker]').trigger('click')
     await flushPromises()
 
@@ -76,6 +82,7 @@ describe('Hardware page: device actions', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu()
     await wrapper.get('[data-forget-bond]').trigger('click')
     await flushPromises()
 
@@ -103,6 +110,7 @@ describe('Hardware page: device actions', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await openDeviceMenu()
     await wrapper.get('[data-forget-bond]').trigger('click')
     await flushPromises()
 

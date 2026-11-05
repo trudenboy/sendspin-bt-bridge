@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import DeviceCard from '@/components/devices/DeviceCard.vue'
+import DevicePlayerPanel from '@/components/devices/DevicePlayerPanel.vue'
 import { useBridgeStore } from '@/stores/bridge'
 import { setTechnicalDetails } from '@/composables/useTechnicalDetails'
 import en from '@/i18n/locales/en.json'
@@ -25,7 +25,7 @@ const Stub = { template: '<div />' }
 function mountCard(device: Device) {
   useBridgeStore().snapshot = makeStatus([device])
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: Stub }] })
-  return mount(DeviceCard, {
+  return mount(DevicePlayerPanel, {
     props: { device },
     global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router] },
   })
