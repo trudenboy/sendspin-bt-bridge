@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.23] - 2026-11-05
+
+### Fixed
+
+- With two or more speakers, clicking a card now opens its details even though the bulk-selection checkbox is visible. The checkbox still selects; it no longer turns the whole card into a selection toggle.
+
 ## [3.2.0-beta.22] - 2026-11-05
 
 ### Fixed
