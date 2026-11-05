@@ -51,6 +51,7 @@ async function setEnabled(next: boolean) {
           data-source-mode-toggle
           @update:model-value="setEnabled"
         />
+        <SbBadge data-source-experimental tone="warning" size="sm">{{ t('common.experimental') }}</SbBadge>
         <SbBadge v-if="source" data-source-mode-state :tone="enabled ? 'success' : 'neutral'" size="sm">
           {{ t(stateKey) }}
         </SbBadge>

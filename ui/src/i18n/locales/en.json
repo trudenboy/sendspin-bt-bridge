@@ -581,6 +581,7 @@
     "released": "Released"
   },
   "common": {
+    "experimental": "Experimental",
     "loading": "Loading...",
     "error": "Error",
     "retry": "Retry",

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.20] - 2026-11-05
+
+### Changed
+
+- The audio source is now labelled **Experimental** throughout Settings, Sources and Add device. It remains off by default.
+- The Sponsor and Help buttons are available again in the Home Assistant ingress header.
+
 ## [3.2.0-beta.19] - 2026-11-03
 
 ### Fixed

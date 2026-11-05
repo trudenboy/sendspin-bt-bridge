@@ -581,6 +581,7 @@
     "released": "해제됨"
   },
   "common": {
+    "experimental": "실험적",
     "loading": "불러오는 중...",
     "error": "오류",
     "retry": "다시 시도",

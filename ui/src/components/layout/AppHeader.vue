@@ -100,12 +100,12 @@ const iconButton =
         >{{ bridgeName }}</span>
       </router-link>
 
-      <div class="ml-auto flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
+      <div class="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
         <button
           v-if="embedded && embeddedPill.label"
           type="button"
           data-status-pill
-          class="inline-flex min-w-0 max-w-[60vw] items-center gap-1.5 truncate rounded-full px-3 py-1 text-xs font-medium"
+          class="inline-flex min-w-0 max-w-[32vw] items-center gap-1.5 truncate rounded-full px-3 py-1 text-xs font-medium"
           :class="statusClass[embeddedPill.tone] ?? 'tone-neutral'"
           :title="embeddedPill.title"
           @click="router.push('/diagnostics')"
@@ -138,21 +138,21 @@ const iconButton =
         </button>
 
         <a
-          v-if="!embedded"
           :href="SPONSOR_URL"
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex h-10 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+          data-sponsor-link
+          class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
           :title="t('header.sponsorHint')"
+          :aria-label="t('header.sponsor')"
         >
           <Heart class="size-4 fill-current text-[#e5487a]" aria-hidden="true" />
-          <span class="hidden md:inline">{{ t('header.sponsor') }}</span>
-          <span class="sr-only md:hidden">{{ t('header.sponsor') }}</span>
+          <span :class="embedded ? 'sr-only' : 'hidden md:inline'">{{ t('header.sponsor') }}</span>
         </a>
 
         <SbDropdown align="right">
           <template #trigger>
-            <button type="button" :class="iconButton" :aria-label="t('header.help')" aria-haspopup="true">
+            <button type="button" :class="iconButton" data-help-button :aria-label="t('header.help')" aria-haspopup="true">
               <CircleHelp class="size-5" />
             </button>
           </template>

@@ -155,7 +155,10 @@ watch(timer, (value) => {
 
 <template>
   <div data-source-picker class="space-y-4">
-    <p class="text-sm text-text-secondary">{{ t('addSpeaker.source.help') }}</p>
+    <div class="flex flex-wrap items-center gap-2">
+      <p class="text-sm text-text-secondary">{{ t('addSpeaker.source.help') }}</p>
+      <SbBadge tone="warning" size="sm">{{ t('common.experimental') }}</SbBadge>
+    </div>
 
     <div class="flex flex-wrap gap-2">
       <SbButton :variant="mode === 'bluetooth' ? 'primary' : 'outline'" size="sm" data-source-mode-bluetooth @click="mode = 'bluetooth'">

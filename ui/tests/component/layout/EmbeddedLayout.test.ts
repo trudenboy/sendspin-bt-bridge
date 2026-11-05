@@ -39,11 +39,12 @@ const mountHeader = () =>
 describe('Home Assistant embedded layout', () => {
   beforeEach(() => setup(true))
 
-  it('has no brand header and no sponsor link, but keeps the status pill with the runtime facts', () => {
+  it('has no brand header, but keeps sponsor, help and the status pill with runtime facts', () => {
     const w = mountHeader()
     expect(w.find('img').exists()).toBe(false)
     expect(w.text()).not.toContain('Sendspin Bluetooth Bridge')
-    expect(w.find('a[href*="support"]').exists()).toBe(false)
+    expect(w.find('[data-sponsor-link]').exists()).toBe(true)
+    expect(w.find('[data-help-button]').exists()).toBe(true)
     const pill = w.get('[data-status-pill]')
     expect(pill.attributes('title')).toContain('10.0.0.5')
     expect(pill.attributes('title')).toContain('Home Assistant add-on')

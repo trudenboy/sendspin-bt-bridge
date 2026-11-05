@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Radio } from 'lucide-vue-next'
-import { SbButton } from '@/kit'
+import { SbBadge, SbButton } from '@/kit'
 import { confirmAction } from '@/composables/useActionPolicy'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
@@ -86,6 +86,7 @@ async function onRemove(id: string) {
       <h2 class="flex items-center gap-2 text-lg font-semibold text-text-primary">
         <Radio class="size-5 text-text-secondary" aria-hidden="true" />
         {{ t('devices.sources.title') }}
+        <SbBadge tone="warning" size="sm">{{ t('common.experimental') }}</SbBadge>
       </h2>
       <SbButton size="sm" variant="outline" data-add-source @click="emit('add')">
         <template #icon-left><Plus class="h-4 w-4" /></template>

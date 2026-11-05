@@ -581,6 +581,7 @@
     "released": "Libérée"
   },
   "common": {
+    "experimental": "Expérimental",
     "loading": "Chargement…",
     "error": "Erreur",
     "retry": "Réessayer",

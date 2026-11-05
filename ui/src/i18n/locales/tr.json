@@ -581,6 +581,7 @@
     "released": "Serbest bırakıldı"
   },
   "common": {
+    "experimental": "Deneysel",
     "loading": "Yükleniyor...",
     "error": "Hata",
     "retry": "Yeniden dene",

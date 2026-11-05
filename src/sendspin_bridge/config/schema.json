@@ -8,7 +8,7 @@
     "SENDSPIN_SOURCE": {
       "type": ["boolean", "null"],
       "default": false,
-      "description": "Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone."
+      "description": "Experimental. Offer audio a phone streams into the bridge over Bluetooth as a Sendspin source in Music Assistant (#563). Uses the host's audio server to capture the phone. Off by default."
     },
     "SENDSPIN_SOURCE_TARGET": {
       "type": ["string", "null"],
