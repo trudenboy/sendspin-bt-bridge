@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.22] - 2026-11-05
+
+### Fixed
+
+- Clicking a speaker card now reliably opens the right-hand details panel again, including when several speakers are shown.
+- The List view keeps its familiar columns (name, status, volume, transport, adapter, actions); the unified cards are the Grid view.
+
+### Changed
+
+- The device drawer now uses the same identity, role and status header as the card.
+
 ## [3.2.0-beta.21] - 2026-11-05
 
 ### Changed
