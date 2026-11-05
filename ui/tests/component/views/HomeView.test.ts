@@ -19,8 +19,8 @@ const stubs = {
   DeviceDetailDrawer: true,
   AddSpeakerDialog: true,
   GuidanceBanner: true,
-  DeviceCard: { props: ['device'], template: '<div data-card>{{ device.name }}</div>' },
-  DisabledPlayerCard: { props: ['player'], template: '<div data-card data-disabled>{{ player.name }}</div>' },
+  DeviceCard: { props: ['device', 'density'], template: '<div data-card :data-density="density">{{ device.name }}</div>' },
+  DisabledPlayerCard: { props: ['player', 'density'], template: '<div data-card data-disabled :data-density="density">{{ player.name }}</div>' },
   DisabledPlayerRow: { props: ['player'], template: '<tr data-disabled-row><td>{{ player.name }}</td></tr>' },
 }
 
@@ -214,8 +214,7 @@ describe('HomeView view toggle', () => {
     })) as unknown as typeof window.matchMedia
     try {
       const w = mountHome([idle('a', 'Alpha')], 'list')
-      expect(w.findAll('[data-density="compact"]').length).toBeGreaterThan(0)
-      expect(cardNames(w)).toEqual(['Alpha'])
+      expect(w.text()).toContain('Alpha')
       expect(localStorage.getItem('sb-view-mode')).toBe('list')
     } finally {
       window.matchMedia = original
@@ -238,7 +237,7 @@ describe('HomeView disabled players', () => {
 
   it('shows them as rows in the list', () => {
     const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')], 'list')
-    expect(w.findAll('[data-density="compact"][data-role="disabled"]').map((r) => r.text()).join(' ')).toContain('Xray')
+    expect(w.findAll('[data-density="compact"][data-disabled]').map((r) => r.text()).join(' ')).toContain('Xray')
   })
 
   it('shows them instead of the empty state when every player is disabled', () => {

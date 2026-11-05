@@ -403,12 +403,6 @@
     "pauseAll": "Alle pausieren",
     "reconnectAll": "Alle neu verbinden",
     "list": {
-      "name": "Name",
-      "status": "Status",
-      "volume": "Lautstärke",
-      "transport": "Steuerung",
-      "adapter": "Adapter",
-      "actions": "Aktionen",
       "expand": "Details für {name} anzeigen",
       "collapse": "Details für {name} ausblenden",
       "quickActions": "Schnellaktionen"

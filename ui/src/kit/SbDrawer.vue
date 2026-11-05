@@ -150,6 +150,7 @@ onBeforeUnmount(() => {
                 {{ title }}
               </h2>
             </slot>
+            <h2 v-if="title && $slots.header" :id="titleId" class="sr-only">{{ title }}</h2>
             <button
               v-if="closable"
               type="button"

@@ -403,12 +403,6 @@
     "pauseAll": "Tümünü duraklat",
     "reconnectAll": "Tümünü yeniden bağla",
     "list": {
-      "name": "Ad",
-      "status": "Durum",
-      "volume": "Ses düzeyi",
-      "transport": "Oynatma",
-      "adapter": "Bağdaştırıcı",
-      "actions": "İşlemler",
       "expand": "{name} ayrıntılarını göster",
       "collapse": "{name} ayrıntılarını gizle",
       "quickActions": "Hızlı işlemler"
