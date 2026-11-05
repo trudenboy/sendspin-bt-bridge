@@ -33,14 +33,14 @@ describe('DeviceCardShell', () => {
     expect(mountShell({ density: 'compact' }).get('[data-device-card]').attributes('data-density')).toBe('compact')
   })
 
-  it('shows a checkbox in selection mode and hides the menu slot', () => {
+  it('shows a checkbox when selection is available and keeps the menu', () => {
     const w = mount(DeviceCardShell, {
       props: { view, selectable: true },
       slots: { menu: '<button data-menu>menu</button>' },
       global: { plugins: [i18n()] },
     })
     expect(w.find('input[type="checkbox"]').exists()).toBe(true)
-    expect(w.find('[data-menu]').exists()).toBe(false)
+    expect(w.find('[data-menu]').exists()).toBe(true)
   })
 
   it('keeps the context line reserved', () => {

@@ -53,8 +53,7 @@ const contextText = computed(() =>
 );
 
 function activate() {
-  if (props.selectable) emit("toggle-select", props.view.id);
-  else emit("open-card", props.view.id);
+  emit("open-card", props.view.id);
 }
 </script>
 
@@ -82,6 +81,7 @@ function activate() {
         :checked="selected"
         class="relative z-10 mt-1 size-4 shrink-0 cursor-pointer accent-primary"
         :aria-label="t('device.select', { name: view.identity.name })"
+        @click.stop
         @change="emit('toggle-select', view.id)"
       />
       <span
@@ -123,7 +123,7 @@ function activate() {
         :title="view.status.title"
         class="relative z-10 shrink-0"
       />
-      <div v-if="$slots.menu && !selectable" class="relative z-10 -mt-1.5 -mr-2">
+      <div v-if="$slots.menu" class="relative z-10 -mt-1.5 -mr-2">
         <slot name="menu" />
       </div>
     </header>
@@ -146,7 +146,7 @@ function activate() {
           v-if="view.primary"
           size="sm"
           variant="outline"
-          :disabled="view.primary.disabled || selectable"
+          :disabled="view.primary.disabled"
           @click="emit('action', view.primary.id)"
         >
           {{ t(view.primary.labelKey) }}

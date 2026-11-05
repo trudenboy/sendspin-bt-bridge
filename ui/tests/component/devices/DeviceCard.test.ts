@@ -129,9 +129,10 @@ describe('DeviceCard', () => {
       props: { device: makeDevice(), selectable: true },
       global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
     })
-    await select.findAll('button').find((b) => b.text() === 'Test Speaker')!.trigger('click')
+    await select.get('input[type="checkbox"]').setValue(true)
     expect(select.emitted('toggleSelect')?.[0]).toEqual(['dev-1'])
-    expect(select.emitted('openDetail')).toBeUndefined()
+    await select.findAll('button').find((b) => b.text() === 'Test Speaker')!.trigger('click')
+    expect(select.emitted('openDetail')?.[0]).toEqual(['dev-1'])
   })
 
   it('shows what is playing with a play control', () => {

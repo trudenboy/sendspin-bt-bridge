@@ -62,7 +62,7 @@ async function toggle() {
       </p>
     </div>
     <button
-      v-if="canToggle && connected && !selectable"
+      v-if="canToggle && connected"
       type="button"
       class="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-fill text-on-primary transition-colors hover:bg-primary-dark disabled:opacity-50"
       :aria-label="isStreaming ? t('transport.pause') : t('transport.play')"
