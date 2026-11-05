@@ -47,7 +47,7 @@ function action(id: string) {
 </script>
 
 <template>
-  <DeviceCardShell :view="view" @open="emit('open', $event)" @action="action">
+  <DeviceCardShell :view="view" @open-card="emit('open', $event)" @action="action">
     <template #menu>
       <HardwareCardMenu
         :device="device"

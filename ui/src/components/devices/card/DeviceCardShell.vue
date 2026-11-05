@@ -23,7 +23,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  open: [id: string];
+  "open-card": [id: string];
   "toggle-select": [id: string];
   action: [id: string];
 }>();
@@ -54,7 +54,7 @@ const contextText = computed(() =>
 
 function activate() {
   if (props.selectable) emit("toggle-select", props.view.id);
-  else emit("open", props.view.id);
+  else emit("open-card", props.view.id);
 }
 </script>
 

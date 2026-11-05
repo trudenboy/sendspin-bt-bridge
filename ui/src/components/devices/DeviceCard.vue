@@ -45,7 +45,7 @@ function onToggle(id: string) {
     :class="{ 'opacity-60': !device.enabled }"
     :selectable="selectable"
     :selected="selected"
-    @open="onOpen"
+    @open-card="onOpen"
     @toggle-select="onToggle"
   >
     <template #menu><SpeakerActionsMenu :device="device" /></template>

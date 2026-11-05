@@ -40,7 +40,7 @@ function onAction(id: string) {
     :density="density"
     :selectable="selectable"
     :selected="selected"
-    @open="emit('openDetail', $event)"
+    @open-card="emit('openDetail', $event)"
     @toggle-select="emit('toggleSelect', $event)"
     @action="onAction"
   >
