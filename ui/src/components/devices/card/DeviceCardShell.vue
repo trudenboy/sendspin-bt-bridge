@@ -84,6 +84,7 @@ function activate() {
       />
       <span
         class="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-text"
+        role="img"
         :title="roleLabel"
         :aria-label="roleLabel"
       >

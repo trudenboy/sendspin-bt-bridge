@@ -6,6 +6,7 @@ import PlayerCardContext from "./PlayerCardContext.vue";
 import DeviceCardShell from "./card/DeviceCardShell.vue";
 import { playerCardView } from "./card/viewModels";
 import { SbBadge } from "@/kit";
+import StatusState from "@/components/StatusState.vue";
 import type { Device } from "@/api/types";
 
 const props = withDefaults(
@@ -49,9 +50,9 @@ function onToggle(id: string) {
   >
     <template #menu><SpeakerActionsMenu :device="device" /></template>
     <template #badges>
-      <SbBadge v-if="microphone" size="sm" tone="info">{{
-        t("device.microphone")
-      }}</SbBadge>
+      <StatusState kind="bluetooth" :status="device.links.bluetooth" only-if-not-ok />
+      <StatusState kind="audio_link" :status="device.links.audio_link" only-if-not-ok />
+      <SbBadge v-if="microphone" size="sm" tone="info">{{ t("device.microphone") }}</SbBadge>
     </template>
     <template #context><PlayerCardContext :device="device" :selectable="selectable" /></template>
   </DeviceCardShell>
