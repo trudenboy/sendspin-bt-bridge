@@ -14,13 +14,13 @@ FROM ghcr.io/astral-sh/uv:0.13.6 AS uv-default
 # armv7 fallback — the upstream image has no linux/arm/v7 manifest, so install
 # the same pinned uv version from its PyPI armv7 wheel instead.
 # Selected by passing --build-arg UV_STAGE=uv-armv7 in the release workflow.
-FROM python:3.13-slim AS uv-armv7
+FROM python:3.15-slim AS uv-armv7
 RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.13.5" && \
     cp "$(command -v uv)" /uv
 
 FROM ${UV_STAGE} AS uv-source
 
-FROM python:3.13-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
@@ -85,7 +85,7 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
     true
 
 # ──────────────────────────────────────────────────────────────────────────────
-FROM python:3.13-slim
+FROM python:3.15-slim
 
 # S6 overlay version
 ARG S6_OVERLAY_VERSION=3.2.3.2
