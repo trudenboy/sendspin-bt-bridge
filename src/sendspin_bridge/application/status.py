@@ -191,12 +191,24 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
 
 
 def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
-    """The source's state, only for a bridge configured to offer one."""
-    if not config.get("SENDSPIN_SOURCE"):
+    """The source's state, also while the feed is off and a phone pairing is under way.
+
+    A bridge configured for the source always reports it. A bridge whose feed is
+    off reports the phone pairing window (or the bond it produced) with
+    ``enabled`` false: the Hardware page shows the window the operator opened,
+    and capture stays off. Any other off bridge reports nothing.
+    """
+    from sendspin_bridge.services.source import state as source_state
+
+    current = source_state.snapshot()
+    if not (config.get("SENDSPIN_SOURCE") or current.pairing_until or current.paired_phone_mac):
         return None
     from sendspin_bridge.application import source as source_uc
 
-    return SendspinSourceStatus(**source_uc.status(config).as_status_dict())
+    data = source_uc.status(config).as_status_dict()
+    if not config.get("SENDSPIN_SOURCE"):
+        data["enabled"] = False
+    return SendspinSourceStatus(**data)
 
 
 def find_client(device_id: str):

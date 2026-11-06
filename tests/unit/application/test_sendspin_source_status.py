@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from sendspin_bridge.application import status
@@ -51,3 +53,31 @@ def test_the_source_block_keeps_a_pairing_error_out_of_its_error():
     assert block is not None
     assert block.error is None
     assert block.ma_error == "ma_pairing_required"
+
+
+def test_a_phone_pairing_window_is_reported_while_the_source_is_off():
+    """The Hardware page shows the window the operator opened; capture stays off."""
+    source_state.publish(
+        pairing_until=time.time() + 60,
+        pairing_adapters=("C0:FB:F9:62:D6:9D",),
+    )
+
+    block = status._sendspin_source({"SENDSPIN_SOURCE": False})
+
+    assert block is not None
+    assert block.enabled is False
+    assert block.state == "off"
+    assert block.pairing_seconds_left > 0
+    assert block.pairing_adapters == ["C0:FB:F9:62:D6:9D"]
+
+
+def test_a_phone_paired_result_is_reported_while_the_source_is_off():
+    """The bond outlives the window: the picker offers it again on the next visit."""
+    source_state.publish(paired_phone_mac="34:C7:E9:25:A3:A3")
+
+    block = status._sendspin_source({})
+
+    assert block is not None
+    assert block.enabled is False
+    assert block.paired_phone_mac == "34:C7:E9:25:A3:A3"
+    assert block.pairing_seconds_left == 0
