@@ -7,11 +7,20 @@ import { confirmAction } from '@/composables/useActionPolicy'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { removeSource, renameSource, selectSource } from '@/api/source'
-import type { SourceInputStatus } from '@/api/types'
+import { matchesSourceQuery, sectionSourceInputs } from '@/utils/sourceMode'
+import type { Device, SourceInputStatus } from '@/api/types'
 import SourceCard from './SourceCard.vue'
+import SourceModeCard from './SourceModeCard.vue'
 
-/** Configured sources on the Devices page. Pairing/adding lives in Add device. */
-const props = defineProps<{ query?: string }>()
+/**
+ * Current inputs on the Devices page: paired phones and local line-ins, plus
+ * the players switched into source mode (their own card moves here). Pairing
+ * and adding live in Add device.
+ */
+const props = withDefaults(defineProps<{ query?: string; devices?: Device[] }>(), {
+  query: '',
+  devices: () => [],
+})
 const emit = defineEmits<{ add: [] }>()
 
 const { t } = useI18n()
@@ -20,17 +29,16 @@ const notifications = useNotificationStore()
 const busy = ref<string | null>(null)
 
 const source = computed(() => bridge.bridge?.sendspin_source ?? null)
+const sourceDevices = computed(() => props.devices ?? [])
+/** The MACs whose own moving card already represents their microphone input. */
+const representedMacs = computed(
+  () => new Set(sourceDevices.value.map((device) => device.bluetooth?.mac).filter((mac): mac is string => !!mac)),
+)
 const inputs = computed<SourceInputStatus[]>(() => {
-  const all = source.value?.inputs ?? []
+  const all = sectionSourceInputs(source.value?.inputs ?? [], representedMacs.value)
   return [...all].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
 })
-const visibleInputs = computed(() => {
-  const q = (props.query ?? '').trim().toLowerCase()
-  if (!q) return inputs.value
-  return inputs.value.filter((input) =>
-    [input.name, input.description, input.mac, input.node, input.kind].some((value) => (value ?? '').toLowerCase().includes(q)),
-  )
-})
+const visibleInputs = computed(() => inputs.value.filter((input) => matchesSourceQuery(input, props.query ?? '')))
 async function refresh() {
   await bridge.refresh()
 }
@@ -102,10 +110,15 @@ async function onRemove(id: string) {
       {{ t('devices.sources.pressPlay') }}
     </p>
 
-    <p v-if="visibleInputs.length === 0" data-sources-empty class="rounded-(--radius-card) border border-dashed border-border px-4 py-5 text-sm text-text-secondary">
+    <p
+      v-if="visibleInputs.length === 0 && sourceDevices.length === 0"
+      data-sources-empty
+      class="rounded-(--radius-card) border border-dashed border-border px-4 py-5 text-sm text-text-secondary"
+    >
       {{ t('devices.sources.empty') }}
     </p>
     <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4">
+      <SourceModeCard v-for="device in sourceDevices" :key="device.id" :device="device" />
       <SourceCard
         v-for="input in visibleInputs"
         :key="input.id"

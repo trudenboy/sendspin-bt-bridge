@@ -480,6 +480,21 @@
       "removeFailed": "Kaynak kaldırılamadı.",
       "useFailed": "Kaynak değiştirilemedi.",
       "renameFailed": "Kaynak yeniden adlandırılamadı.",
+      "enterSourceMode": "Kaynak",
+      "backToPlayback": "Oynatmaya dön",
+      "sourceMode": "Kaynak modu",
+      "waitingForStream": "Akış bekleniyor",
+      "capturing": "Bu cihazın mikrofonu yakalanıyor",
+      "gain": "Kazanç",
+      "mute": "Girişi sessize al",
+      "unmute": "Girişin sesini aç",
+      "level": "Giriş seviyesi",
+      "noSignal": "Sinyal yok — cihazdaki sessize almayı kontrol edin.",
+      "toggleFailed": "Cihaz oynatma ve kaynak modu arasında değiştirilemedi.",
+      "commandFailed": "Köprü bu giriş komutunu reddetti.",
+      "unavailableDisconnected": "Modu değiştirmek için cihazı bağlayın.",
+      "unavailableStandby": "Modu değiştirmek için cihazı bekleme durumundan uyandırın.",
+      "unavailableDisabled": "Modu değiştirmek için cihazı etkinleştirin.",
       "pressPlay": "Kaynak değiştirildi. Yeni girişte başlatmak için Music Assistant'ta Oynat'a bas."
     },
     "outputs": "Çıkışlar"
@@ -1367,7 +1382,10 @@
         "label": "Ses kaynağı",
         "help": "Eşleştirilmiş bir cihazdan Bluetooth sesi yakalanır ve Music Assistant’a sunulur. Varsayılan olarak kapalıdır; etkinleştirildiğinde kaynak hemen başlar.",
         "off": "Kaynak kapalı. Seçili girişi yakalamaya başlamak için etkinleştirin.",
-        "failed": "Kaynak başlatılamadı. Music Assistant’ı ve ana bilgisayarın ses sunucusunu denetledikten sonra yeniden deneyin."
+        "failed": "Kaynak başlatılamadı. Music Assistant’ı ve ana bilgisayarın ses sunucusunu denetledikten sonra yeniden deneyin.",
+        "confirmTitle": "Kaynak modu kapatılsın mı?",
+        "confirmBody": "Etkin giriş serbest bırakılır ve yakalama durur. Oynatıcılar hoparlör listesine döner.",
+        "confirmDisable": "Kaynak modunu kapat"
       },
       "sourceTarget": {
         "label": "Kaynağı oynatacağın yer",

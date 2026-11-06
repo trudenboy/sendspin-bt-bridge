@@ -4,17 +4,22 @@ import { ApiError } from '@/api/client'
 import {
   SOURCE_PAIRING_WINDOW_S,
   cancelMaPairing as apiForgetMaPairing,
+  clearActiveSource,
   closeSourcePairing,
   forgetSourceDevice as apiForgetSourceDevice,
+  getSourceInputs,
   openMaPairing as apiOpenMaPairing,
   openSourcePairing,
   selectSource,
+  setActiveMute,
+  setActiveVolume,
   setSourceEnabled,
   useSourceDevice as apiUseSourceDevice,
   type MaPairingWindow,
   type SourcePairingWindow,
 } from '@/api/source'
-import type { BridgeStatus, SendspinSourceStatus } from '@/api/types'
+import { DEFAULT_EVENT_TYPES, useEventStream, type EventType } from '@/composables/useEventStream'
+import type { BridgeStatus, SendspinSourceStatus, SourceLevelEvent } from '@/api/types'
 import { useBridgeStore, type RefreshOutcome } from './bridge'
 
 /**
@@ -67,9 +72,11 @@ interface WindowGrace {
  * the two pairing windows' clocks.
  *
  * The snapshot is the bridge status's own ``sendspin_source`` block, forwarded
- * by ``useBridgeStore`` — this store never opens an SSE connection and never
- * fetches a status of its own. The hardware snapshot keeps the feed as read
- * data for the Hardware page; it owns nothing here.
+ * by ``useBridgeStore`` — the store reads no status of its own. The one stream
+ * it opens is the ``source.level`` probe: an event type newer than the default
+ * subscription, asked for only after ``GET /bridge/source/inputs`` answered and
+ * dropped quietly when an older bridge refuses it. The hardware snapshot keeps
+ * the feed as read data for the Hardware page; it owns nothing here.
  *
  * Commands are queued, so a Cancel clicked while Open is still in flight runs
  * after it and cannot be undone by the open's late answer. A status event that
@@ -84,6 +91,15 @@ export const useSourceStore = defineStore('source', () => {
   const busy = ref(false)
   /** The latest attempt's failure, with the server's stable code. A status read never clears it. */
   const error = ref<SourceFailure | null>(null)
+  /**
+   * The latest ``source.level`` frame per input id, 0..1. Only the active input
+   * is published; keeping them keyed means a card that is handed the input
+   * later still has no stale level of its own.
+   */
+  const levels = ref<Record<string, { level: number; muted: boolean }>>({})
+  /** The level type is asked for once; a refusal is remembered for this page. */
+  let levelProbe: 'idle' | 'probing' | 'open' | 'unsupported' = 'idle'
+  let levelStream: ReturnType<typeof useEventStream> | null = null
 
   /** The phone pairing deadline, and the Music Assistant one; null = no window. */
   const pairingEndsAt = ref<number | null>(null)
@@ -425,6 +441,9 @@ export const useSourceStore = defineStore('source', () => {
   function disable() {
     return enqueue('source.disable', async () => {
       await setSourceEnabled(false)
+      // Stopping the feed ends the capture and its level frames. A later
+      // enable re-probes the type rather than trusting a stream that is gone.
+      closeLevelProbe()
       // Stopping the feed ends both pairing windows on the server as well; a
       // local countdown that kept running would offer a window that is gone.
       closePairingClock()
@@ -518,6 +537,113 @@ export const useSourceStore = defineStore('source', () => {
     })
   }
 
+  // -------------------------------------------------------------------------
+  // Input level, gain and mute
+  // -------------------------------------------------------------------------
+
+  /** The row of the input the bridge currently captures, if it is listed. */
+  function activeInputRow() {
+    const active = status.value?.active_input
+    if (!active) return null
+    return status.value?.inputs?.find((input) => input.id === active) ?? null
+  }
+
+  /** One level frame: clamp to the meter's range and ignore a frame without an input. */
+  function applyLevel(event: SourceLevelEvent | null | undefined) {
+    const id = typeof event?.id === 'string' ? event.id : ''
+    if (!id) return
+    const raw = Number(event?.level)
+    const level = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0
+    levels.value = { ...levels.value, [id]: { level, muted: event?.muted === true } }
+  }
+
+  function levelFor(sourceId: string) {
+    return levels.value[sourceId] ?? null
+  }
+
+  function closeLevelProbe() {
+    levelStream?.disconnect()
+    levelStream = null
+    levelProbe = 'idle'
+  }
+
+  /**
+   * Ask for ``source.level`` the way the hardware page asks for ``hardware``:
+   * only once a read proves this bridge knows the feature, and with the refusal
+   * of an older bridge treated as an answer, not an error.
+   */
+  async function ensureLevels() {
+    if (levelProbe !== 'idle') return
+    levelProbe = 'probing'
+    try {
+      await getSourceInputs()
+    } catch {
+      // A failed read says nothing about the bridge's event types: retry later.
+      levelProbe = 'idle'
+      return
+    }
+    levelStream = useEventStream({
+      types: [...DEFAULT_EVENT_TYPES, 'source.level'] as EventType[],
+      onEvent(event) {
+        if (event.type === 'source.level') applyLevel(event.data as SourceLevelEvent)
+      },
+      onConnect() {
+        levelProbe = 'open'
+      },
+      onRejected() {
+        // An old bridge answers 400 for the type. Nothing else was asked for;
+        // close the refused stream and keep the cards on their status snapshot.
+        levelProbe = 'unsupported'
+        levelStream?.disconnect()
+        levelStream = null
+      },
+    })
+    levelStream.connect()
+  }
+
+  /**
+   * Set the gain of the active input. The slider moves at once; a refusal puts
+   * the previous value back. The queue keeps the attempt's error and epoch
+   * rules, exactly as every other source command.
+   */
+  function setGain(volume: number) {
+    const asked = Math.round(Number(volume))
+    const level = Number.isFinite(asked) ? Math.min(100, Math.max(0, asked)) : 0
+    const input = activeInputRow()
+    const previous = input?.volume
+    if (input) input.volume = level
+    return enqueue(`source.gain:${level}`, async () => {
+      try {
+        await setActiveVolume(level)
+      } catch (e) {
+        if (input && previous !== undefined) input.volume = previous
+        throw e
+      }
+    })
+  }
+
+  /** Mute the active input's capture, without ending its stream to Music Assistant. */
+  function setMuted(muted: boolean) {
+    const input = activeInputRow()
+    const previous = input?.muted
+    if (input) input.muted = muted
+    return enqueue(`source.mute:${muted}`, async () => {
+      try {
+        await setActiveMute(muted)
+      } catch (e) {
+        if (input && previous !== undefined) input.muted = previous
+        throw e
+      }
+    })
+  }
+
+  /** Release the active input so its player can resume; the feature stays enabled. */
+  function release() {
+    return enqueue('source.release', async () => {
+      await clearActiveSource()
+    })
+  }
+
   function clearError() {
     error.value = null
   }
@@ -529,6 +655,7 @@ export const useSourceStore = defineStore('source', () => {
    */
   function teardown() {
     stopTicker()
+    closeLevelProbe()
   }
 
   return {
@@ -541,6 +668,12 @@ export const useSourceStore = defineStore('source', () => {
     pairingAdapters,
     commandEpoch,
     applyStatus,
+    applyLevel,
+    levelFor,
+    ensureLevels,
+    setGain,
+    setMuted,
+    release,
     enable,
     disable,
     useDevice,

@@ -8,6 +8,7 @@ import { isPulseSink, resolveAdapter } from '@/utils/deviceBackend'
 import { fleetSummary } from '@/utils/fleetSummary'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
+import { isSourceModeDevice, matchesSourceQuery, sectionSourceInputs } from '@/utils/sourceMode'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
 import { useRowExpansion } from '@/composables/useRowExpansion'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
@@ -40,8 +41,16 @@ const selectedId = ref<string | null>(null)
 const scanModalOpen = ref(false)
 const addMode = ref<'bluetooth' | 'audio' | 'source'>('bluetooth')
 const btStore = useBluetoothStore()
-const sourceEnabled = computed(() => !!bridge.bridge?.sendspin_source?.enabled)
-const sourceCount = computed(() => bridge.bridge?.sendspin_source?.inputs?.length ?? 0)
+const sourceFeed = computed(() => bridge.bridge?.sendspin_source ?? null)
+const sourceEnabled = computed(() => !!sourceFeed.value?.enabled)
+/** The one input being captured now; its owner's card lives in the Sources section. */
+const activeInput = computed(() => sourceFeed.value?.active_input ?? null)
+const allSourceDevices = computed(() =>
+  bridge.devices.filter((device) => isSourceModeDevice(device, activeInput.value)),
+)
+const sourceModeMacs = computed(
+  () => new Set(allSourceDevices.value.map((device) => device.bluetooth?.mac).filter((mac): mac is string => !!mac)),
+)
 
 function openAdd(mode: 'bluetooth' | 'audio' | 'source' = 'bluetooth') {
   addMode.value = mode
@@ -82,11 +91,41 @@ const viewMode = ref<ViewMode>(readViewMode())
 const wide = useMediaQuery('(min-width: 640px)')
 const shownView = computed<ViewMode>(() => (wide.value ? viewMode.value : 'grid'))
 
+/*
+ * One list of cards, partitioned by the mode the link is in: a player whose
+ * MAC owns the active headset microphone input renders in the Sources section
+ * instead of the players grid. Counts follow the section a card is in.
+ */
+const playerDevices = computed(() =>
+  bridge.devices.filter((device) => !isSourceModeDevice(device, activeInput.value)),
+)
+const filteredPlayerDevices = computed(() =>
+  deviceStore.filteredDevices.filter((device) => !isSourceModeDevice(device, activeInput.value)),
+)
+const filteredSourceDevices = computed(() =>
+  deviceStore.filteredDevices.filter((device) => isSourceModeDevice(device, activeInput.value)),
+)
+const playerEntries = computed(() =>
+  deviceStore.filteredPlayers.filter(
+    (entry) => entry.kind !== 'device' || !isSourceModeDevice(entry.device, activeInput.value),
+  ),
+)
+
 /* Running and disabled players alike: the dashboard shows both. */
-const playerCount = computed(() => bridge.devices.length + deviceStore.disabledPlayers.length)
+const playerCount = computed(() => playerDevices.value.length + deviceStore.disabledPlayers.length)
+const sectionInputs = computed(() =>
+  sectionSourceInputs(sourceFeed.value?.inputs ?? [], sourceModeMacs.value),
+)
+const sourceCount = computed(() => sectionInputs.value.length + allSourceDevices.value.length)
+/** What the current search leaves in the Sources section (its inputs plus the moved cards). */
+const visibleSourceCount = computed(() => {
+  const q = deviceStore.filter.search
+  const inputs = sectionInputs.value.filter((input) => matchesSourceQuery(input, q))
+  return inputs.length + filteredSourceDevices.value.length
+})
 
 const selection = useDeviceSelection(
-  computed(() => deviceStore.filteredDevices),
+  computed(() => filteredPlayerDevices.value),
   computed(() => deviceStore.filteredPlayers.filter((p) => p.kind === 'disabled').map((p) => p.id)),
 )
 const selectedDisabled = computed(() =>
@@ -148,7 +187,7 @@ const expansion = useRowExpansion(computed(() => deviceStore.filteredDevices))
 
 /** Only the states some device is in right now, so every chip filters something. */
 const statusFilters = computed(() => {
-  const states = bridge.devices.map(deviceState)
+  const states = playerDevices.value.map(deviceState)
   if (deviceStore.disabledPlayers.length) states.push('disabled')
   const present = [...new Set(states)].sort()
   return present.map((key) => ({
@@ -303,7 +342,12 @@ watch(
 
       <FirstRunChecklist @add-speaker="openAdd('bluetooth')" />
 
-      <SourceSection v-if="sourceEnabled" :query="deviceStore.filter.search" @add="openAdd('source')" />
+      <SourceSection
+        v-if="sourceEnabled"
+        :query="deviceStore.filter.search"
+        :devices="filteredSourceDevices"
+        @add="openAdd('source')"
+      />
 
       <h2 class="mb-3 text-lg font-semibold text-text-primary">{{ t('devices.outputs') }}</h2>
 
@@ -426,8 +470,8 @@ watch(
       <!-- Group action bar -->
       <GroupActionBar
         v-if="showGroupBar && selection.selectedCount.value > 0"
-        :devices="deviceStore.filteredDevices"
-        :total="deviceStore.filteredPlayers.length"
+        :devices="filteredPlayerDevices"
+        :total="playerEntries.length"
         :selected-count="selection.selectedCount.value"
         :all-selected="selection.allSelected.value"
         :some-selected="selection.someSelected.value"
@@ -439,7 +483,7 @@ watch(
 
       <!-- Empty state -->
       <SbEmptyState
-        v-if="playerCount === 0 && !sourceEnabled"
+        v-if="playerCount === 0 && sourceCount === 0"
         :title="t('devices.empty.title')"
         :description="t('devices.empty.description')"
       >
@@ -455,10 +499,10 @@ watch(
 
       <!-- Device grid -->
       <div
-        v-else-if="shownView === 'grid' && deviceStore.filteredPlayers.length > 0"
+        v-else-if="shownView === 'grid' && playerEntries.length > 0"
         class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"
       >
-        <template v-for="entry in deviceStore.filteredPlayers" :key="entry.id">
+        <template v-for="entry in playerEntries" :key="entry.id">
           <DeviceCard
             v-if="entry.kind === 'device'"
             :device="entry.device"
@@ -480,7 +524,7 @@ watch(
 
       <!-- Device list with the familiar columns; the card grid is the card view. -->
       <div
-        v-else-if="shownView === 'list' && deviceStore.filteredPlayers.length > 0"
+        v-else-if="shownView === 'list' && playerEntries.length > 0"
         class="overflow-x-auto rounded-lg border border-border"
       >
         <table class="w-full text-left text-sm">
@@ -496,7 +540,7 @@ watch(
             </tr>
           </thead>
           <tbody>
-            <template v-for="entry in deviceStore.filteredPlayers" :key="entry.id">
+            <template v-for="entry in playerEntries" :key="entry.id">
               <DeviceListRow
                 v-if="entry.kind === 'device'"
                 :device="entry.device"
@@ -521,7 +565,7 @@ watch(
       </div>
 
       <!-- No filter results -->
-      <div v-else-if="deviceStore.filteredPlayers.length === 0" class="flex flex-col items-center gap-3 py-16 text-center text-text-secondary">
+      <div v-else-if="playerEntries.length === 0 && visibleSourceCount === 0" class="flex flex-col items-center gap-3 py-16 text-center text-text-secondary">
         {{ t('common.noResults') }}
         <SbButton variant="outline" size="sm" data-clear-filters @click="deviceStore.clearFilters()">
           {{ t('common.clearFilters') }}

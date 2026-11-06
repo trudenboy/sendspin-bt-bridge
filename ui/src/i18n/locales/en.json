@@ -480,6 +480,21 @@
       "removeFailed": "Could not remove the source.",
       "useFailed": "Could not switch the source.",
       "renameFailed": "Could not rename the source.",
+      "enterSourceMode": "Source",
+      "backToPlayback": "Back to playback",
+      "sourceMode": "Source mode",
+      "waitingForStream": "Waiting for stream",
+      "capturing": "Capturing this device's microphone",
+      "gain": "Gain",
+      "mute": "Mute input",
+      "unmute": "Unmute input",
+      "level": "Input level",
+      "noSignal": "No signal — check the mute on the device.",
+      "toggleFailed": "Could not switch the device between playback and source mode.",
+      "commandFailed": "The bridge refused that input command.",
+      "unavailableDisconnected": "Connect the device to switch modes.",
+      "unavailableStandby": "Wake the device from standby to switch modes.",
+      "unavailableDisabled": "Enable the device to switch modes.",
       "pressPlay": "Source switched. Press Play in Music Assistant to start it on the new input."
     },
     "outputs": "Outputs"
@@ -1367,7 +1382,10 @@
         "label": "Audio source",
         "help": "Capture Bluetooth audio from a paired device and offer it to Music Assistant. Off by default; enabling starts the source immediately.",
         "off": "The source is off. Enable it to start capturing the selected source input.",
-        "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again."
+        "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again.",
+        "confirmTitle": "Turn source mode off?",
+        "confirmBody": "The active input is released and its capture stops. Players return to the speaker list.",
+        "confirmDisable": "Turn off source mode"
       },
       "sourceTarget": {
         "label": "Play source on",

@@ -480,6 +480,21 @@
       "removeFailed": "无法移除源。",
       "useFailed": "无法切换源。",
       "renameFailed": "无法重命名源。",
+      "enterSourceMode": "音源",
+      "backToPlayback": "返回播放",
+      "sourceMode": "音源模式",
+      "waitingForStream": "等待音频流",
+      "capturing": "正在采集此设备的麦克风",
+      "gain": "增益",
+      "mute": "静音输入",
+      "unmute": "取消静音输入",
+      "level": "输入电平",
+      "noSignal": "无信号——请检查设备上的静音设置。",
+      "toggleFailed": "无法在播放和音源模式之间切换设备。",
+      "commandFailed": "网桥拒绝了该输入命令。",
+      "unavailableDisconnected": "请连接设备以切换模式。",
+      "unavailableStandby": "请将设备从待机中唤醒以切换模式。",
+      "unavailableDisabled": "请启用设备以切换模式。",
       "pressPlay": "已切换源。请在 Music Assistant 中按播放，以在新输入上启动。"
     },
     "outputs": "输出"
@@ -1367,7 +1382,10 @@
         "label": "音频源",
         "help": "从已配对的设备采集 Bluetooth 音频，并将其提供给 Music Assistant。默认关闭；启用后源会立即启动。",
         "off": "源已关闭。启用后将开始采集所选输入。",
-        "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。"
+        "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。",
+        "confirmTitle": "关闭音源模式？",
+        "confirmBody": "将释放当前输入并停止采集。播放器会回到扬声器列表。",
+        "confirmDisable": "关闭音源模式"
       },
       "sourceTarget": {
         "label": "源播放位置",

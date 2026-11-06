@@ -480,6 +480,21 @@
       "removeFailed": "ソースを削除できませんでした。",
       "useFailed": "ソースを切り替えられませんでした。",
       "renameFailed": "ソースの名前を変更できませんでした。",
+      "enterSourceMode": "ソース",
+      "backToPlayback": "再生に戻る",
+      "sourceMode": "ソースモード",
+      "waitingForStream": "ストリームを待っています",
+      "capturing": "このデバイスのマイクをキャプチャ中",
+      "gain": "ゲイン",
+      "mute": "入力をミュート",
+      "unmute": "入力のミュートを解除",
+      "level": "入力レベル",
+      "noSignal": "信号がありません。デバイス側のミュートを確認してください。",
+      "toggleFailed": "デバイスを再生とソースモードの間で切り替えられませんでした。",
+      "commandFailed": "ブリッジが入力コマンドを拒否しました。",
+      "unavailableDisconnected": "モードを切り替えるにはデバイスを接続してください。",
+      "unavailableStandby": "モードを切り替えるにはデバイスをスタンバイから復帰させてください。",
+      "unavailableDisabled": "モードを切り替えるにはデバイスを有効にしてください。",
       "pressPlay": "ソースを切り替えました。Music Assistant で再生を押すと、新しい入力で開始します。"
     },
     "outputs": "出力"
@@ -1367,7 +1382,10 @@
         "label": "音声ソース",
         "help": "ペアリング済みのデバイスから Bluetooth 音声を取り込み、Music Assistant に提供します。既定ではオフで、有効にするとソースがすぐに開始されます。",
         "off": "ソースはオフです。有効にすると、選択した入力のキャプチャを開始します。",
-        "failed": "ソースを開始できませんでした。Music Assistant とホストの音声サーバーを確認してから、もう一度お試しください。"
+        "failed": "ソースを開始できませんでした。Music Assistant とホストの音声サーバーを確認してから、もう一度お試しください。",
+        "confirmTitle": "ソースモードをオフにしますか？",
+        "confirmBody": "アクティブな入力は解放され、キャプチャは停止します。プレイヤーはスピーカー一覧に戻ります。",
+        "confirmDisable": "ソースモードをオフにする"
       },
       "sourceTarget": {
         "label": "ソースの再生先",

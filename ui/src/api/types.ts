@@ -64,9 +64,20 @@ export interface ScanResult {
 /** One envelope for every event on /api/v1/events. */
 export interface EventEnvelope<T = unknown> {
   v: number
-  type: 'status' | 'job' | 'log' | 'sync' | 'hardware'
+  type: 'status' | 'job' | 'log' | 'sync' | 'hardware' | 'source.level'
   at: string
   data: T
+}
+
+/**
+ * One live input-level frame (``source.level``): the smoothed peak of the
+ * active input, 0..1, and the capture mute the bridge holds. Published only
+ * while a capture stream is open; zero is a real value.
+ */
+export interface SourceLevelEvent {
+  id: string
+  level: number
+  muted: boolean
 }
 
 /** ``bluetoothctl info`` fields for one device ("yes"/"no" strings) plus the raw lines. */
@@ -138,9 +149,23 @@ export type SourceFeed = Schemas['SourceFeed']
 export type SourceCapture = Schemas['SourceCapture']
 export type SourceState = SourceFeed['state']
 export type SourceCaptureKind = SourceCapture['kind']
-/** The bridge status's source block: capture, pairing windows and the Music Assistant link. */
-export type SendspinSourceStatus = Schemas['SendspinSourceStatus']
+/**
+ * The bridge status's source block: capture, pairing windows and the Music
+ * Assistant link. Its input rows carry the gain and mute of each input; a
+ * bridge older than the source-mode work omits both.
+ */
+export type SendspinSourceStatus = Omit<Schemas['SendspinSourceStatus'], 'inputs'> & {
+  inputs: SourceInputStatus[]
+}
 export type SourceTarget = Schemas['SourceTarget']
 export type SourceTargets = Schemas['SourceTargets']
-export type SourceInputStatus = Schemas['SourceInputStatus']
-export type SourceInputs = Schemas['SourceInputs']
+export type SourceInputStatus = Schemas['SourceInputStatus'] & {
+  /** Gain of this input, 0..100; absent on a bridge without input gain. */
+  volume?: number
+  /** Capture mute of this input; absent on a bridge without input mute. */
+  muted?: boolean
+}
+export type SourceInputs = Omit<Schemas['SourceInputs'], 'inputs' | 'local_candidates'> & {
+  inputs: SourceInputStatus[]
+  local_candidates: SourceInputStatus[]
+}

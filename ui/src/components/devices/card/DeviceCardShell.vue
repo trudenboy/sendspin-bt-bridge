@@ -147,10 +147,18 @@ function activate() {
           size="sm"
           variant="outline"
           :disabled="view.primary.disabled"
+          :title="view.primary.title"
           @click="emit('action', view.primary.id)"
         >
           {{ t(view.primary.labelKey) }}
         </SbButton>
+        <p
+          v-if="view.primary?.disabled && view.primary.hintKey"
+          data-card-primary-hint
+          class="basis-full text-xs leading-snug text-text-secondary"
+        >
+          {{ t(view.primary.hintKey) }}
+        </p>
       </slot>
     </div>
 

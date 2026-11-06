@@ -424,6 +424,33 @@ describe('Add device: audio source', () => {
     expect(useSourceStore().error).toMatchObject({ code: 'no_agent' })
   })
 
+  it('never offers a player microphone as a source to add', async () => {
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [
+        existingBond,
+        {
+          ...existingBond,
+          id: 'headset-mic:AA:BB:CC:DD:EE:FF',
+          kind: 'headset_microphone',
+          name: 'Headset microphone',
+          mac: 'AA:BB:CC:DD:EE:FF',
+        },
+      ],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    const wrapper = mountPicker()
+    await flushPromises()
+
+    // "Add a source" covers phones (Bluetooth bonds) and local line-ins; a
+    // player's headset microphone is switched on from its own card instead.
+    expect(wrapper.find('[data-source-bluetooth-list]').text()).toContain('ENEBY20')
+    expect(wrapper.find('[data-source-bluetooth-list]').text()).not.toContain('Headset microphone')
+    expect(wrapper.findAll('[data-source-bluetooth-list] li')).toHaveLength(1)
+  })
+
   it('does not allow local add when capture is unavailable', async () => {
     vi.mocked(getSourceInputs).mockResolvedValue({
       active_input: null,

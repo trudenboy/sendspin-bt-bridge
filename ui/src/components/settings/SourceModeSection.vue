@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourceStore } from '@/stores/source'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { SbBadge, SbToggle } from '@/kit'
 import SettingsRow from './SettingsRow.vue'
 
@@ -27,8 +28,22 @@ const stateKey = computed(() => {
 async function setEnabled(next: boolean) {
   error.value = null
   try {
-    if (next) await source.enable()
-    else await source.disable()
+    if (next) {
+      await source.enable()
+    } else {
+      // The feature owns capture; switching it off while an input is live
+      // releases that input first, after naming what stops.
+      if (feed.value?.active_input) {
+        const ok = await confirmAction('source.disableWithInput', {
+          title: t('settings.parts.sourceMode.confirmTitle'),
+          consequences: [t('settings.parts.sourceMode.confirmBody')],
+          confirmLabel: t('settings.parts.sourceMode.confirmDisable'),
+        })
+        if (!ok) return
+        await source.release()
+      }
+      await source.disable()
+    }
   } catch {
     // The store already kept the failure; a start that could not run leaves
     // the source off instead of persisting an "enabled" flag that does nothing.

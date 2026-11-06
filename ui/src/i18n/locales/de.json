@@ -480,6 +480,21 @@
       "removeFailed": "Die Quelle konnte nicht entfernt werden.",
       "useFailed": "Die Quelle konnte nicht gewechselt werden.",
       "renameFailed": "Die Quelle konnte nicht umbenannt werden.",
+      "enterSourceMode": "Quelle",
+      "backToPlayback": "Zurück zur Wiedergabe",
+      "sourceMode": "Quellenmodus",
+      "waitingForStream": "Warte auf Stream",
+      "capturing": "Mikrofon dieses Geräts wird aufgenommen",
+      "gain": "Verstärkung",
+      "mute": "Eingang stummschalten",
+      "unmute": "Eingang laut schalten",
+      "level": "Eingangspegel",
+      "noSignal": "Kein Signal — prüfe die Stummschaltung am Gerät.",
+      "toggleFailed": "Das Gerät konnte nicht zwischen Wiedergabe und Quellenmodus umgeschaltet werden.",
+      "commandFailed": "Die Bridge hat diesen Eingabebefehl abgelehnt.",
+      "unavailableDisconnected": "Verbinde das Gerät, um den Modus zu wechseln.",
+      "unavailableStandby": "Wecke das Gerät aus dem Standby, um den Modus zu wechseln.",
+      "unavailableDisabled": "Aktiviere das Gerät, um den Modus zu wechseln.",
       "pressPlay": "Quelle gewechselt. Drücke Play in Music Assistant, um sie am neuen Eingang zu starten."
     },
     "outputs": "Ausgänge"
@@ -1367,7 +1382,10 @@
         "label": "Audioquelle",
         "help": "Nimm Bluetooth-Audio von einem gekoppelten Gerät auf und biete es Music Assistant an. Standardmäßig aus; beim Aktivieren startet die Quelle sofort.",
         "off": "Die Quelle ist aus. Aktiviere sie, um den gewählten Eingang aufzunehmen.",
-        "failed": "Die Quelle konnte nicht gestartet werden. Prüfe Music Assistant und den Audioserver des Hosts und versuche es erneut."
+        "failed": "Die Quelle konnte nicht gestartet werden. Prüfe Music Assistant und den Audioserver des Hosts und versuche es erneut.",
+        "confirmTitle": "Quellenmodus ausschalten?",
+        "confirmBody": "Der aktive Eingang wird freigegeben und die Aufnahme beendet. Player kehren in die Lautsprecherliste zurück.",
+        "confirmDisable": "Quellenmodus ausschalten"
       },
       "sourceTarget": {
         "label": "Quelle abspielen auf",

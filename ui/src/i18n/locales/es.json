@@ -480,6 +480,21 @@
       "removeFailed": "No se pudo eliminar la fuente.",
       "useFailed": "No se pudo cambiar la fuente.",
       "renameFailed": "No se pudo cambiar el nombre de la fuente.",
+      "enterSourceMode": "Fuente",
+      "backToPlayback": "Volver a la reproducción",
+      "sourceMode": "Modo fuente",
+      "waitingForStream": "Esperando el flujo",
+      "capturing": "Capturando el micrófono de este dispositivo",
+      "gain": "Ganancia",
+      "mute": "Silenciar la entrada",
+      "unmute": "Activar el sonido de la entrada",
+      "level": "Nivel de entrada",
+      "noSignal": "Sin señal: comprueba el silencio en el dispositivo.",
+      "toggleFailed": "No se pudo cambiar el dispositivo entre reproducción y modo fuente.",
+      "commandFailed": "El puente rechazó ese comando de entrada.",
+      "unavailableDisconnected": "Conecta el dispositivo para cambiar de modo.",
+      "unavailableStandby": "Despierta el dispositivo del modo de espera para cambiar de modo.",
+      "unavailableDisabled": "Activa el dispositivo para cambiar de modo.",
       "pressPlay": "Fuente cambiada. Pulsa Reproducir en Music Assistant para iniciarla en la nueva entrada."
     },
     "outputs": "Salidas"
@@ -1367,7 +1382,10 @@
         "label": "Fuente de audio",
         "help": "Captura el audio Bluetooth de un dispositivo emparejado y ofrécelo a Music Assistant. Desactivado de forma predeterminada; al activarlo, la fuente se inicia de inmediato.",
         "off": "La fuente está desactivada. Actívala para empezar a capturar la entrada seleccionada.",
-        "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo."
+        "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo.",
+        "confirmTitle": "¿Desactivar el modo fuente?",
+        "confirmBody": "Se libera la entrada activa y se detiene su captura. Los reproductores vuelven a la lista de altavoces.",
+        "confirmDisable": "Desactivar el modo fuente"
       },
       "sourceTarget": {
         "label": "Reproducir la fuente en",

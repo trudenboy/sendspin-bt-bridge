@@ -480,6 +480,21 @@
       "removeFailed": "Impossible de retirer la source.",
       "useFailed": "Impossible de changer de source.",
       "renameFailed": "Impossible de renommer la source.",
+      "enterSourceMode": "Source",
+      "backToPlayback": "Retour à la lecture",
+      "sourceMode": "Mode source",
+      "waitingForStream": "En attente du flux",
+      "capturing": "Capture du microphone de cet appareil",
+      "gain": "Gain",
+      "mute": "Mettre l'entrée en sourdine",
+      "unmute": "Réactiver l'entrée",
+      "level": "Niveau d'entrée",
+      "noSignal": "Aucun signal — vérifiez la sourdine sur l'appareil.",
+      "toggleFailed": "Impossible de basculer l'appareil entre lecture et mode source.",
+      "commandFailed": "Le pont a refusé cette commande d'entrée.",
+      "unavailableDisconnected": "Connectez l'appareil pour changer de mode.",
+      "unavailableStandby": "Réveillez l'appareil pour changer de mode.",
+      "unavailableDisabled": "Activez l'appareil pour changer de mode.",
       "pressPlay": "Source changée. Appuyez sur Lecture dans Music Assistant pour la démarrer sur la nouvelle entrée."
     },
     "outputs": "Sorties"
@@ -1367,7 +1382,10 @@
         "label": "Source audio",
         "help": "Capturez l’audio Bluetooth d’un appareil appairé et proposez-le à Music Assistant. Désactivé par défaut ; l’activation démarre immédiatement la source.",
         "off": "La source est désactivée. Activez-la pour commencer à capturer l’entrée sélectionnée.",
-        "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez."
+        "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez.",
+        "confirmTitle": "Désactiver le mode source ?",
+        "confirmBody": "L'entrée active est libérée et sa capture s'arrête. Les lecteurs reviennent dans la liste des enceintes.",
+        "confirmDisable": "Désactiver le mode source"
       },
       "sourceTarget": {
         "label": "Lire la source sur",

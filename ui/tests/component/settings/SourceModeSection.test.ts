@@ -5,7 +5,8 @@ import { createI18n } from 'vue-i18n'
 import SourceModeSection from '@/components/settings/SourceModeSection.vue'
 import { useSourceStore } from '@/stores/source'
 import { getStatus } from '@/api/status'
-import { setSourceEnabled } from '@/api/source'
+import { clearActiveSource, setSourceEnabled } from '@/api/source'
+import { confirmState, settleConfirm } from '@/composables/useConfirm'
 import en from '@/i18n/locales/en.json'
 
 vi.mock('@/composables/useEventStream', () => ({
@@ -13,7 +14,7 @@ vi.mock('@/composables/useEventStream', () => ({
   useEventStream: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
 }))
 vi.mock('@/api/status', () => ({ getStatus: vi.fn(), restartBridge: vi.fn() }))
-vi.mock('@/api/source', () => ({ setSourceEnabled: vi.fn() }))
+vi.mock('@/api/source', () => ({ setSourceEnabled: vi.fn(), clearActiveSource: vi.fn() }))
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
@@ -44,6 +45,7 @@ describe('Settings: audio source mode', () => {
     vi.clearAllMocks()
     vi.mocked(getStatus).mockResolvedValue({ bridge: { sendspin_source: null }, devices: [], groups: [] } as never)
     vi.mocked(setSourceEnabled).mockResolvedValue({} as never)
+    vi.mocked(clearActiveSource).mockResolvedValue(undefined as never)
   })
 
   afterEach(() => {
@@ -70,7 +72,53 @@ describe('Settings: audio source mode', () => {
     expect(setSourceEnabled).toHaveBeenCalledWith(false)
   })
 
-  it('shows an error and stays off when the start fails', async () => {
+  it('asks before switching off an active input, releases it, then stops the source', async () => {
+    setSource(sourceBlock({ enabled: true, state: 'streaming', active_input: 'headset-mic:AA:BB:CC:DD:EE:FF' }))
+
+    const wrapper = mountSection()
+    await wrapper.get('[role="switch"]').trigger('click')
+    await flushPromises()
+
+    expect(confirmState.open).toBe(true)
+    expect(clearActiveSource).not.toHaveBeenCalled()
+    expect(setSourceEnabled).not.toHaveBeenCalled()
+
+    settleConfirm(true)
+    await flushPromises()
+
+    expect(clearActiveSource).toHaveBeenCalledOnce()
+    expect(setSourceEnabled).toHaveBeenCalledWith(false)
+    expect(vi.mocked(clearActiveSource).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(setSourceEnabled).mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it('leaves the source on when the switch-off is declined', async () => {
+    setSource(sourceBlock({ enabled: true, state: 'streaming', active_input: 'headset-mic:AA:BB:CC:DD:EE:FF' }))
+
+    const wrapper = mountSection()
+    await wrapper.get('[role="switch"]').trigger('click')
+    await flushPromises()
+    settleConfirm(false)
+    await flushPromises()
+
+    expect(clearActiveSource).not.toHaveBeenCalled()
+    expect(setSourceEnabled).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+  })
+
+  it('stops the source without a confirmation when no input is active', async () => {
+    setSource(sourceBlock({ enabled: true, state: 'waiting', active_input: null }))
+
+    const wrapper = mountSection()
+    await wrapper.get('[role="switch"]').trigger('click')
+    await flushPromises()
+
+    expect(confirmState.open).toBe(false)
+    expect(setSourceEnabled).toHaveBeenCalledWith(false)
+  })
+
+  it('shows an error and keeps the source on when the start fails', async () => {
     setSource(sourceBlock())
     vi.mocked(setSourceEnabled).mockRejectedValue(new Error('capture_unavailable'))
 
