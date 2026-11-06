@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A device that can carry input now has a **Source** switch on its own card. Turning it on moves the card into Sources, stops its player and shows the input's gain, mute and a live level; turning it off returns the device to playback with its A2DP output restored.
+- The Sources section shows what is an input right now — paired phones, saved line-in and microphone inputs, and devices switched into source mode — with their input gain, mute and level.
+
 ### Changed
 
+- A speaker's microphone is no longer a separate entry in Sources: it is that device's card in source mode, so one device never appears twice with two different actions.
+- Device counts, the filter bar and the empty state follow the section a card is currently in, and bulk volume/mute skip devices in source mode while keeping them visible.
 - Bluetooth source pairing stays open when switching pages or closing the input picker, until pairing succeeds, it is cancelled, or its window expires. Settings and device pages share the same pairing countdowns.
 
 ### Fixed
 
+- A headset microphone input is found on hosts where `wpctl status` prints the device's name instead of the node name: discovery now reads the authoritative node list from `pw-dump` and falls back to `wpctl`.
 - Source inputs and hardware status share discovery results, so newly paired or forgotten devices appear consistently and failed refreshes retain the last known hardware state.
 - Leaving headset microphone mode resumes music only after the A2DP output is confirmed ready. A failed restoration keeps playback stopped and reports an error for manual recovery.
 

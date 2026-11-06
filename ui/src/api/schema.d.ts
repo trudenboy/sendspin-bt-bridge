@@ -554,6 +554,50 @@ export interface paths {
         /** Select the active source input */
         put: operations["select_source_input_api_v1_bridge_source_active_put"];
         post?: never;
+        /**
+         * Clear the active source input
+         * @description Return the device to playback; the feed stays enabled and the choice is remembered.
+         */
+        delete: operations["clear_source_input_api_v1_bridge_source_active_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/active/mute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mute or unmute the active input
+         * @description Silence the capture without stopping the stream to Music Assistant.
+         */
+        put: operations["set_source_mute_api_v1_bridge_source_active_mute_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bridge/source/active/volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the active input's gain
+         * @description Apply 0–100 to the active capture node and remember it per input id.
+         */
+        put: operations["set_source_volume_api_v1_bridge_source_active_volume_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6989,10 +7033,22 @@ export interface components {
              * @default false
              */
             monitor: boolean;
+            /**
+             * Muted
+             * @description The capture source is muted; the stream keeps running.
+             * @default false
+             */
+            muted: boolean;
             /** Name */
             name: string;
             /** Node */
             node: string | null;
+            /**
+             * Volume
+             * @description Capture gain, 0 to 100.
+             * @default 100
+             */
+            volume: number;
         };
         /**
          * SourceInputs
@@ -7061,6 +7117,11 @@ export interface components {
              */
             server: string | null;
         };
+        /** SourceMuteIn */
+        SourceMuteIn: {
+            /** Muted */
+            muted: boolean;
+        };
         /** SourcePairingIn */
         SourcePairingIn: {
             /**
@@ -7119,6 +7180,11 @@ export interface components {
             selected: string | null;
             /** Targets */
             targets: components["schemas"]["SourceTarget"][];
+        };
+        /** SourceVolumeIn */
+        SourceVolumeIn: {
+            /** Volume */
+            volume: number;
         };
         /** StartupProgress */
         StartupProgress: {
@@ -8880,6 +8946,132 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    clear_source_input_api_v1_bridge_source_active_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_source_mute_api_v1_bridge_source_active_mute_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceMuteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceInputStatus"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_source_volume_api_v1_bridge_source_active_volume_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceVolumeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceInputStatus"];
                 };
             };
             /** @description Client error */

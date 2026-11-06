@@ -78,6 +78,23 @@ Bluetooth audio, a saved local Audio endpoint, or a headset microphone. The
 bridge captures and forwards; Music Assistant owns playback and routing. It
 is not a Player and not a Device; it has no playback of its own.
 
+**Source mode** — one device used as an input instead of an output. A Device
+whose link can carry input wears a switch on its own card: in source mode its
+card stands in the Sources section and the Player is stopped, in playback mode
+it stands among the players. One link cannot be both at once, and only one
+input is active at a time: switching steals it and the previous device returns
+to playback. The mode belongs to the device, so a restart or a lost link keeps
+it; a lost link only means the capture is waiting.
+
+**Input level** — how loud the selected input is right now, as a peak of the
+frames already captured, reported continuously while a capture is open. Zero is
+silence and is information: five seconds of it means "check the mute on the
+device", which is a different story from "the capture never opened".
+
+**Input gain** — how much the bridge turns the selected input up before Music
+Assistant sees it. It belongs to the input, not to the feed, and is remembered
+per input so a restart does not move a level the operator set.
+
 **Microphone hand-off** — temporarily using a headset's HFP microphone instead
 of its A2DP output. Its Player rests while the microphone is in use and can
 resume only when the A2DP output is confirmed ready. A failed return leaves

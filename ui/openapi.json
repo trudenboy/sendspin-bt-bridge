@@ -9827,6 +9827,12 @@
             "title": "Monitor",
             "type": "boolean"
           },
+          "muted": {
+            "default": false,
+            "description": "The capture source is muted; the stream keeps running.",
+            "title": "Muted",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -9841,6 +9847,14 @@
               }
             ],
             "title": "Node"
+          },
+          "volume": {
+            "default": 100,
+            "description": "Capture gain, 0 to 100.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Volume",
+            "type": "integer"
           }
         },
         "required": [
@@ -9853,7 +9867,9 @@
           "connected",
           "monitor",
           "mac",
-          "node"
+          "node",
+          "volume",
+          "muted"
         ],
         "title": "SourceInputStatus",
         "type": "object"
@@ -9983,6 +9999,19 @@
         "title": "SourceMa",
         "type": "object"
       },
+      "SourceMuteIn": {
+        "properties": {
+          "muted": {
+            "title": "Muted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "muted"
+        ],
+        "title": "SourceMuteIn",
+        "type": "object"
+      },
       "SourcePairingIn": {
         "properties": {
           "seconds": {
@@ -10098,6 +10127,19 @@
           "error"
         ],
         "title": "SourceTargets",
+        "type": "object"
+      },
+      "SourceVolumeIn": {
+        "properties": {
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "volume"
+        ],
+        "title": "SourceVolumeIn",
         "type": "object"
       },
       "StartupProgress": {
@@ -12862,6 +12904,41 @@
       }
     },
     "/api/v1/bridge/source/active": {
+      "delete": {
+        "description": "Return the device to playback; the feed stays enabled and the choice is remembered.",
+        "operationId": "clear_source_input_api_v1_bridge_source_active_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Clear the active source input",
+        "tags": [
+          "bridge"
+        ]
+      },
       "put": {
         "operationId": "select_source_input_api_v1_bridge_source_active_put",
         "requestBody": {
@@ -12911,6 +12988,114 @@
           }
         },
         "summary": "Select the active source input",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/active/mute": {
+      "put": {
+        "description": "Silence the capture without stopping the stream to Music Assistant.",
+        "operationId": "set_source_mute_api_v1_bridge_source_active_mute_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceMuteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceInputStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Mute or unmute the active input",
+        "tags": [
+          "bridge"
+        ]
+      }
+    },
+    "/api/v1/bridge/source/active/volume": {
+      "put": {
+        "description": "Apply 0–100 to the active capture node and remember it per input id.",
+        "operationId": "set_source_volume_api_v1_bridge_source_active_volume_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceVolumeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceInputStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Set the active input's gain",
         "tags": [
           "bridge"
         ]
