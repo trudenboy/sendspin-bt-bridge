@@ -17,6 +17,7 @@ worker thread, never on the bridge loop.
 
 from __future__ import annotations
 
+import os
 import shutil
 import struct
 import subprocess
@@ -167,7 +168,8 @@ class RunningCapture:
     def _read(self) -> None:
         stdout = self._proc.stdout
         assert stdout is not None
-        while chunk := stdout.read1(65536):
+        fd = stdout.fileno()
+        while chunk := os.read(fd, 65536):  # what is there now; b"" once the recorder has ended
             self._out.extend(chunk)
             self._got_audio.set()
         self._got_audio.set()  # ended: whoever waits for audio stops waiting
