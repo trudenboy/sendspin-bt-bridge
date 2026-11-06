@@ -38,6 +38,7 @@ ErrorCode = Literal[
     # the phone capture's sequence
     "no_sequence",
     "sequence_running",
+    "sequence_too_long",
     "upload_running",
     # a click track or listening sound file that cannot be written
     "disk_full",

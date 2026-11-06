@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Group sync no longer measures the wrong speakers when the last speaker in the sequence stays silent (muted, asleep or at volume 0): each speaker's phase is taken from its own solo, and a recording whose timing cannot be told apart is reported as not heard instead of being guessed.
 - Saving a bridge setting no longer puts back a speaker's latency compensation, air calibration or learned latency from the moment the Settings page was opened.
 - Measuring a speaker again, or skipping it, after group sync has proposed delays withdraws that proposal, so applying always writes delays computed from the latest measurements.
+- A group sync sequence no longer fails part-way with "clicker stopped" late in the click track: when the clicks would end before the last speaker's solo, they start over before the sequence begins (skipped speakers stay skipped), and a sequence too long for the click track is refused up front.
 
 ## [3.2.0-beta.24] - 2026-11-06
 

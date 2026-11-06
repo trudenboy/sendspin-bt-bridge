@@ -281,8 +281,9 @@ class SyncSession:
         self.clicker_starts += 1
         self._clicker_started = self._clock()
         if self.state in _MEASURING and self.measurements:
-            # phases from two playbacks cannot be compared: the round starts again
-            self.measurements = {}
+            # phases from two playbacks cannot be compared: the round starts again (a skip is not a
+            # phase: it stays)
+            self.measurements = {mid: m for mid, m in self.measurements.items() if m.status == "skipped"}
             self._generation += 1
         self.touch()
         self._changed()
@@ -474,7 +475,18 @@ class SyncSession:
             m = self._member(mid)
             if not m.adjustable:
                 raise ControlError("not_adjustable", m.name, member=mid)
+        lead = max(seq.LEAD_S, min(seq.MAX_LEAD_S, float(lead_s)))
+        needed = seq.needed_s(len(set(members)), self.point, lead)
+        if needed > click_track.DURATION_S:
+            raise ControlError(
+                "sequence_too_long",
+                f"the sequence needs {needed:.0f} s of clicks; the click track lasts {click_track.DURATION_S} s",
+            )
         self._require_clicker()
+        left = self._clicker_left()
+        if left is not None and left < needed:
+            # the clicks would end part-way through the last solo: start them over first
+            self._start_clicker()
         self._seq_slots = []
         self._seq_clicks = self.clicker_starts
         self.sequence = {
@@ -486,7 +498,7 @@ class SyncSession:
             "error_member": None,
             "solo_s": seq.solo_seconds(self.point),
             "gap_s": seq.gap_seconds(self.point),
-            "lead_s": max(seq.LEAD_S, min(seq.MAX_LEAD_S, float(lead_s))),
+            "lead_s": lead,
             "uploaded": False,
         }
         self.touch()

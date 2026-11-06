@@ -80,6 +80,7 @@ _STATUS = {
     "sync_mute_unsupported": 409,
     "no_sequence": 409,
     "sequence_running": 409,
+    "sequence_too_long": 409,
     "upload_running": 409,
     "disk_full": 507,
     "track_unavailable": 503,

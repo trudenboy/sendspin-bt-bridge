@@ -220,3 +220,50 @@ def test_a_sequence_recording_replaces_measurements_from_another_clock():
     pcm, _ = sequence_recording({"a": 0.0})
     s.record_sequence(pcm, 16000)
     assert "b" not in s.measurements  # its phase was on the microphone's clock, not this file's
+
+
+# -- the click track must outlast the sequence ------------------------------------------------------
+
+
+def test_a_sequence_that_would_outlast_the_clicks_starts_them_over_first():
+    """160 s into a 180 s track, a two-member sequence (about half a minute) would run out of clicks
+    part-way and fail with clicker_stopped; the clicks start over before it begins."""
+    s, ctl, clock, _ = ready()
+    starts = s.clicker_starts
+    clock.t += 160.0
+    s.start_sequence(["a", "b"])
+    assert s.clicker_starts == starts + 1
+    assert ("clicker", s.clicker_url) in ctl.calls
+
+
+def test_a_sequence_with_enough_clicks_left_keeps_them_playing():
+    s, ctl, clock, _ = ready()
+    starts = s.clicker_starts
+    clock.t += 30.0
+    s.start_sequence(["a", "b"])
+    assert s.clicker_starts == starts
+    assert not [c for c in ctl.calls if c[0] == "clicker"]
+
+
+def test_starting_the_clicks_over_for_a_sequence_keeps_the_skips():
+    s, _ctl, clock, _ = ready()
+    s.skip("cast")
+    clock.t += 160.0
+    s.start_sequence(["a", "b"])
+    assert s.measurements["cast"].status == "skipped"
+
+
+def test_a_sequence_longer_than_the_click_track_is_refused(monkeypatch):
+    from sendspin_sync import click_track
+
+    s, _ctl, _clock, _ = ready()
+    monkeypatch.setattr(click_track, "DURATION_S", 20)
+    with pytest.raises(ControlError) as exc:
+        s.start_sequence(["a", "b"])
+    assert exc.value.code == "sequence_too_long"
+
+
+def test_the_time_a_sequence_needs_counts_the_music_assistant_steps():
+    nominal = seq.length_s(4, "device")
+    assert seq.needed_s(4, "device") > nominal
+    assert seq.needed_s(4, "device", lead_s=seq.RECORDER_LEAD_S) > seq.needed_s(4, "device")

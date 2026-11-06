@@ -213,3 +213,13 @@ def max_duration_s(members: int, point: str) -> float:
 def length_s(members: int, point: str, lead_s: float = LEAD_S) -> float:
     """How long a sequence of *members* plays, lead-in included."""
     return lead_s + members * solo_seconds(point) + max(0, members - 1) * gap_seconds(point)
+
+
+STEP_OVERHEAD_S = 1.0  # each member's solo and silence: Music Assistant round trips the waits do not count
+MARGIN_S = 5.0
+
+
+def needed_s(members: int, point: str, lead_s: float = LEAD_S) -> float:
+    """How much click track a sequence of *members* uses up, Music Assistant's steps included: the
+    clicks must still play when the last member's solo ends."""
+    return length_s(members, point, lead_s) + members * STEP_OVERHEAD_S + MARGIN_S
