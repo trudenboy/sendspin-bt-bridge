@@ -27,7 +27,14 @@ const showMonitors = ref(false)
 const name = ref('')
 const manualNode = ref('')
 const added = ref<string | null>(null)
-const knownBluetooth = ref(0)
+/**
+ * The bonds the dialog knew before this window opened; growth above it is the
+ * phone that just paired. ``null`` means not measured yet (the list is still
+ * loading or the dialog mounted mid-window).
+ */
+const knownBluetooth = ref<number | null>(null)
+/** The window opened before the input list arrived: measure the baseline on that first load. */
+let baselinePending = false
 let pairPoll: ReturnType<typeof setInterval> | undefined
 
 const feed = computed(() => source.status)
@@ -41,12 +48,22 @@ function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+/** Every bond already listed when the window opens is old; only growth is the phone. */
+function seedBaseline(inputs: SourceInputStatus[] = allInputs.value) {
+  knownBluetooth.value = inputs.filter((input) => input.kind === 'bluetooth').length
+  baselinePending = false
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
     const answer = await getSourceInputs(showMonitors.value)
-    allInputs.value = answer.inputs ?? []
+    const inputs = answer.inputs ?? []
+    // A dialog mounting during an open window sees the existing bonds for the
+    // first time; without a baseline every one of them would look newly paired.
+    if (pairing.value && (knownBluetooth.value === null || baselinePending)) seedBaseline(inputs)
+    allInputs.value = inputs
     candidates.value = answer.local_candidates ?? []
     captureAvailable.value = answer.capture_available !== false
     captureKind.value = answer.capture_kind ?? ''
@@ -75,7 +92,8 @@ function stopPolling() {
 async function pair() {
   error.value = ''
   added.value = null
-  knownBluetooth.value = bluetoothInputs.value.length
+  if (loading.value) baselinePending = true
+  else seedBaseline()
   try {
     await source.openPairingWindow()
   } catch {
@@ -149,7 +167,8 @@ watch(
 watch(
   () => bluetoothInputs.value.length,
   (count) => {
-    if (!pairing.value || count <= knownBluetooth.value) return
+    if (!pairing.value || knownBluetooth.value === null || count <= knownBluetooth.value) return
+    knownBluetooth.value = count
     stopPolling()
     const fresh = bluetoothInputs.value[bluetoothInputs.value.length - 1]
     added.value = fresh?.name ?? null

@@ -11,6 +11,12 @@ import type { Adapter, BridgeStatus, Device, Group, Job, SyncSession } from '@/a
 export type RestartState = 'idle' | 'stopping' | 'restarting' | 'ready' | 'error'
 /** Why the bridge restarts: asked for, or because an update was installed. */
 export type RestartReason = 'restart' | 'update'
+/**
+ * What a fresh status read did: it applied, it was dropped because a newer read
+ * already applied, or the bridge did not answer. Callers that keep a fallback
+ * must tell the first two apart.
+ */
+export type RefreshOutcome = 'applied' | 'stale' | 'failed'
 
 export const useBridgeStore = defineStore('bridge', () => {
   const snapshot = ref<BridgeStatus | null>(null)
@@ -33,11 +39,12 @@ export const useBridgeStore = defineStore('bridge', () => {
   /** The version the bridge ran when an update began; another version means it is done. */
   let versionBeforeUpdate = ''
 
-  function apply(status: BridgeStatus) {
+  function apply(status: BridgeStatus, sourceEpoch?: number) {
     snapshot.value = status
     // The source feed has its own owner; it is fed from this one status, never
-    // from a second stream or a second read.
-    useSourceStore().applyStatus(status)
+    // from a second stream or a second read. A read carries the epoch it began
+    // in so the source owner can drop what predates a completed command.
+    useSourceStore().applyStatus(status, sourceEpoch)
     const inProgress = restartState.value === 'stopping' || restartState.value === 'restarting'
     if (inProgress && restartReason.value === 'update' && versionBeforeUpdate && status.bridge.version !== versionBeforeUpdate) {
       restartState.value = 'ready'
@@ -100,18 +107,21 @@ export const useBridgeStore = defineStore('bridge', () => {
   let refreshSeq = 0
   let appliedSeq = 0
 
-  /** A fresh read; false means the bridge did not answer, so callers can keep what they had. */
-  async function refresh(): Promise<boolean> {
+  /** A fresh read; ``failed`` means the bridge did not answer, so callers can keep what they had. */
+  async function refresh(): Promise<RefreshOutcome> {
     const seq = ++refreshSeq
+    // The source owner's epoch when this read began: an answer that predates a
+    // completed source command must not restate its pairing windows.
+    const sourceEpoch = useSourceStore().commandEpoch
     try {
       const status = await getStatus()
-      if (seq < appliedSeq) return false
+      if (seq < appliedSeq) return 'stale'
       appliedSeq = seq
-      apply(status)
-      return true
+      apply(status, sourceEpoch)
+      return 'applied'
     } catch {
       /* the event stream will catch up */
-      return false
+      return 'failed'
     }
   }
 

@@ -472,6 +472,35 @@ async def test_stop_clears_the_state(harness):
     assert snapshot.ma_connected is False
 
 
+async def test_stop_closes_the_phone_pairing_window(harness, monkeypatch):
+    from sendspin_bridge.services.source import pairing
+
+    discoverable: list[bool] = []
+    monkeypatch.setattr(pairing, "_task", None)
+    monkeypatch.setattr(pairing, "_known_devices", set())
+    monkeypatch.setattr(pairing, "_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(pairing, "_devices", lambda: set())
+    monkeypatch.setattr(pairing, "_set_discoverable", lambda _adapters, on: discoverable.append(on) or True)
+    monkeypatch.setattr(pairing, "ensure_agent", lambda: _async(True))
+
+    await harness.client.start()
+    await _wait_for(lambda: source_state.snapshot().ma_connected)
+    await pairing.open_window(30)
+    assert source_state.snapshot().pairing_until > 0
+    assert discoverable == [True]
+
+    # The window exists to feed the source: stopping the source ends it.
+    try:
+        await harness.client.stop()
+
+        snapshot = source_state.snapshot()
+        assert snapshot.pairing_until == 0
+        assert snapshot.pairing_adapters == ()
+        assert discoverable[-1] is False
+    finally:
+        await pairing.close_window()
+
+
 async def test_line_sense_follows_the_phone_and_is_deduplicated(harness):
     harness.backend.endpoint = CaptureEndpoint(node="bluez_source.34_C7_E9_25_A3_A3", backend="fake", running=True)
     await harness.client.start()

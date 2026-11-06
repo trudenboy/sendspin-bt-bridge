@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import MaPairingSection from '@/components/settings/MaPairingSection.vue'
 import { useSourceStore } from '@/stores/source'
 import { getStatus } from '@/api/status'
@@ -101,6 +102,48 @@ describe('Settings: Music Assistant pairing', () => {
     setSource(sourceBlock({ state: 'pairing', ma_pairing_code: '12345678', ma_pairing_seconds_left: 47 }))
     const second = mountSection()
     expect(second.text()).toContain('0:46')
+  })
+
+  it('the window survives a route change away and back without restarting', async () => {
+    vi.useFakeTimers()
+    setSource(sourceBlock({ state: 'pairing', ma_pairing_code: '12345678', ma_pairing_seconds_left: 300 }))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/config', component: MaPairingSection },
+        { path: '/hardware', component: { template: '<div data-other-route />' } },
+      ],
+    })
+    await router.push('/config')
+    const wrapper = mount(
+      { template: '<router-view />' },
+      {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            RouterLink: { props: ['to'], template: '<a :href="String(to)"><slot /></a>' },
+          },
+        },
+      },
+    )
+    await flushPromises()
+    expect(wrapper.text()).toContain('12345678')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(wrapper.text()).toContain('4:59')
+
+    // Leaving Settings unmounts the section; the window belongs to the store.
+    await router.push('/hardware')
+    await flushPromises()
+    expect(wrapper.find('[data-ma-pairing]').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await router.push('/config')
+    await flushPromises()
+    expect(wrapper.text()).toContain('12345678')
+    // The clock kept running while the page was away: it neither restarted nor slid.
+    expect(wrapper.text()).toContain('4:58')
+    expect(openMaPairing).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('forgets the pairing only after the confirm dialog', async () => {

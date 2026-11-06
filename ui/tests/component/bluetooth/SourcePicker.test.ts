@@ -7,7 +7,7 @@ import { ApiError } from '@/api/client'
 import { useBridgeStore } from '@/stores/bridge'
 import { useSourceStore } from '@/stores/source'
 import { getStatus } from '@/api/status'
-import { addLocalSource, closeSourcePairing, getSourceInputs, openSourcePairing } from '@/api/source'
+import { addLocalSource, closeSourcePairing, getSourceInputs, openSourcePairing, selectSource } from '@/api/source'
 import en from '@/i18n/locales/en.json'
 
 vi.mock('@/composables/useEventStream', () => ({
@@ -38,6 +38,20 @@ const candidate = {
   monitor: false,
   mac: null,
   node: 'alsa_input.line',
+}
+
+/** A bond BlueZ already knew when the window opened: not the phone being added. */
+const existingBond = {
+  id: 'bluetooth:FC:58:FA:EB:08:6C',
+  kind: 'bluetooth',
+  name: 'ENEBY20',
+  description: 'ENEBY20',
+  active: false,
+  available: true,
+  connected: false,
+  monitor: false,
+  mac: 'FC:58:FA:EB:08:6C',
+  node: null,
 }
 
 const sourceBlock = (overrides: Record<string, unknown> = {}) => ({
@@ -149,6 +163,73 @@ describe('Add device: audio source', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(second.get('[data-source-pairing]').text()).toContain('1:59')
+  })
+
+  it('an existing bond is not taken for the new phone when the dialog mounts mid-window', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    // The window was opened before this dialog mounted; its clock lives in the
+    // source store. Nothing new has paired, but a bond is already listed.
+    useSourceStore().applyStatus({
+      bridge: { sendspin_source: sourceBlock({ pairing_seconds_left: 120 }) },
+      devices: [],
+      groups: [],
+    } as never)
+    statusWith(sourceBlock({ pairing_seconds_left: 120 }))
+    const wrapper = mountPicker()
+    await vi.advanceTimersByTimeAsync(0)
+
+    const before = vi.mocked(getSourceInputs).mock.calls.length
+    await vi.advanceTimersByTimeAsync(2000)
+
+    expect(selectSource).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-source-added]').exists()).toBe(false)
+    // The 2 s poll is still running: one more read, not a stopped window.
+    expect(vi.mocked(getSourceInputs).mock.calls.length).toBe(before + 1)
+    wrapper.unmount()
+  })
+
+  it('a phone that bonds during the window is still taken for the new source', async () => {
+    vi.useFakeTimers()
+    const phoneBond = {
+      ...existingBond,
+      id: 'bluetooth:34:C7:E9:25:A3:A3',
+      name: 'Pixel',
+      mac: '34:C7:E9:25:A3:A3',
+    }
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    statusWith(sourceBlock({ pairing_seconds_left: 120 }))
+    const wrapper = mountPicker()
+    await vi.advanceTimersByTimeAsync(0)
+    await wrapper.get('[data-source-pair]').trigger('click')
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The next poll sees the phone's new bond above the existing one.
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond, phoneBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(selectSource).toHaveBeenCalledWith(phoneBond.id)
+    expect(wrapper.get('[data-source-added]').text()).toContain('Pixel')
+    wrapper.unmount()
   })
 
   it('cancelling the window is the explicit server-side close', async () => {

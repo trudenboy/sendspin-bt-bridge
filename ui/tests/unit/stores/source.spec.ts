@@ -225,7 +225,7 @@ describe('useSourceStore', () => {
     expect(store.maPairingSecondsLeft).toBe(120)
   })
 
-  it('enables and disables the feed, closing both local windows on disable', async () => {
+  it('disabling the feed closes both local windows at once and adopts the post-stop status', async () => {
     vi.useFakeTimers()
     vi.mocked(getStatus).mockResolvedValue(
       bridgeStatus(
@@ -240,11 +240,41 @@ describe('useSourceStore', () => {
     await store.enable()
     expect(setSourceEnabled).toHaveBeenCalledWith(true)
 
-    vi.mocked(getStatus).mockResolvedValue(bridgeStatus() as never)
-    await store.disable()
+    // The local close is the immediate optimistic effect, before the command's
+    // reconciling read has answered.
+    let resolveStatus!: (value: unknown) => void
+    vi.mocked(getStatus).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStatus = resolve
+      }) as never,
+    )
+    const disabling = store.disable()
+    await vi.advanceTimersByTimeAsync(0)
+
     expect(setSourceEnabled).toHaveBeenCalledWith(false)
     expect(store.pairingSecondsLeft).toBe(0)
     expect(store.maPairingSecondsLeft).toBe(0)
+
+    // The realistic post-stop status: stopping the source ends both windows
+    // server-side (the phone window is closed in SourceClient.stop()).
+    resolveStatus(
+      bridgeStatus(
+        sourceStatus({
+          enabled: false,
+          state: 'off',
+          ma_paired: false,
+          ma_pairing_code: null,
+          ma_pairing_seconds_left: 0,
+          pairing_seconds_left: 0,
+          pairing_adapters: [],
+        }),
+      ) as never,
+    )
+    await disabling
+
+    expect(store.pairingSecondsLeft).toBe(0)
+    expect(store.maPairingSecondsLeft).toBe(0)
+    expect(store.status).toMatchObject({ enabled: false, state: 'off' })
   })
 
   it('keeps the server code when a command fails and stops being busy', async () => {
@@ -378,6 +408,129 @@ describe('useSourceStore', () => {
 
     // The older read must not overwrite the command's fresh answer.
     expect(store.pairingSecondsLeft).toBe(120)
+  })
+
+  it('a status read that began before a cancel cannot revive the phone window', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockResolvedValue(bridgeStatus(sourceStatus({ pairing_seconds_left: 120 })) as never)
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    // A read begins before the cancel and stays in flight.
+    let resolveStale!: (value: unknown) => void
+    vi.mocked(getStatus).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStale = resolve
+      }) as never,
+    )
+    const staleRead = bridge.refresh()
+
+    // Cancel; its own reconciling read fails, so no newer read has applied.
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.closePairingWindow()
+    expect(store.pairingSecondsLeft).toBe(0)
+
+    // The pre-cancel snapshot still says the window has 120 s left.
+    resolveStale(bridgeStatus(sourceStatus({ pairing_seconds_left: 120 })) as never)
+    await staleRead
+
+    expect(store.pairingSecondsLeft).toBe(0)
+  })
+
+  it('a status read that began before an open cannot close the new phone window', async () => {
+    vi.useFakeTimers()
+    let resolveStale!: (value: unknown) => void
+    vi.mocked(getStatus).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStale = resolve
+      }) as never,
+    )
+    const staleRead = bridge.refresh()
+
+    // The open succeeds; its own reconciling read fails, so the stale read is
+    // the only status that will land.
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    // That read still carries the pre-open "no window".
+    resolveStale(bridgeStatus(sourceStatus({ pairing_seconds_left: 0 })) as never)
+    await staleRead
+
+    expect(store.pairingSecondsLeft).toBe(120)
+  })
+
+  it('a status read that began before opening a Music Assistant window cannot close it', async () => {
+    vi.useFakeTimers()
+    let resolveStale!: (value: unknown) => void
+    vi.mocked(getStatus).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStale = resolve
+      }) as never,
+    )
+    const staleRead = bridge.refresh()
+
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.openMaPairing()
+    expect(store.maPairingSecondsLeft).toBe(300)
+
+    resolveStale(bridgeStatus(sourceStatus({ ma_pairing_seconds_left: 0, ma_pairing_code: null })) as never)
+    await staleRead
+
+    expect(store.maPairingSecondsLeft).toBe(300)
+    expect(store.maPairingCode).toBe('12345678')
+  })
+
+  it('a server terminal answer closes the Music Assistant countdown immediately', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockResolvedValue(
+      bridgeStatus(sourceStatus({ ma_paired: false, ma_pairing_code: '12345678', ma_pairing_seconds_left: 300 })) as never,
+    )
+    await store.openMaPairing()
+    expect(store.maPairingSecondsLeft).toBe(300)
+
+    store.applyStatus(bridgeStatus(sourceStatus({ ma_paired: false, ma_pairing_seconds_left: 0 })))
+
+    expect(store.maPairingSecondsLeft).toBe(0)
+    expect(store.maPairingCode).toBeNull()
+  })
+
+  it('a stale reconcile answer never applies the buffered pre-command status over a newer read', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockResolvedValue(
+      bridgeStatus(sourceStatus({ state: 'streaming', pairing_seconds_left: 120 })) as never,
+    )
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    // A command is in flight while a pre-command status lands; it is buffered.
+    let finishCommand!: (value: unknown) => void
+    vi.mocked(useSourceDevice).mockReturnValue(
+      new Promise((resolve) => {
+        finishCommand = resolve
+      }) as never,
+    )
+    const command = store.useDevice('34:C7:E9:25:A3:A3')
+    store.applyStatus(bridgeStatus(sourceStatus({ state: 'waiting', pairing_seconds_left: 0 })))
+
+    // The command's reconciling read answers 0, but a newer read has already
+    // applied the open window, so the older answer is dropped as stale.
+    let calls = 0
+    vi.mocked(getStatus).mockImplementation(async () => {
+      calls += 1
+      if (calls === 1) {
+        await bridge.refresh()
+        return bridgeStatus(sourceStatus({ state: 'waiting', pairing_seconds_left: 0 })) as never
+      }
+      return bridgeStatus(sourceStatus({ state: 'streaming', pairing_seconds_left: 120 })) as never
+    })
+    finishCommand({})
+    await command
+
+    // The buffered status is older than the read that applied: it must not be
+    // replayed over it, not even for the status block it carries.
+    expect(store.pairingSecondsLeft).toBe(120)
+    expect(store.status?.state).toBe('streaming')
   })
 
   it('one ticker drives both windows and stops when both are closed', async () => {

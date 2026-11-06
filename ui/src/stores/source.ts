@@ -15,7 +15,7 @@ import {
   type SourcePairingWindow,
 } from '@/api/source'
 import type { BridgeStatus, SendspinSourceStatus } from '@/api/types'
-import { useBridgeStore } from './bridge'
+import { useBridgeStore, type RefreshOutcome } from './bridge'
 
 /** A failed source command: the server's stable code and its sentence. */
 export interface SourceFailure {
@@ -26,6 +26,12 @@ export interface SourceFailure {
 /** One serialized command attempt. Its generation decides whether an answer still counts. */
 interface Attempt {
   id: number
+}
+
+/** A status that arrived while a command was queued or running, with the epoch it began in. */
+interface BufferedStatus {
+  source: SendspinSourceStatus | null
+  epoch: number
 }
 
 /**
@@ -63,6 +69,12 @@ export const useSourceStore = defineStore('source', () => {
   /** The server has confirmed this window open at least once, so its zero means "closed". */
   let serverPairingSeen = false
   let serverMaPairingSeen = false
+  /**
+   * Commands completed so far. A status application carries the epoch it began
+   * in; one that began before the last completed command cannot say anything
+   * about the pairing windows — it predates the command's effect.
+   */
+  const commandEpoch = ref(0)
 
   const pairingSecondsLeft = computed(() => {
     // ``pairingNow`` is the tick: Date.now() alone would not make this reactive.
@@ -176,9 +188,15 @@ export const useSourceStore = defineStore('source', () => {
     closeMaPairingClock()
   }
 
-  function applySource(next: SendspinSourceStatus | null) {
+  function applySource(next: SendspinSourceStatus | null, epoch = commandEpoch.value) {
     status.value = next
     if (!next) return
+    // A status older than the last completed command describes the server
+    // before that command: its windows, adapters and code are not facts about
+    // now. In particular a pre-command positive value must not reopen a window
+    // a command just closed, and a pre-command zero must not close one it just
+    // opened.
+    if (epoch < commandEpoch.value) return
     if (next.ma_pairing_code) maPairingCode.value = next.ma_pairing_code
     pairingAdapters.value = Array.isArray(next.pairing_adapters) ? next.pairing_adapters : []
     adoptPairingSeconds(Number(next.pairing_seconds_left) || 0)
@@ -190,17 +208,17 @@ export const useSourceStore = defineStore('source', () => {
   // -------------------------------------------------------------------------
 
   /** A status that arrived while a command was queued or running, applied only if the fresh read fails. */
-  let buffered: SendspinSourceStatus | null | undefined
+  let buffered: BufferedStatus | undefined
   /** The fresh read after a command is itself a status application, not an intermediate one. */
   let reconciling = false
 
-  function applyStatus(next: BridgeStatus | null | undefined) {
+  function applyStatus(next: BridgeStatus | null | undefined, epoch = commandEpoch.value) {
     const source = next?.bridge?.sendspin_source ?? null
     if (busy.value && !reconciling) {
-      buffered = source
+      buffered = { source, epoch }
       return
     }
-    applySource(source)
+    applySource(source, epoch)
   }
 
   async function reconcile() {
@@ -208,14 +226,16 @@ export const useSourceStore = defineStore('source', () => {
     const stale = buffered
     buffered = undefined
     reconciling = true
-    let fresh = false
+    let answered: RefreshOutcome = 'failed'
     try {
-      fresh = await useBridgeStore().refresh()
+      answered = await useBridgeStore().refresh()
     } finally {
       reconciling = false
     }
-    // The bridge did not answer: keep the last status seen while the command ran.
-    if (!fresh && stale !== undefined) applySource(stale)
+    // Only a read that never answered may fall back to the status seen while the
+    // command ran. A read dropped as stale means a newer answer already applied,
+    // so the older one must not overwrite it.
+    if (answered === 'failed' && stale !== undefined) applySource(stale.source, stale.epoch)
   }
 
   // -------------------------------------------------------------------------
@@ -252,6 +272,9 @@ export const useSourceStore = defineStore('source', () => {
           throw e
         } finally {
           pending -= 1
+          // The command is over: any status application that began before this
+          // point predates its effect on the pairing windows.
+          commandEpoch.value += 1
           if (pending === 0) await reconcile()
           busy.value = pending > 0
         }
@@ -381,6 +404,7 @@ export const useSourceStore = defineStore('source', () => {
     maPairingSecondsLeft,
     maPairingCode,
     pairingAdapters,
+    commandEpoch,
     applyStatus,
     enable,
     disable,

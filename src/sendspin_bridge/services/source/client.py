@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from sendspin_bridge.services.source import devices as source_devices
+from sendspin_bridge.services.source import pairing as source_pairing
 from sendspin_bridge.services.source import state as source_state
 from sendspin_bridge.services.source.capture import CHUNK_MS, CaptureBackend, CaptureEndpoint, CaptureStream
 from sendspin_bridge.services.source.identity import load_or_create_identity, open_pairing_store
@@ -236,6 +237,10 @@ class SourceClient:
         self._signal = None
         self._endpoint = None
         self._preferred_mac = None
+        # The phone pairing window exists to feed this source: stopping the
+        # source ends it for real (discoverability off, window task cancelled),
+        # not just the countdown the UI draws.
+        await source_pairing.close_window()
         source_state.publish(
             enabled=False,
             state="off",
