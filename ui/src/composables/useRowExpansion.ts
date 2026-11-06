@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import { deviceState } from '@/stores/devices'
+import { deviceState } from '@/utils/deviceStatus'
 import type { Device } from '@/api/types'
 
 /**

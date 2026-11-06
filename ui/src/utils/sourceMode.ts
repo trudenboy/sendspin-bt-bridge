@@ -1,4 +1,4 @@
-import { isDeviceConnected } from './deviceBackend'
+import { isDeviceConnected } from './deviceStatus'
 import type { Device, SourceInputStatus } from '@/api/types'
 
 /**

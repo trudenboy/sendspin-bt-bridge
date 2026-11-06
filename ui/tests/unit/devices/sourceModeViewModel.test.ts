@@ -39,8 +39,9 @@ describe('source mode card view model', () => {
   })
 
   it('keeps the waiting story when a disconnect leaves the source in error', () => {
-    const disconnected = device()
-    disconnected.bluetooth!.connected = false
+    const disconnected = makeDevice({
+      bluetooth: { mac: MAC, connected: false, microphone_available: true, hfp_available: true },
+    } as never)
     expect(sourceModeCardView(disconnected, 'error', null, false).status.labelKey).toBe('devices.sources.waitingForStream')
   })
 })

@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useNotificationStore } from "@/stores/notifications";
-import { isDeviceConnected } from "@/utils/deviceBackend";
+import { isDeviceConnected } from "@/utils/deviceStatus";
 import { transport } from "@/api/playback";
 import { Play, Pause } from "lucide-vue-next";
 import type { Device } from "@/api/types";

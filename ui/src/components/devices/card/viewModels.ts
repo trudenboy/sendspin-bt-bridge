@@ -1,6 +1,5 @@
 /* Pure adapters from the API/store entities to the shared card view-model. */
-import { deviceState } from "@/stores/devices";
-import { isDeviceConnected } from "@/utils/deviceBackend";
+import { deviceState, isDeviceConnected } from "@/utils/deviceStatus";
 import { speakerName } from "@/utils/speakerName";
 import type {
   BtDeviceSummary,

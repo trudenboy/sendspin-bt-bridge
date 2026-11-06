@@ -37,6 +37,8 @@ def _links(**facts):
         ({"bt_management_enabled": False, "bt_released_by": "auto"}, "released", "auto"),
         ({"enabled": False}, "disabled", None),
         ({"bluetooth_connected": False, "never_paired": True}, "not_paired", None),
+        # Waking from standby: the card says "Reconnecting", so the chip says "Connecting".
+        ({"bluetooth_connected": False, "bt_standby": True, "reconnecting": True}, "connecting", "reconnecting"),
     ],
 )
 def test_bluetooth_connection_states(facts, state, reason) -> None:
