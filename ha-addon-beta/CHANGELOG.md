@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.25] - 2026-11-07
+
+### Fixed
+
+- The Diagnostics page, the guidance and recovery panels and the diagnostics bundle attached to a bug report now report the same health as the header: disabled speakers no longer turn "All devices disabled" into "Waiting for setup", and the recovery and latency panels use the same host check the header does.
+- A speaker's state badge, its Bluetooth chip, the list filters and the fleet counts now agree: a speaker waking from standby reads Reconnecting and Connecting rather than Reconnecting beside Standby, and a speaker whose Bluetooth link is down is never shown as Ready or counted as connected.
+- Group sync no longer measures the wrong speakers when the last speaker in the sequence stays silent (muted, asleep or at volume 0): each speaker's phase is taken from its own solo, and a recording whose timing cannot be told apart is reported as not heard instead of being guessed.
+- Saving a bridge setting no longer puts back a speaker's latency compensation, air calibration or learned latency from the moment the Settings page was opened.
+- Measuring a speaker again, or skipping it, after group sync has proposed delays withdraws that proposal, so applying always writes delays computed from the latest measurements.
+- A group sync sequence no longer fails part-way with "clicker stopped" late in the click track: when the clicks would end before the last speaker's solo, they start over before the sequence begins (skipped speakers stay skipped), and a sequence too long for the click track is refused up front.
+- Measuring a group with a bridge input now records the whole sequence: the bridge starts recording before the first speaker plays and stops only after the last one has finished, and uses the moment it started recording to tell which speaker played when.
+- Recording the same group sync sequence again no longer throws away speakers the first recording heard when the second one hears fewer, and measuring with this device's microphone after a sequence starts a fresh round instead of comparing phases taken on two different clocks.
+
 ## [3.2.0-beta.24] - 2026-11-06
 
 ### Added
