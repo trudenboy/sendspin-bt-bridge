@@ -139,6 +139,34 @@ paired with, plus the last playback server. Persisted next to the identity.
 PIN pairing is optional and off by default; unpaired access still uses Noise
 transport encryption.
 
+## Group sync
+
+**Speaker latency compensation** — a speaker's `static_delay_ms` (0–5000): how
+much earlier the bridge sends its audio so it is heard on time. A larger value
+plays earlier. Group sync sets it relative to the group (the earliest member
+gets 0); several other places can also write it, which is why a group being
+tuned must not be written from elsewhere.
+
+**Click track** — what the group plays while it is measured: a chirp pair
+every 2 s whose gap encodes the click's place in a 10 s cycle. A member's
+phase is where in that cycle its clicks are heard. Phases from two playbacks
+of the track never compare; starting the track over starts the round over.
+
+**Sequence** — every member of the group playing alone in turn, everyone muted
+for a lead-in and between members, so one recording holds every member's
+clicks. Each member's stretch is cut out at its place in the file, and the
+file's clock is the one clock their phases share.
+
+**Measurement round** — the phases a proposal is planned from. They come from
+one clock — one sequence recording, or the browser's microphone — and from one
+playback of the click track. A new measurement withdraws the proposal planned
+before it; a recording on another clock starts a new round. Skips are not
+phases and outlive a round.
+
+**Proposal** — the delays a measurement round implies: each member's lag
+behind the earliest one, added to the delay it had. Applying writes it
+through Music Assistant; it is never older than the round.
+
 ## Music Assistant
 
 **Player id** — Music Assistant's own id for the player fronting one of our
