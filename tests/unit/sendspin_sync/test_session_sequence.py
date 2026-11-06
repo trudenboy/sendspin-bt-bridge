@@ -267,3 +267,52 @@ def test_the_time_a_sequence_needs_counts_the_music_assistant_steps():
     nominal = seq.length_s(4, "device")
     assert seq.needed_s(4, "device") > nominal
     assert seq.needed_s(4, "device", lead_s=seq.RECORDER_LEAD_S) > seq.needed_s(4, "device")
+
+
+# -- one clock per round ----------------------------------------------------------------------------
+
+
+def test_a_microphone_recording_after_a_sequence_starts_a_new_round():
+    """A phase from the sequence's file and one from the browser's microphone are on two clocks; the
+    planner would subtract them as if they were one."""
+    from tests.support.sync_synth import synth
+
+    s, _ctl, clock, _ = ready()
+    s.start_sequence(["a", "b"])
+    run(s, clock)
+    pcm, _slots = sequence_recording({"a": 0.0, "b": 0.030})
+    s.record_sequence(pcm, 16000)
+    s.skip("cast")
+
+    s.record(synth("a", lag_s=0.0))
+
+    assert set(s.measurements) == {"a", "cast"}
+    assert s.measurements["cast"].status == "skipped"
+
+
+def test_a_worse_recording_of_the_same_sequence_keeps_the_better_one():
+    """Recording the same sequence again and hearing fewer speakers must not throw away the speakers
+    the first recording heard."""
+    s, _ctl, clock, _ = ready()
+    s.start_sequence(["a", "b"])
+    run(s, clock)
+    good, _slots = sequence_recording({"a": 0.0, "b": 0.030})
+    s.record_sequence(good, 16000)
+    worse, _slots = sequence_recording({"a": 0.0, "b": 0.030}, silent=frozenset({"b"}))
+
+    s.record_sequence(worse, 16000)
+
+    assert {k: v.status for k, v in s.measurements.items()} == {"a": "ok", "b": "ok"}
+
+
+def test_a_better_recording_of_the_same_sequence_replaces_the_worse_one():
+    s, _ctl, clock, _ = ready()
+    s.start_sequence(["a", "b"])
+    run(s, clock)
+    worse, _slots = sequence_recording({"a": 0.0, "b": 0.030}, silent=frozenset({"b"}))
+    s.record_sequence(worse, 16000)
+    good, _slots = sequence_recording({"a": 0.0, "b": 0.030})
+
+    s.record_sequence(good, 16000)
+
+    assert {k: v.status for k, v in s.measurements.items()} == {"a": "ok", "b": "ok"}

@@ -143,6 +143,10 @@ class SyncSession:
         self.volumes_before: dict[str, int] = {}
         self._clicker_started: float | None = None  # clock at the last clicker start
         self._seq_t0: float | None = None  # clock when the last sequence's lead-in began
+        # Where the phases of this round come from: one sequence recording (its file's clock), or the
+        # browser's microphone (its audio clock). Phases from the two are never compared.
+        self._round_source: Literal["sequence", "microphone"] | None = None
+        self._round_sequence: dict[str, Any] | None = None
         # the phone capture's sequence (every member alone in turn, recorded once); None before one
         self.sequence: dict[str, Any] | None = None
         self._seq_slots: list[seq.Slot] = []
@@ -293,6 +297,7 @@ class SyncSession:
             # phase: it stays)
             self.measurements = {mid: m for mid, m in self.measurements.items() if m.status == "skipped"}
             self._generation += 1
+            self._round_source, self._round_sequence = None, None
         self.touch()
         self._changed()
 
@@ -633,12 +638,20 @@ class SyncSession:
                 raise ControlError("session_state", "the measurement changed while estimating")
             present = {m.ma_player_id for m in self.members}
             results = {mid: m for mid, m in results.items() if mid in present}
+            heard = sum(1 for m in results.values() if m.status == "ok")
+            if self._round_source == "sequence" and self._round_sequence is current:
+                had = sum(1 for m in self.measurements.values() if m.status == "ok")
+                if heard < had:
+                    # the same sequence recorded again, worse: the better recording stays
+                    self.touch()
+                    return results
             # one clock per round: a phase measured on another recording (the microphone, an earlier
             # sequence) cannot be compared with these, so only skips are kept beside them
             self.measurements = {
                 mid: m for mid, m in self.measurements.items() if m.status == "skipped" and mid not in results
             }
             self.measurements.update(results)
+            self._round_source, self._round_sequence = "sequence", current
             self._measurements_changed()
             current["uploaded"] = True
             self.touch()
@@ -726,6 +739,10 @@ class SyncSession:
             if self._generation != generation:
                 raise ControlError("session_state", "the measurement round changed while estimating")
             self._member(recording.member)
+            if self._round_source == "sequence":
+                # the round so far was measured on a sequence's file: the microphone starts a new one
+                self.measurements = {mid: x for mid, x in self.measurements.items() if x.status == "skipped"}
+            self._round_source, self._round_sequence = "microphone", None
             self.measurements[recording.member] = m
             self._measurements_changed()
             self.touch()

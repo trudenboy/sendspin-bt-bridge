@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Measuring a speaker again, or skipping it, after group sync has proposed delays withdraws that proposal, so applying always writes delays computed from the latest measurements.
 - A group sync sequence no longer fails part-way with "clicker stopped" late in the click track: when the clicks would end before the last speaker's solo, they start over before the sequence begins (skipped speakers stay skipped), and a sequence too long for the click track is refused up front.
 - Measuring a group with a bridge input now records the whole sequence: the bridge starts recording before the first speaker plays and stops only after the last one has finished, and uses the moment it started recording to tell which speaker played when.
+- Recording the same group sync sequence again no longer throws away speakers the first recording heard when the second one hears fewer, and measuring with this device's microphone after a sequence starts a fresh round instead of comparing phases taken on two different clocks.
 
 ## [3.2.0-beta.24] - 2026-11-06
 
