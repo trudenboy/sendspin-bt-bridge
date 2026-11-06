@@ -196,6 +196,14 @@ class SyncSession:
             return member.delay_ms
         return self.snapshot.delays.get(member.ma_player_id, 0) if self.snapshot else 0
 
+    def _measurements_changed(self) -> None:
+        """Under the lock: a measurement was added, replaced or skipped. A proposal planned from the
+        earlier measurements no longer describes them: it is withdrawn, and applying waits for a new
+        one."""
+        if self.proposal is not None or self.state == "proposed":
+            self.proposal = None
+            self.state = "measuring"
+
     def _set_member_delay(self, mid: str, ms: int) -> None:
         self.members = [dataclasses.replace(m, delay_ms=ms) if m.ma_player_id == mid else m for m in self.members]
 
@@ -599,6 +607,7 @@ class SyncSession:
                 mid: m for mid, m in self.measurements.items() if m.status == "skipped" and mid not in results
             }
             self.measurements.update(results)
+            self._measurements_changed()
             current["uploaded"] = True
             self.touch()
             self._changed()
@@ -686,6 +695,7 @@ class SyncSession:
                 raise ControlError("session_state", "the measurement round changed while estimating")
             self._member(recording.member)
             self.measurements[recording.member] = m
+            self._measurements_changed()
             self.touch()
             self._changed()
         return m
@@ -700,6 +710,7 @@ class SyncSession:
         self._apply_membership(current)
         self._member(member)
         self.measurements[member] = Measurement(member=member, status="skipped", reason="skipped")
+        self._measurements_changed()
         self.touch()
         self._changed()
 

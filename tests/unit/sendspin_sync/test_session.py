@@ -476,6 +476,25 @@ def test_a_member_can_be_measured_again_after_the_proposal_before_applying():
     assert ctl.delays_now["b"] == pytest.approx(40, abs=1)
 
 
+def test_a_measurement_after_the_proposal_withdraws_it():
+    """Applying must never write a proposal older than the measurements: re-measuring b at +40 ms
+    and applying without proposing again used to write the +30 ms of the first proposal."""
+    s, ctl, _ = _measured_and_proposed()
+    s.record(synth("b", lag_s=0.040))
+
+    assert s.state == "measuring" and s.proposal is None
+    with pytest.raises(ControlError) as exc:
+        s.apply()
+    assert exc.value.code == "session_state"
+    assert ctl.delays_now["b"] == 0  # nothing was written
+
+
+def test_a_skip_after_the_proposal_withdraws_it():
+    s, _ctl, _ = _measured_and_proposed()
+    s.skip("b")
+    assert s.state == "measuring" and s.proposal is None
+
+
 def test_finish_is_refused_before_the_session_started_and_while_restoring():
     s, _ctl, _ = make()
     with pytest.raises(ControlError) as exc:
