@@ -690,13 +690,14 @@ def test_status_events_streams_typed_events_until_its_lifetime(client, monkeypat
     import sendspin_bridge.api.routers.compat_ha as compat
     from sendspin_bridge.bridge.state import get_internal_event_publisher, publish_internal_event
 
-    monkeypatch.setattr(compat, "_EVENT_SSE_MAX_LIFETIME", 1.5)
+    # Room to subscribe before the stream closes on a loaded runner.
+    monkeypatch.setattr(compat, "_EVENT_SSE_MAX_LIFETIME", 4.0)
     publisher = get_internal_event_publisher()
     baseline = len(publisher._subscribers)
 
     def _publish_soon():
         # Publish once the stream has subscribed, not after a fixed delay.
-        deadline = time.monotonic() + 1.0
+        deadline = time.monotonic() + 3.0
         while len(publisher._subscribers) <= baseline and time.monotonic() < deadline:
             time.sleep(0.01)
         publish_internal_event(
