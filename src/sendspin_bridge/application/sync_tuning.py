@@ -799,13 +799,19 @@ async def capture_input(sid: str, input_id: str, seconds: float | None = None) -
 
 
 def _input_busy(view: Mapping[str, Any], input_id: str) -> bool:
-    """The source client is capturing this input: borrowing the node would fight it."""
-    from sendspin_bridge.services.source import manager as source_manager
+    """The source client holds the node only while a capture is actually open.
+
+    Selected is not captured: with the feed enabled and the input chosen, the
+    card sits on HFP and the node exists, but nothing reads it until Music
+    Assistant starts the stream. Refusing then would make the one microphone
+    the operator has unusable for the very measurement that needs it.
+    """
     from sendspin_bridge.services.source import state as source_state
 
     if str(view.get("active_input") or "") != input_id:
         return False
-    return source_manager.running() or source_state.snapshot().enabled
+    current = source_state.snapshot()
+    return bool(current.streaming) or current.state == "streaming"
 
 
 def _recorder_tool(view: Mapping[str, Any]) -> str:

@@ -238,15 +238,29 @@ def test_the_recording_length_is_the_sequences_and_is_clamped(api_client, source
 # -- borrow, never select --------------------------------------------------------------------
 
 
-def test_an_input_the_source_client_captures_is_refused_as_busy(api_client, source_view, recorder):
+def test_an_input_the_source_client_is_streaming_from_is_refused_as_busy(api_client, source_view, recorder):
     from sendspin_bridge.services.source import state
 
     source_view["active_input"] = LOCAL["id"]
-    state.publish(enabled=True, active_input=LOCAL["id"])
+    state.publish(enabled=True, active_input=LOCAL["id"], streaming=True, state="streaming")
     sid = _ready(api_client)
     resp = _capture(api_client, sid, LOCAL["id"])
     assert resp.status_code == 409 and resp.json()["code"] == "input_busy"
     assert recorder.calls == []
+
+
+def test_a_selected_but_idle_source_input_can_be_borrowed(api_client, source_view, clocked, recorder):
+    """Enabled and chosen is not busy: nothing reads the node until a stream opens."""
+    from sendspin_bridge.services.source import state
+
+    source_view["active_input"] = LOCAL["id"]
+    recorder.payload, _slots = sequence_recording({"a": 0.0, "b": 0.030})
+    sid = _ready(api_client)
+    _play_sequence(api_client, sid)
+    state.publish(enabled=True, active_input=LOCAL["id"], streaming=False, state="waiting")
+    resp = _capture(api_client, sid, LOCAL["id"])
+    assert resp.status_code == 200, resp.text
+    assert recorder.calls, "the idle input was not recorded"
 
 
 def test_the_active_source_input_is_unchanged_by_the_recording(api_client, source_view, clocked, recorder, tmp_config):
