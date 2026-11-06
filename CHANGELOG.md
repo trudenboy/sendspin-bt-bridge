@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Diagnostics page, the guidance and recovery panels and the diagnostics bundle attached to a bug report now report the same health as the header: disabled speakers no longer turn "All devices disabled" into "Waiting for setup", and the recovery and latency panels use the same host check the header does.
+
 ## [3.2.0-beta.24] - 2026-11-06
 
 ### Added

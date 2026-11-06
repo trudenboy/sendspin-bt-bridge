@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sendspin_bridge.application import read_model
 from sendspin_bridge.application.errors import UseCaseError, config_write_error
 from sendspin_bridge.bluetooth.bluez import Outcome, get_bluez
 from sendspin_bridge.config import (
@@ -63,7 +64,6 @@ from sendspin_bridge.services.lifecycle.bridge_runtime_state import (
     get_bridge_uptime_text,
 )
 from sendspin_bridge.services.lifecycle.status_snapshot import (
-    build_bridge_snapshot,
     build_device_snapshot,
     build_device_snapshot_pairs,
     build_group_snapshots,
@@ -481,55 +481,19 @@ def _build_operator_guidance_payload(
 
 def _build_status_payload() -> dict:
     """Build the full `/api/status` payload including unified operator guidance."""
-    registry = get_device_registry_snapshot()
-    bridge_snapshot = build_bridge_snapshot(registry.active_clients)
-    payload = bridge_snapshot.to_status_payload()
-    config = load_config()
-    preflight = _sampled_preflight_status()
-    startup_progress = bridge_snapshot.startup_progress.to_dict() if bridge_snapshot.startup_progress else {}
-    bridge_state = build_bridge_state_model(
-        config=config,
-        preflight=preflight,
-        devices=bridge_snapshot.devices,
-        ma_connected=bridge_snapshot.ma_connected,
-        runtime_mode=bridge_snapshot.runtime_mode,
-        startup_progress=startup_progress,
-        update_available=bool(bridge_snapshot.update_available),
-        disabled_devices=bridge_snapshot.disabled_devices,
-    )
-    onboarding_assistant = _build_onboarding_assistant_payload(
-        preflight=preflight,
-        config=config,
-        devices=bridge_snapshot.devices,
-        runtime_mode=bridge_snapshot.runtime_mode,
-        ma_connected=bridge_snapshot.ma_connected,
-        bridge_state=bridge_state,
-    )
-    recovery_assistant = _build_recovery_assistant_payload(
-        preflight=preflight,
-        config=config,
-        devices=bridge_snapshot.devices,
-        onboarding_assistant=onboarding_assistant,
-        startup_progress=startup_progress,
-        bridge_state=bridge_state,
-    )
-    payload["preflight"] = preflight
-    payload["state_model"] = bridge_state.to_dict()
-    payload["onboarding_assistant"] = onboarding_assistant
-    payload["recovery_assistant"] = recovery_assistant
-    payload["operator_guidance"] = _build_operator_guidance_payload(
-        config=config,
-        devices=bridge_snapshot.devices,
-        disabled_devices=bridge_snapshot.disabled_devices,
-        onboarding_assistant=onboarding_assistant,
-        recovery_assistant=recovery_assistant,
-        startup_progress=startup_progress,
-        preflight=preflight,
-        runtime_mode=bridge_snapshot.runtime_mode,
-        ma_connected=bridge_snapshot.ma_connected,
-        bridge_state=bridge_state,
-    )
+    view = read_model.build(read_model.inputs_now())
+    payload = view.inputs.snapshot.to_status_payload()
+    payload["preflight"] = view.inputs.preflight
+    payload["state_model"] = view.bridge_state.to_dict()
+    payload["onboarding_assistant"] = view.onboarding
+    payload["recovery_assistant"] = view.recovery
+    payload["operator_guidance"] = view.guidance
     return payload
+
+
+def _read_view() -> read_model.ReadView:
+    """The read model of the running bridge, from the sampled host probe."""
+    return read_model.build(read_model.inputs_now())
 
 
 def get_client_status_for(client):
@@ -903,87 +867,26 @@ def diagnostics(*, auth_enabled: bool = False) -> dict:
                 fallback={"error": "Failed to collect event hooks"},
                 log_message="Failed to collect event hooks for diagnostics",
             )
-        # The normalised device state, built once and shared with everything
-        # below.  `/api/status` has always passed it; this endpoint did not,
-        # so the same speaker produced different issues, traces and timeline
-        # entries depending on which page the operator opened — and the
-        # bundle attached to a bug report was the one built the other way.
-        diagnostics_config = load_config()
-        diagnostics_devices = [device for _client, device in snapshot_pairs]
-        # Measured, not guessed: the bundle has no "preflight" key, so this
-        # used to hand the state model an empty one.  An empty preflight reads
-        # as "D-Bus unavailable", and the recovery card in the bundle then
-        # reported a runtime that cannot reach D-Bus on a host that was
-        # paired, connected and playing.
-        # A bug report is taken because something looks wrong, so this one
-        # measures the host rather than reading the sampled value.
-        diagnostics_preflight = _collect_preflight_status()
-        try:
-            diagnostics_state = build_bridge_state_model(
-                config=diagnostics_config,
-                devices=diagnostics_devices,
-                runtime_mode=diag["runtime_info"].get("mode", "unknown"),
-                ma_connected=is_ma_connected(),
-                preflight=diagnostics_preflight,
-            )
-        except Exception:
-            logger.warning("Could not build the state model for diagnostics", exc_info=True)
-            diagnostics_state = None
-
-        try:
-            onboarding_assistant = _build_onboarding_assistant_payload(
-                preflight=diagnostics_preflight,
-                config=diagnostics_config,
-                devices=diagnostics_devices,
-                runtime_mode=diag["runtime_info"].get("mode", "unknown"),
-                ma_connected=is_ma_connected(),
-                bridge_state=diagnostics_state,
-            )
-            diag["onboarding_assistant"] = onboarding_assistant
-            _record_success("onboarding_assistant")
-        except Exception as exc:
-            onboarding_assistant = {"error": "Failed to build onboarding assistant"}
-            diag["onboarding_assistant"] = _record_failure(
-                "onboarding_assistant",
-                exc,
-                fallback=onboarding_assistant,
-                log_message="Failed to build onboarding assistant for diagnostics",
-            )
-        try:
-            diag["recovery_assistant"] = _build_recovery_assistant_payload(
-                preflight=diagnostics_preflight,
-                config=diagnostics_config,
-                devices=diagnostics_devices,
-                onboarding_assistant=onboarding_assistant,
-                startup_progress=diag["startup_progress"],
-                bridge_state=diagnostics_state,
-            )
-            _record_success("recovery_assistant")
-        except Exception as exc:
-            diag["recovery_assistant"] = _record_failure(
-                "recovery_assistant",
-                exc,
-                fallback={"error": "Failed to build recovery assistant"},
-                log_message="Failed to build recovery assistant for diagnostics",
-            )
-        try:
-            diag["operator_guidance"] = _build_operator_guidance_payload(
-                config=load_config(),
-                devices=[device for _client, device in snapshot_pairs],
-                onboarding_assistant=onboarding_assistant,
-                recovery_assistant=diag["recovery_assistant"],
-                startup_progress=diag["startup_progress"],
-                runtime_mode=diag["runtime_info"].get("mode", "unknown"),
-                ma_connected=is_ma_connected(),
-            )
-            _record_success("operator_guidance")
-        except Exception as exc:
-            diag["operator_guidance"] = _record_failure(
-                "operator_guidance",
-                exc,
-                fallback={"error": "Failed to build operator guidance"},
-                log_message="Failed to build operator guidance for diagnostics",
-            )
+        # The same read model `/status` renders, so the bundle attached to a
+        # bug report describes the bridge the header described.  A bug report
+        # is taken because something looks wrong, so this one measures the
+        # host rather than reading the sampled probe.
+        view = read_model.build(read_model.inputs_now(registry=registry, fresh_preflight=True))
+        for key, part, label in (
+            ("onboarding_assistant", "onboarding", "onboarding assistant"),
+            ("recovery_assistant", "recovery", "recovery assistant"),
+            ("operator_guidance", "guidance", "operator guidance"),
+        ):
+            try:
+                diag[key] = getattr(view, part)
+                _record_success(key)
+            except Exception as exc:
+                diag[key] = _record_failure(
+                    key,
+                    exc,
+                    fallback={"error": f"Failed to build {label}"},
+                    log_message=f"Failed to build {label} for diagnostics",
+                )
         try:
             diag["telemetry"] = _build_bridge_telemetry_payload(
                 environment=diag["environment"],
@@ -1982,29 +1885,29 @@ def diagnostics_text_report(*, auth_enabled: bool) -> tuple[str, str]:
 
 def onboarding_assistant() -> dict:
     """Actionable setup guidance derived from current runtime health."""
-    return _build_onboarding_assistant_payload()
+    return _read_view().onboarding
 
 
 def recovery_assistant() -> dict:
     """Recovery, trace and latency guidance derived from runtime health."""
-    return _build_recovery_assistant_payload()
+    return _read_view().recovery
 
 
 def recovery_timeline() -> dict:
     """The structured chronological recovery timeline."""
-    return _build_recovery_assistant_payload().get("timeline") or {"summary": {"entry_count": 0}, "entries": []}
+    return _read_view().recovery.get("timeline") or {"summary": {"entry_count": 0}, "entries": []}
 
 
 def recovery_timeline_csv() -> tuple[str, str]:
     """The recovery timeline as CSV, and its download file name."""
-    timeline = _build_recovery_assistant_payload().get("timeline") or {"entries": []}
+    timeline = _read_view().recovery.get("timeline") or {"entries": []}
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
     return build_recovery_timeline_csv(timeline), f"sendspin-recovery-timeline-{timestamp}.csv"
 
 
 def operator_guidance() -> dict:
     """The unified operator guidance shown in the dashboard header and banners."""
-    return _build_operator_guidance_payload()
+    return _read_view().guidance
 
 
 def rerun_check(check_key: str, device_names: list[str] | None = None) -> dict:
@@ -2020,7 +1923,7 @@ def rerun_check(check_key: str, device_names: list[str] | None = None) -> dict:
 
 def latency_recommendations() -> dict:
     """The latency assistant: recommended PulseAudio latency and why."""
-    return _build_recovery_assistant_payload().get("latency_assistant") or {}
+    return _read_view().recovery.get("latency_assistant") or {}
 
 
 def apply_latency_recommendation(pulse_latency_msec: int) -> dict:
@@ -2035,7 +1938,7 @@ def apply_latency_recommendation(pulse_latency_msec: int) -> dict:
         update_config(_mutate)
     except OSError as exc:
         raise config_write_error(exc, context="Cannot save latency") from exc
-    latency = _build_recovery_assistant_payload(config=load_config()).get("latency_assistant") or {}
+    latency = _read_view().recovery.get("latency_assistant") or {}
     return {
         "pulse_latency_msec": pulse_latency_msec,
         "restart_required": True,
