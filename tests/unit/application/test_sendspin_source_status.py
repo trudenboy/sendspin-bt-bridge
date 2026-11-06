@@ -121,7 +121,7 @@ def test_a_failed_headset_restore_keeps_the_source_error_visible_while_the_feed_
     from sendspin_bridge.services.bluetooth import headset
 
     service = headset.HeadsetProfileService()
-    service._publish(PHONE, "failed")
+    service._set_handoff(PHONE, "restore_failed")
     monkeypatch.setattr(headset, "_service", service)
     source_state.publish(state="off", error="headset_a2dp_restore_failed", streaming=False)
 
@@ -131,6 +131,6 @@ def test_a_failed_headset_restore_keeps_the_source_error_visible_while_the_feed_
     assert block.enabled is False
     assert block.error == "headset_a2dp_restore_failed"
 
-    service._publish(PHONE, None)
+    service._set_handoff(PHONE, "none")
     source_state.publish(error=None)
     assert status._sendspin_source({"SENDSPIN_SOURCE": False}) is None
