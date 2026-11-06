@@ -50,12 +50,20 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  /** Saves and applies; returns what the bridge applied live and what needs a restart. */
+  /**
+   * Saves and applies; returns what the bridge applied live and what needs a restart.
+   *
+   * The players are left out: Settings never edits them, and the copy read when
+   * the page opened may be older than what the bridge has written since — a
+   * speaker's latency compensation, its air calibrations and learned latencies.
+   * The bridge keeps its players when a save does not mention them.
+   */
   async function saveConfig() {
     if (!config.value) return
     saving.value = true
     try {
-      const result = await apiSaveConfig(config.value)
+      const { players: _players, ...settings } = config.value as BridgeConfig & { players?: unknown }
+      const result = await apiSaveConfig(settings as BridgeConfig)
       const snapshot = JSON.stringify(config.value)
       originalConfig.value = JSON.parse(snapshot)
       _originalJson.value = snapshot
