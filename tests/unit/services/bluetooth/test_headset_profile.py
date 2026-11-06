@@ -83,8 +83,7 @@ def test_release_restores_a2dp_and_the_player(monkeypatch):
     monkeypatch.setattr(headset.bt_audio, "card_profile_state", lambda _pa: _card())
     monkeypatch.setattr(headset, "set_card_profile", lambda _name, profile: profiles.append(profile) or True)
     monkeypatch.setattr(headset, "_client_for_mac", lambda _mac: client)
-    started: list[object] = []
-    monkeypatch.setattr(headset, "_scheduled_start", lambda c: started.append(c))
+    monkeypatch.setattr(headset.bt_audio, "list_sinks", lambda: [{"name": "bluez_sink.80_99_E7_C2_0B_D3.a2dp_sink"}])
     service = headset.HeadsetProfileService()
 
     asyncio.run(service.acquire_microphone(_MAC))
@@ -92,7 +91,7 @@ def test_release_restores_a2dp_and_the_player(monkeypatch):
 
     assert "a2dp_sink" in profiles
     assert service.active(_MAC) is False
-    assert started == [client]
+    client.start_sendspin.assert_awaited_once()
 
 
 def test_router_acquires_the_headset_and_exposes_the_capture():

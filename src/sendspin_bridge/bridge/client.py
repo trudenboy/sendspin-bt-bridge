@@ -2120,6 +2120,19 @@ class SendspinClient:
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        mac = getattr(getattr(self, "bt_manager", None), "mac_address", None)
+        if isinstance(mac, str) and mac:
+            if get_headset_profiles().blocked(mac):
+                return
+            async with get_headset_profiles().player_start(mac) as allowed:
+                if allowed:
+                    await self._start_sendspin_owned()
+            return
+        await self._start_sendspin_owned()
+
+    async def _start_sendspin_owned(self) -> None:
         lock = self._start_sendspin_lock
         if lock is None:
             await self._start_sendspin_inner()
@@ -2172,25 +2185,14 @@ class SendspinClient:
         if updates:
             self._update_status(updates)
 
-    def retry_a2dp(self) -> bool:
-        """Retry the bounded A2DP path from a device action (thread-safe)."""
+    async def retry_a2dp(self) -> bool:
+        """Retry on the bridge loop through the profile owner, never a worker thread."""
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
         manager = getattr(self, "bt_manager", None)
-        if manager is None or not getattr(manager, "connected", False):
+        if manager is None or not manager.connected:
             return False
-        manager.configure_bluetooth_audio()
-        self._sync_bt_profile_status()
-        if manager.audio_sink_ready:
-            schedule_on_bridge_loop(self.start_sendspin(), description="A2DP retry")
-            return True
-        self._update_status(
-            {
-                "a2dp_available": False,
-                "profile_mode": "hfp_only" if getattr(manager, "hfp_available", False) else "unavailable",
-                "sink_missing": True,
-                "playing": False,
-            }
-        )
-        return False
+        return await get_headset_profiles().retry_a2dp(manager.mac_address)
 
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""

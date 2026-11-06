@@ -790,6 +790,12 @@ class BluetoothManager:
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        with get_headset_profiles().automatic_audio(self.mac_address) as allowed:
+            return self._configure_bluetooth_audio_owned() if allowed else False
+
+    def _configure_bluetooth_audio_owned(self) -> bool:
         if self._reconnect_cancelled():
             return False
         profile = bt_audio.card_profile_state(DeviceAddress.require(self.mac_address).underscores)
@@ -1285,6 +1291,14 @@ class BluetoothManager:
         *wait* bounds how long to wait for an attempt another path has in
         flight; ``0`` returns at once. Blocking: call it off the loop.
         """
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        with get_headset_profiles().automatic_audio(self.mac_address) as allowed:
+            if not allowed:
+                return False
+            return self._early_a2dp_role_flip_owned(wait=wait, allow_unknown_uuids=allow_unknown_uuids)
+
+    def _early_a2dp_role_flip_owned(self, *, wait: float, allow_unknown_uuids: bool) -> bool:
         if not self.early_role_flip_pending:
             return False
         acquired = self._early_flip_lock.acquire(timeout=wait) if wait > 0 else self._early_flip_lock.acquire(False)

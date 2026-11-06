@@ -114,7 +114,13 @@ def retry_a2dp(device_id: str) -> dict[str, Any]:
         raise UseCaseError(409, "not_bluetooth", "This player is not a Bluetooth player")
     if not getattr(manager, "connected", False):
         raise UseCaseError(409, "not_connected", "The Bluetooth device is not connected")
-    threading.Thread(target=client.retry_a2dp, daemon=True).start()
+    from sendspin_bridge.bridge.loop_scheduling import schedule_on_bridge_loop
+    from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+    if get_headset_profiles().capture_owned(manager.mac_address):
+        raise UseCaseError(409, "headset_microphone_active", "Release the headset microphone before retrying A2DP")
+    if schedule_on_bridge_loop(client.retry_a2dp(), description="A2DP recovery") is None:
+        raise UseCaseError(503, "bridge_unavailable", "The bridge event loop is not available")
     return {"retrying": True}
 
 

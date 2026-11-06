@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 from sendspin_bridge.services.audio.pulse import set_card_profile
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -103,90 +108,225 @@ def _set_status(client: Any | None, **values: Any) -> None:
 
 
 class HeadsetProfileService:
-    """The single owner of the A2DP/HFP hand-off for microphone capture."""
+    """Own profile transitions on the bridge loop, and fence monitor threads.
+
+    Lock order: SourceClient endpoint -> capture -> this async lock. Automatic
+    Player starts also take this async lock. Blocking configuration takes only
+    _audio_lock, then reads _view_lock; never wait for either on the event loop.
+    Ownership is published before draining existing configuration work.
+    """
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
-        self._active: set[str] = set()
+        self._audio_lock = threading.RLock()
+        self._view_lock = threading.Lock()
+        self._owners: dict[str, str] = {}
         self._resume: dict[str, bool] = {}
 
+    def _phase(self, mac: str) -> str | None:
+        with self._view_lock:
+            return self._owners.get(mac.upper())
+
+    def _publish(self, mac: str, phase: str | None) -> None:
+        with self._view_lock:
+            if phase is None:
+                self._owners.pop(mac, None)
+            else:
+                self._owners[mac] = phase
+
     def active(self, mac: str) -> bool:
-        return mac.upper() in self._active
+        return self._phase(mac) == "microphone"
+
+    def blocked(self, mac: str) -> bool:
+        """Automatic output operations must stay out, including after failure."""
+        return self._phase(mac) is not None
+
+    def capture_owned(self, mac: str) -> bool:
+        """Explicit recovery is forbidden until capture and its transition finish."""
+        return self._phase(mac) in {"acquiring", "microphone", "restoring"}
+
+    @contextmanager
+    def automatic_audio(self, mac: str) -> Iterator[bool]:
+        """Reserve a whole blocking output configuration, including role flips."""
+        with self._audio_lock:
+            yield not self.blocked(mac)
+
+    @asynccontextmanager
+    async def player_start(self, mac: str) -> AsyncIterator[bool]:
+        async with self._lock:
+            yield not self.blocked(mac)
+
+    def _drain_audio(self) -> None:
+        with self._audio_lock:
+            pass
 
     async def acquire_microphone(self, mac: str) -> bool:
+        try:
+            return bool(await _complete(self._acquire_microphone(mac)))
+        except asyncio.CancelledError:
+            await self.release_microphone(mac)
+            raise
+
+    async def _acquire_microphone(self, mac: str) -> bool:
         wanted = mac.upper()
+        acquired = False
         async with self._lock:
-            if wanted in self._active:
+            if self.active(wanted):
                 return True
+            if self.blocked(wanted):
+                return False
             from sendspin_bridge.config import load_config
 
-            config = load_config() or {}
-            player = next(
-                (
-                    entry
-                    for entry in config.get("players") or ()
-                    if isinstance(entry, dict) and str((entry.get("backend") or {}).get("mac") or "").upper() == wanted
-                ),
-                None,
-            )
-            if player is not None and player.get("allow_call_mode") is False:
+            config = await asyncio.to_thread(load_config) or {}
+            if any(
+                isinstance(entry, dict)
+                and str((entry.get("backend") or {}).get("mac") or "").upper() == wanted
+                and entry.get("allow_call_mode") is False
+                for entry in config.get("players") or ()
+            ):
                 return False
-            address = bt_audio.DeviceAddress.require(wanted)
-            card = bt_audio.card_profile_state(address.underscores)
-            if card is None or not card.hfp_available:
-                return False
-            hfp = _pick_hfp(card.profiles)
-            if hfp is None:
-                return False
+            self._publish(wanted, "acquiring")
             client = _client_for_mac(wanted)
-            was_running = bool(getattr(client, "is_running", lambda: False)())
-            self._resume[wanted] = was_running or bool(
-                getattr(client, "status", {}).get("playing", False) if client is not None else False
-            )
-            if client is not None and was_running:
-                try:
-                    await client.stop_sendspin()
-                except Exception:
-                    logger.warning("Headset %s: could not stop the player for microphone mode", wanted, exc_info=True)
-            ok = await asyncio.to_thread(set_card_profile, f"bluez_card.{address.underscores}", hfp)
-            if not ok:
-                self._resume.pop(wanted, None)
+            stopped = False
+            try:
+                await asyncio.to_thread(self._drain_audio)
+                address = bt_audio.DeviceAddress.require(wanted)
+                card = await asyncio.to_thread(bt_audio.card_profile_state, address.underscores)
+                if card is None or not card.hfp_available:
+                    self._publish(wanted, None)
+                    return False
+                hfp = _pick_hfp(card.profiles)
+                if hfp is None:
+                    self._publish(wanted, None)
+                    return False
+                was_running = bool(getattr(client, "is_running", lambda: False)())
                 if client is not None and was_running:
-                    _scheduled_start(client)
-                return False
-            self._active.add(wanted)
-            _set_status(client, profile_mode="microphone", a2dp_available=card.a2dp_available)
-            logger.info("Headset %s: switched card to %s for microphone capture", wanted, hfp)
-            return True
+                    await client.stop_sendspin()
+                stopped = True
+                self._resume[wanted] = was_running
+                acquired = await asyncio.to_thread(set_card_profile, f"bluez_card.{address.underscores}", hfp)
+                self._publish(wanted, "microphone")
+                if acquired:
+                    manager = getattr(client, "bt_manager", None)
+                    if manager is not None:
+                        manager.audio_sink_ready = False
+                        manager.profile_mode = "microphone"
+                    _set_status(client, profile_mode="microphone", a2dp_available=card.a2dp_available)
+            except Exception:
+                if not stopped:
+                    self._publish(wanted, None)
+                logger.warning("Headset %s: microphone acquisition failed", wanted, exc_info=True)
+        if not acquired and stopped:
+            await self.release_microphone(wanted)
+        return acquired
+
+    async def _restore_locked(self, wanted: str) -> bool:
+        from sendspin_bridge.services.source import state
+        from sendspin_bridge.services.source.client import SourceError
+
+        self._publish(wanted, "restoring")
+        client = _client_for_mac(wanted)
+        try:
+            evidence = await asyncio.to_thread(self._restore_audio, wanted)
+        except Exception:
+            evidence = None
+        if evidence is None:
+            self._publish(wanted, "failed")
+            manager = getattr(client, "bt_manager", None)
+            if manager is not None:
+                manager.audio_sink_ready = False
+                manager.profile_mode = "unknown"
+            _set_status(client, profile_mode="unknown", sink_missing=True, playing=False)
+            state.publish(error="headset_a2dp_restore_failed", streaming=False)
+            raise SourceError("headset_a2dp_restore_failed", "Could not restore the headset A2DP profile and output.")
+        card, sink = evidence
+        manager = getattr(client, "bt_manager", None)
+        if manager is not None:
+            manager.audio_sink_ready = True
+            manager.a2dp_available = card.a2dp_available
+            manager.hfp_available = card.hfp_available
+            manager.profile_mode = card.mode
+        if client is not None:
+            client.bluetooth_sink_name = sink
+        _set_status(client, profile_mode="a2dp", a2dp_available=True, sink_missing=False)
+        self._publish(wanted, None)
+        if state.snapshot().error == "headset_a2dp_restore_failed":
+            state.publish(error=None)
+        return self._resume.pop(wanted, False)
+
+    def _restore_audio(self, wanted: str) -> tuple[bt_audio.CardProfileState, str] | None:
+        from sendspin_bridge.services.audio.sink_names import sink_name_candidates
+
+        address = bt_audio.DeviceAddress.require(wanted)
+        with self._audio_lock:
+            card = bt_audio.card_profile_state(address.underscores)
+            profile = _pick_a2dp(card.profiles) if card else None
+            if profile is None or not set_card_profile(f"bluez_card.{address.underscores}", profile):
+                return None
+            card = bt_audio.card_profile_state(address.underscores)
+            names = {entry["name"] for entry in bt_audio.list_sinks() or ()}
+            sink = next((name for name in sink_name_candidates(address) if name in names), None)
+            if card is None or card.mode != "a2dp" or sink is None:
+                return None
+            return card, sink
 
     async def release_microphone(self, mac: str) -> None:
+        await _complete(self._release_microphone(mac))
+
+    async def _release_microphone(self, mac: str) -> None:
         wanted = mac.upper()
         async with self._lock:
-            if wanted not in self._active:
+            if self._phase(wanted) not in {"microphone", "acquiring"}:
                 return
-            self._active.discard(wanted)
-            resume = self._resume.pop(wanted, False)
-            address = bt_audio.DeviceAddress.require(wanted)
-            card = bt_audio.card_profile_state(address.underscores)
-            a2dp = _pick_a2dp(card.profiles) if card is not None else None
-            client = _client_for_mac(wanted)
-            if a2dp is not None:
-                ok = await asyncio.to_thread(set_card_profile, f"bluez_card.{address.underscores}", a2dp)
-                if not ok:
-                    logger.warning("Headset %s: could not restore the A2DP profile", wanted)
-            _set_status(client, profile_mode="a2dp" if a2dp else "unknown")
-            if resume and client is not None:
-                _scheduled_start(client)
+            resume = await self._restore_locked(wanted)
+        if resume and (client := _client_for_mac(wanted)) is not None:
+            await client.start_sendspin()
+
+    async def retry_a2dp(self, mac: str) -> bool:
+        """One explicit recovery on the bridge loop, after capture has released."""
+        if self.capture_owned(mac):
+            return False
+        return bool(await _complete(self._retry_a2dp(mac)))
+
+    async def _retry_a2dp(self, mac: str) -> bool:
+        wanted = mac.upper()
+        async with self._lock:
+            if self.capture_owned(wanted):
+                return False
+            if self._phase(wanted) == "failed":
+                resume = await self._restore_locked(wanted)
+            else:
+                client = _client_for_mac(wanted)
+                manager = getattr(client, "bt_manager", None)
+                if manager is None or not manager.connected:
+                    return False
+                if not await asyncio.to_thread(manager.configure_bluetooth_audio):
+                    return False
+                if client is not None:
+                    client._sync_bt_profile_status()
+                resume = True
+        if resume and (client := _client_for_mac(wanted)) is not None:
+            await client.start_sendspin()
+        return True
 
 
-def _scheduled_start(client: Any) -> None:
-    """Start the player from a worker thread without owning the bridge loop."""
-    try:
-        from sendspin_bridge.bridge.loop_scheduling import schedule_on_bridge_loop
+async def _complete(operation: Any) -> Any:
+    """Settle a whole ownership transaction before delivering cancellation.
 
-        schedule_on_bridge_loop(client.start_sendspin(), description="headset profile restore")
-    except Exception:
-        logger.warning("Headset: could not schedule player restart", exc_info=True)
+    Shielding is bounded to a task we always join, including repeated cancel;
+    no profile worker or resume task escapes to mutate a later selection.
+    """
+    task = asyncio.create_task(operation)
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+    result = task.result()
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
 
 
 _service: HeadsetProfileService | None = None

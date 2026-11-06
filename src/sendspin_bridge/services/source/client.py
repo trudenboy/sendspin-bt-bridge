@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import logging
 import secrets
 import time
@@ -204,15 +205,6 @@ class SourceClient:
 
     async def stop(self) -> dict[str, Any]:
         """Disconnect and release everything; a second call is a no-op."""
-        release = getattr(self._capture_backend, "release_active", None)
-        if callable(release):
-            try:
-                await release()
-            except Exception:
-                logger.warning("Source: could not restore the headset profile", exc_info=True)
-        if not self.running and self._client is None:
-            source_state.publish(enabled=False, state="off", ma_connected=False, streaming=False)
-            return {"started": False, "already": True}
         self._stop.set()
         self._disconnected.set()
         for task in (self._watch_task, self._run_task):
@@ -222,7 +214,17 @@ class SourceClient:
                     await task
         self._watch_task = None
         self._run_task = None
-        await self._stop_capture()
+        async with self._endpoint_lock:
+            self._stream_requested = False
+            await self._stop_capture()
+            release = getattr(self._capture_backend, "release_active", None)
+            if callable(release):
+                try:
+                    await release()
+                except SourceError as exc:
+                    source_state.publish(error=exc.code)
+                    logger.warning("Source: could not restore the headset profile", exc_info=True)
+
         if self._subscription is not None:
             with contextlib.suppress(Exception):
                 await self._subscription.stop()
@@ -234,7 +236,6 @@ class SourceClient:
         self._signal = None
         self._endpoint = None
         self._preferred_mac = None
-        self._set_backend_preference(None)
         source_state.publish(
             enabled=False,
             state="off",
@@ -246,7 +247,7 @@ class SourceClient:
             ma_pairing_code=None,
             ma_pairing_until=0.0,
             ma_error=None,
-            error=None,
+            error=source_state.snapshot().error,
             target_player=None,
             target_error=None,
             active_input=None,
@@ -427,10 +428,12 @@ class SourceClient:
         if callable(setter):
             setter(mac)
 
-    def _set_backend_active(self, source_id: str | None) -> None:
+    async def _set_backend_active(self, source_id: str | None) -> None:
         setter = getattr(self._capture_backend, "set_active", None)
         if callable(setter):
-            setter(source_id)
+            result = setter(source_id)
+            if inspect.isawaitable(result):
+                await result
             return
         if source_id and source_id.startswith("bluetooth:"):
             self._set_backend_preference(source_id.split(":", 1)[1])
@@ -438,41 +441,40 @@ class SourceClient:
             self._set_backend_preference(None)
 
     async def set_active(self, source_id: str | None, *, play_target: bool = True) -> str | None:
-        """Switch the captured input; None means "no active input", not auto-Bluetooth."""
-        chosen = str(source_id or "").strip() or "none"
-        if chosen == self._active_input:
-            return None
-        old = self._active_input
-        was_streaming = self._stream is not None
-        if old and old.startswith("headset-mic:"):
-            release = getattr(self._capture_backend, "release_active", None)
-            if callable(release):
-                await release()
-        self._active_input = chosen
-        self._set_backend_active(chosen)
-        source_state.publish(active_input=None if chosen == "none" else chosen, target_error=None, error=None)
-        if was_streaming:
-            # One server start authorises one capture opening; the switched
-            # input needs MA to ask again.
+        """Serialize selection/watch/stop: endpoint lock before capture/profile locks.
+
+        None is an explicit deselection; only the initial None setting means
+        auto-Bluetooth. Every changed choice invalidates the previous MA grant.
+        """
+        async with self._endpoint_lock:
+            chosen = str(source_id or "").strip() or "none"
+            if chosen == self._active_input:
+                return None
+            old = self._active_input
+            was_streaming = self._stream is not None
             self._stream_requested = False
             await self._stop_capture()
             self._endpoint = None
-        await self._sync_endpoint()
-        if chosen.startswith("local:") and self._endpoint is None:
-            # The node vanished before we could open it: restore the previous
-            # choice so a failed switch does not lose the operator's source.
-            self._active_input = old
-            self._set_backend_active(old)
-            source_state.publish(active_input=None if old in (None, "none") else old)
-            await self._sync_endpoint()
-            raise SourceError("input_unavailable", "That local audio input is not present.")
-        if play_target and self._target_player and self._endpoint is not None:
-            return await self._play_target(allow_without_stream=True)
-        if was_streaming:
-            if not self._target_player:
-                source_state.publish(target_error="press_play")
-            source_state.publish(state=await self._idle_state(), streaming=False)
-        return None
+            try:
+                await self._set_backend_active(chosen)
+                self._active_input = chosen
+                await self._sync_endpoint_locked()
+                if chosen.startswith(("local:", "headset-mic:")) and self._endpoint is None:
+                    raise SourceError("input_unavailable", "That audio input is not present.")
+            except BaseException:
+                await self._set_backend_active(old)
+                self._active_input = old
+                self._endpoint = None
+                source_state.publish(active_input=None if old in (None, "none") else old, phone=None, phone_mac=None)
+                raise
+            source_state.publish(active_input=None if chosen == "none" else chosen, target_error=None)
+            if play_target and self._target_player and self._endpoint is not None:
+                return await self._play_target(allow_without_stream=True)
+            if was_streaming:
+                if not self._target_player:
+                    source_state.publish(target_error="press_play")
+                source_state.publish(state=await self._idle_state(), streaming=False)
+            return None
 
     async def _play_target_after_switch(self) -> None:
         await self._play_target(allow_without_stream=True)
@@ -491,7 +493,7 @@ class SourceClient:
             raise SourceError("device_selection_unsupported", "This capture backend cannot select a device.")
         old = self._preferred_mac
         self._preferred_mac = address.colons
-        self._set_backend_active(f"bluetooth:{address.colons}")
+        await self._set_backend_active(f"bluetooth:{address.colons}")
         endpoint = await self._capture_backend.find()
         if endpoint is None or endpoint.phone_mac != address.colons:
             self._preferred_mac = old
