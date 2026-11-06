@@ -258,3 +258,69 @@ export function captureProfile(
     api().POST('/api/v1/sync/groups/{group_id}/capture', { params: { path: { group_id: groupId } }, body }),
   )
 }
+
+/* -- listening devices: an input on the bridge records the sequence ---------------------- */
+
+/**
+ * One input the bridge can record the sequence from. Task 1's endpoint is newer than
+ * ``schema.d.ts`` (the controller regenerates the client afterwards), so its contract is
+ * pinned here: ``{devices: [{id, name, kind, available}]}``.
+ */
+export interface ListeningDevice {
+  id: string
+  name: string
+  /** ``local`` line-in, ``bluetooth`` source, or a headset's microphone. */
+  kind: 'local' | 'bluetooth' | 'headset_microphone'
+  /** The node is present (``false``: the device disappeared since the sources were read). */
+  available: boolean
+}
+
+/** The canonical answer: the bridge's inputs it can record the sequence from. */
+export interface ListeningDevicesAnswer {
+  devices: ListeningDevice[]
+}
+
+/**
+ * A route build that landed before the contract answered a bare array. ``listeningDevicesOf``
+ * normalizes either to the envelope; the envelope is what the wizard and the tests speak.
+ */
+export type ListeningDevicesPayload = ListeningDevicesAnswer | ListeningDevice[]
+
+/** What one recording of the sequence measured, one entry per member (the upload's shape). */
+export interface InputCaptureAnswer {
+  results: SyncMeasurement[]
+}
+
+/** The two new routes, typed locally until ``schema.d.ts`` carries them. */
+interface ListeningClient {
+  GET(path: '/api/v1/sync/listening-devices'): Promise<{
+    data?: ListeningDevicesPayload
+    error?: unknown
+    response: Response
+  }>
+  POST(
+    path: '/api/v1/sync/sessions/{session_id}/capture/input',
+    init: { params: { path: { session_id: string } }; body: { input_id: string; seconds: number } },
+  ): Promise<{ data?: InputCaptureAnswer; error?: unknown; response: Response }>
+}
+
+const listeningClient = () => api() as unknown as ListeningClient
+
+/** The bridge's inputs the wizard can listen with; a bridge with none offers only the phone. */
+export function getListeningDevices(): Promise<ListeningDevicesPayload> {
+  return unwrap(listeningClient().GET('/api/v1/sync/listening-devices'))
+}
+
+/**
+ * Record the running sequence on the bridge from one of its inputs for ``seconds`` (its
+ * played length) and measure every member from that one recording. The device is borrowed:
+ * the source's active input is not changed.
+ */
+export function captureInput(id: string, inputId: string, seconds: number): Promise<InputCaptureAnswer> {
+  return unwrap(
+    listeningClient().POST('/api/v1/sync/sessions/{session_id}/capture/input', {
+      params: { path: { session_id: id } },
+      body: { input_id: inputId, seconds },
+    }),
+  )
+}

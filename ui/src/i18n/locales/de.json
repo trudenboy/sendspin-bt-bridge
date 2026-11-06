@@ -2065,6 +2065,8 @@
         "deviceHelp": "Trage dieses Gerät zu jedem Lautsprecher. Benötigt HTTPS (oder localhost) für das Mikrofon.",
         "phone": "Ein Smartphone (QR-Code scannen)",
         "phoneHelp": "Öffne die Aufnahmeseite auf einem Smartphone; sie nimmt alle Lautsprecher auf einmal auf und sendet die Aufnahme. Funktioniert auch über einfaches HTTP (mit dem Rekorder des Smartphones).",
+        "inputHelp": "Die Bridge nimmt die Klicks über „{name}“ auf; trage nichts mit dir herum und erteile keine Mikrofonfreigabe.",
+        "inputMissing": "Wähle ein Eingabegerät, von dem die Bridge aufnehmen kann.",
         "usePhone": "Stattdessen mit einem Smartphone messen"
       },
       "startPhone": "Starten"
@@ -2236,6 +2238,16 @@
       "certificate": "Dein Smartphone warnt einmal wegen des Zertifikats – akzeptiere es, um direkt im Browser aufzunehmen.",
       "httpFallback": "Ohne das Zertifikat nutze den einfachen Link (der Rekorder des Smartphones):",
       "keepsDelay": "Nicht gemessen, sie behalten ihre aktuelle Verzögerung: {names}"
+    },
+    "input": {
+      "help": "Die Bridge nimmt die Klicks über {name} auf, während jeder Lautsprecher der Reihe nach allein spielt, und misst alle damit aus dieser einen Aufnahme.",
+      "recording": "Die Bridge nimmt die Sequenz auf…",
+      "play": "Über die Bridge aufnehmen ({n})",
+      "measuring": "Aufnahme wird ausgewertet…",
+      "measured": "Die Aufnahme der Bridge ist ausgewertet.",
+      "unavailable": "Das Eingabegerät „{name}“ ist nicht mehr verfügbar. Miss stattdessen mit dem Telefon.",
+      "busy": "Das Eingabegerät „{name}“ wird gerade vom Quell-Feed belegt. Miss stattdessen mit dem Telefon.",
+      "latencyNote": "Hinweis: Die Eingangslatenz ist nicht kalibriert — eine konstante Verzögerung verschiebt alle Lautsprecher gleich, das relative Ergebnis bleibt also unberührt."
     },
     "tuneLink": "Mit deiner Gruppe abstimmen →",
     "noGroupHelp": "{name} ist in keiner Sync-Gruppe. Um ihn mit anderen abzustimmen, erstelle unter Gruppen eine Sync-Gruppe und füge diesen Lautsprecher hinzu.",

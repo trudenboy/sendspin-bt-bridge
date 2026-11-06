@@ -2065,6 +2065,8 @@
         "deviceHelp": "Bu cihazı her hoparlöre götür. Mikrofon için HTTPS (veya localhost) gerekir.",
         "phone": "Bir telefon (QR kod okut)",
         "phoneHelp": "Telefonda yakalama sayfasını aç; tüm hoparlörleri tek seferde kaydeder ve kaydı gönderir. Düz HTTP üzerinden de çalışır (telefonun kayıt aracıyla).",
+        "inputHelp": "Köprü, tıklamaları “{name}” üzerinden kaydeder; hiçbir şey taşımanız ve mikrofon izni vermeniz gerekmez.",
+        "inputMissing": "Köprünün kayıt yapabileceği bir dinleme cihazı seçin.",
         "usePhone": "Bunun yerine telefonla ölç"
       },
       "startPhone": "Başlat"
@@ -2236,6 +2238,16 @@
       "certificate": "Telefonun sertifika için bir kez uyarır — doğrudan tarayıcıda kayıt yapmak için kabul et.",
       "httpFallback": "Sertifika olmadan düz bağlantıyı kullan (telefonun kayıt aracı):",
       "keepsDelay": "Ölçülmedi, bunlar mevcut gecikmelerini korur: {names}"
+    },
+    "input": {
+      "help": "Köprü, her hoparlör sırayla tek başına çalarken {name} üzerinden tıklamaları kaydeder ve tüm hoparlörleri bu tek kayıttan ölçer.",
+      "recording": "Köprü diziyi kaydediyor…",
+      "play": "Köprüden kaydet ({n})",
+      "measuring": "Kayıt ölçülüyor…",
+      "measured": "Köprünün kaydı ölçüldü.",
+      "unavailable": "Dinleme cihazı “{name}” artık kullanılamıyor. Bunun yerine telefonla ölçün.",
+      "busy": "Dinleme cihazı “{name}” kaynak akışı tarafından kullanılıyor. Bunun yerine telefonla ölçün.",
+      "latencyNote": "Not: Giriş gecikmesi kalibre edilmedi — sabit bir gecikme tüm hoparlörleri aynı şekilde kaydırdığı için göreli sonuç etkilenmez."
     },
     "tuneLink": "Grubunla birlikte ayarla →",
     "noGroupHelp": "{name} bir eşitleme grubunda değil. Diğerleriyle birlikte ayarlamak için Gruplar bölümünde bir eşitleme grubu oluştur ve bu hoparlörü ona ekle.",

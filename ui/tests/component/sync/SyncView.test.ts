@@ -9,6 +9,7 @@ import en from '@/i18n/locales/en.json'
 
 vi.mock('@/api/sync', () => ({
   getSyncGroup: vi.fn(), getSession: vi.fn(), listRestores: vi.fn(), retryRestore: vi.fn(), listProfiles: vi.fn(),
+  getListeningDevices: vi.fn().mockResolvedValue({ devices: [] }),
 }))
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'

@@ -18,6 +18,8 @@ import ManualTuning from './ManualTuning.vue'
 const props = defineProps<{
   session: SyncSession
   proposal: SyncProposal
+  /** The bridge input the recording came from; null when a browser or phone measured. */
+  inputName?: string | null
   /** Finishing (or cancelling) is under way. */
   busy?: boolean
   /** A failure to show (already translated). */
@@ -81,6 +83,7 @@ function confirmSave() {
     <p v-if="kept.length" data-kept class="text-sm text-text-secondary">
       {{ t('sync.tune.kept', { names: kept.join(', ') }) }}
     </p>
+    <p v-if="inputName" data-input-latency-note class="text-xs text-text-secondary">{{ t('sync.input.latencyNote') }}</p>
     <div
       v-if="warnings.length"
       data-warnings

@@ -15,6 +15,8 @@ import { ENDED } from '@/stores/sync'
 const props = defineProps<{
   /** The measuring session's last known state (``restoring`` until the bridge reports ``done``). */
   state: SessionStateName | null
+  /** The bridge input the recording came from; null when a browser or phone measured. */
+  inputName?: string | null
   before: number | null
   after: number | null
   saved: string | null
@@ -45,6 +47,7 @@ const restored = computed(() => !!props.state && ENDED.has(props.state))
     <p v-if="before != null && after != null" data-spread class="text-sm text-text-primary">
       {{ t('sync.done.spread', { before: formatMs(before), after: formatMs(after) }) }}
     </p>
+    <p v-if="inputName" data-input-latency-note class="text-xs text-text-secondary">{{ t('sync.input.latencyNote') }}</p>
     <p v-if="saved" data-saved role="status" class="text-sm text-text-primary">{{ t('sync.done.saved', { name: saved }) }}</p>
     <p v-if="saveError" role="alert" class="text-sm text-error">{{ saveError }}</p>
 

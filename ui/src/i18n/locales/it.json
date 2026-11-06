@@ -2065,6 +2065,8 @@
         "deviceHelp": "Porta questo dispositivo vicino a ogni altoparlante. Richiede HTTPS (o localhost) per il microfono.",
         "phone": "Un telefono (scansiona un codice QR)",
         "phoneHelp": "Apri la pagina di cattura su un telefono; registra tutti gli altoparlanti in una volta e invia la registrazione. Funziona anche con HTTP semplice (con il registratore del telefono).",
+        "inputHelp": "Il bridge registra i clic da «{name}»; non serve portare nulla né concedere il permesso al microfono.",
+        "inputMissing": "Scegli un dispositivo di ascolto da cui il bridge può registrare.",
         "usePhone": "Misura invece con un telefono"
       },
       "startPhone": "Avvia"
@@ -2236,6 +2238,16 @@
       "certificate": "Il telefono avviserà del certificato una volta — accettalo per registrare direttamente nel browser.",
       "httpFallback": "Senza certificato, usa il link semplice (con il registratore del telefono):",
       "keepsDelay": "Non misurati, mantengono il ritardo attuale: {names}"
+    },
+    "input": {
+      "help": "Il bridge registra i clic da {name} mentre ogni altoparlante suona da solo a turno, poi li misura tutti da quell’unica registrazione.",
+      "recording": "Il bridge sta registrando la sequenza…",
+      "play": "Registra dal bridge ({n})",
+      "measuring": "Misurazione della registrazione…",
+      "measured": "La registrazione del bridge è misurata.",
+      "unavailable": "Il dispositivo di ascolto «{name}» non è più disponibile. Misura con il telefono.",
+      "busy": "Il dispositivo di ascolto «{name}» è occupato dalla sorgente. Misura con il telefono.",
+      "latencyNote": "Nota: la latenza d’ingresso non è calibrata: un ritardo costante sposta tutti gli altoparlanti allo stesso modo, quindi il risultato relativo non cambia."
     },
     "tuneLink": "Regola con il tuo gruppo →",
     "noGroupHelp": "{name} non è in un gruppo di sincronizzazione. Per regolarlo insieme ad altri, crea un gruppo di sincronizzazione in Gruppi e aggiungi questo altoparlante.",

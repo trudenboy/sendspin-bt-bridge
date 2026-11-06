@@ -9,6 +9,7 @@ import {
   endSession,
   endSessionOnPageHide,
   finishSession,
+  getListeningDevices,
   getSession,
   resetSession,
   sessionSignal,
@@ -16,6 +17,7 @@ import {
   uploadRecording,
 } from '@/api/sync'
 import { ApiError } from '@/api/client'
+import type { ListeningDevice } from '@/api/sync'
 import type { SessionPoint, SyncMeasurement, SyncProposal, SyncSession } from '@/api/types'
 import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SOLO_SETTLE_MS, SyncCaptureError, SyncRecorder, type Capture } from '@/sync/capture'
@@ -23,6 +25,7 @@ import { SbButton } from '@/kit'
 import LongOperation from '@/components/LongOperation.vue'
 import { confirmAction } from '@/composables/useActionPolicy'
 import { formatMs } from '@/sync/format'
+import { listeningDevicesOf } from '@/sync/listening'
 import { speakerName } from '@/sync/names'
 import { stopMusicAndStartClicks } from '@/sync/startClicks'
 import { useCountdown } from '@/sync/countdown'
@@ -32,13 +35,16 @@ import StepVolume from './StepVolume.vue'
 import StepMembers, { type MemberPhase } from './StepMembers.vue'
 import StepTune from './StepTune.vue'
 import PhoneCapture from './PhoneCapture.vue'
+import ListeningCapture from './ListeningCapture.vue'
 import StepDone from './StepDone.vue'
 
 /**
- * The measurement wizard, in four stages. Prepare: where to measure and the microphone, stop the
- * group's music and start the clicks (one step), set the volumes (with the microphone's level). Measure: speaker by
- * speaker. Tune: the measured delays are applied and the session becomes the manual editor (listen,
- * adjust, finish). Done: the group restored.
+ * The measurement wizard, in four stages. Prepare: where to measure and what records (this
+ * device's microphone, a phone, or one of the bridge's own inputs), stop the group's music and
+ * start the clicks (one step), set the volumes (with the microphone's level). Measure: speaker by
+ * speaker, or one sequence recorded by the bridge from a listening device. Tune: the measured
+ * delays are applied and the session becomes the manual editor (listen, adjust, finish). Done: the
+ * group restored.
  *
  * The wizard owns the microphone: it is opened from the first "Next" (a user gesture) and
  * closed on cancel, on unmount and when the session ends. Captures share one clock only
@@ -84,8 +90,17 @@ const sync = useSyncStore()
 
 const step = ref<Step>('prepare')
 const point = ref<SessionPoint>('device')
-/** Record here (this device's microphone) or with a phone through the capture page. */
-const capture = ref<'device' | 'phone'>('device')
+/**
+ * Record here (this device's microphone), with a phone through the capture page, or with one of
+ * the bridge's own inputs (the bridge records the sequence itself).
+ */
+const capture = ref<'device' | 'phone' | 'input'>('device')
+/** The inputs the bridge can record from; empty when it has none or the question failed. */
+const listeningDevices = ref<ListeningDevice[]>([])
+/** The bridge input chosen on step 1. */
+const listeningId = ref('')
+/** The bridge input this measurement used (its name also marks the result as uncalibrated). */
+const usedInput = ref<ListeningDevice | null>(null)
 const starting = ref(false)
 const startError = ref('')
 /** The session this wizard started; null before the start and after it ended. */
@@ -105,6 +120,30 @@ const PROGRESS_TICK_MS = 100
 const supported = props.recorderFactory ? true : SyncRecorder.supported()
 // No microphone here (plain HTTP, an old browser): a phone is the way to measure.
 if (!supported) capture.value = 'phone'
+
+const chosenInput = computed(() => listeningDevices.value.find((d) => d.id === listeningId.value) ?? null)
+/** The input the running measurement uses: the chosen one, or the one it was started with. */
+const activeInput = computed(() => chosenInput.value ?? usedInput.value)
+
+/** The bridge input cannot record (gone, or the source feed took it): measure with the phone instead. */
+function switchToPhone() {
+  capture.value = 'phone'
+  // The phone measured, not the input: the result screen must not claim otherwise.
+  usedInput.value = null
+  startError.value = ''
+}
+
+/** Ask which inputs the bridge has. A bridge that cannot answer simply offers no bridge input. */
+async function loadListeningDevices() {
+  try {
+    const answer = await getListeningDevices()
+    if (disposed) return
+    listeningDevices.value = [...listeningDevicesOf(answer).devices]
+  } catch {
+    if (!disposed) listeningDevices.value = []
+  }
+}
+onMounted(loadListeningDevices)
 
 /* -- members ------------------------------------------------------------------------ */
 
@@ -168,7 +207,7 @@ function startProgress(durationS: number) {
 
 const complete = computed(() => {
   const here = ordered.value.filter((m) => !departed.value.includes(m.ma_player_id))
-  if (capture.value === 'phone') {
+  if (capture.value === 'phone' || capture.value === 'input') {
     // one recording measures every speaker; one heard is enough, those not heard keep their delay
     const ms = session.value?.measurements ?? {}
     const st = (id: string) => ms[id]?.status
@@ -350,8 +389,13 @@ async function begin() {
   if (starting.value) return
   startError.value = ''
   ended.value = false
+  // A bridge input that is not there (or no longer offered) cannot record the sequence.
+  if (capture.value === 'input' && !chosenInput.value?.available) {
+    startError.value = t('sync.wizard.capture.inputMissing')
+    return
+  }
   starting.value = true
-  // With a phone, nothing is recorded here: no microphone to open.
+  // With a phone or a bridge input, nothing is recorded here: no microphone to open.
   const rec = capture.value === 'device' ? (props.recorderFactory?.() ?? new SyncRecorder()) : null
   recorder = rec
   try {
@@ -379,6 +423,7 @@ async function begin() {
     }
     sessionId.value = id
     trackedId.value = id
+    usedInput.value = capture.value === 'input' ? chosenInput.value : null
     notice.value = ''
     setActiveFlag()
     if (rec) attach(rec)
@@ -890,6 +935,7 @@ function clearAll() {
   resetFlow()
   active.value = null
   reopenError.value = ''
+  usedInput.value = null
 }
 
 /* -- telling the page a measurement runs, so a reload can say how it ended ------------- */
@@ -1080,6 +1126,8 @@ const volumes = computed(() => session.value?.volumes ?? {})
       v-if="step === 'prepare'"
       v-model:point="point"
       v-model:capture="capture"
+      v-model:input-id="listeningId"
+      :devices="listeningDevices"
       :busy="starting"
       :error="startError"
       :supported="supported"
@@ -1123,6 +1171,18 @@ const volumes = computed(() => session.value?.volumes ?? {})
       @next="toTune"
       @back="backToVolume"
       @cancel="cancel"
+    />
+    <ListeningCapture
+      v-else-if="step === 'members' && capture === 'input' && session && activeInput"
+      :session="session"
+      :members="phoneMembers"
+      :input="activeInput"
+      :clicker-left-s="leftS"
+      @restart="restartClicker"
+      @next="toTune"
+      @back="backToVolume"
+      @cancel="cancel"
+      @phone="switchToPhone"
     />
     <StepMembers
       v-else-if="step === 'members'"
@@ -1178,6 +1238,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
         v-else-if="applied && proposal && session"
         :session="session"
         :proposal="proposal"
+        :input-name="usedInput?.name ?? null"
         :busy="finishing"
         :error="finishError || saveError"
         @finish="finish"
@@ -1187,6 +1248,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
     <StepDone
       v-else-if="step === 'done'"
       :state="doneState"
+      :input-name="usedInput?.name ?? null"
       :before="doneBefore"
       :after="doneAfter"
       :saved="savedName"

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { computed, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Mic, TriangleAlert } from 'lucide-vue-next'
 import { SbButton } from '@/kit'
+import type { ListeningDevice } from '@/api/sync'
 import type { SessionPoint, SyncMember } from '@/api/types'
+import { inputKindKey } from '@/sync/listening'
 import ReadinessWarnings from './ReadinessWarnings.vue'
 
 const props = defineProps<{
@@ -19,16 +21,46 @@ const props = defineProps<{
   error: string
   /** Capture works in this browser at all. */
   supported: boolean
+  /** The bridge's inputs it could record from (empty: the bridge reports none, or cannot be asked). */
+  devices?: ListeningDevice[]
 }>()
 const point = defineModel<SessionPoint>('point', { required: true })
-/** Record with this device's microphone, or with a phone through the capture page (link + QR). */
-const capture = defineModel<'device' | 'phone'>('capture', { default: 'device' })
+/**
+ * Record with this device's microphone, with a phone through the capture page (link + QR), or
+ * with one of the bridge's own inputs (``input``: the bridge records the sequence itself).
+ */
+const capture = defineModel<'device' | 'phone' | 'input'>('capture', { default: 'device' })
+/** The bridge input chosen when ``capture`` is ``input``. */
+const inputId = defineModel<string>('inputId', { default: '' })
 const emit = defineEmits<{ next: []; manual: []; skip: [member: string, skip: boolean] }>()
 
 const { t } = useI18n()
 const uid = useId()
 const points = ['device', 'position'] as const
-const captures = ['device', 'phone'] as const
+const devices = computed(() => props.devices ?? [])
+const chosen = computed(() => devices.value.find((d) => d.id === inputId.value) ?? null)
+const kindOf = (d: ListeningDevice) => t(inputKindKey(d))
+
+/** Pick a bridge input (the shown names are its list); an unavailable one can never be chosen. */
+function chooseInput(d: ListeningDevice) {
+  if (!d.available) return
+  capture.value = 'input'
+  inputId.value = d.id
+}
+
+/*
+ * Default the picker to the first input the bridge can actually record from; never change the
+ * capture mode here (today's microphone-or-phone default stays).
+ */
+watch(
+  devices,
+  (list) => {
+    if (!list.length) return
+    if (list.some((d) => d.id === inputId.value)) return
+    inputId.value = (list.find((d) => d.available) ?? list[0]!).id
+  },
+  { immediate: true },
+)
 /** About a minute per speaker (record, maybe repeat), plus two for getting the group ready. */
 const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
 </script>
@@ -82,29 +114,79 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
     <fieldset class="flex flex-col gap-2">
       <legend class="mb-2 text-sm font-medium text-text-primary">{{ t('sync.wizard.capture.legend') }}</legend>
       <label
-        v-for="c in captures"
-        :key="c"
         :class="[
           'flex cursor-pointer gap-3 rounded-(--radius-card) border px-4 py-3 focus-within:ring-2 focus-within:ring-primary/40',
-          capture === c ? 'border-primary bg-primary/5' : 'border-border',
+          capture === 'device' ? 'border-primary bg-primary/5' : 'border-border',
         ]"
       >
         <input
           v-model="capture"
           type="radio"
           :name="`${uid}-capture`"
-          :value="c"
-          :data-capture="c"
-          :aria-describedby="`${uid}-${c}-capture-help`"
+          value="device"
+          data-capture="device"
+          :aria-describedby="`${uid}-device-capture-help`"
           class="mt-1 accent-primary"
         />
         <span class="flex flex-col">
-          <span class="text-sm font-medium text-text-primary">{{ t(`sync.wizard.capture.${c}`) }}</span>
-          <span :id="`${uid}-${c}-capture-help`" class="text-xs text-text-secondary">{{ t(`sync.wizard.capture.${c}Help`) }}</span>
+          <span class="text-sm font-medium text-text-primary">{{ t('sync.wizard.capture.device') }}</span>
+          <span :id="`${uid}-device-capture-help`" class="text-xs text-text-secondary">{{ t('sync.wizard.capture.deviceHelp') }}</span>
+        </span>
+      </label>
+      <label
+        v-for="d in devices"
+        :key="d.id"
+        :data-input-row="d.id"
+        :class="[
+          'flex gap-3 rounded-(--radius-card) border px-4 py-3 focus-within:ring-2 focus-within:ring-primary/40',
+          d.available ? 'cursor-pointer' : 'cursor-not-allowed opacity-70',
+          capture === 'input' && inputId === d.id ? 'border-primary bg-primary/5' : 'border-border',
+        ]"
+      >
+        <input
+          type="radio"
+          :name="`${uid}-capture`"
+          :value="`input:${d.id}`"
+          :checked="capture === 'input' && inputId === d.id"
+          :disabled="!d.available"
+          data-capture="input"
+          :data-listening-input="d.id"
+          :data-input-unavailable="d.available ? undefined : d.id"
+          class="mt-1 accent-primary"
+          @change="chooseInput(d)"
+        />
+        <span class="flex flex-col">
+          <span class="text-sm font-medium text-text-primary">{{ d.name }}</span>
+          <span class="text-xs text-text-secondary">
+            {{ kindOf(d) }}<template v-if="!d.available"> · {{ t('devices.sources.unavailable') }}</template>
+          </span>
+        </span>
+      </label>
+      <label
+        :class="[
+          'flex cursor-pointer gap-3 rounded-(--radius-card) border px-4 py-3 focus-within:ring-2 focus-within:ring-primary/40',
+          capture === 'phone' ? 'border-primary bg-primary/5' : 'border-border',
+        ]"
+      >
+        <input
+          v-model="capture"
+          type="radio"
+          :name="`${uid}-capture`"
+          value="phone"
+          data-capture="phone"
+          :aria-describedby="`${uid}-phone-capture-help`"
+          class="mt-1 accent-primary"
+        />
+        <span class="flex flex-col">
+          <span class="text-sm font-medium text-text-primary">{{ t('sync.wizard.capture.phone') }}</span>
+          <span :id="`${uid}-phone-capture-help`" class="text-xs text-text-secondary">{{ t('sync.wizard.capture.phoneHelp') }}</span>
         </span>
       </label>
     </fieldset>
 
+    <p v-if="capture === 'input' && chosen" data-input-help class="text-sm text-text-secondary">
+      {{ t('sync.wizard.capture.inputHelp', { name: chosen.name }) }}
+    </p>
     <p v-if="capture === 'device'" class="flex gap-2 text-sm text-text-secondary">
       <Mic class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ t('sync.wizard.micPermission') }}
     </p>
@@ -127,8 +209,14 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
     </div>
 
     <div class="flex justify-end">
-      <SbButton type="button" data-next :loading="busy" :disabled="!supported && capture === 'device'" @click="emit('next')">
-        {{ capture === 'phone' ? t('sync.wizard.startPhone') : t('sync.wizard.start') }}
+      <SbButton
+        type="button"
+        data-next
+        :loading="busy"
+        :disabled="(!supported && capture === 'device') || (capture === 'input' && !chosen?.available)"
+        @click="emit('next')"
+      >
+        {{ capture === 'device' ? t('sync.wizard.start') : t('sync.wizard.startPhone') }}
       </SbButton>
     </div>
   </div>

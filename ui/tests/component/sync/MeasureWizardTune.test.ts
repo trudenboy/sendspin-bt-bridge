@@ -13,6 +13,7 @@ vi.mock('@/api/sync', () => ({
   sessionSkip: vi.fn(), sessionReference: vi.fn(), getProposal: vi.fn(), computeProposal: vi.fn(), applyProposal: vi.fn(),
   finishSession: vi.fn(), resetSession: vi.fn(), endSession: vi.fn(), captureProfile: vi.fn(), endSessionOnPageHide: vi.fn(),
   sessionDelay: vi.fn(), sessionAb: vi.fn(), sessionVolume: vi.fn(), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(),
+  getListeningDevices: vi.fn().mockResolvedValue({ devices: [] }),
 }))
 import * as api from '@/api/sync'
 

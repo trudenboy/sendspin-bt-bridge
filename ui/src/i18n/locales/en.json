@@ -2065,6 +2065,8 @@
         "deviceHelp": "Carry this device to each speaker. Needs HTTPS (or localhost) for the microphone.",
         "phone": "A phone (scan a QR code)",
         "phoneHelp": "Open the capture page on a phone; it records every speaker in one go and sends the recording. Works over plain HTTP too (with the phone’s recorder).",
+        "inputHelp": "The bridge records the clicks from “{name}”; carry nothing and grant no microphone permission.",
+        "inputMissing": "Choose a listening device the bridge can record from.",
         "usePhone": "Measure with a phone instead"
       },
       "startPhone": "Start"
@@ -2236,6 +2238,16 @@
       "certificate": "Your phone will warn about the certificate once — accept it to record directly in the browser.",
       "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):",
       "keepsDelay": "Not measured, these keep their current delay: {names}"
+    },
+    "input": {
+      "help": "The bridge records the clicks from {name} while every speaker plays alone in turn, then measures all of them from that one recording.",
+      "recording": "The bridge is recording the sequence…",
+      "play": "Record from the bridge ({n})",
+      "measuring": "Measuring the recording…",
+      "measured": "The bridge’s recording is measured.",
+      "unavailable": "The listening device “{name}” is no longer available. Measure with the phone instead.",
+      "busy": "The listening device “{name}” is busy with the source feed. Measure with the phone instead.",
+      "latencyNote": "Note: input latency is not calibrated — a constant delay shifts every speaker equally, so the relative result is unaffected."
     },
     "tuneLink": "Tune with your group →",
     "noGroupHelp": "{name} is not in a sync group. To tune it with others, create a sync group in Groups and add this speaker to it.",
