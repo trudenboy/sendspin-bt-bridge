@@ -3,6 +3,7 @@ type Translate = (key: string) => string
 
 const KEYS: Record<string, readonly [text: string, next: string]> = {
   capture_unavailable: ['hardware.source.errorCapture', 'hardware.source.errorCaptureNext'],
+  headset_a2dp_restore_failed: ['hardware.source.errorHeadsetA2dp', 'hardware.source.errorHeadsetA2dpNext'],
   no_adapter: ['hardware.source.errorNoAdapter', 'hardware.source.errorBluetoothNext'],
   no_agent: ['hardware.source.errorNoAgent', 'hardware.source.errorBluetoothNext'],
   ma_unreachable: ['hardware.source.maUnreachable', 'hardware.source.maUnreachableNext'],

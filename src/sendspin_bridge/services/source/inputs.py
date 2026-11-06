@@ -6,16 +6,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable
+    from collections.abc import Collection, Iterable, Mapping
 
     from sendspin_bridge.services.source.state import SourceDevice
 
 __all__ = [
+    "DEFAULT_INPUT_VOLUME",
     "NO_SOURCE",
     "SourceInput",
+    "active_headset_mac",
     "bluetooth_id",
     "build_inputs",
     "headset_mic_id",
+    "input_audio",
     "local_candidates",
     "local_id",
     "parse_source_id",
@@ -25,6 +28,9 @@ SourceKind = Literal["bluetooth", "local", "headset_microphone"]
 
 #: Explicit "no active source"; distinct from the legacy ``None`` auto-Bluetooth policy.
 NO_SOURCE = "none"
+
+#: A source the operator has never touched runs at the audio server's default gain.
+DEFAULT_INPUT_VOLUME = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +47,8 @@ class SourceInput:
     monitor: bool = False
     mac: str | None = None
     node: str | None = None
+    volume: int = DEFAULT_INPUT_VOLUME
+    muted: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -54,7 +62,22 @@ class SourceInput:
             "monitor": self.monitor,
             "mac": self.mac,
             "node": self.node,
+            "volume": self.volume,
+            "muted": self.muted,
         }
+
+
+def input_audio(config: dict[str, Any] | None, source_id: str) -> tuple[int, bool]:
+    """The saved ``(volume, muted)`` of one input id; full scale and unmuted when unset."""
+    raw = (config or {}).get("SENDSPIN_SOURCE_INPUT_STATE")
+    entry = raw.get(source_id) if isinstance(raw, dict) else None
+    volume = entry.get("volume") if isinstance(entry, dict) else None
+    muted = entry.get("muted") if isinstance(entry, dict) else None
+    if not isinstance(volume, int) or isinstance(volume, bool) or not 0 <= volume <= 100:
+        volume = DEFAULT_INPUT_VOLUME
+    if not isinstance(muted, bool):
+        muted = False
+    return volume, muted
 
 
 def bluetooth_id(mac: str) -> str:
@@ -67,6 +90,20 @@ def local_id(node: str) -> str:
 
 def headset_mic_id(mac: str) -> str:
     return f"headset-mic:{mac.upper()}"
+
+
+def active_headset_mac(config: Mapping[str, Any] | None) -> str | None:
+    """The MAC whose microphone is the selected source input, if any.
+
+    The selection is persisted in ``SENDSPIN_SOURCE_ACTIVE``; a ``headset-mic:``
+    value is the bridge's own statement that this device's capture owns its
+    Bluetooth card on purpose.
+    """
+    raw = str((config or {}).get("SENDSPIN_SOURCE_ACTIVE") or "")
+    parsed = parse_source_id(raw)
+    if parsed is None or parsed[0] != "headset_microphone":
+        return None
+    return parsed[1]
 
 
 def parse_source_id(source_id: str) -> tuple[SourceKind, str] | None:
@@ -155,31 +192,39 @@ def build_inputs(
     audio = _audio_by_name(audio_sources)
     inputs: list[SourceInput] = []
     for device in bluetooth or ():
+        source_id = bluetooth_id(device.mac)
+        volume, muted = input_audio(config, source_id)
         inputs.append(
             SourceInput(
-                id=bluetooth_id(device.mac),
+                id=source_id,
                 kind="bluetooth",
                 name=device.name or device.mac,
                 description=device.mac,
-                active=active == bluetooth_id(device.mac),
+                active=active == source_id,
                 available=True,
                 connected=device.connected,
                 mac=device.mac,
+                volume=volume,
+                muted=muted,
             )
         )
     for headset in headsets or ():
         mac = str(headset.get("mac") or "").upper()
         if not mac:
             continue
+        source_id = headset_mic_id(mac)
+        volume, muted = input_audio(config, source_id)
         inputs.append(
             SourceInput(
-                id=headset_mic_id(mac),
+                id=source_id,
                 kind="headset_microphone",
                 name=str(headset.get("name") or mac),
                 description="HFP microphone",
-                active=active == headset_mic_id(mac),
+                active=active == source_id,
                 available=bool(headset.get("hfp_available", True)),
                 mac=mac,
+                volume=volume,
+                muted=muted,
             )
         )
     for profile in local_profiles(config):
@@ -188,6 +233,7 @@ def build_inputs(
         # No audio list means "status snapshot, not a live probe": keep the
         # saved profile selectable; the capture client reports input_missing.
         available = True if audio_sources is None else source is not None
+        volume, muted = input_audio(config, profile["id"])
         inputs.append(
             SourceInput(
                 id=profile["id"],
@@ -198,6 +244,8 @@ def build_inputs(
                 available=available,
                 monitor=bool(getattr(source, "monitor_of", None)),
                 node=node,
+                volume=volume,
+                muted=muted,
             )
         )
     # Candidates already configured must not be offered twice in the add modal.

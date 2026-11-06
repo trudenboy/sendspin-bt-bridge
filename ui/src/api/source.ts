@@ -149,3 +149,38 @@ export function selectSource(sourceId: string) {
     }),
   )
 }
+
+/**
+ * The source-active commands are newer than the generated schema, so their
+ * contract is pinned here: the path, the body and nothing else.
+ */
+interface SourceActiveCommandClient {
+  DELETE(path: string): Promise<{ data?: unknown; error?: unknown; response: Response }>
+  PUT(
+    path: string,
+    init: { body: Record<string, unknown> },
+  ): Promise<{ data?: unknown; error?: unknown; response: Response }>
+}
+
+function activeCommandClient() {
+  return api() as unknown as SourceActiveCommandClient
+}
+
+/**
+ * Clear the active input: capture is released and the player may resume, while
+ * the feature itself stays enabled. Idempotent, so a retry after a dropped
+ * answer is safe.
+ */
+export function clearActiveSource() {
+  return unwrap(activeCommandClient().DELETE('/api/v1/bridge/source/active'))
+}
+
+/** Set the gain of the active input, 0..100. */
+export function setActiveVolume(volume: number) {
+  return unwrap(activeCommandClient().PUT('/api/v1/bridge/source/active/volume', { body: { volume } }))
+}
+
+/** Mute or unmute the active input without breaking its stream to Music Assistant. */
+export function setActiveMute(muted: boolean) {
+  return unwrap(activeCommandClient().PUT('/api/v1/bridge/source/active/mute', { body: { muted } }))
+}

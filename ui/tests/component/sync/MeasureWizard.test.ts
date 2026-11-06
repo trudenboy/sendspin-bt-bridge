@@ -9,7 +9,7 @@ import { confirmState, settleConfirm } from '@/composables/useConfirm'
 import en from '@/i18n/locales/en.json'
 import ru from '@/i18n/locales/ru.json'
 
-vi.mock('@/api/sync', () => ({ createSession: vi.fn(), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), uploadRecording: vi.fn(), sessionSkip: vi.fn().mockResolvedValue({}), sessionReference: vi.fn(), getProposal: vi.fn(), endSession: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn() }))
+vi.mock('@/api/sync', () => ({ createSession: vi.fn(), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), uploadRecording: vi.fn(), sessionSkip: vi.fn().mockResolvedValue({}), sessionReference: vi.fn(), getProposal: vi.fn(), endSession: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), getListeningDevices: vi.fn().mockResolvedValue({ devices: [] }) }))
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })

@@ -480,6 +480,23 @@
       "removeFailed": "Impossible de retirer la source.",
       "useFailed": "Impossible de changer de source.",
       "renameFailed": "Impossible de renommer la source.",
+      "enterSourceMode": "Source",
+      "backToPlayback": "Retour à la lecture",
+      "switchingToSource": "Passage à la source…",
+      "switchingToPlayback": "Retour à la lecture…",
+      "sourceMode": "Mode source",
+      "waitingForStream": "En attente du flux",
+      "capturing": "Capture du microphone de cet appareil",
+      "gain": "Gain",
+      "mute": "Mettre l'entrée en sourdine",
+      "unmute": "Réactiver l'entrée",
+      "level": "Niveau d'entrée",
+      "noSignal": "Aucun signal — vérifiez la sourdine sur l'appareil.",
+      "toggleFailed": "Impossible de basculer l'appareil entre lecture et mode source.",
+      "commandFailed": "Le pont a refusé cette commande d'entrée.",
+      "unavailableDisconnected": "Connectez l'appareil pour changer de mode.",
+      "unavailableStandby": "Réveillez l'appareil pour changer de mode.",
+      "unavailableDisabled": "Activez l'appareil pour changer de mode.",
       "pressPlay": "Source changée. Appuyez sur Lecture dans Music Assistant pour la démarrer sur la nouvelle entrée."
     },
     "outputs": "Sorties"
@@ -817,6 +834,8 @@
     "source": {
       "errorCapture": "L’audio du téléphone ne peut pas être capturé sur cet hôte.",
       "errorCaptureNext": "Le pont a besoin de nœuds de capture PipeWire pour le téléphone ; vérifiez le moteur audio de l’hôte.",
+      "errorHeadsetA2dp": "Le micro du casque a été libéré, mais sa sortie audio Bluetooth n’est pas revenue.",
+      "errorHeadsetA2dpNext": "Reconnectez le casque, puis réessayez sa sortie A2DP depuis la fiche de l’appareil. Le lecteur reste arrêté tant que cela ne fonctionne pas.",
       "errorNoAdapter": "Aucun adaptateur Bluetooth n’a accepté le mode découvrable.",
       "errorNoAgent": "Le pont n’a pas pu enregistrer d’agent d’appairage Bluetooth.",
       "errorBluetoothNext": "Vérifiez les contrôleurs Bluetooth ci-dessus, puis réessayez l’appairage.",
@@ -1365,7 +1384,10 @@
         "label": "Source audio",
         "help": "Capturez l’audio Bluetooth d’un appareil appairé et proposez-le à Music Assistant. Désactivé par défaut ; l’activation démarre immédiatement la source.",
         "off": "La source est désactivée. Activez-la pour commencer à capturer l’entrée sélectionnée.",
-        "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez."
+        "failed": "La source n’a pas pu démarrer. Vérifiez Music Assistant et le serveur audio de l’hôte, puis réessayez.",
+        "confirmTitle": "Désactiver le mode source ?",
+        "confirmBody": "L'entrée active est libérée et sa capture s'arrête. Les lecteurs reviennent dans la liste des enceintes.",
+        "confirmDisable": "Désactiver le mode source"
       },
       "sourceTarget": {
         "label": "Lire la source sur",
@@ -2043,6 +2065,8 @@
         "deviceHelp": "Transportez cet appareil vers chaque enceinte. Nécessite HTTPS (ou localhost) pour le microphone.",
         "phone": "Un téléphone (scannez un QR code)",
         "phoneHelp": "Ouvrez la page de capture sur un téléphone ; elle enregistre toutes les enceintes d’un coup et envoie l’enregistrement. Fonctionne aussi en HTTP simple (avec l’enregistreur du téléphone).",
+        "inputHelp": "Le pont enregistre les clics depuis « {name} » ; rien à transporter et aucune autorisation de microphone à donner.",
+        "inputMissing": "Choisissez un périphérique d’écoute depuis lequel le pont peut enregistrer.",
         "usePhone": "Mesurer plutôt avec un téléphone"
       },
       "startPhone": "Démarrer"
@@ -2214,6 +2238,16 @@
       "certificate": "Votre téléphone signalera une fois le certificat — acceptez-le pour enregistrer directement dans le navigateur.",
       "httpFallback": "Sans le certificat, utilisez le lien simple (l’enregistreur du téléphone) :",
       "keepsDelay": "Non mesurées, elles gardent leur délai actuel : {names}"
+    },
+    "input": {
+      "help": "Le pont enregistre les clics depuis {name} pendant que chaque enceinte joue seule à tour de rôle, puis les mesure toutes à partir de ce seul enregistrement.",
+      "recording": "Le pont enregistre la séquence…",
+      "play": "Enregistrer depuis le pont ({n})",
+      "measuring": "Mesure de l’enregistrement…",
+      "measured": "L’enregistrement du pont est mesuré.",
+      "unavailable": "Le périphérique d’écoute « {name} » n’est plus disponible. Mesurez avec le téléphone.",
+      "busy": "Le périphérique d’écoute « {name} » est occupé par la source. Mesurez avec le téléphone.",
+      "latencyNote": "Remarque : la latence d’entrée n’est pas calibrée — un délai constant décale toutes les enceintes de la même façon ; le résultat relatif n’est donc pas affecté."
     },
     "tuneLink": "Accorder avec votre groupe →",
     "noGroupHelp": "{name} ne fait partie d’aucun groupe de synchronisation. Pour l’accorder avec d’autres, créez un groupe de synchronisation dans Groupes et ajoutez-y cette enceinte.",

@@ -1,5 +1,6 @@
 /* Pure adapters from the API/store entities to the shared card view-model. */
 import { deviceState } from "@/stores/devices";
+import { isDeviceConnected } from "@/utils/deviceBackend";
 import { speakerName } from "@/utils/speakerName";
 import type {
   BtDeviceSummary,
@@ -8,9 +9,11 @@ import type {
   SourceState,
 } from "@/api/types";
 import type { DisabledPlayer } from "@/stores/devices";
+import type { SourceToggleState, SourceTransition } from "@/utils/sourceMode";
 import type {
   CardDot,
   CardTone,
+  DeviceCardAction,
   DeviceCardStatus,
   DeviceCardView,
 } from "./types";
@@ -59,7 +62,28 @@ function playerTransport(device: Device): string | null {
   return device.bluetooth?.adapter?.hci || "bluetooth";
 }
 
-export function playerCardView(device: Device): DeviceCardView {
+/**
+ * The chip a card wears instead of its mode while a source-mode command runs:
+ * the switch is the one thing the operator is waiting for, so it takes the
+ * status chip's place rather than sitting beside the stale state.
+ */
+const TRANSITION_STATUS: Record<SourceTransition, DeviceCardStatus> = {
+  "to-source": {
+    labelKey: "devices.sources.switchingToSource",
+    tone: "warning",
+    dot: "connecting",
+  },
+  "to-playback": {
+    labelKey: "devices.sources.switchingToPlayback",
+    tone: "warning",
+    dot: "connecting",
+  },
+};
+
+export function playerCardView(
+  device: Device,
+  transition: SourceTransition | null = null,
+): DeviceCardView {
   const name = speakerName(device.name, device.bluetooth?.mac ?? device.id);
   return {
     id: device.id,
@@ -69,7 +93,7 @@ export function playerCardView(device: Device): DeviceCardView {
       room: device.room?.name,
       technicalId: device.bluetooth?.mac ?? device.id,
     },
-    status: playerStatus(device),
+    status: transition ? TRANSITION_STATUS[transition] : playerStatus(device),
     meta: {
       room: device.room?.name,
       transport: playerTransport(device),
@@ -135,6 +159,73 @@ export function hardwareCardView(
         ? { id: "connect", labelKey: "hardware.connect" }
         : undefined,
     overflowGroups: [],
+  };
+}
+
+/**
+ * The same player, in the Sources section: same identity and shell, but the
+ * link is now an input. Streaming means the capture is open; anything else is
+ * the operator's "waiting for stream" story (a disconnect never changes mode).
+ */
+export function sourceModeCardView(
+  device: Device,
+  state: SourceState | undefined,
+  transition: SourceTransition | null = null,
+  captured = true,
+): DeviceCardView {
+  const name = speakerName(device.name, device.bluetooth?.mac ?? device.id);
+  // A disconnect does not change the mode: the card waits for the stream to
+  // come back rather than reporting the capture's transient error. The feed can
+  // also be streaming to Music Assistant while another input is the one open,
+  // so "streaming" only describes this card when its own capture is open.
+  const streaming = state === "streaming" && captured;
+  const failed = state === "error" && isDeviceConnected(device);
+  const status: DeviceCardStatus =
+    transition !== null
+      ? TRANSITION_STATUS[transition]
+      : failed
+        ? { labelKey: "devices.sources.error", tone: "error", dot: "error" }
+        : streaming
+          ? {
+              labelKey: "devices.sources.streaming",
+              tone: "success",
+              dot: "streaming",
+            }
+          : {
+              labelKey: "devices.sources.waitingForStream",
+              tone: "neutral",
+              dot: "standby",
+            };
+  return {
+    id: device.id,
+    role: "input",
+    identity: {
+      name,
+      room: device.room?.name,
+      technicalId: device.bluetooth?.mac ?? device.id,
+    },
+    status,
+    meta: {
+      room: device.room?.name,
+      transport: playerTransport(device),
+      shortId: SHORT_ID(device.bluetooth?.mac ?? device.id),
+    },
+    contextKey: "devices.sources.capturing",
+    overflowGroups: [],
+  };
+}
+
+/** The source-mode toggle as the shell's one primary action, or nothing when hidden. */
+export function sourceToggleAction(
+  id: string,
+  toggle: SourceToggleState,
+): DeviceCardAction | undefined {
+  if (!toggle.visible) return undefined;
+  return {
+    id,
+    labelKey: toggle.labelKey,
+    disabled: toggle.disabled,
+    hintKey: toggle.disabled ? (toggle.reasonKey ?? undefined) : undefined,
   };
 }
 

@@ -26,6 +26,8 @@ from sendspin_bridge.services.source.capture import (
     CommandResult,
     ProcessCapture,
     mac_from_node,
+    pactl_set_source_mute,
+    pactl_set_source_volume,
     run_command,
     terminate_process,
 )
@@ -253,6 +255,14 @@ class PulseAudioBackend:
             channels=self._channels,
             spawn=self._spawn,
         )
+
+    async def set_gain(self, node: str, volume: int) -> bool:
+        """Set the source's gain (0..100); a missing node is ``False``, not an error."""
+        return await pactl_set_source_volume(self._run, node, volume)
+
+    async def set_mute(self, node: str, muted: bool) -> bool:
+        """Mute or unmute the source without breaking the stream to Music Assistant."""
+        return await pactl_set_source_mute(self._run, node, muted)
 
     async def subscribe(self, on_change: Callable[[], None]) -> PulseSubscription:
         """Call ``on_change`` for every source or card event; the caller stops the subscription."""

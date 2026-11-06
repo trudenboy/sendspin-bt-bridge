@@ -7,6 +7,7 @@ vi.mock('@/composables/useEventStream', () => ({
   useEventStream: () => ({ connected: { value: false }, connect: vi.fn(), disconnect: vi.fn() }),
 }))
 vi.mock('@/api/hardware', () => ({ getHardware: vi.fn() }))
+vi.mock('@/api/status', () => ({ getStatus: vi.fn(), restartBridge: vi.fn() }))
 vi.mock('@/api/source', () => ({
   SOURCE_PAIRING_WINDOW_S: 120,
   setSourceEnabled: vi.fn(),
@@ -18,8 +19,10 @@ vi.mock('@/api/source', () => ({
 
 import { ApiError } from '@/api/client'
 import { getHardware } from '@/api/hardware'
-import { cancelMaPairing, closeSourcePairing, openMaPairing, openSourcePairing, setSourceEnabled } from '@/api/source'
+import { getStatus } from '@/api/status'
+import { openMaPairing, openSourcePairing } from '@/api/source'
 import { useHardwareStore } from '@/stores/hardware'
+import { useSourceStore } from '@/stores/source'
 
 const sourceFeed = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
@@ -58,27 +61,56 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
 })
 
 const problem = (status: number, code: string, detail = 'Nope') => new ApiError({ status, code, detail })
-const window = (overrides: Record<string, unknown> = {}) => ({
+const pairingWindow = (overrides: Record<string, unknown> = {}) => ({
   pairing_seconds_left: 120,
   pairing_adapters: ['C0:FB:F9:62:D6:9D'],
   error: null,
   ...overrides,
 })
 
-let store: ReturnType<typeof useHardwareStore>
+/** The bridge status's source block, with every field the generated type requires. */
+const sourceBlock = (overrides: Record<string, unknown> = {}) => ({
+  enabled: true,
+  state: 'waiting',
+  phone: null,
+  phone_mac: null,
+  paired_phone_mac: null,
+  streaming: false,
+  server: null,
+  ma_connected: true,
+  ma_paired: true,
+  ma_pairing_required: false,
+  ma_pairing_code: null,
+  ma_pairing_seconds_left: 0,
+  ma_error: null,
+  pairing_seconds_left: 0,
+  pairing_adapters: [],
+  devices: [],
+  inputs: [],
+  target_player: null,
+  target_error: null,
+  active_input: null,
+  error: null,
+  ...overrides,
+})
 
-describe('useHardwareStore: source', () => {
+const bridgeStatus = (source: Record<string, unknown> | null = sourceBlock()) =>
+  ({ bridge: { sendspin_source: source }, devices: [], groups: [] }) as never
+
+let store: ReturnType<typeof useHardwareStore>
+let source: ReturnType<typeof useSourceStore>
+
+describe('useHardwareStore: source read data', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     asOfTick = 0
     vi.mocked(getHardware).mockResolvedValue(snapshot() as never)
-    vi.mocked(setSourceEnabled).mockResolvedValue({} as never)
+    vi.mocked(getStatus).mockResolvedValue(bridgeStatus() as never)
+    vi.mocked(openSourcePairing).mockResolvedValue(pairingWindow() as never)
     vi.mocked(openMaPairing).mockResolvedValue({ code: '12345678', seconds_left: 300, client_id: 'peer' } as never)
-    vi.mocked(cancelMaPairing).mockResolvedValue(undefined as never)
-    vi.mocked(openSourcePairing).mockResolvedValue(window() as never)
-    vi.mocked(closeSourcePairing).mockResolvedValue(undefined as never)
     store = useHardwareStore()
+    source = useSourceStore()
     store.connect()
     await flushPromises()
     vi.mocked(getHardware).mockClear()
@@ -86,6 +118,7 @@ describe('useHardwareStore: source', () => {
 
   afterEach(() => {
     store.disconnect()
+    source.teardown()
     vi.useRealTimers()
   })
 
@@ -98,152 +131,35 @@ describe('useHardwareStore: source', () => {
     expect(store.source).toBeNull()
   })
 
-  it('starts and stops the source, refreshing after each command', async () => {
-    await store.startSource()
-    expect(setSourceEnabled).toHaveBeenCalledWith(true)
-    expect(getHardware).toHaveBeenCalledOnce()
-    expect(store.sourceError).toBeNull()
+  it('keeps the feed in the snapshot after the page is left', async () => {
+    store.disconnect()
 
-    vi.mocked(getHardware).mockClear()
-    await store.stopSource()
-    expect(setSourceEnabled).toHaveBeenCalledWith(false)
-    expect(getHardware).toHaveBeenCalledOnce()
+    expect(store.source?.state).toBe('waiting')
   })
 
-  it('opens the pairing window with the shared 120 s default and counts it down', async () => {
+  it('leaving the Hardware page keeps the source store pairing countdown', async () => {
     vi.useFakeTimers()
-
-    await store.startPairingWindow()
-
-    expect(openSourcePairing).toHaveBeenCalledWith(120)
-    expect(store.pairingSecondsLeft).toBe(120)
-
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(store.pairingSecondsLeft).toBe(119)
-
-    await vi.advanceTimersByTimeAsync(119_000)
-    expect(store.pairingSecondsLeft).toBe(0)
-  })
-
-  it('closes the pairing window and clears the countdown', async () => {
-    await store.startPairingWindow()
-    expect(store.pairingSecondsLeft).toBeGreaterThan(0)
-
-    await store.stopPairingWindow()
-
-    expect(closeSourcePairing).toHaveBeenCalledOnce()
-    expect(store.pairingSecondsLeft).toBe(0)
-  })
-
-  it('seeds the countdown from the server answer, not from the 120 s default', async () => {
-    vi.useFakeTimers()
-    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 47 }) as never)
-
-    await store.startPairingWindow()
-
-    expect(openSourcePairing).toHaveBeenCalledWith(120)
-    expect(store.pairingSecondsLeft).toBe(47)
-  })
-
-  it('adopts a window the bridge reports, so a reload keeps the countdown', async () => {
-    vi.useFakeTimers()
-
-    store.adoptPairingWindow(47)
-
-    expect(store.pairingSecondsLeft).toBe(47)
-  })
-
-  it('never shortens a window it already counts', async () => {
-    vi.useFakeTimers()
-    store.adoptPairingWindow(90)
-
-    store.adoptPairingWindow(20)
-
-    expect(store.pairingSecondsLeft).toBe(90)
-  })
-
-  it('surfaces a window the server could not open', async () => {
-    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 0, error: 'no_adapter' }) as never)
-
-    const answer = await store.startPairingWindow()
-
-    expect(answer).toMatchObject({ error: 'no_adapter' })
-    expect(store.pairingSecondsLeft).toBe(0)
-    expect(store.sourceError).toMatchObject({ code: 'no_adapter' })
-  })
-
-  it('clears a refusal once a read shows the source healthy again', async () => {
-    vi.mocked(openSourcePairing).mockResolvedValue(window({ pairing_seconds_left: 0, error: 'no_agent' }) as never)
-    await store.startPairingWindow()
-    expect(store.sourceError).toMatchObject({ code: 'no_agent' })
-
-    vi.mocked(getHardware).mockResolvedValue(snapshot({ source: sourceFeed({ state: 'streaming' }) }) as never)
-    await store.refresh()
-
-    expect(store.sourceError).toBeNull()
-  })
-
-  it('clears the countdown when the page is left, so a return can pair again', async () => {
-    vi.useFakeTimers()
-    await store.startPairingWindow()
-    expect(store.pairingSecondsLeft).toBeGreaterThan(0)
+    vi.mocked(getStatus).mockResolvedValue(
+      bridgeStatus(sourceBlock({ pairing_seconds_left: 120 })) as never,
+    )
+    await source.openPairingWindow()
+    expect(source.pairingSecondsLeft).toBeGreaterThan(0)
 
     store.disconnect()
 
-    expect(store.pairingSecondsLeft).toBe(0)
-    await vi.advanceTimersByTimeAsync(2000)
-    expect(store.pairingSecondsLeft).toBe(0)
+    // The window belongs to the source, not to the Hardware page visit.
+    expect(source.pairingSecondsLeft).toBeGreaterThan(0)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(source.pairingSecondsLeft).toBe(119)
   })
 
-  it('clears a refusal when the page is left', async () => {
+  it('a healthy hardware read never clears a pairing error (errors are per attempt)', async () => {
     vi.mocked(openMaPairing).mockRejectedValue(problem(409, 'ma_already_paired', 'Already paired'))
-    await expect(store.openMaPairingWindow()).rejects.toMatchObject({ code: 'ma_already_paired' })
-    expect(store.sourceError).not.toBeNull()
+    await expect(source.openMaPairing()).rejects.toMatchObject({ code: 'ma_already_paired' })
 
+    await store.refresh()
     store.disconnect()
 
-    expect(store.sourceError).toBeNull()
-  })
-
-  it('opens the Music Assistant pairing window and counts it down', async () => {
-    vi.useFakeTimers()
-    const result = await store.openMaPairingWindow()
-
-    expect(openMaPairing).toHaveBeenCalledOnce()
-    expect(result).toMatchObject({ code: '12345678' })
-    expect(store.maPairingSecondsLeft).toBe(300)
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(store.maPairingSecondsLeft).toBe(299)
-  })
-
-  it('forgets the Music Assistant pairing through the delete route', async () => {
-    await store.forgetMaPairing()
-
-    expect(cancelMaPairing).toHaveBeenCalledOnce()
-    expect(store.maPairingSecondsLeft).toBe(0)
-    expect(store.sourceError).toBeNull()
-  })
-
-  it('surfaces the server code when the source itself cannot start', async () => {
-    vi.mocked(setSourceEnabled).mockRejectedValue(problem(422, 'capture_unavailable', 'No capture node'))
-
-    await expect(store.startSource()).rejects.toMatchObject({ code: 'capture_unavailable' })
-
-    expect(store.sourceError).toMatchObject({ code: 'capture_unavailable', player: null })
-    expect(store.sourceBusy).toBe(false)
-  })
-})
-
-describe('useHardwareStore: pairing window follows the server', () => {
-  it('clears the countdown when the bridge closes the window early', async () => {
-    setActivePinia(createPinia())
-    vi.clearAllMocks()
-    const store = useHardwareStore()
-    store.adoptPairingWindow(30)
-    expect(store.pairingSecondsLeft).toBe(30)
-
-    store.adoptPairingWindow(0)
-
-    expect(store.pairingSecondsLeft).toBe(0)
+    expect(source.error).toMatchObject({ code: 'ma_already_paired' })
   })
 })

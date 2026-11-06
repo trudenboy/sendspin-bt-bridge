@@ -480,6 +480,23 @@
       "removeFailed": "소스를 제거하지 못했습니다.",
       "useFailed": "소스를 전환하지 못했습니다.",
       "renameFailed": "소스 이름을 변경하지 못했습니다.",
+      "enterSourceMode": "소스",
+      "backToPlayback": "재생으로 돌아가기",
+      "switchingToSource": "소스로 전환 중…",
+      "switchingToPlayback": "재생으로 돌아가는 중…",
+      "sourceMode": "소스 모드",
+      "waitingForStream": "스트림 대기 중",
+      "capturing": "이 기기의 마이크를 캡처하는 중",
+      "gain": "게인",
+      "mute": "입력 음소거",
+      "unmute": "입력 음소거 해제",
+      "level": "입력 레벨",
+      "noSignal": "신호가 없습니다. 기기의 음소거를 확인하세요.",
+      "toggleFailed": "기기를 재생과 소스 모드 사이에서 전환하지 못했습니다.",
+      "commandFailed": "브리지가 해당 입력 명령을 거부했습니다.",
+      "unavailableDisconnected": "모드를 전환하려면 기기를 연결하세요.",
+      "unavailableStandby": "모드를 전환하려면 기기를 대기 상태에서 깨우세요.",
+      "unavailableDisabled": "모드를 전환하려면 기기를 활성화하세요.",
       "pressPlay": "소스를 전환했습니다. Music Assistant에서 재생을 누르면 새 입력에서 시작합니다."
     },
     "outputs": "출력"
@@ -817,6 +834,8 @@
     "source": {
       "errorCapture": "이 호스트에서는 스마트폰 오디오를 캡처할 수 없습니다.",
       "errorCaptureNext": "브리지가 스마트폰용 PipeWire 캡처 노드를 필요로 합니다. 호스트의 오디오 백엔드를 확인하세요.",
+      "errorHeadsetA2dp": "헤드셋 마이크는 해제되었지만 Bluetooth 오디오 출력이 돌아오지 않았습니다.",
+      "errorHeadsetA2dpNext": "헤드셋을 다시 연결한 뒤 기기 카드에서 A2DP 출력을 다시 시도하세요. 성공할 때까지 플레이어는 멈춘 상태로 유지됩니다.",
       "errorNoAdapter": "검색 가능 모드를 허용한 Bluetooth 어댑터가 없습니다.",
       "errorNoAgent": "브리지가 Bluetooth 페어링 에이전트를 등록하지 못했습니다.",
       "errorBluetoothNext": "위의 Bluetooth 컨트롤러를 확인한 뒤 다시 페어링하세요.",
@@ -1365,7 +1384,10 @@
         "label": "오디오 소스",
         "help": "페어링된 기기에서 Bluetooth 오디오를 캡처하여 Music Assistant에 제공합니다. 기본적으로 꺼져 있으며, 활성화하면 소스가 즉시 시작됩니다.",
         "off": "소스가 꺼져 있습니다. 활성화하면 선택한 입력 캡처를 시작합니다.",
-        "failed": "소스를 시작하지 못했습니다. Music Assistant와 호스트 오디오 서버를 확인한 뒤 다시 시도하십시오."
+        "failed": "소스를 시작하지 못했습니다. Music Assistant와 호스트 오디오 서버를 확인한 뒤 다시 시도하십시오.",
+        "confirmTitle": "소스 모드를 끌까요?",
+        "confirmBody": "활성 입력이 해제되고 캡처가 중지됩니다. 플레이어는 스피커 목록으로 돌아갑니다.",
+        "confirmDisable": "소스 모드 끄기"
       },
       "sourceTarget": {
         "label": "소스 재생 대상",
@@ -2043,6 +2065,8 @@
         "deviceHelp": "이 기기를 각 스피커로 가져가세요. 마이크를 사용하려면 HTTPS(또는 localhost)가 필요합니다.",
         "phone": "스마트폰 (QR 코드 스캔)",
         "phoneHelp": "스마트폰에서 캡처 페이지를 여세요. 모든 스피커를 한 번에 녹음해 전송합니다. 일반 HTTP에서도 작동합니다(스마트폰 녹음기 사용).",
+        "inputHelp": "브리지가 “{name}”에서 클릭 소리를 녹음합니다. 아무것도 들고 다닐 필요도, 마이크 권한도 필요 없습니다.",
+        "inputMissing": "브리지가 녹음할 수 있는 청취 장치를 선택하세요.",
         "usePhone": "대신 스마트폰으로 측정"
       },
       "startPhone": "시작"
@@ -2214,6 +2238,16 @@
       "certificate": "스마트폰에 인증서 경고가 한 번 표시됩니다. 수락하면 브라우저에서 바로 녹음할 수 있습니다.",
       "httpFallback": "인증서가 없으면 일반 링크(스마트폰 녹음기)를 사용하세요:",
       "keepsDelay": "측정하지 않아 현재 지연을 유지하는 스피커: {names}"
+    },
+    "input": {
+      "help": "브리지는 각 스피커가 차례로 혼자 재생되는 동안 {name}에서 클릭 소리를 녹음한 뒤, 그 한 번의 녹음으로 모든 스피커를 측정합니다.",
+      "recording": "브리지가 시퀀스를 녹음하는 중…",
+      "play": "브리지에서 녹음 ({n})",
+      "measuring": "녹음을 측정하는 중…",
+      "measured": "브리지 녹음 측정이 끝났습니다.",
+      "unavailable": "청취 장치 “{name}”을(를) 더 이상 사용할 수 없습니다. 대신 휴대폰으로 측정하세요.",
+      "busy": "청취 장치 “{name}”이(가) 소스 피드에서 사용 중입니다. 대신 휴대폰으로 측정하세요.",
+      "latencyNote": "참고: 입력 지연 시간은 보정되지 않았습니다. 일정한 지연은 모든 스피커를 똑같이 밀어내므로 상대 결과에는 영향을 주지 않습니다."
     },
     "tuneLink": "그룹과 함께 튜닝 →",
     "noGroupHelp": "{name}은(는) 동기화 그룹에 없습니다. 다른 스피커와 함께 튜닝하려면 그룹에서 동기화 그룹을 만들어 이 스피커를 추가하세요.",

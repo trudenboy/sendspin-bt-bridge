@@ -480,6 +480,23 @@
       "removeFailed": "Could not remove the source.",
       "useFailed": "Could not switch the source.",
       "renameFailed": "Could not rename the source.",
+      "enterSourceMode": "Source",
+      "backToPlayback": "Back to playback",
+      "switchingToSource": "Switching to source…",
+      "switchingToPlayback": "Back to playback…",
+      "sourceMode": "Source mode",
+      "waitingForStream": "Waiting for stream",
+      "capturing": "Capturing this device's microphone",
+      "gain": "Gain",
+      "mute": "Mute input",
+      "unmute": "Unmute input",
+      "level": "Input level",
+      "noSignal": "No signal — check the mute on the device.",
+      "toggleFailed": "Could not switch the device between playback and source mode.",
+      "commandFailed": "The bridge refused that input command.",
+      "unavailableDisconnected": "Connect the device to switch modes.",
+      "unavailableStandby": "Wake the device from standby to switch modes.",
+      "unavailableDisabled": "Enable the device to switch modes.",
       "pressPlay": "Source switched. Press Play in Music Assistant to start it on the new input."
     },
     "outputs": "Outputs"
@@ -817,6 +834,8 @@
     "source": {
       "errorCapture": "The phone's audio cannot be captured on this host.",
       "errorCaptureNext": "The bridge needs PipeWire capture nodes for the phone; check the host's audio backend.",
+      "errorHeadsetA2dp": "The headset's microphone was released, but its Bluetooth audio output did not come back.",
+      "errorHeadsetA2dpNext": "Reconnect the headset, then retry its A2DP output from the device card. The player stays stopped until it works.",
       "errorNoAdapter": "No Bluetooth adapter accepted discoverability.",
       "errorNoAgent": "The bridge could not register a Bluetooth pairing agent.",
       "errorBluetoothNext": "Check the Bluetooth controllers above, then try pairing again.",
@@ -1365,7 +1384,10 @@
         "label": "Audio source",
         "help": "Capture Bluetooth audio from a paired device and offer it to Music Assistant. Off by default; enabling starts the source immediately.",
         "off": "The source is off. Enable it to start capturing the selected source input.",
-        "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again."
+        "failed": "The source could not be started. Check Music Assistant and the host audio server, then try again.",
+        "confirmTitle": "Turn source mode off?",
+        "confirmBody": "The active input is released and its capture stops. Players return to the speaker list.",
+        "confirmDisable": "Turn off source mode"
       },
       "sourceTarget": {
         "label": "Play source on",
@@ -2043,6 +2065,8 @@
         "deviceHelp": "Carry this device to each speaker. Needs HTTPS (or localhost) for the microphone.",
         "phone": "A phone (scan a QR code)",
         "phoneHelp": "Open the capture page on a phone; it records every speaker in one go and sends the recording. Works over plain HTTP too (with the phone’s recorder).",
+        "inputHelp": "The bridge records the clicks from “{name}”; carry nothing and grant no microphone permission.",
+        "inputMissing": "Choose a listening device the bridge can record from.",
         "usePhone": "Measure with a phone instead"
       },
       "startPhone": "Start"
@@ -2214,6 +2238,16 @@
       "certificate": "Your phone will warn about the certificate once — accept it to record directly in the browser.",
       "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):",
       "keepsDelay": "Not measured, these keep their current delay: {names}"
+    },
+    "input": {
+      "help": "The bridge records the clicks from {name} while every speaker plays alone in turn, then measures all of them from that one recording.",
+      "recording": "The bridge is recording the sequence…",
+      "play": "Record from the bridge ({n})",
+      "measuring": "Measuring the recording…",
+      "measured": "The bridge’s recording is measured.",
+      "unavailable": "The listening device “{name}” is no longer available. Measure with the phone instead.",
+      "busy": "The listening device “{name}” is busy with the source feed. Measure with the phone instead.",
+      "latencyNote": "Note: input latency is not calibrated — a constant delay shifts every speaker equally, so the relative result is unaffected."
     },
     "tuneLink": "Tune with your group →",
     "noGroupHelp": "{name} is not in a sync group. To tune it with others, create a sync group in Groups and add this speaker to it.",

@@ -19,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
 
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.models.sync import (
@@ -29,6 +29,8 @@ from sendspin_bridge.application.models.sync import (
     CaptureMemberOut,
     CaptureResultOut,
     CaptureStateOut,
+    ListeningDeviceOut,
+    ListeningDevicesOut,
     MeasurementOut,
     PendingRestoreOut,
     ProfileApplyOut,
@@ -85,10 +87,23 @@ _STATUS = {
     "not_eligible": 409,
 }
 
+#: The recording-from-an-input endpoint's own stable problem codes (the phone capture keeps its).
+_INPUT_STATUS = {
+    "unknown_input": 404,
+    "input_unavailable": 409,
+    "input_busy": 409,
+    "capture_running": 409,
+    "session_state": 409,
+}
+
 #: Largest recording body accepted: 20 s of 48 kHz int16 mono is 1.92 MB.
 MAX_RECORDING_BYTES = 2_000_000
 #: Largest phone upload: a few minutes of a phone recorder's AAC, or of WAV at 16 kHz.
 MAX_CAPTURE_BYTES = 20_000_000
+
+#: The input recorder stops at its length; the sequence it recorded normally ends before it does.
+_SEQUENCE_WAIT_S = 15.0
+_SEQUENCE_POLL_S = 0.05
 
 #: The phone capture's sequence waits with this (tests swap it for a clock that does not wait).
 _sequence_sleep = time.sleep
@@ -675,14 +690,227 @@ def _capture_upload(session: SyncSession, body: bytes) -> CaptureResultOut:
         pcm, rate = audio_decode.decode_to_mono(
             body, max_seconds=seq.max_duration_s(len(current["members"]), session.point)
         )
+    except ControlError as exc:
+        logger.info("Sync capture upload refused (%s): %s", exc.code, exc.detail)
+        _raise(exc)
+    return _measure_sequence(session, pcm, rate)
+
+
+def _measure_sequence(session: SyncSession, pcm: bytes, rate: int) -> CaptureResultOut:
+    """The one measurement path: the phone's upload and a bridge input's recording both end here."""
+    try:
         results = session.record_sequence(pcm, rate)
     except (ControlError, MaApiError) as exc:
-        logger.info("Sync capture upload refused (%s): %s", exc.code, exc.detail)
+        logger.info("Sync capture measurement refused (%s): %s", exc.code, exc.detail)
         _raise(exc)
     for m in results.values():
         if m.status == "ok":
             get_store().mark_measured(session.group_id, m.member, _now())
     return CaptureResultOut(results=[MeasurementOut.model_validate(to_dict(m)) for m in results.values()])
+
+
+# -- a bridge input as the measurement's listening device ----------------------------------
+#
+# The wizard can record the sequence with any input the Sources UI knows instead of a phone: a
+# local line-in, a headset's HFP microphone, a phone streaming to the bridge.  The input is
+# BORROWED: the recorder opens its node directly on a worker thread, so the active source input,
+# the source client, the headset profile and every sink stay as they are.  A device the source
+# client is already capturing is refused (input_busy) instead of fighting it for the node.
+
+
+def _refuse_input(code: str, detail: str) -> NoReturn:
+    """A refused input request: logged with its reason, then the stable problem."""
+    logger.info("Sync input recording refused (%s): %s", code, detail)
+    raise UseCaseError(_INPUT_STATUS[code], code, detail)
+
+
+async def list_listening_devices() -> ListeningDevicesOut:
+    """Every input the Sources UI knows, as a choice for the measurement's listening device."""
+    entries = _input_entries(await _source_inputs())
+    return ListeningDevicesOut(devices=[_listening_device(entry) for entry in entries])
+
+
+async def _source_inputs() -> Mapping[str, Any]:
+    """The Sources UI's own input view, reused so this list can never be narrower."""
+    from sendspin_bridge.application import source as source_uc
+
+    return await source_uc.inputs()
+
+
+def _input_entries(view: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The configured inputs and the local nodes that can still be added, in the UI's order."""
+    return [*(view.get("inputs") or ()), *(view.get("local_candidates") or ())]
+
+
+def _entry_available(entry: Mapping[str, Any]) -> bool:
+    """The node is there now: a saved local input's node may be gone, a phone may be disconnected."""
+    if not entry.get("available"):
+        return False
+    return not (entry.get("kind") == "bluetooth" and not entry.get("connected"))
+
+
+def _listening_device(entry: Mapping[str, Any]) -> ListeningDeviceOut:
+    return ListeningDeviceOut(
+        id=str(entry.get("id") or ""),
+        name=str(entry.get("name") or entry.get("id") or ""),
+        kind=cast('Literal["local", "bluetooth", "headset_microphone"]', str(entry.get("kind") or "local")),
+        available=_entry_available(entry),
+    )
+
+
+async def capture_input(sid: str, input_id: str, seconds: float | None = None) -> CaptureResultOut:
+    """Record one input of the bridge for ``seconds`` and measure the sequence from it.
+
+    The recording happens on a worker thread (the route awaits it off the bridge loop), in the
+    same raw format the phone decode produces, and the result goes through the same measurement
+    path as the phone upload.  One recording at a time per session, like the upload.
+    """
+    session = _session(sid)
+    _measuring(session)
+    view = await _source_inputs()
+    entry = next((row for row in _input_entries(view) if str(row.get("id")) == input_id), None)
+    if entry is None:
+        _refuse_input("unknown_input", f"No input {input_id} is known to the bridge")
+    if _input_busy(view, input_id):
+        _refuse_input("input_busy", f"{entry.get('name') or input_id} is the source feed's input right now")
+    if not _entry_available(entry):
+        _refuse_input("input_unavailable", f"{entry.get('name') or input_id} is not available to record")
+    node = await _input_node(entry)
+    if node is None:
+        _refuse_input("input_unavailable", f"No capture node answers for {entry.get('name') or input_id}")
+    current = session.sequence
+    if current is None:
+        _refuse_input("session_state", "The measurement has no sequence to record: play it first")
+    duration = _recording_seconds(seconds, current, session.point)
+    tool = _recorder_tool(view)
+    with _upload_locks_lock:
+        lock = _upload_locks.setdefault(session.id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        _refuse_input("capture_running", "A recording is being measured; wait a moment")
+    try:
+        if not _decode_gate.acquire(blocking=False):
+            _refuse_input("capture_running", "Another recording is being measured; try again in a moment")
+        try:
+            return await asyncio.to_thread(_capture_input_sync, session, node, duration, tool)
+        finally:
+            _decode_gate.release()
+    finally:
+        lock.release()
+
+
+def _input_busy(view: Mapping[str, Any], input_id: str) -> bool:
+    """The source client holds the node only while a capture is actually open.
+
+    Selected is not captured: with the feed enabled and the input chosen, the
+    card sits on HFP and the node exists, but nothing reads it until Music
+    Assistant starts the stream. Refusing then would make the one microphone
+    the operator has unusable for the very measurement that needs it.
+    """
+    from sendspin_bridge.services.source import state as source_state
+
+    if str(view.get("active_input") or "") != input_id:
+        return False
+    current = source_state.snapshot()
+    return bool(current.streaming) or current.state == "streaming"
+
+
+def _recorder_tool(view: Mapping[str, Any]) -> str:
+    from sendspin_bridge.sync_tuning.input_recorder import RecorderUnavailable, recorder_tool
+
+    try:
+        return recorder_tool(str(view.get("capture_kind") or "unknown"))
+    except RecorderUnavailable as exc:
+        _refuse_input("input_unavailable", str(exc))
+
+
+async def _input_node(entry: Mapping[str, Any]) -> str | None:
+    """The audio server's node for an input: its own name for a local one, the address's for a phone."""
+    from sendspin_bridge.services.source.capture import mac_from_node
+
+    if entry.get("kind") == "local":
+        return str(entry.get("node") or "") or None
+    mac = str(entry.get("mac") or "").upper()
+    if not mac:
+        return None
+    nodes = await asyncio.to_thread(_audio_source_nodes)
+    return next((node for node in nodes if mac_from_node(node) == mac), None)
+
+
+def _audio_source_nodes() -> tuple[str, ...]:
+    """The audio server's source names, read through the cached hardware inventory."""
+    from sendspin_bridge.services.hardware import inventory
+    from sendspin_bridge.services.source.read_model import audio_sources_from_read
+
+    try:
+        snapshot = inventory.read_inventory()
+    except inventory.HardwareUnavailable:
+        return ()
+    return tuple(str(getattr(source, "name", "") or "") for source in audio_sources_from_read(snapshot) or ())
+
+
+def _recording_seconds(seconds: float | None, sequence: Mapping[str, Any], point: str) -> float:
+    """The recording's length: the client's number, or the sequence's own, within its recording bound.
+
+    The sequence is what has to fit in the recording.  The ceiling is the same generous maximum the
+    phone upload path accepts for that sequence (``seq.max_duration_s``), never the estimator's
+    per-member window: a two-member sequence already plays longer than that window, and a recording
+    stopped early would miss the last speaker's solo.  A client can ask for more time (a slow source)
+    but never for an unbounded capture, and never for less than the estimator can measure.
+    """
+    members = len(sequence.get("members") or ())
+    wanted = float(seconds) if seconds is not None and math.isfinite(float(seconds)) else None
+    if wanted is None:
+        wanted = seq.length_s(members, point, float(sequence.get("lead_s") or seq.LEAD_S))
+    ceiling = seq.max_duration_s(members, point)
+    return max(estimator.MIN_DURATION_S, min(ceiling, wanted))
+
+
+def _capture_input_sync(session: SyncSession, node: str, seconds: float, tool: str) -> CaptureResultOut:
+    """Worker thread: record the node, decode it exactly as the phone's upload is decoded, measure."""
+    from sendspin_bridge.sync_tuning import audio_decode, input_recorder
+
+    argv = input_recorder.capture_argv(node, tool=tool)
+    try:
+        raw = input_recorder.run_capture(argv, seconds)
+    except input_recorder.RecorderUnavailable as exc:
+        raise UseCaseError(_INPUT_STATUS["input_unavailable"], "input_unavailable", str(exc)) from exc
+    current = session.sequence
+    if current is None:
+        raise UseCaseError(
+            _INPUT_STATUS["session_state"], "session_state", "The sequence ended while the input recorded"
+        )
+    try:
+        pcm, rate = audio_decode.decode_to_mono(
+            input_recorder.to_wav(raw), max_seconds=seq.max_duration_s(len(current["members"]), session.point)
+        )
+    except ControlError as exc:
+        _raise(exc)
+    _wait_for_sequence(session)
+    return _measure_sequence(session, pcm, rate)
+
+
+def _wait_for_sequence(session: SyncSession) -> None:
+    """The sequence normally ends before the recording does; a late start leaves only a moment."""
+    deadline = time.monotonic() + _SEQUENCE_WAIT_S
+    while True:
+        current = session.sequence
+        if current is None:
+            raise UseCaseError(
+                _INPUT_STATUS["session_state"], "session_state", "The sequence ended while the input was recording"
+            )
+        if current["phase"] == "done":
+            return
+        if current["phase"] == "failed":
+            raise UseCaseError(
+                _INPUT_STATUS["session_state"], "session_state", "The sequence failed while the input was recording"
+            )
+        if time.monotonic() >= deadline:
+            raise UseCaseError(
+                _INPUT_STATUS["session_state"],
+                "session_state",
+                "The sequence was still playing when the recording ended",
+            )
+        time.sleep(_SEQUENCE_POLL_S)
 
 
 # -- a speaker's air-to-sound latency (air sensor) -----------------------------------------

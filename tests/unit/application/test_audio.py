@@ -349,10 +349,10 @@ async def test_an_unreadable_inventory_with_a_live_server_is_a_503(monkeypatch):
     assert exc.value.code == "hardware_unavailable"
 
 
-async def test_every_write_drops_the_inventory_cache(host, monkeypatch):
+async def test_every_write_expires_the_inventory_cache(host, monkeypatch):
     """A read right after a write must not answer from before it."""
     dropped: list[int] = []
-    monkeypatch.setattr(audio_uc, "clear_cache", lambda: dropped.append(1))
+    monkeypatch.setattr(audio_uc, "invalidate_cache", lambda: dropped.append(1))
 
     await audio_uc.set_sink_volume(SINK.name, 50)
     await audio_uc.set_sink_mute(SINK.name, True)
@@ -707,12 +707,39 @@ async def test_set_sink_port_a_name_outside_the_grammar_is_invalid_audio_name(ho
     assert host == []
 
 
-async def test_card_profile_and_sink_port_writes_drop_the_inventory_cache(host, monkeypatch):
+async def test_card_profile_and_sink_port_writes_expire_the_inventory_cache(host, monkeypatch):
     """A read right after either write must not answer from before it."""
     dropped: list[int] = []
-    monkeypatch.setattr(audio_uc, "clear_cache", lambda: dropped.append(1))
+    monkeypatch.setattr(audio_uc, "invalidate_cache", lambda: dropped.append(1))
 
     await audio_uc.set_card_profile(CARD.name, "off")
     await audio_uc.set_sink_port(SINK.name, "analog-output-headphones")
 
     assert len(dropped) == 2
+
+
+async def test_a_profile_write_keeps_shared_facts_when_the_refresh_fails(host, monkeypatch):
+    from sendspin_bridge.services.hardware import inventory
+
+    inventory.clear_cache()
+    first = _read()
+    reads = []
+
+    def refresh():
+        reads.append(1)
+        if len(reads) > 1:
+            raise HardwareUnavailable("offline")
+        return first
+
+    monkeypatch.setattr(inventory, "_refresh", refresh)
+    monkeypatch.setattr(audio_uc, "read_inventory", inventory.read_inventory)
+    try:
+        detail = await audio_uc.set_card_profile(CARD.name, "output:analog-stereo")
+        assert detail.stale is True
+        assert detail.active_profile == CARD.active_profile
+        retained = inventory.read_inventory()
+        assert retained.stale and retained.as_of == first.as_of
+        assert retained.audio.cards == first.audio.cards
+        assert any(entry.code == "refresh_failed" for entry in retained.degraded)
+    finally:
+        inventory.clear_cache()

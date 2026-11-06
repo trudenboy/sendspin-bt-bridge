@@ -82,6 +82,20 @@ adapter, one `card_list`, one `sink_list`, one `source_list`, one `wpctl`
 status, cached for 2 s with `as_of` and `stale` in the response. Every consumer
 — aggregate, details, guidance, diagnostics — reads through it.
 
+*Clarified 2026-11-06:* Source feed status and input selection reuse this
+reader too. One hardware response projects its Source feed from the same
+inventory and one source runtime snapshot; source discovery has no separate
+cache. Player exclusions are applied to cached facts using the current
+configuration. An unavailable audio list remains unknown rather than becoming
+a confirmed empty list.
+
+Runtime invalidation after bond or audio changes expires the read without
+discarding its last successful facts. If refreshing fails, that read remains
+available with `stale` and degradation reasons; failed refreshes also respect
+the short TTL. A retained stale read cannot confirm a requested profile or
+port change as newly observed. Blocking reads run outside the bridge loop;
+projection of supplied facts performs no hardware reads.
+
 Read-only D-Bus calls do not take the adapter lease. The `bluetoothctl` fallback
 does: it is a blocking command, and the lease is what keeps pairing, scanning
 and RSSI refresh from colliding. A read that cannot get the lease waits.

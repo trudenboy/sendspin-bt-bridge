@@ -9,11 +9,15 @@ from sendspin_bridge.application.errors import UseCaseError
 
 
 @pytest.fixture(autouse=True)
-def _clean_state():
+def _clean_state(installed_bluez):
+    from sendspin_bridge.services.hardware import inventory
+
+    inventory.clear_cache()
     from sendspin_bridge.services.source import state
 
     state.reset()
     yield
+    inventory.clear_cache()
     state.reset()
 
 
@@ -269,3 +273,88 @@ def test_selecting_a_source_answers_with_the_active_id(api_client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["active_input"] == "local:alsa_input.line"
     assert seen == ["local:alsa_input.line"]
+
+
+def test_setting_the_active_volume_answers_with_the_resulting_row(api_client, monkeypatch):
+    seen: list[int] = []
+
+    async def fake_set_volume(volume):
+        seen.append(volume)
+        return {"id": "local:alsa_input.line", "kind": "local", "name": "Line", "volume": volume, "muted": False}
+
+    monkeypatch.setattr(source_uc, "set_active_volume", fake_set_volume)
+
+    response = api_client.put("/api/v1/bridge/source/active/volume", json={"volume": 35})
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "local:alsa_input.line"
+    assert response.json()["volume"] == 35
+    assert seen == [35]
+
+
+def test_setting_the_active_mute_answers_with_the_resulting_row(api_client, monkeypatch):
+    seen: list[bool] = []
+
+    async def fake_set_mute(muted):
+        seen.append(muted)
+        return {"id": "local:alsa_input.line", "kind": "local", "name": "Line", "volume": 100, "muted": muted}
+
+    monkeypatch.setattr(source_uc, "set_active_mute", fake_set_mute)
+
+    response = api_client.put("/api/v1/bridge/source/active/mute", json={"muted": True})
+
+    assert response.status_code == 200
+    assert response.json()["muted"] is True
+    assert seen == [True]
+
+
+def test_a_gain_without_an_active_input_is_a_problem(api_client, monkeypatch):
+    async def fake_set_volume(volume):
+        raise UseCaseError(409, "no_active_input", "No source input is active.")
+
+    monkeypatch.setattr(source_uc, "set_active_volume", fake_set_volume)
+
+    response = api_client.put("/api/v1/bridge/source/active/volume", json={"volume": 35})
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "no_active_input"
+
+
+def test_clearing_the_active_input_answers_204(api_client, monkeypatch):
+    seen: list[int] = []
+
+    async def fake_clear():
+        seen.append(1)
+
+    monkeypatch.setattr(source_uc, "clear_active_input", fake_clear)
+
+    response = api_client.delete("/api/v1/bridge/source/active")
+
+    assert response.status_code == 204
+    assert seen == [1]
+
+
+def test_the_source_input_rows_carry_gain_and_mute(api_client, monkeypatch):
+    async def fake_inputs(include_monitors=False):
+        return {
+            "active_input": "local:alsa_input.line",
+            "inputs": [
+                {
+                    "id": "local:alsa_input.line",
+                    "kind": "local",
+                    "name": "Line",
+                    "active": True,
+                    "volume": 35,
+                    "muted": True,
+                }
+            ],
+            "local_candidates": [],
+            "capture_available": True,
+            "capture_kind": "pulseaudio",
+        }
+
+    monkeypatch.setattr(source_uc, "inputs", fake_inputs)
+
+    row = api_client.get("/api/v1/bridge/source/inputs").json()["inputs"][0]
+
+    assert (row["volume"], row["muted"]) == (35, True)

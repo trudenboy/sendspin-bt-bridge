@@ -13,11 +13,15 @@ SERVER_URL = "ws://ma.local:8927/sendspin"
 
 
 @pytest.fixture(autouse=True)
-def _clean_state(monkeypatch, tmp_path):
+def _clean_state(monkeypatch, tmp_path, installed_bluez):
+    from sendspin_bridge.services.hardware import inventory
+
+    inventory.clear_cache()
     source_state.reset()
     manager.reset()
     monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: tmp_path)
     yield
+    inventory.clear_cache()
     source_state.reset()
     manager.reset()
 
@@ -327,12 +331,21 @@ async def test_set_target_without_an_ma_token_is_refused(monkeypatch):
 
 
 def _snapshot(sources):
-    from types import SimpleNamespace
+    from sendspin_bridge.services.audio.sink_inventory import LocalSource
+    from sendspin_bridge.services.hardware import inventory
 
-    return SimpleNamespace(
-        audio=SimpleNamespace(sources=sources),
-        capabilities=SimpleNamespace(capture=True, audio_server="pulseaudio"),
+    audio = inventory.build_audio_facts(
+        [],
+        [],
+        [
+            LocalSource(
+                source.name, source.description, "idle", "s16le 2ch 48000Hz", False, 100, monitor_of=source.monitor_of
+            )
+            for source in sources
+        ],
+        inventory.CaptureFacts(),
     )
+    return inventory._assemble([], [], dbus=True, bluetooth=True, degraded=[], audio=audio, server_name="PulseAudio")
 
 
 async def test_inputs_lists_configured_sources_and_local_candidates(monkeypatch):
@@ -405,14 +418,32 @@ async def test_selecting_an_unknown_source_is_refused(monkeypatch):
     assert raised.value.status == 404
 
 
-async def test_status_exposes_local_inputs_and_marks_the_active_one(monkeypatch):
-    from sendspin_bridge.services.source.state import SourceDevice
+async def test_status_exposes_local_inputs_and_marks_the_active_one(monkeypatch, installed_bluez):
+    from dataclasses import replace
 
-    monkeypatch.setattr(
-        source_uc.source_devices,
-        "list_source_devices",
-        lambda **_kw: (SourceDevice("34:C7:E9:25:A3:A3", "Pixel", True),),
+    from sendspin_bridge.services.hardware import inventory
+
+    phone = "34:C7:E9:25:A3:A3"
+    facts = inventory.DeviceFacts(
+        mac=phone,
+        name="Pixel",
+        alias="Pixel",
+        paired=True,
+        bonded=True,
+        trusted=True,
+        blocked=False,
+        connected=True,
+        controller_macs=(),
+        uuids=("0000110a-0000-1000-8000-00805f9b34fb",),
+        modalias=None,
+        services_resolved=True,
+        battery_pct=None,
+        rssi_delta_db=None,
+        rssi_at=None,
+        transport_state=None,
+        roles=(),
     )
+    monkeypatch.setattr(inventory, "read_inventory", lambda: replace(_snapshot([]), devices=(facts,)))
     source_state.publish(enabled=True, state="waiting", active_input="local:alsa_input.line")
 
     view = source_uc.status(
@@ -459,3 +490,158 @@ async def test_set_target_rejects_a_player_without_play_media(monkeypatch):
 
     assert raised.value.status == 422
     assert raised.value.code == "target_unsupported"
+
+
+class _FakeAudioClient:
+    """A source client whose gain/mute/selection actions the test can see."""
+
+    client_id = "peer-1"
+
+    def __init__(self) -> None:
+        self.active_input: str | None = "local:alsa_input.line"
+        self.gains: list[int] = []
+        self.mutes: list[bool] = []
+        self.selections: list[str | None] = []
+        self.gain_verdict = True
+        self.mute_verdict = True
+
+    async def set_input_gain(self, volume: int) -> bool:
+        self.gains.append(volume)
+        return self.gain_verdict
+
+    async def set_input_mute(self, muted: bool) -> bool:
+        self.mutes.append(muted)
+        return self.mute_verdict
+
+    async def set_active(self, source_id: str | None) -> None:
+        self.selections.append(source_id)
+        self.active_input = "none" if source_id is None else source_id
+        source_state.publish(active_input=None if source_id in (None, "none") else source_id)
+
+
+def _seed_active_line(tmp_path) -> None:
+    import json
+
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "SENDSPIN_SOURCE": True,
+                "SENDSPIN_SOURCES": [
+                    {"id": "local:alsa_input.line", "kind": "local", "node": "alsa_input.line", "name": "Line"}
+                ],
+                "SENDSPIN_SOURCE_ACTIVE": "local:alsa_input.line",
+            }
+        )
+    )
+
+
+def _dirties(tmp_path):
+    import json
+
+    return json.loads((tmp_path / "config.json").read_text())
+
+
+async def test_setting_the_active_gain_applies_it_and_returns_the_row(tmp_config, monkeypatch):
+    _seed_active_line(tmp_config.parent)
+    client = _FakeAudioClient()
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+    monkeypatch.setattr(source_uc, "_hardware_audio", lambda: _async(None))
+
+    row = await source_uc.set_active_volume(35)
+
+    assert client.gains == [35]
+    assert client.selections == []
+    assert (row["id"], row["volume"], row["muted"]) == ("local:alsa_input.line", 35, False)
+    assert _dirties(tmp_config.parent)["SENDSPIN_SOURCE_INPUT_STATE"]["local:alsa_input.line"] == {"volume": 35}
+
+
+async def test_setting_the_active_mute_applies_it_and_returns_the_row(tmp_config, monkeypatch):
+    _seed_active_line(tmp_config.parent)
+    client = _FakeAudioClient()
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+    monkeypatch.setattr(source_uc, "_hardware_audio", lambda: _async(None))
+
+    row = await source_uc.set_active_mute(True)
+
+    assert client.mutes == [True]
+    assert client.selections == []
+    assert (row["volume"], row["muted"]) == (100, True)
+    assert _dirties(tmp_config.parent)["SENDSPIN_SOURCE_INPUT_STATE"]["local:alsa_input.line"] == {"muted": True}
+
+
+async def test_the_gain_command_without_an_active_input_is_a_problem(tmp_config, monkeypatch):
+    import json
+
+    tmp_config.write_text(json.dumps({"SENDSPIN_SOURCE": True, "SENDSPIN_SOURCE_ACTIVE": None}))
+    monkeypatch.setattr(source_uc.manager, "client", lambda: _FakeAudioClient())
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.set_active_volume(35)
+
+    assert (raised.value.status, raised.value.code) == (409, "no_active_input")
+
+
+async def test_a_gain_the_node_refuses_is_input_unavailable_and_is_not_saved(tmp_config, monkeypatch):
+    _seed_active_line(tmp_config.parent)
+    client = _FakeAudioClient()
+    client.gain_verdict = False
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+    monkeypatch.setattr(source_uc, "_hardware_audio", lambda: _async(None))
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.set_active_volume(35)
+
+    assert (raised.value.status, raised.value.code) == (409, "input_unavailable")
+    assert "SENDSPIN_SOURCE_INPUT_STATE" not in _dirties(tmp_config.parent)
+
+
+async def test_an_out_of_range_gain_never_reaches_the_node(tmp_config, monkeypatch):
+    _seed_active_line(tmp_config.parent)
+    client = _FakeAudioClient()
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+
+    with pytest.raises(UseCaseError) as raised:
+        await source_uc.set_active_volume(101)
+
+    assert (raised.value.status, raised.value.code) == (422, "invalid_volume")
+    assert client.gains == []
+
+
+async def test_clearing_the_active_input_releases_it_and_remembers_the_choice(tmp_config, monkeypatch):
+    _seed_active_line(tmp_config.parent)
+    client = _FakeAudioClient()
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+
+    await source_uc.clear_active_input()
+
+    assert client.selections == [None]
+    assert source_state.snapshot().active_input is None
+    saved = _dirties(tmp_config.parent)
+    assert saved["SENDSPIN_SOURCE_ACTIVE"] == "none"
+    assert saved["SENDSPIN_SOURCE"] is True
+
+
+async def test_clearing_when_nothing_is_active_does_nothing(tmp_config, monkeypatch):
+    import json
+
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
+
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
+                "SENDSPIN_SOURCE": True,
+                "SENDSPIN_SOURCE_ACTIVE": "none",
+            }
+        )
+    )
+    client = _FakeAudioClient()
+    client.active_input = "none"
+    monkeypatch.setattr(source_uc.manager, "client", lambda: client)
+    writes: list[object] = []
+    monkeypatch.setattr("sendspin_bridge.config.update_config", lambda mutator: writes.append(mutator))
+
+    await source_uc.clear_active_input()
+
+    assert client.selections == []
+    assert writes == []

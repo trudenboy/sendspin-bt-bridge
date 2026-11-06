@@ -52,6 +52,8 @@ class SourceInputStatus(ResponseModel):
     monitor: bool = False
     mac: str | None = None
     node: str | None = None
+    volume: int = Field(default=100, ge=0, le=100, description="Capture gain, 0 to 100.")
+    muted: bool = Field(default=False, description="The capture source is muted; the stream keeps running.")
 
 
 class SourceTarget(ResponseModel):

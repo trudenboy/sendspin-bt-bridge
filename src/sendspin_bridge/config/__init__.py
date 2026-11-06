@@ -78,6 +78,7 @@ __all__ = [
     "is_ha_addon_runtime",
     "load_config",
     "load_player_volume",
+    "load_source_input_state",
     "migrate_config_payload",
     "normalize_update_channel",
     "resolve_additional_web_port",
@@ -90,6 +91,7 @@ __all__ = [
     "save_device_volume",
     "save_player_static_delay",
     "save_player_volume",
+    "save_source_input_state",
     "update_config",
     "write_config_file",
 ]
@@ -166,6 +168,8 @@ DEFAULT_CONFIG = {
     "SENDSPIN_SOURCE_TARGET": None,
     "SENDSPIN_SOURCES": [],
     "SENDSPIN_SOURCE_ACTIVE": None,
+    # Per-input gain/mute for the source feed, keyed by source input id.
+    "SENDSPIN_SOURCE_INPUT_STATE": {},
     "PULSE_SINK_RESET_ON_START": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],
@@ -232,7 +236,7 @@ config_lock = threading.RLock()  # serializes all config.json read-modify-write 
 _config_load_log_lock = threading.Lock()
 _config_load_logged_once = False
 CONFIG_ALLOWED_KEYS = frozenset(DEFAULT_CONFIG)
-RUNTIME_STATE_CONFIG_KEYS = frozenset(("PLAYER_STATE",))
+RUNTIME_STATE_CONFIG_KEYS = frozenset(("PLAYER_STATE", "SENDSPIN_SOURCE_INPUT_STATE"))
 SENSITIVE_CONFIG_KEYS = frozenset(
     (
         "AUTH_PASSWORD_HASH",
@@ -492,6 +496,63 @@ def load_player_volume(player_id: str) -> int | None:
     if isinstance(volume, int) and not isinstance(volume, bool) and 0 <= volume <= 100:
         return volume
     return None
+
+
+def load_source_input_state(source_id: str) -> dict[str, Any]:
+    """The saved ``{volume, muted}`` of one source input id, read from disk.
+
+    Source inputs are not players: a phone bond, a line-in or a headset
+    microphone has an input id but no ``PLAYER_STATE`` entry, so its gain
+    lives in its own small map, keyed by that same id.
+    """
+    if not source_id:
+        return {}
+    try:
+        with config_lock, open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+    entries = cfg.get("SENDSPIN_SOURCE_INPUT_STATE") if isinstance(cfg, dict) else None
+    entry = entries.get(source_id) if isinstance(entries, dict) else None
+    if not isinstance(entry, dict):
+        return {}
+    saved: dict[str, Any] = {}
+    volume = entry.get("volume")
+    if isinstance(volume, int) and not isinstance(volume, bool) and 0 <= volume <= 100:
+        saved["volume"] = volume
+    muted = entry.get("muted")
+    if isinstance(muted, bool):
+        saved["muted"] = muted
+    return saved
+
+
+def save_source_input_state(source_id: str, *, volume: int | None = None, muted: bool | None = None) -> None:
+    """Persist one source input's gain and mute, merging into what was already saved."""
+    if not source_id or (volume is None and muted is None):
+        return
+    if volume is not None and (isinstance(volume, bool) or not isinstance(volume, int) or not 0 <= volume <= 100):
+        logger.warning("Skipping saved source gain %r for %s", volume, source_id)
+        return
+    if muted is not None and not isinstance(muted, bool):
+        logger.warning("Skipping saved source mute %r for %s", muted, source_id)
+        return
+
+    def _set_state(cfg: dict) -> None:
+        entries = cfg.get("SENDSPIN_SOURCE_INPUT_STATE")
+        if not isinstance(entries, dict):
+            entries = cfg["SENDSPIN_SOURCE_INPUT_STATE"] = {}
+        entry = entries.get(source_id)
+        if not isinstance(entry, dict):
+            entry = entries[source_id] = {}
+        if volume is not None:
+            entry["volume"] = volume
+        if muted is not None:
+            entry["muted"] = muted
+
+    try:
+        update_config(_set_state)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Could not save source input state for %s: %s", source_id, exc)
 
 
 def save_device_sink(mac: str | None, sink_name: str) -> None:

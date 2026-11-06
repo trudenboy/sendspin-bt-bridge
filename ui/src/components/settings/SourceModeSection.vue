@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useBridgeStore } from '@/stores/bridge'
-import { useHardwareStore } from '@/stores/hardware'
+import { useSourceStore } from '@/stores/source'
+import { confirmAction } from '@/composables/useActionPolicy'
 import { SbBadge, SbToggle } from '@/kit'
 import SettingsRow from './SettingsRow.vue'
 
@@ -13,25 +13,37 @@ import SettingsRow from './SettingsRow.vue'
  * the Hardware page and only appears after MA has paired the bridge.
  */
 const { t } = useI18n()
-const bridge = useBridgeStore()
-const hardware = useHardwareStore()
+const source = useSourceStore()
 
-const source = computed(() => bridge.bridge?.sendspin_source ?? null)
-const enabled = computed(() => !!source.value?.enabled)
-const busy = computed(() => hardware.sourceBusy)
+const feed = computed(() => source.status)
+const enabled = computed(() => !!feed.value?.enabled)
+const busy = computed(() => source.busy)
 const error = ref<string | null>(null)
 
 const stateKey = computed(() => {
-  const state = source.value?.state ?? 'off'
+  const state = feed.value?.state ?? 'off'
   return `hardware.source.state${state.charAt(0).toUpperCase()}${state.slice(1)}`
 })
 
 async function setEnabled(next: boolean) {
   error.value = null
   try {
-    if (next) await hardware.startSource()
-    else await hardware.stopSource()
-    await bridge.refresh()
+    if (next) {
+      await source.enable()
+    } else {
+      // The feature owns capture; switching it off while an input is live
+      // releases that input first, after naming what stops.
+      if (feed.value?.active_input) {
+        const ok = await confirmAction('source.disableWithInput', {
+          title: t('settings.parts.sourceMode.confirmTitle'),
+          consequences: [t('settings.parts.sourceMode.confirmBody')],
+          confirmLabel: t('settings.parts.sourceMode.confirmDisable'),
+        })
+        if (!ok) return
+        await source.release()
+      }
+      await source.disable()
+    }
   } catch {
     // The store already kept the failure; a start that could not run leaves
     // the source off instead of persisting an "enabled" flag that does nothing.
@@ -52,7 +64,7 @@ async function setEnabled(next: boolean) {
           @update:model-value="setEnabled"
         />
         <SbBadge data-source-experimental tone="warning" size="sm">{{ t('common.experimental') }}</SbBadge>
-        <SbBadge v-if="source" data-source-mode-state :tone="enabled ? 'success' : 'neutral'" size="sm">
+        <SbBadge v-if="feed" data-source-mode-state :tone="enabled ? 'success' : 'neutral'" size="sm">
           {{ t(stateKey) }}
         </SbBadge>
       </div>

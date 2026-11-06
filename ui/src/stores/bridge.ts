@@ -4,12 +4,19 @@ import { useEventStream } from '@/composables/useEventStream'
 import { getStatus, restartBridge } from '@/api/status'
 import { getAdapters } from '@/api/bluetooth'
 import { useJobsStore } from './jobs'
+import { useSourceStore } from './source'
 import { useSyncStore } from './sync'
 import type { Adapter, BridgeStatus, Device, Group, Job, SyncSession } from '@/api/types'
 
 export type RestartState = 'idle' | 'stopping' | 'restarting' | 'ready' | 'error'
 /** Why the bridge restarts: asked for, or because an update was installed. */
 export type RestartReason = 'restart' | 'update'
+/**
+ * What a fresh status read did: it applied, it was dropped because a newer read
+ * already applied, or the bridge did not answer. Callers that keep a fallback
+ * must tell the first two apart.
+ */
+export type RefreshOutcome = 'applied' | 'stale' | 'failed'
 
 export const useBridgeStore = defineStore('bridge', () => {
   const snapshot = ref<BridgeStatus | null>(null)
@@ -32,8 +39,13 @@ export const useBridgeStore = defineStore('bridge', () => {
   /** The version the bridge ran when an update began; another version means it is done. */
   let versionBeforeUpdate = ''
 
-  function apply(status: BridgeStatus) {
+  function apply(status: BridgeStatus, sourceEpoch?: number, requestedAt?: number) {
     snapshot.value = status
+    // The source feed has its own owner; it is fed from this one status, never
+    // from a second stream or a second read. A read carries the epoch it began
+    // in, and when it began, so the source owner can drop what predates a
+    // completed command and tell a post-command read from a pushed frame.
+    useSourceStore().applyStatus(status, { epoch: sourceEpoch, requestedAt })
     const inProgress = restartState.value === 'stopping' || restartState.value === 'restarting'
     if (inProgress && restartReason.value === 'update' && versionBeforeUpdate && status.bridge.version !== versionBeforeUpdate) {
       restartState.value = 'ready'
@@ -92,11 +104,26 @@ export const useBridgeStore = defineStore('bridge', () => {
     }
   }
 
-  async function refresh() {
+  /** A read that started before a newer one — or before a source command — never wins. */
+  let refreshSeq = 0
+  let appliedSeq = 0
+
+  /** A fresh read; ``failed`` means the bridge did not answer, so callers can keep what they had. */
+  async function refresh(): Promise<RefreshOutcome> {
+    const seq = ++refreshSeq
+    // The source owner's epoch when this read began: an answer that predates a
+    // completed source command must not restate its pairing windows.
+    const sourceEpoch = useSourceStore().commandEpoch
+    const requestedAt = Date.now()
     try {
-      apply(await getStatus())
+      const status = await getStatus()
+      if (seq < appliedSeq) return 'stale'
+      appliedSeq = seq
+      apply(status, sourceEpoch, requestedAt)
+      return 'applied'
     } catch {
       /* the event stream will catch up */
+      return 'failed'
     }
   }
 

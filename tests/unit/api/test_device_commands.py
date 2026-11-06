@@ -382,13 +382,20 @@ def test_a_removed_disabled_sound_card_leaves_the_disabled_list(api_client, regi
 # -- A2DP retry (#586) ------------------------------------------------------------------------
 
 
-def test_a2dp_retry_starts_the_bounded_retry(api_client, registry):
+def test_a2dp_retry_starts_the_bounded_retry(api_client, registry, bridge_loop):
     import threading
 
     started = threading.Event()
     speaker = _speaker(bluetooth_connected=True)
     speaker.bt_manager.connected = True
-    speaker.retry_a2dp = lambda: started.set()
+
+    async def retry():
+        import asyncio
+
+        assert asyncio.get_running_loop() is bridge_loop
+        started.set()
+
+    speaker.retry_a2dp = retry
     registry.append(speaker)
 
     resp = api_client.post("/api/v1/devices/kitchen/a2dp-retry")
@@ -407,3 +414,17 @@ def test_a2dp_retry_requires_a_connected_device(api_client, registry):
 
     assert resp.status_code == 409
     assert resp.json()["code"] == "not_connected"
+
+
+def test_a2dp_retry_rejects_microphone_ownership(api_client, registry, monkeypatch):
+    from sendspin_bridge.services.bluetooth import headset
+
+    owner = headset.HeadsetProfileService()
+    owner._publish(MAC, "acquiring")
+    monkeypatch.setattr(headset, "_service", owner)
+    speaker = _speaker()
+    speaker.bt_manager.connected = True
+    registry.append(speaker)
+    response = api_client.post("/api/v1/devices/kitchen/a2dp-retry")
+    assert response.status_code == 409
+    assert response.json()["code"] == "headset_microphone_active"

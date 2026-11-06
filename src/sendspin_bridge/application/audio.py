@@ -20,7 +20,7 @@ from sendspin_bridge.services.hardware import capabilities
 from sendspin_bridge.services.hardware.inventory import (
     HardwareUnavailable,
     InventoryRead,
-    clear_cache,
+    invalidate_cache,
     read_inventory,
 )
 
@@ -116,14 +116,14 @@ def _refused(action: str, name: str) -> UseCaseError:
 
 
 async def _after_write() -> None:
-    """Drop the inventory cache so the next read shows what the write changed.
+    """Expire the inventory cache so the next read shows what the write changed.
 
     Without this the page refreshes within the two-second TTL and gets the state
     from before the command: the Default badge stays on the old sink right after
-    the toast says it moved.  ``clear_cache`` takes the reader lock, so it runs
+    the toast says it moved.  ``invalidate_cache`` takes the reader lock, so it runs
     in a worker thread: a request handler must never wait on it on the loop.
     """
-    await asyncio.to_thread(clear_cache)
+    await asyncio.to_thread(invalidate_cache)
 
 
 def _unread_list(read: InventoryRead, kind: Literal["cards", "sinks"]) -> UseCaseError | None:
@@ -248,7 +248,7 @@ async def resume_sink(name: str) -> SinkStateOut:
 async def _read_after_write(fallback: InventoryRead) -> tuple[InventoryRead, dict[str, Any], bool]:
     """The state after a command, the config the detail joins, and whether it refreshed.
 
-    The cache was just dropped, so this is a fresh read (and the first one to see
+    The cache was just expired, so this is a fresh read (and the first one to see
     what the command changed).  When the refresh cannot answer at all the
     pre-write read is used instead: the command already succeeded, and a failed
     follow-up read must not turn an audible action into an error.  ``refreshed``
@@ -260,7 +260,7 @@ async def _read_after_write(fallback: InventoryRead) -> tuple[InventoryRead, dic
     except HardwareUnavailable:
         read, refreshed = fallback, False
     else:
-        refreshed = True
+        refreshed = not read.stale
     config = await asyncio.to_thread(load_config)
     return read, config, refreshed
 

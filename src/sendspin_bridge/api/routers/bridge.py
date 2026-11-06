@@ -12,7 +12,15 @@ from sendspin_bridge.api.errors import PROBLEM_RESPONSES, ApiError
 from sendspin_bridge.application import diagnostics as diag
 from sendspin_bridge.application import source
 from sendspin_bridge.application.jobs import Job, jobs
-from sendspin_bridge.application.models import Bridge, BridgeStatus, Device, Group, SourceInputs, SourceTargets
+from sendspin_bridge.application.models import (
+    Bridge,
+    BridgeStatus,
+    Device,
+    Group,
+    SourceInputs,
+    SourceInputStatus,
+    SourceTargets,
+)
 from sendspin_bridge.application.status import build_status
 
 public = APIRouter(tags=["bridge"])
@@ -48,6 +56,14 @@ class SourceInputRemoveIn(BaseModel):
 
 class SourceActiveIn(BaseModel):
     source_id: str
+
+
+class SourceVolumeIn(BaseModel):
+    volume: int
+
+
+class SourceMuteIn(BaseModel):
+    muted: bool
 
 
 class Health(BaseModel):
@@ -171,6 +187,33 @@ async def remove_source_input(body: SourceInputRemoveIn) -> Response:
 @router.put("/bridge/source/active", summary="Select the active source input")
 async def select_source_input(body: SourceActiveIn) -> dict[str, Any]:
     return await source.select_input(body.source_id)
+
+
+@router.delete("/bridge/source/active", status_code=204, summary="Clear the active source input")
+async def clear_source_input() -> Response:
+    """Return the device to playback; the feed stays enabled and the choice is remembered."""
+    await source.clear_active_input()
+    return Response(status_code=204)
+
+
+@router.put(
+    "/bridge/source/active/volume",
+    response_model=SourceInputStatus,
+    summary="Set the active input's gain",
+)
+async def set_source_volume(body: SourceVolumeIn) -> SourceInputStatus:
+    """Apply 0–100 to the active capture node and remember it per input id."""
+    return SourceInputStatus(**await source.set_active_volume(body.volume))
+
+
+@router.put(
+    "/bridge/source/active/mute",
+    response_model=SourceInputStatus,
+    summary="Mute or unmute the active input",
+)
+async def set_source_mute(body: SourceMuteIn) -> SourceInputStatus:
+    """Silence the capture without stopping the stream to Music Assistant."""
+    return SourceInputStatus(**await source.set_active_mute(body.muted))
 
 
 @router.get("/bridge/source/targets", response_model=SourceTargets, summary="MA players that can play the source")

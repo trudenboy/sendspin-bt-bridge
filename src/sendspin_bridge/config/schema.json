@@ -36,6 +36,24 @@
       "default": null,
       "description": "Selected source id (bluetooth:<MAC> or local:<node>); null keeps the automatic Bluetooth policy."
     },
+    "SENDSPIN_SOURCE_INPUT_STATE": {
+      "type": "object",
+      "default": {},
+      "description": "Runtime state: per-input gain and mute for the Sendspin source, keyed by source input id (bluetooth:<MAC>, local:<node>, headset-mic:<MAC>).",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "volume": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "muted": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
     "CONFIG_SCHEMA_VERSION": {
       "type": "integer",
       "const": 6,

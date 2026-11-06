@@ -41,6 +41,8 @@ export interface DeviceCardAction {
   labelKey: string;
   icon?: Component;
   disabled?: boolean;
+  /** Why it is disabled: a translation key, shown under the button. */
+  hintKey?: string;
   title?: string;
   destructive?: boolean;
 }

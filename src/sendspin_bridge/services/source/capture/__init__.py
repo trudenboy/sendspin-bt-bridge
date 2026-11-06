@@ -1,8 +1,9 @@
 """Capture backends: the phone's Bluetooth audio as PCM, whatever the host audio server is.
 
-The source only needs three facts from a backend: whether a phone is streaming, a stable
-name for its capture, and a stream of whole 10 ms s16 frames.  PipeWire exposes the phone
-as ``bluez_input.*``, PulseAudio as a ``bluez_source.*`` recording source.
+The source needs four things from a backend: whether a phone is streaming, a stable name
+for its capture, a stream of whole 10 ms s16 frames, and gain/mute on that capture node.
+PipeWire exposes the phone as ``bluez_input.*``, PulseAudio as a ``bluez_source.*``
+recording source; ``pactl`` addresses both, so one helper serves both backends.
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ __all__ = [
     "chunk_bytes",
     "frame_bytes",
     "mac_from_node",
+    "pactl_set_source_mute",
+    "pactl_set_source_volume",
     "run_command",
     "terminate_process",
 ]
@@ -80,6 +83,10 @@ class CaptureBackend(Protocol):
 
     async def open(self, endpoint: CaptureEndpoint) -> CaptureStream: ...
 
+    async def set_gain(self, node: str, volume: int) -> bool: ...
+
+    async def set_mute(self, node: str, muted: bool) -> bool: ...
+
 
 def frame_bytes(channels: int = CHANNELS, bytes_per_sample: int = BYTES_PER_SAMPLE) -> int:
     """Bytes of one s16 frame (one sample per channel)."""
@@ -124,6 +131,36 @@ async def run_command(argv: Sequence[str], *, timeout: float = RUN_TIMEOUT_S) ->
     after a few minutes of streaming.  ``subprocess.run`` closes its pipes deterministically.
     """
     return await asyncio.to_thread(_run_command_sync, list(argv), timeout)
+
+
+async def pactl_set_source_volume(run: Callable[..., Awaitable[CommandResult]], node: str, volume: int) -> bool:
+    """Apply a 0..100 gain to one capture node; ``False`` when the node is gone or refused.
+
+    ``pactl set-source-volume`` is the one call that works against both PulseAudio and
+    pipewire-pulse, so the two backends share it rather than each spelling its own tool.
+    """
+    try:
+        result = await run(["pactl", "set-source-volume", str(node), f"{int(volume)}%"])
+    except Exception:
+        logger.warning("Could not set the capture gain of %s", node, exc_info=True)
+        return False
+    if result.returncode != 0:
+        logger.warning("pactl refused the gain of %s: %s", node, result.stderr.strip()[:200])
+        return False
+    return True
+
+
+async def pactl_set_source_mute(run: Callable[..., Awaitable[CommandResult]], node: str, muted: bool) -> bool:
+    """Mute or unmute one capture node; ``False`` when the node is gone or refused."""
+    try:
+        result = await run(["pactl", "set-source-mute", str(node), "1" if muted else "0"])
+    except Exception:
+        logger.warning("Could not set the capture mute of %s", node, exc_info=True)
+        return False
+    if result.returncode != 0:
+        logger.warning("pactl refused the mute of %s: %s", node, result.stderr.strip()[:200])
+        return False
+    return True
 
 
 async def terminate_process(proc: Any, *, timeout: float = STOP_TIMEOUT_S) -> None:

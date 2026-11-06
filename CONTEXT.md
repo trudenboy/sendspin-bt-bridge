@@ -72,12 +72,48 @@ to the device, `input` when the device sends audio to the bridge. One device can
 hold both at once. The role is derived from evidence — an active transport, a
 capture node, a source — never from the spelling of a sink name.
 
-**Source feed** — the phone→bridge→Music Assistant Sendspin source: one phone,
-one capture node, and the source-client link to Music Assistant. The bridge
-captures and forwards; Music Assistant owns playback and routing. It is not a
-Player and not a Device; it has no playback of its own.
+**Source feed** — one selected audio input, its capture, and the Sendspin
+source-client link to Music Assistant. The input can be a phone sending
+Bluetooth audio, a saved local Audio endpoint, or a headset microphone. The
+bridge captures and forwards; Music Assistant owns playback and routing. It
+is not a Player and not a Device; it has no playback of its own.
 
-**Music Assistant pairing code** — the eight digits shown on Hardware and typed
+**Source mode** — one device used as an input instead of an output. A Device
+whose link can carry input wears a switch on its own card: in source mode its
+card stands in the Sources section and the Player is stopped, in playback mode
+it stands among the players. One link cannot be both at once, and only one
+input is active at a time: switching steals it and the previous device returns
+to playback. The mode belongs to the device, so a restart or a lost link keeps
+it; a lost link only means the capture is waiting.
+
+**Listening device** — the input a group-sync measurement hears the room with:
+the bridge records it itself — a local line-in, a headset microphone, a phone —
+instead of a phone's browser page. It is borrowed for the measurement and never
+becomes the Source feed's active input. Its own latency does not need
+calibrating: a constant shift moves every speaker's measurement equally, and
+the proposal is the difference between them.
+
+**Input level** — how loud the selected input is right now, as a peak of the
+frames already captured, reported continuously while a capture is open. Zero is
+silence and is information: five seconds of it means "check the mute on the
+device", which is a different story from "the capture never opened".
+
+**Input gain** — how much the bridge turns the selected input up before Music
+Assistant sees it. It belongs to the input, not to the feed, and is remembered
+per input so a restart does not move a level the operator set.
+
+**Microphone hand-off** — temporarily using a headset's HFP microphone instead
+of its A2DP output. Its Player rests while the microphone is in use and can
+resume only when the A2DP output is confirmed ready. A failed return leaves
+the Player stopped until the operator requests recovery.
+
+**Pairing window** — the limited time in which a phone can pair with the
+bridge, or Music Assistant can pair with the Source feed using its code.
+These are separate pairings. Each window belongs to the attempt and remains
+open across page changes until pairing succeeds, the operator cancels, or
+the window expires.
+
+**Music Assistant pairing code** — the eight digits shown in Settings and typed
 into Music Assistant to pair the bridge's source client. Separate from the
 phone's Bluetooth pairing: the phone pairs with the bridge, the bridge pairs
 with Music Assistant.

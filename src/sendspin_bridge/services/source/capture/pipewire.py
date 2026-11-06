@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -14,13 +15,20 @@ from sendspin_bridge.services.source.capture import (
     SAMPLE_RATE,
     CaptureEndpoint,
     CaptureStream,
-    CommandResult,
     ProcessCapture,
     mac_from_node,
+    pactl_set_source_mute,
+    pactl_set_source_volume,
     run_command,
 )
 
-__all__ = ["BLUEZ_INPUT_RE", "PipeWireBackend", "find_bluez_input", "find_bluez_input_on_host"]
+__all__ = [
+    "BLUEZ_INPUT_RE",
+    "PipeWireBackend",
+    "bluez_inputs_from_dump",
+    "find_bluez_input",
+    "find_bluez_input_on_host",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +47,55 @@ def find_bluez_input(wpctl_status: str) -> str | None:
     return nodes[0] if nodes else None
 
 
+def bluez_inputs_from_dump(payload: str) -> list[str]:
+    """Every Bluetooth capture node ``pw-dump`` reports, in its order.
+
+    ``wpctl status`` prints a node's *description* once the device has one — a
+    headset's HFP capture appears there as "WH-1000XM4", never as
+    ``bluez_input.<MAC>.<n>`` — while ``pw-dump`` carries the real
+    ``node.name``. A sink is filtered out even when its name looks the same.
+    """
+    try:
+        objects = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    found: list[str] = []
+    for entry in objects or ():
+        if not isinstance(entry, dict):
+            continue
+        info = entry.get("info")
+        props = info.get("props") if isinstance(info, dict) else None
+        if not isinstance(props, dict):
+            continue
+        name = str(props.get("node.name") or "")
+        if not BLUEZ_INPUT_RE.fullmatch(name):
+            continue
+        media_class = str(props.get("media.class") or "")
+        if media_class and media_class != "Audio/Source":
+            continue
+        found.append(name)
+    return list(dict.fromkeys(found))
+
+
+async def _pipewire_nodes(run: Any = run_command) -> list[str]:
+    """Bluetooth capture nodes: ``pw-dump`` first, ``wpctl status`` as the fallback.
+
+    ``pw-dump`` answers with the authoritative node names; ``wpctl`` is what a
+    host without the tool can still answer, and what older hosts have.
+    """
+    dump = await run(["pw-dump"])
+    if dump.returncode == 0:
+        nodes = bluez_inputs_from_dump(dump.stdout)
+        if nodes:
+            return nodes
+    status = await run(["wpctl", "status"])
+    return find_bluez_inputs(status.stdout) if status.returncode == 0 else []
+
+
 async def find_bluez_input_on_host() -> str | None:
     """Ask PipeWire for the phone's capture node, if one is streaming."""
-    result = await run_command(["wpctl", "status"])
-    return find_bluez_input(result.stdout) if result.returncode == 0 else None
+    nodes = await _pipewire_nodes()
+    return nodes[0] if nodes else None
 
 
 class PipeWireBackend:
@@ -80,8 +133,7 @@ class PipeWireBackend:
                 phone_mac=mac_from_node(self._fixed_node),
                 running=True,
             )
-        result: CommandResult = await self._run(["wpctl", "status"])
-        nodes = find_bluez_inputs(result.stdout) if result.returncode == 0 else []
+        nodes = await _pipewire_nodes(self._run)
         if self.preferred_mac:
             nodes = [node for node in nodes if mac_from_node(node) == self.preferred_mac]
         node = nodes[0] if nodes else None
@@ -111,3 +163,11 @@ class PipeWireBackend:
             channels=self._channels,
             spawn=self._spawn,
         )
+
+    async def set_gain(self, node: str, volume: int) -> bool:
+        """Set the capture node's gain (0..100); pipewire-pulse answers ``pactl``."""
+        return await pactl_set_source_volume(self._run, node, volume)
+
+    async def set_mute(self, node: str, muted: bool) -> bool:
+        """Mute or unmute the capture node without stopping the stream."""
+        return await pactl_set_source_mute(self._run, node, muted)

@@ -480,6 +480,23 @@
       "removeFailed": "无法移除源。",
       "useFailed": "无法切换源。",
       "renameFailed": "无法重命名源。",
+      "enterSourceMode": "音源",
+      "backToPlayback": "返回播放",
+      "switchingToSource": "正在切换到音源…",
+      "switchingToPlayback": "正在返回播放…",
+      "sourceMode": "音源模式",
+      "waitingForStream": "等待音频流",
+      "capturing": "正在采集此设备的麦克风",
+      "gain": "增益",
+      "mute": "静音输入",
+      "unmute": "取消静音输入",
+      "level": "输入电平",
+      "noSignal": "无信号——请检查设备上的静音设置。",
+      "toggleFailed": "无法在播放和音源模式之间切换设备。",
+      "commandFailed": "网桥拒绝了该输入命令。",
+      "unavailableDisconnected": "请连接设备以切换模式。",
+      "unavailableStandby": "请将设备从待机中唤醒以切换模式。",
+      "unavailableDisabled": "请启用设备以切换模式。",
       "pressPlay": "已切换源。请在 Music Assistant 中按播放，以在新输入上启动。"
     },
     "outputs": "输出"
@@ -817,6 +834,8 @@
     "source": {
       "errorCapture": "此主机无法采集手机的音频。",
       "errorCaptureNext": "桥接器需要手机的 PipeWire 采集节点；请检查主机的音频后端。",
+      "errorHeadsetA2dp": "耳机的麦克风已释放，但它的 Bluetooth 音频输出没有恢复。",
+      "errorHeadsetA2dpNext": "重新连接耳机，然后在设备卡片中重试 A2DP 输出。在恢复正常之前，播放器会保持停止状态。",
       "errorNoAdapter": "没有 Bluetooth 适配器可进入可被发现状态。",
       "errorNoAgent": "桥接器无法注册 Bluetooth 配对代理。",
       "errorBluetoothNext": "请检查上方的 Bluetooth 控制器，然后再次尝试配对。",
@@ -1365,7 +1384,10 @@
         "label": "音频源",
         "help": "从已配对的设备采集 Bluetooth 音频，并将其提供给 Music Assistant。默认关闭；启用后源会立即启动。",
         "off": "源已关闭。启用后将开始采集所选输入。",
-        "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。"
+        "failed": "无法启动源。请检查 Music Assistant 和主机的音频服务器，然后重试。",
+        "confirmTitle": "关闭音源模式？",
+        "confirmBody": "将释放当前输入并停止采集。播放器会回到扬声器列表。",
+        "confirmDisable": "关闭音源模式"
       },
       "sourceTarget": {
         "label": "源播放位置",
@@ -2043,6 +2065,8 @@
         "deviceHelp": "将此设备带到每个音箱旁。麦克风需要 HTTPS（或 localhost）。",
         "phone": "手机（扫描二维码）",
         "phoneHelp": "在手机上打开采集页面；它会一次性录制所有音箱并发送录音。使用普通 HTTP 也可以（通过手机的录音器）。",
+        "inputHelp": "网桥从“{name}”录制节拍声；无需携带设备，也无需授予麦克风权限。",
+        "inputMissing": "请选择网桥可以录制的收听设备。",
         "usePhone": "改用手机测量"
       },
       "startPhone": "开始"
@@ -2214,6 +2238,16 @@
       "certificate": "手机会就证书提示一次 — 接受后即可直接在浏览器中录音。",
       "httpFallback": "若没有证书，请使用普通链接（手机录音器）：",
       "keepsDelay": "未测量的音箱保留当前延迟：{names}"
+    },
+    "input": {
+      "help": "网桥从 {name} 录制节拍声，每个音箱依次单独发声，然后用这一次录音测量所有音箱。",
+      "recording": "网桥正在录制序列…",
+      "play": "从网桥录制 ({n})",
+      "measuring": "正在测量录音…",
+      "measured": "网桥的录音已测量。",
+      "unavailable": "收听设备“{name}”已不可用。请改用手机测量。",
+      "busy": "收听设备“{name}”正被音源占用。请改用手机测量。",
+      "latencyNote": "注意：输入延迟尚未校准——固定延迟会让所有音箱同样偏移，因此不会影响相对结果。"
     },
     "tuneLink": "与组一起调整 →",
     "noGroupHelp": "{name} 不在同步组中。要与其他音箱一起调整，请在“组”中创建同步组并将此音箱加入。",

@@ -480,6 +480,23 @@
       "removeFailed": "No se pudo eliminar la fuente.",
       "useFailed": "No se pudo cambiar la fuente.",
       "renameFailed": "No se pudo cambiar el nombre de la fuente.",
+      "enterSourceMode": "Fuente",
+      "backToPlayback": "Volver a la reproducción",
+      "switchingToSource": "Cambiando a la fuente…",
+      "switchingToPlayback": "Volviendo a la reproducción…",
+      "sourceMode": "Modo fuente",
+      "waitingForStream": "Esperando el flujo",
+      "capturing": "Capturando el micrófono de este dispositivo",
+      "gain": "Ganancia",
+      "mute": "Silenciar la entrada",
+      "unmute": "Activar el sonido de la entrada",
+      "level": "Nivel de entrada",
+      "noSignal": "Sin señal: comprueba el silencio en el dispositivo.",
+      "toggleFailed": "No se pudo cambiar el dispositivo entre reproducción y modo fuente.",
+      "commandFailed": "El puente rechazó ese comando de entrada.",
+      "unavailableDisconnected": "Conecta el dispositivo para cambiar de modo.",
+      "unavailableStandby": "Despierta el dispositivo del modo de espera para cambiar de modo.",
+      "unavailableDisabled": "Activa el dispositivo para cambiar de modo.",
       "pressPlay": "Fuente cambiada. Pulsa Reproducir en Music Assistant para iniciarla en la nueva entrada."
     },
     "outputs": "Salidas"
@@ -817,6 +834,8 @@
     "source": {
       "errorCapture": "El audio del teléfono no se puede capturar en este host.",
       "errorCaptureNext": "El puente necesita nodos de captura de PipeWire para el teléfono; revisa el motor de audio del host.",
+      "errorHeadsetA2dp": "El micrófono del auricular se liberó, pero su salida de audio Bluetooth no volvió.",
+      "errorHeadsetA2dpNext": "Vuelve a conectar el auricular y reintenta su salida A2DP desde la tarjeta del dispositivo. El reproductor sigue detenido hasta que funcione.",
       "errorNoAdapter": "Ningún adaptador Bluetooth aceptó ponerse en modo detectable.",
       "errorNoAgent": "El puente no pudo registrar un agente de emparejamiento Bluetooth.",
       "errorBluetoothNext": "Revisa los controladores Bluetooth de arriba y vuelve a intentar el emparejamiento.",
@@ -1365,7 +1384,10 @@
         "label": "Fuente de audio",
         "help": "Captura el audio Bluetooth de un dispositivo emparejado y ofrécelo a Music Assistant. Desactivado de forma predeterminada; al activarlo, la fuente se inicia de inmediato.",
         "off": "La fuente está desactivada. Actívala para empezar a capturar la entrada seleccionada.",
-        "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo."
+        "failed": "No se pudo iniciar la fuente. Comprueba Music Assistant y el servidor de audio del host y vuelve a intentarlo.",
+        "confirmTitle": "¿Desactivar el modo fuente?",
+        "confirmBody": "Se libera la entrada activa y se detiene su captura. Los reproductores vuelven a la lista de altavoces.",
+        "confirmDisable": "Desactivar el modo fuente"
       },
       "sourceTarget": {
         "label": "Reproducir la fuente en",
@@ -2043,6 +2065,8 @@
         "deviceHelp": "Lleva este dispositivo a cada altavoz. Necesita HTTPS (o localhost) para el micrófono.",
         "phone": "Un teléfono (escanea un código QR)",
         "phoneHelp": "Abre la página de captura en un teléfono; graba todos los altavoces de una vez y envía la grabación. También funciona por HTTP simple (con el grabador del teléfono).",
+        "inputHelp": "El puente graba los clics desde «{name}»; no hace falta llevar nada ni dar permiso al micrófono.",
+        "inputMissing": "Elige un dispositivo de escucha desde el que el puente pueda grabar.",
         "usePhone": "Medir con un teléfono en su lugar"
       },
       "startPhone": "Iniciar"
@@ -2214,6 +2238,16 @@
       "certificate": "Tu teléfono avisará una vez sobre el certificado; acéptalo para grabar directamente en el navegador.",
       "httpFallback": "Sin el certificado, usa el enlace simple (el grabador del teléfono):",
       "keepsDelay": "Sin medir, estos mantienen su retraso actual: {names}"
+    },
+    "input": {
+      "help": "El puente graba los clics desde {name} mientras cada altavoz suena solo por turno, y luego mide todos con esa única grabación.",
+      "recording": "El puente está grabando la secuencia…",
+      "play": "Grabar desde el puente ({n})",
+      "measuring": "Midiendo la grabación…",
+      "measured": "La grabación del puente está medida.",
+      "unavailable": "El dispositivo de escucha «{name}» ya no está disponible. Mide con el teléfono.",
+      "busy": "El dispositivo de escucha «{name}» está ocupado por la fuente. Mide con el teléfono.",
+      "latencyNote": "Nota: la latencia de entrada no está calibrada: un retardo constante desplaza todos los altavoces por igual, así que el resultado relativo no cambia."
     },
     "tuneLink": "Ajustar con tu grupo →",
     "noGroupHelp": "{name} no está en un grupo de sincronización. Para ajustarlo con otros, crea un grupo de sincronización en Grupos y añade este altavoz.",

@@ -11,6 +11,7 @@ from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attem
 from sendspin_bridge.services.diagnostics.guidance_issue_registry import build_issue_context, issue_sort_priority
 from sendspin_bridge.services.diagnostics.recovery_assistant import RecoveryAction, build_recovery_issue_actions
 from sendspin_bridge.services.diagnostics.server_text import action_fields, coded, device_params
+from sendspin_bridge.services.diagnostics.source_mode import device_mac, source_mode_macs
 from sendspin_bridge.services.infrastructure._helpers import (
     _device_audio_streaming,
     _device_extra,
@@ -604,6 +605,7 @@ def _build_issue_groups(
     runtime_access_issue: dict[str, Any] | None = None,
     bluetooth_access_issue: dict[str, Any] | None = None,
     audio_backend_issue: dict[str, Any] | None = None,
+    source_mode_device_macs: frozenset[str] = frozenset(),
 ) -> list[GuidanceIssueGroup]:
     groups: list[GuidanceIssueGroup] = []
     checklist = onboarding_assistant.get("checklist") or {}
@@ -675,12 +677,15 @@ def _build_issue_groups(
         and _device_extra(device).get("never_paired") is not True
         and _device_extra(device).get("bluetooth_paired") is not False
     ]
+    # A device whose microphone owns the Source feed has no A2DP sink on
+    # purpose: that is the mode the operator chose, not a missing output.
     missing_sink = [
         str(getattr(device, "player_name", None) or "Unknown")
         for device in bluetooth_devices
         if getattr(device, "bt_management_enabled", True)
         and getattr(device, "bluetooth_connected", False)
         and not getattr(device, "has_sink", False)
+        and str(device_mac(device) or "").upper() not in source_mode_device_macs
     ]
     transport_down = [
         str(getattr(device, "player_name", None) or "Unknown")
@@ -1491,6 +1496,7 @@ def build_operator_guidance_snapshot(
         runtime_access_issue=runtime_access_issue,
         bluetooth_access_issue=bluetooth_access_issue,
         audio_backend_issue=audio_backend_issue,
+        source_mode_device_macs=source_mode_macs(devices, config),
     )
     startup_status = str(startup_progress.get("status") or "idle")
     startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress, config)

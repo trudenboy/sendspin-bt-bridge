@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-__all__ = ["SourceDevice", "SourceState", "publish", "reset", "snapshot"]
+__all__ = ["SourceDevice", "SourceState", "attach_event_hub", "publish", "publish_level", "reset", "snapshot"]
 
 SourceStateName = Literal["off", "pairing", "waiting", "streaming", "error"]
 
@@ -57,6 +57,9 @@ class SourceState:
     active_input: str | None = None
     target_error: str | None = None
     devices: tuple[SourceDevice, ...] = ()
+    #: Smoothed peak of the frames the capture is feeding, 0..1.  Silence is 0.0,
+    #: never "unknown" — but it is not part of the status payload (see publish_level).
+    level: float = 0.0
 
     def pairing_seconds_left(self, *, now: float | None = None) -> int:
         """Seconds the phone's pairing window stays open (0 when it is closed)."""
@@ -101,13 +104,76 @@ def _seconds_left(until: float, now: float | None) -> int:
 
 _lock = threading.Lock()
 _state = SourceState()
+_hub: Any = None
+
+
+#: Fields the bridge status exposes, so a change to one is worth a status frame.
+#: ``devices`` and the pairing clocks are included: a bond that closes a window
+#: and a window that opens both have to reach the SPA on their own.
+_VISIBLE = (
+    "enabled",
+    "state",
+    "phone",
+    "phone_mac",
+    "paired_phone_mac",
+    "streaming",
+    "server",
+    "ma_connected",
+    "ma_paired",
+    "ma_pairing_code",
+    "ma_pairing_until",
+    "ma_error",
+    "pairing_until",
+    "pairing_adapters",
+    "pairing_error",
+    "error",
+    "target_player",
+    "target_error",
+    "active_input",
+    "devices",
+)
 
 
 def publish(**changes: Any) -> None:
-    """Replace the snapshot with a copy carrying *changes* (unknown fields raise)."""
+    """Replace the snapshot with a copy carrying *changes* (unknown fields raise).
+
+    A change the status payload shows is announced to the event stream, because
+    nothing else will: the source owns no heartbeat of its own, so a window that
+    closed or a phone that bonded would otherwise wait for an unrelated device's
+    status tick.  A publish that changes nothing visible stays silent.
+    """
     global _state
     with _lock:
+        previous = _state
         _state = replace(_state, **changes)
+        announced = any(getattr(previous, name) != getattr(_state, name) for name in _VISIBLE)
+    if announced:
+        from sendspin_bridge.services.lifecycle.bridge_runtime_state import notify_status_changed
+
+        notify_status_changed()
+
+
+def attach_event_hub(hub: Any) -> None:
+    """Attach the API's EventHub (or a test double); ``None`` detaches it."""
+    global _hub
+    _hub = hub
+
+
+def publish_level(level: float, *, input_id: str | None, muted: bool) -> None:
+    """Record the smoothed input level and publish one ``source.level`` event.
+
+    The level is deliberately not a status-visible field and not part of the
+    status payload: it changes ten times a second, and the status event rebuilds
+    the whole bridge document (about 60 ms) on every change.  Only listeners
+    that asked for ``source.level`` receive this.
+    """
+    publish(level=float(level))
+    hub = _hub
+    if hub is None:
+        return
+    from sendspin_bridge.api.events import envelope
+
+    hub.publish_threadsafe(envelope("source.level", {"id": input_id, "level": float(level), "muted": bool(muted)}))
 
 
 def snapshot() -> SourceState:
@@ -118,6 +184,7 @@ def snapshot() -> SourceState:
 
 def reset() -> None:
     """Forget everything (tests, and a cold start that never had a source)."""
-    global _state
+    global _state, _hub
     with _lock:
         _state = SourceState()
+        _hub = None

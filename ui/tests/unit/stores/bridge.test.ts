@@ -17,6 +17,7 @@ vi.mock('@/api/bluetooth', () => ({ getAdapters: vi.fn().mockResolvedValue([{ id
 import { getStatus, restartBridge } from '@/api/status'
 import { useBridgeStore } from '@/stores/bridge'
 import { useJobsStore } from '@/stores/jobs'
+import { useSourceStore } from '@/stores/source'
 import { useSyncStore } from '@/stores/sync'
 
 describe('useBridgeStore', () => {
@@ -40,6 +41,27 @@ describe('useBridgeStore', () => {
     expect(store.deviceById('x')).toBeTruthy()
     stream.options!.onEvent!({ type: 'job', data: { id: 'j9', status: 'running' } })
     expect(useJobsStore().byId.j9).toBeTruthy()
+  })
+
+  it('forwards the source block from the one status stream to the source store', () => {
+    const store = useBridgeStore()
+    const source = useSourceStore()
+    const status = makeStatus() as never as {
+      bridge: { sendspin_source: Record<string, unknown> | null }
+    }
+    status.bridge.sendspin_source = {
+      enabled: true,
+      state: 'waiting',
+      ma_paired: true,
+      pairing_seconds_left: 0,
+      ma_pairing_seconds_left: 0,
+    }
+
+    stream.options!.onEvent!({ type: 'status', data: status })
+
+    expect(store.bridge?.sendspin_source).toEqual(status.bridge.sendspin_source)
+    expect(source.status?.state).toBe('waiting')
+    expect(source.status?.ma_paired).toBe(true)
   })
 
   it('subscribes to sync events and hands them to the sync store', () => {

@@ -20,13 +20,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import logging
 import secrets
+import sys
 import time
+from array import array
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from sendspin_bridge.services.source import devices as source_devices
+from sendspin_bridge.services.source import pairing as source_pairing
 from sendspin_bridge.services.source import state as source_state
 from sendspin_bridge.services.source.capture import CHUNK_MS, CaptureBackend, CaptureEndpoint, CaptureStream
 from sendspin_bridge.services.source.identity import load_or_create_identity, open_pairing_store
@@ -53,6 +57,11 @@ PAIRING_POLL_S = 1.0
 STOP_ATTEMPTS = 5
 STOP_RETRY_DELAY_S = 0.2
 STOP_TIMEOUT_S = 5.0
+#: How often the smoothed capture level reaches the event stream while streaming.
+LEVEL_PUBLISH_INTERVAL_S = 0.1
+#: Per-10 ms-chunk decay of the level after a peak: slow enough to read, fast
+#: enough that silence reaches zero in a couple of seconds.
+LEVEL_DECAY = 0.98
 
 #: Keep in sync with the exact aiosendspin pin in pyproject.toml.
 AIOSENDSPIN_PIN = "aiosendspin==10.2.1"
@@ -131,12 +140,16 @@ class SourceClient:
         client_factory: Callable[[SourceSettings, Any, Any], Any] | None = None,
         signal_factory: Callable[[Any], SignalReporter] | None = None,
         clock: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
+        input_state: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self._settings = settings
         self._capture_backend = capture
         self._client_factory = client_factory or _default_client_factory
         self._signal_factory = signal_factory or (lambda client: AdmittedSignal(client))
         self._clock = clock
+        self._monotonic = monotonic
+        self._load_input_state = input_state or _load_saved_input_state
         self._client: Any = None
         self._identity: Any = None
         self._store: Any = None
@@ -158,6 +171,10 @@ class SourceClient:
         self._preferred_mac: str | None = None
         self._target_player: str | None = settings.target_player
         self._active_input: str | None = settings.active_input
+        self._volume = 100
+        self._muted = False
+        self._level = 0.0
+        self._level_published_at = 0.0
 
     # -- lifecycle -------------------------------------------------------------------------
 
@@ -204,15 +221,6 @@ class SourceClient:
 
     async def stop(self) -> dict[str, Any]:
         """Disconnect and release everything; a second call is a no-op."""
-        release = getattr(self._capture_backend, "release_active", None)
-        if callable(release):
-            try:
-                await release()
-            except Exception:
-                logger.warning("Source: could not restore the headset profile", exc_info=True)
-        if not self.running and self._client is None:
-            source_state.publish(enabled=False, state="off", ma_connected=False, streaming=False)
-            return {"started": False, "already": True}
         self._stop.set()
         self._disconnected.set()
         for task in (self._watch_task, self._run_task):
@@ -222,7 +230,17 @@ class SourceClient:
                     await task
         self._watch_task = None
         self._run_task = None
-        await self._stop_capture()
+        async with self._endpoint_lock:
+            self._stream_requested = False
+            await self._stop_capture()
+            release = getattr(self._capture_backend, "release_active", None)
+            if callable(release):
+                try:
+                    await release()
+                except SourceError as exc:
+                    source_state.publish(error=exc.code)
+                    logger.warning("Source: could not restore the headset profile", exc_info=True)
+
         if self._subscription is not None:
             with contextlib.suppress(Exception):
                 await self._subscription.stop()
@@ -234,7 +252,10 @@ class SourceClient:
         self._signal = None
         self._endpoint = None
         self._preferred_mac = None
-        self._set_backend_preference(None)
+        # The phone pairing window exists to feed this source: stopping the
+        # source ends it for real (discoverability off, window task cancelled),
+        # not just the countdown the UI draws.
+        await source_pairing.close_window()
         source_state.publish(
             enabled=False,
             state="off",
@@ -246,7 +267,7 @@ class SourceClient:
             ma_pairing_code=None,
             ma_pairing_until=0.0,
             ma_error=None,
-            error=None,
+            error=source_state.snapshot().error,
             target_player=None,
             target_error=None,
             active_input=None,
@@ -416,6 +437,8 @@ class SourceClient:
             )
             if endpoint is not None and endpoint.phone_mac:
                 await self._nudge_profile(endpoint)
+            if endpoint is not None:
+                await self._restore_input_audio()
             await self._report_signal(force=True)
             if endpoint is not None and self._stream_requested and self._client is not None:
                 await self._start_capture()
@@ -427,10 +450,12 @@ class SourceClient:
         if callable(setter):
             setter(mac)
 
-    def _set_backend_active(self, source_id: str | None) -> None:
+    async def _set_backend_active(self, source_id: str | None) -> None:
         setter = getattr(self._capture_backend, "set_active", None)
         if callable(setter):
-            setter(source_id)
+            result = setter(source_id)
+            if inspect.isawaitable(result):
+                await result
             return
         if source_id and source_id.startswith("bluetooth:"):
             self._set_backend_preference(source_id.split(":", 1)[1])
@@ -438,41 +463,40 @@ class SourceClient:
             self._set_backend_preference(None)
 
     async def set_active(self, source_id: str | None, *, play_target: bool = True) -> str | None:
-        """Switch the captured input; None means "no active input", not auto-Bluetooth."""
-        chosen = str(source_id or "").strip() or "none"
-        if chosen == self._active_input:
-            return None
-        old = self._active_input
-        was_streaming = self._stream is not None
-        if old and old.startswith("headset-mic:"):
-            release = getattr(self._capture_backend, "release_active", None)
-            if callable(release):
-                await release()
-        self._active_input = chosen
-        self._set_backend_active(chosen)
-        source_state.publish(active_input=None if chosen == "none" else chosen, target_error=None, error=None)
-        if was_streaming:
-            # One server start authorises one capture opening; the switched
-            # input needs MA to ask again.
+        """Serialize selection/watch/stop: endpoint lock before capture/profile locks.
+
+        None is an explicit deselection; only the initial None setting means
+        auto-Bluetooth. Every changed choice invalidates the previous MA grant.
+        """
+        async with self._endpoint_lock:
+            chosen = str(source_id or "").strip() or "none"
+            if chosen == self._active_input:
+                return None
+            old = self._active_input
+            was_streaming = self._stream is not None
             self._stream_requested = False
             await self._stop_capture()
             self._endpoint = None
-        await self._sync_endpoint()
-        if chosen.startswith("local:") and self._endpoint is None:
-            # The node vanished before we could open it: restore the previous
-            # choice so a failed switch does not lose the operator's source.
-            self._active_input = old
-            self._set_backend_active(old)
-            source_state.publish(active_input=None if old in (None, "none") else old)
-            await self._sync_endpoint()
-            raise SourceError("input_unavailable", "That local audio input is not present.")
-        if play_target and self._target_player and self._endpoint is not None:
-            return await self._play_target(allow_without_stream=True)
-        if was_streaming:
-            if not self._target_player:
-                source_state.publish(target_error="press_play")
-            source_state.publish(state=await self._idle_state(), streaming=False)
-        return None
+            try:
+                await self._set_backend_active(chosen)
+                self._active_input = chosen
+                await self._sync_endpoint_locked()
+                if chosen.startswith(("local:", "headset-mic:")) and self._endpoint is None:
+                    raise SourceError("input_unavailable", "That audio input is not present.")
+            except BaseException:
+                await self._set_backend_active(old)
+                self._active_input = old
+                self._endpoint = None
+                source_state.publish(active_input=None if old in (None, "none") else old, phone=None, phone_mac=None)
+                raise
+            source_state.publish(active_input=None if chosen == "none" else chosen, target_error=None)
+            if play_target and self._target_player and self._endpoint is not None:
+                return await self._play_target(allow_without_stream=True)
+            if was_streaming:
+                if not self._target_player:
+                    source_state.publish(target_error="press_play")
+                source_state.publish(state=await self._idle_state(), streaming=False)
+            return None
 
     async def _play_target_after_switch(self) -> None:
         await self._play_target(allow_without_stream=True)
@@ -491,7 +515,7 @@ class SourceClient:
             raise SourceError("device_selection_unsupported", "This capture backend cannot select a device.")
         old = self._preferred_mac
         self._preferred_mac = address.colons
-        self._set_backend_active(f"bluetooth:{address.colons}")
+        await self._set_backend_active(f"bluetooth:{address.colons}")
         endpoint = await self._capture_backend.find()
         if endpoint is None or endpoint.phone_mac != address.colons:
             self._preferred_mac = old
@@ -517,10 +541,51 @@ class SourceClient:
             self._set_backend_preference(None)
         if (source_state.snapshot().paired_phone_mac or "").upper() == address:
             source_state.publish(paired_phone_mac=None)
-        source_devices.invalidate()
         from sendspin_bridge.services.bluetooth import bt_remove_device
 
         await asyncio.to_thread(bt_remove_device, address)
+        await asyncio.to_thread(source_devices.invalidate)
+
+    async def _restore_input_audio(self) -> None:
+        """Reapply the gain and mute saved for the input that just became active."""
+        endpoint = self._endpoint
+        source_id = self._input_id()
+        if endpoint is None or source_id is None:
+            return
+        # The loader reads config.json; keep that off the bridge loop.
+        saved = await asyncio.to_thread(self._load_input_state, source_id) or {}
+        volume = saved.get("volume")
+        if isinstance(volume, int) and not isinstance(volume, bool) and 0 <= volume <= 100:
+            await self.set_input_gain(volume)
+        muted = saved.get("muted")
+        if isinstance(muted, bool):
+            await self.set_input_mute(muted)
+
+    async def _apply_to_node(self, method: str, value: Any) -> bool:
+        """Call one capture-backend verb for the current node; never raise at the seam."""
+        endpoint = self._endpoint
+        setter = getattr(self._capture_backend, method, None)
+        if endpoint is None or not callable(setter):
+            return False
+        try:
+            return bool(await setter(endpoint.node, value))
+        except Exception:
+            logger.warning("Source: could not apply %s to %s", method, endpoint.node, exc_info=True)
+            return False
+
+    async def set_input_gain(self, volume: int) -> bool:
+        """Set the active capture node's gain (0..100); ``False`` when there is no node."""
+        applied = await self._apply_to_node("set_gain", volume)
+        if applied:
+            self._volume = volume
+        return applied
+
+    async def set_input_mute(self, muted: bool) -> bool:
+        """Mute the active capture node without touching the Sendspin stream."""
+        applied = await self._apply_to_node("set_mute", muted)
+        if applied:
+            self._muted = muted
+        return applied
 
     async def _nudge_profile(self, endpoint: CaptureEndpoint | None) -> None:
         if (self._active_input or "").startswith("headset-mic:"):
@@ -605,11 +670,15 @@ class SourceClient:
         return None
 
     async def _feed(self, sendspin_capture: Any, stream: CaptureStream) -> None:
+        self._level = 0.0
+        self._level_published_at = self._monotonic()
         try:
             async for chunk in stream.chunks():
                 if self._client is None:
                     return
+                self._track_level(chunk)
                 await sendspin_capture.feed(chunk, self._client.now_us() - CHUNK_MS * 1000)
+                self._publish_level_if_due()
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -623,8 +692,30 @@ class SourceClient:
                 if sendspin_capture is not None:
                     await self._stop_sendspin_capture(sendspin_capture)
                 self._stream_requested = False
-                source_state.publish(streaming=False, state=await self._idle_state())
+                self._level = 0.0
+                source_state.publish(streaming=False, level=0.0, state=await self._idle_state())
                 await self._report_signal(force=True)
+
+    def _track_level(self, chunk: bytes) -> None:
+        """A smoothed peak: the signal attacks instantly and decays chunk by chunk."""
+        self._level = max(_chunk_peak(chunk), self._level * LEVEL_DECAY)
+
+    def _publish_level_if_due(self) -> None:
+        now = self._monotonic()
+        if now - self._level_published_at < LEVEL_PUBLISH_INTERVAL_S:
+            return
+        self._level_published_at = now
+        source_state.publish_level(self._level, input_id=self._input_id(), muted=self._muted)
+
+    def _input_id(self) -> str | None:
+        """The input the capture belongs to: the explicit pick, or the auto-detected phone."""
+        active = str(self._active_input or "").strip()
+        if active and active != "none":
+            return active
+        endpoint = self._endpoint
+        if endpoint is not None and endpoint.phone_mac:
+            return f"bluetooth:{endpoint.phone_mac.upper()}"
+        return None
 
     async def _stop_capture(self) -> None:
         async with self._capture_lock:
@@ -787,3 +878,26 @@ def _default_client_factory(settings: SourceSettings, identity: Any, store: Any)
         source_support=ClientHelloSourceSupport(features=ClientHelloSourceFeatures(line_sense=True)),
         pairing_support=PairingSupport(offer_static_pairing_code=True, secret_locations=("device",)),
     )
+
+
+def _chunk_peak(chunk: bytes) -> float:
+    """The absolute peak of one interleaved s16le chunk, as 0..1."""
+    usable = len(chunk) - len(chunk) % 2
+    if usable <= 0:
+        return 0.0
+    samples = array("h")
+    samples.frombytes(chunk[:usable])
+    if sys.byteorder == "big":
+        samples.byteswap()
+    return max(max(samples, default=0), -min(samples, default=0)) / 32768.0
+
+
+def _load_saved_input_state(source_id: str) -> dict[str, Any]:
+    """The persisted gain/mute of one source input, from the config file."""
+    from sendspin_bridge.config import load_source_input_state
+
+    try:
+        return load_source_input_state(source_id)
+    except Exception:
+        logger.debug("Source: could not read the saved gain of %s", source_id, exc_info=True)
+        return {}

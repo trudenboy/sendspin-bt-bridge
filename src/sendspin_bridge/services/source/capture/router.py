@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -79,21 +80,14 @@ class SourceInputRouter:
     def active_input(self) -> str | None:
         return self._active
 
-    def set_active(self, source_id: str | None) -> None:
-        previous = parse_source_id(self._active) if self._active else None
-        self._active = str(source_id or "").strip() or None
-        parsed = parse_source_id(self._active) if self._active else None
-        if previous is not None and previous[0] == "headset_microphone" and parsed != previous and self._headset:
-            import asyncio
-
-            try:
-                asyncio.get_running_loop().create_task(self._headset.release_microphone(previous[1]))
-            except RuntimeError:
-                pass
-        if parsed is not None and parsed[0] == "bluetooth":
-            self._set_base_mac(parsed[1])
-        else:
-            self._set_base_mac(None)
+    async def set_active(self, source_id: str | None) -> None:
+        """Switch only after the caller has stopped PCM; profile release is awaited."""
+        chosen = str(source_id or "").strip() or None
+        if chosen != self._active:
+            await self.release_active()
+        self._active = chosen
+        parsed = parse_source_id(chosen) if chosen else None
+        self._set_base_mac(parsed[1] if parsed and parsed[0] == "bluetooth" else None)
 
     def set_preferred_mac(self, mac: str | None) -> None:
         """Legacy Bluetooth selection: turn it into an active Bluetooth source."""
@@ -114,14 +108,16 @@ class SourceInputRouter:
             mac = parsed[1]
             if self._headset is None or not await self._headset.acquire_microphone(mac):
                 return None
-            self._set_base_mac(mac)
-            for _ in range(16):
-                endpoint = await self._base.find()
-                if endpoint is not None:
-                    return endpoint
-                import asyncio
-
-                await asyncio.sleep(0.5)
+            try:
+                self._set_base_mac(mac)
+                for _ in range(16):
+                    endpoint = await self._base.find()
+                    if endpoint is not None:
+                        return endpoint
+                    await asyncio.sleep(0.5)
+            except BaseException:
+                await self._headset.release_microphone(mac)
+                raise
             await self._headset.release_microphone(mac)
             return None
         if parsed is not None and parsed[0] == "local":
@@ -136,6 +132,14 @@ class SourceInputRouter:
 
     async def open(self, endpoint: CaptureEndpoint) -> CaptureStream:
         return await self._base.open(endpoint)
+
+    async def set_gain(self, node: str, volume: int) -> bool:
+        """Apply gain to the node the picked input is being captured from."""
+        return await self._base.set_gain(node, volume)
+
+    async def set_mute(self, node: str, muted: bool) -> bool:
+        """Mute the node the picked input is being captured from."""
+        return await self._base.set_mute(node, muted)
 
     async def release_active(self) -> None:
         """Return a headset to A2DP after its microphone input stops being used."""

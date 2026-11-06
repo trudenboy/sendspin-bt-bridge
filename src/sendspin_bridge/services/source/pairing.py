@@ -173,7 +173,7 @@ async def _watch_window(seconds: int, adapters: list[str]) -> None:
                 )
                 from sendspin_bridge.services.source import devices as source_devices
 
-                source_devices.invalidate()
+                await asyncio.to_thread(source_devices.invalidate)
                 logger.info("Bluetooth pairing window closed: %s paired", mac)
                 return
             await asyncio.sleep(2.0)

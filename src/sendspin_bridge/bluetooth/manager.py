@@ -790,6 +790,95 @@ class BluetoothManager:
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        with get_headset_profiles().automatic_audio(self.mac_address) as allowed:
+            return self._configure_bluetooth_audio_owned() if allowed else False
+
+    def _headset_owns_link(self) -> bool:
+        """Is a Source capture using this link (microphone, or a restore in flight)?"""
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        return get_headset_profiles().blocked(self.mac_address)
+
+    def _recover_sink_after_connect(self) -> bool:
+        """Ask a freshly connected speaker for an A2DP sink, and prove it.
+
+        The role flip and the disconnect/reconnect dance change profiles and
+        can drop the link, so the whole recovery runs under the Source feed's
+        automatic-audio fence: while a capture owns the card, the fenced
+        configure's ``False`` means "not ours to try", never "no sink", and the
+        dance must not tear a live HFP call down.
+        """
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        with get_headset_profiles().automatic_audio(self.mac_address) as allowed:
+            if not allowed:
+                logger.debug(
+                    "[%s] Link is owned by the Source capture — leaving its profile alone",
+                    self.device_name,
+                )
+                return False
+            # Workaround for bluez/bluez#1922 (5.86 dual-role A2DP regression):
+            # after the generic Connect() succeeds, also ask BlueZ explicitly
+            # for A2DP Sink. On an unaffected stack this is a cheap no-op
+            # ("AlreadyConnected"); on the buggy path it can force the sink
+            # profile to register where auto-select failed.
+            self._force_a2dp_sink_profile()
+            if self._abort_connect_if_cancelled():
+                return False
+            # Configure audio routing. If no sink appears (same regression
+            # class) try one disconnect→reconnect dance before surrendering
+            # — some users report the profile registers on the 2nd connect.
+            # The dance is experimental/opt-in because on some headless setups
+            # it hurts more than it helps (see #174 / forum #78).
+            sink_ok = self.configure_bluetooth_audio()
+            if get_headset_profiles().blocked(self.mac_address):
+                # A capture took the card while the configure ran; its drain is
+                # waiting for this lock. The profile belongs to it now.
+                logger.debug(
+                    "[%s] Source capture took the link during configuration — leaving it alone",
+                    self.device_name,
+                )
+                return False
+            if (
+                not sink_ok
+                and self._enable_a2dp_dance
+                and self._a2dp_dance_remaining > 0
+                and not self._abort_connect_if_cancelled()
+            ):
+                self._a2dp_dance_remaining -= 1
+                # A speaker that streams to the host instead (#476) gets
+                # its roles swapped first; the dance is the fallback.
+                dual_role = self._is_dual_role_speaker()
+                self._last_role_flip_refusal = None
+                flipped = self._a2dp_role_flip(dual_role)
+                if flipped:
+                    sink_ok = self.configure_bluetooth_audio()
+                if not sink_ok and not self._abort_connect_if_cancelled():
+                    skip_reason = self._dance_skip_reason(dual_role, flipped)
+                    if skip_reason:
+                        logger.warning(
+                            "[%s] Skipping the disconnect/reconnect dance: %s",
+                            self.device_name,
+                            skip_reason,
+                        )
+                    elif self._a2dp_recovery_dance():
+                        sink_ok = self.configure_bluetooth_audio()
+            # Last resort: reload module-bluez5-discover to force PA to
+            # re-publish the bluez_card/bluez_sink hierarchy. Gated on its
+            # own experimental flag because it briefly drops every other
+            # active BT sink on the bridge.
+            if (
+                not sink_ok
+                and self._enable_pa_module_reload
+                and not self._abort_connect_if_cancelled()
+                and self._reload_pa_bluez5_module()
+            ):
+                sink_ok = self.configure_bluetooth_audio()
+            return sink_ok
+
+    def _configure_bluetooth_audio_owned(self) -> bool:
         if self._reconnect_cancelled():
             return False
         profile = bt_audio.card_profile_state(DeviceAddress.require(self.mac_address).underscores)
@@ -855,6 +944,11 @@ class BluetoothManager:
             self._paired_unknown_count = 0
             if self._abort_connect_if_cancelled():
                 return False
+            if self._headset_owns_link():
+                # The Source feed owns the card (HFP microphone, or a restore
+                # in flight): its profile is not ours to flip or reconfigure.
+                logger.debug("[%s] Link is owned by the Source capture — leaving its profile alone", self.device_name)
+                return True
             # An Echo that connected on its own (#476).
             self.early_a2dp_role_flip(wait=2.0)
             # Ensure audio is configured
@@ -901,6 +995,14 @@ class BluetoothManager:
                 self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
                     return False
+                if self._headset_owns_link():
+                    # A call was already running when the link came back: the
+                    # Source feed keeps the card on HFP and restores A2DP (and
+                    # the Player) itself. Nothing here is ours to change.
+                    logger.debug(
+                        "[%s] Link is owned by the Source capture — leaving its profile alone", self.device_name
+                    )
+                    return True
                 # A dual-role speaker (an Echo, #476) picks its role as the
                 # link comes up: ask for its sink before it opens its own
                 # source stream towards the host.
@@ -932,55 +1034,9 @@ class BluetoothManager:
                     self.device_name,
                     describe_uuids(self.device.uuids_blocking()),
                 )
-                # Workaround for bluez/bluez#1922 (5.86 dual-role A2DP regression):
-                # after the generic Connect() succeeds, also ask BlueZ explicitly
-                # for A2DP Sink. On an unaffected stack this is a cheap no-op
-                # ("AlreadyConnected"); on the buggy path it can force the sink
-                # profile to register where auto-select failed.
-                self._force_a2dp_sink_profile()
-                if self._abort_connect_if_cancelled():
-                    return False
-                # Configure audio routing. If no sink appears (same regression
-                # class) try one disconnect→reconnect dance before surrendering
-                # — some users report the profile registers on the 2nd connect.
-                # The dance is experimental/opt-in because on some headless setups
-                # it hurts more than it helps (see #174 / forum #78).
-                sink_ok = self.configure_bluetooth_audio()
-                if (
-                    not sink_ok
-                    and self._enable_a2dp_dance
-                    and self._a2dp_dance_remaining > 0
-                    and not self._abort_connect_if_cancelled()
-                ):
-                    self._a2dp_dance_remaining -= 1
-                    # A speaker that streams to the host instead (#476) gets
-                    # its roles swapped first; the dance is the fallback.
-                    dual_role = self._is_dual_role_speaker()
-                    self._last_role_flip_refusal = None
-                    flipped = self._a2dp_role_flip(dual_role)
-                    if flipped:
-                        sink_ok = self.configure_bluetooth_audio()
-                    if not sink_ok and not self._abort_connect_if_cancelled():
-                        skip_reason = self._dance_skip_reason(dual_role, flipped)
-                        if skip_reason:
-                            logger.warning(
-                                "[%s] Skipping the disconnect/reconnect dance: %s",
-                                self.device_name,
-                                skip_reason,
-                            )
-                        elif self._a2dp_recovery_dance():
-                            sink_ok = self.configure_bluetooth_audio()
-                # Last resort: reload module-bluez5-discover to force PA to
-                # re-publish the bluez_card/bluez_sink hierarchy. Gated on its
-                # own experimental flag because it briefly drops every other
-                # active BT sink on the bridge.
-                if (
-                    not sink_ok
-                    and self._enable_pa_module_reload
-                    and not self._abort_connect_if_cancelled()
-                    and self._reload_pa_bluez5_module()
-                ):
-                    sink_ok = self.configure_bluetooth_audio()
+                # No usable sink here is not a connect failure: the monitor
+                # decides what that means once this returns (#476).
+                self._recover_sink_after_connect()
                 return not self._abort_connect_if_cancelled()
 
         excerpt = connect_result.detail
@@ -1215,6 +1271,16 @@ class BluetoothManager:
         Returns whether the disconnect was made. At most ``SINK_RECONNECT_TRIES`` per
         ``SINK_RECONNECT_WINDOW_S``: a speaker that simply has no sink profile must not loop.
         """
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        if get_headset_profiles().blocked(self.mac_address):
+            # The Source feed owns the card (HFP microphone, or a restore in
+            # flight); dropping the link here would end the call.
+            logger.debug(
+                "[%s] Not reconnecting for a missing sink — the Source feed owns this link",
+                self.device_name,
+            )
+            return False
         now = time.monotonic()
         if now - self._sink_reconnect_since > SINK_RECONNECT_WINDOW_S:
             self._sink_reconnect_since = now
@@ -1285,6 +1351,14 @@ class BluetoothManager:
         *wait* bounds how long to wait for an attempt another path has in
         flight; ``0`` returns at once. Blocking: call it off the loop.
         """
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        with get_headset_profiles().automatic_audio(self.mac_address) as allowed:
+            if not allowed:
+                return False
+            return self._early_a2dp_role_flip_owned(wait=wait, allow_unknown_uuids=allow_unknown_uuids)
+
+    def _early_a2dp_role_flip_owned(self, *, wait: float, allow_unknown_uuids: bool) -> bool:
         if not self.early_role_flip_pending:
             return False
         acquired = self._early_flip_lock.acquire(timeout=wait) if wait > 0 else self._early_flip_lock.acquire(False)

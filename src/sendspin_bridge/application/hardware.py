@@ -244,7 +244,7 @@ def _source_state(view: source_uc.SourceStatus) -> Literal["off", "pairing", "wa
     return view.state  # type: ignore[return-value]
 
 
-def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collection[str]) -> SourceFeed | None:
+def _source_feed(config: dict[str, Any], read: InventoryRead, known_macs: Collection[str]) -> SourceFeed | None:
     """The source as the page shows it, or ``None`` when the feature is off.
 
     ``None`` is "this bridge does not report a source", not an empty feed: the
@@ -254,7 +254,8 @@ def _source_feed(config: dict[str, Any], audio: AudioFacts, known_macs: Collecti
     """
     if not config.get("SENDSPIN_SOURCE") and not source_manager.running():
         return None
-    view = source_uc.status(config)
+    audio = read.audio
+    view = source_uc.status(config, inventory=read)
     return SourceFeed(
         enabled=view.enabled,
         state=_source_state(view),
@@ -507,7 +508,7 @@ async def snapshot() -> HardwareSnapshot:
     """One aggregate read of the physical layer."""
     read, config = await _read()
     players, areas, sink_players = _config_view(config)
-    source = _source_feed(config, read.audio, {device.mac for device in read.devices})
+    source = _source_feed(config, read, {device.mac for device in read.devices})
     return HardwareSnapshot(
         as_of=read.as_of,
         stale_after_s=read.stale_after_s,
@@ -538,7 +539,7 @@ async def controller(controller_id: str) -> ControllerDetail:
         raise not_found(f"Unknown controller: {controller_id}", code="entity_not_found")
     players, areas, _sink_players = _config_view(config)
     by_mac = {device.mac: device for device in read.devices}
-    source = _source_feed(config, read.audio, set(by_mac))
+    source = _source_feed(config, read, set(by_mac))
     return ControllerDetail(
         **_controller_summary(facts, areas).model_dump(),
         devices=[_device_summary(by_mac[mac], players, source) for mac in facts.device_macs if mac in by_mac],
@@ -556,7 +557,7 @@ async def bluetooth_device(mac: str) -> BtDeviceDetail:
     if facts is None:
         raise not_found(f"Unknown Bluetooth device: {mac}", code="entity_not_found")
     players, _areas, _sink_players = _config_view(config)
-    summary = _device_summary(facts, players, _source_feed(config, read.audio, {device.mac for device in read.devices}))
+    summary = _device_summary(facts, players, _source_feed(config, read, {device.mac for device in read.devices}))
     return BtDeviceDetail(
         **summary.model_dump(),
         uuids=list(facts.uuids),

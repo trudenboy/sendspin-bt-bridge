@@ -99,3 +99,68 @@ def test_an_unknown_field_cannot_corrupt_the_snapshot():
         state.publish(not_a_field=True)
 
     assert state.snapshot() == state.SourceState()
+
+
+def test_a_publish_that_changes_a_visible_field_announces_the_status(monkeypatch):
+    """A pairing window opening or closing must reach the event stream on its own.
+
+    The status stream is only built when something announces a change; a source
+    that closed its window silently left the SPA counting down a window the
+    server had already ended.
+    """
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    announced: list[int] = []
+    monkeypatch.setattr(bridge_runtime_state, "notify_status_changed", lambda: announced.append(1))
+
+    state.publish(pairing_until=1.0, pairing_adapters=("AA:BB:CC:DD:EE:FF",))
+    state.publish(pairing_until=0.0, pairing_adapters=())
+
+    assert announced == [1, 1]
+
+
+def test_a_publish_that_changes_nothing_visible_stays_silent(monkeypatch):
+    """Re-publishing an identical snapshot must not spend a status build."""
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    announced: list[int] = []
+    monkeypatch.setattr(bridge_runtime_state, "notify_status_changed", lambda: announced.append(1))
+    state.publish(enabled=True, state="waiting")
+
+    state.publish(enabled=True, state="waiting")
+
+    assert announced == [1]
+
+
+def test_a_fresh_snapshot_has_silence_not_an_unknown_level():
+    assert state.snapshot().level == 0.0
+
+
+def test_the_level_is_published_as_a_source_level_event_without_a_status_build(monkeypatch):
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    announced: list[int] = []
+    monkeypatch.setattr(bridge_runtime_state, "notify_status_changed", lambda: announced.append(1))
+
+    class _Hub:
+        def __init__(self) -> None:
+            self.events: list[dict] = []
+
+        def publish_threadsafe(self, event: dict) -> None:
+            self.events.append(event)
+
+    hub = _Hub()
+    state.attach_event_hub(hub)
+    try:
+        state.publish_level(0.625, input_id="bluetooth:34:C7:E9:25:A3:A3", muted=True)
+    finally:
+        state.attach_event_hub(None)
+
+    assert state.snapshot().level == 0.625
+    assert "level" not in state.snapshot().status_dict()
+    assert announced == [], "a level tick rebuilt the whole status payload"
+    assert len(hub.events) == 1
+    event = hub.events[0]
+    assert set(event) == {"v", "type", "at", "data"}
+    assert event["type"] == "source.level"
+    assert event["data"] == {"id": "bluetooth:34:C7:E9:25:A3:A3", "level": 0.625, "muted": True}

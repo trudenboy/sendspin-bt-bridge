@@ -150,9 +150,21 @@ class FakeBackend:
         self.stream = FakeStream()
         self.nudged: list[str | None] = []
         self.preferred_mac: str | None = None
+        self.gains: list[tuple[str, int]] = []
+        self.mutes: list[tuple[str, bool]] = []
+        self.gain_verdict = True
+        self.mute_verdict = True
 
     def set_preferred_mac(self, mac: str | None) -> None:
         self.preferred_mac = str(mac or "").upper() or None
+
+    async def set_gain(self, node: str, volume: int) -> bool:
+        self.gains.append((node, volume))
+        return self.gain_verdict
+
+    async def set_mute(self, node: str, muted: bool) -> bool:
+        self.mutes.append((node, muted))
+        return self.mute_verdict
 
     async def find(self):
         if self.preferred_mac and (self.endpoint is None or self.endpoint.phone_mac != self.preferred_mac):
@@ -219,14 +231,16 @@ def harness(monkeypatch, tmp_path):
         created.append(fake_client)
         return fake_client
 
+    saved: dict[str, dict] = {}
     settings = client_module.SourceSettings(server_url="ws://ma:8927/sendspin", state_dir=tmp_path)
     client = client_module.SourceClient(
         settings,
         backend,
         client_factory=factory,
         signal_factory=lambda _client: signal,
+        input_state=saved.get,
     )
-    return SimpleNamespace(client=client, fake=fake_client, store=store, signal=signal, backend=backend)
+    return SimpleNamespace(client=client, fake=fake_client, store=store, signal=signal, backend=backend, saved=saved)
 
 
 async def _async(value):
@@ -472,6 +486,35 @@ async def test_stop_clears_the_state(harness):
     assert snapshot.ma_connected is False
 
 
+async def test_stop_closes_the_phone_pairing_window(harness, monkeypatch):
+    from sendspin_bridge.services.source import pairing
+
+    discoverable: list[bool] = []
+    monkeypatch.setattr(pairing, "_task", None)
+    monkeypatch.setattr(pairing, "_known_devices", set())
+    monkeypatch.setattr(pairing, "_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(pairing, "_devices", lambda: set())
+    monkeypatch.setattr(pairing, "_set_discoverable", lambda _adapters, on: discoverable.append(on) or True)
+    monkeypatch.setattr(pairing, "ensure_agent", lambda: _async(True))
+
+    await harness.client.start()
+    await _wait_for(lambda: source_state.snapshot().ma_connected)
+    await pairing.open_window(30)
+    assert source_state.snapshot().pairing_until > 0
+    assert discoverable == [True]
+
+    # The window exists to feed the source: stopping the source ends it.
+    try:
+        await harness.client.stop()
+
+        snapshot = source_state.snapshot()
+        assert snapshot.pairing_until == 0
+        assert snapshot.pairing_adapters == ()
+        assert discoverable[-1] is False
+    finally:
+        await pairing.close_window()
+
+
 async def test_line_sense_follows_the_phone_and_is_deduplicated(harness):
     harness.backend.endpoint = CaptureEndpoint(node="bluez_source.34_C7_E9_25_A3_A3", backend="fake", running=True)
     await harness.client.start()
@@ -514,3 +557,153 @@ async def test_the_signal_adapter_refuses_a_changed_private_shape():
 
     with pytest.raises(RuntimeError, match="send_source_signal"):
         await adapter.report(True)
+
+
+class ScriptedStream:
+    """A capture stream whose chunks the test pushes; it stays open until stopped."""
+
+    def __init__(self) -> None:
+        self.started = False
+        self.stopped = False
+        self._chunks: asyncio.Queue[bytes | None] = asyncio.Queue()
+
+    @property
+    def running(self) -> bool:
+        return self.started and not self.stopped
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def push(self, chunk: bytes) -> None:
+        self._chunks.put_nowait(chunk)
+
+    async def chunks(self):
+        while True:
+            chunk = await self._chunks.get()
+            if chunk is None:
+                return
+            yield chunk
+
+    async def stop(self) -> None:
+        self.stopped = True
+        self._chunks.put_nowait(None)
+
+
+class LevelHub:
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    def publish_threadsafe(self, event: dict) -> None:
+        self.events.append(event)
+
+
+PHONE = "34:C7:E9:25:A3:A3"
+PHONE_NODE = "bluez_source.34_C7_E9_25_A3_A3"
+
+
+async def _streaming_capture(harness, monkeypatch):
+    monkeypatch.setattr(client_module, "LEVEL_PUBLISH_INTERVAL_S", 0.0)
+    stream = ScriptedStream()
+    harness.backend.stream = stream
+    harness.backend.endpoint = CaptureEndpoint(node=PHONE_NODE, backend="fake", phone_mac=PHONE, running=True)
+    await harness.client.start()
+    await _wait_for(lambda: source_state.snapshot().ma_connected)
+    harness.fake.fire_command("start")
+    await _wait_for(lambda: len(harness.fake.captures) == 1)
+    return stream
+
+
+async def test_the_level_rises_with_the_signal_and_decays_in_silence(harness, monkeypatch):
+    hub = LevelHub()
+    source_state.attach_event_hub(hub)
+    stream = await _streaming_capture(harness, monkeypatch)
+    try:
+        await stream.push(b"\xff\x7f" * (chunk_bytes() // 2))
+        await _wait_for(lambda: source_state.snapshot().level > 0.9)
+        loud = source_state.snapshot().level
+
+        silent = b"\x00" * chunk_bytes()
+        for _ in range(150):
+            await stream.push(silent)
+        await _wait_for(lambda: source_state.snapshot().level < loud / 2)
+
+        assert source_state.snapshot().level < 0.5
+        assert hub.events and all(event["type"] == "source.level" for event in hub.events)
+        payload = hub.events[-1]["data"]
+        assert set(payload) == {"id", "level", "muted"}
+        assert payload["id"] == "bluetooth:" + PHONE
+        assert payload["muted"] is False
+    finally:
+        await harness.client.stop()
+        source_state.attach_event_hub(None)
+
+
+async def test_silence_is_published_as_zero_not_left_unknown(harness, monkeypatch):
+    hub = LevelHub()
+    source_state.attach_event_hub(hub)
+    stream = await _streaming_capture(harness, monkeypatch)
+    try:
+        await stream.push(b"\x00" * chunk_bytes())
+        await _wait_for(lambda: bool(hub.events))
+
+        assert hub.events[-1]["data"]["level"] == 0.0
+        assert source_state.snapshot().level == 0.0
+    finally:
+        await harness.client.stop()
+        source_state.attach_event_hub(None)
+
+
+async def test_the_saved_gain_and_mute_are_reapplied_when_an_input_becomes_active(harness):
+    harness.saved["bluetooth:" + PHONE] = {"volume": 42, "muted": True}
+    harness.backend.endpoint = CaptureEndpoint(node=PHONE_NODE, backend="fake", phone_mac=PHONE, running=True)
+
+    await harness.client.start()
+    await _wait_for(lambda: harness.backend.gains == [(PHONE_NODE, 42)])
+
+    assert harness.backend.mutes == [(PHONE_NODE, True)]
+    assert source_state.snapshot().phone == PHONE_NODE
+
+    await harness.client.stop()
+
+
+async def test_an_input_with_no_saved_gain_leaves_the_node_alone(harness):
+    harness.backend.endpoint = CaptureEndpoint(node=PHONE_NODE, backend="fake", phone_mac=PHONE, running=True)
+
+    await harness.client.start()
+    await _wait_for(lambda: source_state.snapshot().phone == PHONE_NODE)
+
+    assert harness.backend.gains == []
+    assert harness.backend.mutes == []
+
+    await harness.client.stop()
+
+
+async def test_the_gain_and_mute_commands_reach_the_active_capture_node(harness):
+    harness.backend.endpoint = CaptureEndpoint(node=PHONE_NODE, backend="fake", phone_mac=PHONE, running=True)
+    await harness.client.start()
+    await _wait_for(lambda: source_state.snapshot().phone == PHONE_NODE)
+
+    assert await harness.client.set_input_gain(30) is True
+    assert await harness.client.set_input_mute(True) is True
+
+    assert harness.backend.gains == [(PHONE_NODE, 30)]
+    assert harness.backend.mutes == [(PHONE_NODE, True)]
+
+    await harness.client.stop()
+
+
+async def test_gain_with_no_capture_node_is_a_false_verdict(harness):
+    await harness.client.start()
+
+    assert await harness.client.set_input_gain(30) is False
+    assert await harness.client.set_input_mute(True) is False
+
+    await harness.client.stop()
+
+
+def test_the_client_reads_the_saved_state_from_the_config_file(tmp_config):
+    from sendspin_bridge.config import save_source_input_state
+
+    save_source_input_state("local:alsa_input.line", volume=44, muted=True)
+
+    assert client_module._load_saved_input_state("local:alsa_input.line") == {"volume": 44, "muted": True}
