@@ -35,6 +35,7 @@ __all__ = [
     "SourceStatus",
     "add_local_input",
     "cancel_ma_pairing",
+    "clear_active_input",
     "close_pairing_window",
     "open_ma_pairing",
     "open_pairing_window",
@@ -42,6 +43,8 @@ __all__ = [
     "rename_local_input",
     "resolve_server_url",
     "select_input",
+    "set_active_mute",
+    "set_active_volume",
     "set_target",
     "start",
     "status",
@@ -522,6 +525,118 @@ async def remove_input(source_id: str) -> None:
     source_state.publish(active_input=active)
     await asyncio.to_thread(bt_remove_device, value)
     await asyncio.to_thread(source_devices.invalidate)
+
+
+async def _require_active_input() -> tuple[str, Any]:
+    """The active input id and the running client, or the stable "nothing active" problem."""
+    from sendspin_bridge.config import load_config
+
+    config = await asyncio.to_thread(load_config) or {}
+    active = _active_id(config, source_state.snapshot())
+    client = manager.client()
+    if active is None or client is None:
+        raise UseCaseError(409, "no_active_input", "No source input is active.")
+    return active, client
+
+
+async def _input_row(active_input: str) -> dict[str, Any]:
+    """The read-model row of *active_input*, the shape ``GET /bridge/source/inputs`` returns."""
+    from dataclasses import replace
+
+    from sendspin_bridge.config import load_config
+
+    config = await asyncio.to_thread(load_config) or {}
+    view = project_status(config, source_state.snapshot(), await _hardware_audio(), headsets=_headsets(config))
+    row = next((entry for entry in view.inputs if entry.id == active_input), None)
+    if row is not None:
+        # The command just acted on this input, whatever a stale snapshot says.
+        return (row if row.active else replace(row, active=True)).as_dict()
+    parsed = source_inputs.parse_source_id(active_input)
+    kind: Any = "local"
+    value = active_input
+    mac = node = None
+    if parsed is not None:
+        kind, value = parsed
+        if kind == "local":
+            node = value
+        else:
+            mac = value
+    volume, muted = source_inputs.input_audio(config, active_input)
+    return source_inputs.SourceInput(
+        id=active_input,
+        kind=kind,
+        name=value,
+        active=True,
+        available=False,
+        mac=mac,
+        node=node,
+        volume=volume,
+        muted=muted,
+    ).as_dict()
+
+
+async def set_active_volume(volume: int) -> dict[str, Any]:
+    """Set the active input's gain, apply it to its capture node, and remember it."""
+    if isinstance(volume, bool) or not isinstance(volume, int) or not 0 <= volume <= 100:
+        raise UseCaseError(422, "invalid_volume", "The input volume is 0 to 100.")
+    active, client = await _require_active_input()
+    try:
+        applied = bool(await client.set_input_gain(volume))
+    except Exception:
+        logger.warning("Source: applying the input gain failed", exc_info=True)
+        applied = False
+    if not applied:
+        raise UseCaseError(409, "input_unavailable", "The active input has no capture node to apply the volume to.")
+    from sendspin_bridge.config import save_source_input_state
+
+    await asyncio.to_thread(save_source_input_state, active, volume=volume)
+    row = await _input_row(active)
+    row["volume"] = volume
+    return row
+
+
+async def set_active_mute(muted: bool) -> dict[str, Any]:
+    """Mute or unmute the active input without stopping the stream to Music Assistant."""
+    if not isinstance(muted, bool):
+        raise UseCaseError(422, "invalid_mute", "The mute state is true or false.")
+    active, client = await _require_active_input()
+    try:
+        applied = bool(await client.set_input_mute(muted))
+    except Exception:
+        logger.warning("Source: applying the input mute failed", exc_info=True)
+        applied = False
+    if not applied:
+        raise UseCaseError(409, "input_unavailable", "The active input has no capture node to mute.")
+    from sendspin_bridge.config import save_source_input_state
+
+    await asyncio.to_thread(save_source_input_state, active, muted=muted)
+    row = await _input_row(active)
+    row["muted"] = muted
+    return row
+
+
+async def clear_active_input() -> None:
+    """Release the active input (capture and hand-off) without switching the feed off.
+
+    Idempotent: with nothing active there is nothing to release and nothing to
+    persist, so the call is a no-op.  A successful clear stores the explicit
+    "none" choice, exactly like :func:`select_input` stores a pick, so a restart
+    does not silently fall back to the automatic Bluetooth policy.
+    """
+    from sendspin_bridge.config import load_config, update_config
+
+    config = await asyncio.to_thread(load_config) or {}
+    active = _active_id(config, source_state.snapshot())
+    client = manager.client()
+    if active is None and (client is None or getattr(client, "active_input", None) in (None, "none")):
+        return
+    if client is not None:
+        try:
+            await client.set_active(None)
+        except Exception as exc:
+            raise UseCaseError(409, getattr(exc, "code", "input_release_failed"), str(exc)) from exc
+    await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE_ACTIVE", "none"))
+    source_state.publish(active_input=None, phone=None, phone_mac=None)
 
 
 async def select_input(source_id: str) -> dict[str, Any]:

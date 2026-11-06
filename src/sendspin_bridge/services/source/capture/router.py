@@ -133,6 +133,14 @@ class SourceInputRouter:
     async def open(self, endpoint: CaptureEndpoint) -> CaptureStream:
         return await self._base.open(endpoint)
 
+    async def set_gain(self, node: str, volume: int) -> bool:
+        """Apply gain to the node the picked input is being captured from."""
+        return await self._base.set_gain(node, volume)
+
+    async def set_mute(self, node: str, muted: bool) -> bool:
+        """Mute the node the picked input is being captured from."""
+        return await self._base.set_mute(node, muted)
+
     async def release_active(self) -> None:
         """Return a headset to A2DP after its microphone input stops being used."""
         if self._headset is None or not self._active:

@@ -228,7 +228,7 @@ def main() -> None:
         config["SENDSPIN_SOURCE"] = existing["SENDSPIN_SOURCE"]
     if "SENDSPIN_SOURCE_TARGET" in existing:
         config["SENDSPIN_SOURCE_TARGET"] = existing["SENDSPIN_SOURCE_TARGET"]
-    for key in ("SENDSPIN_SOURCES", "SENDSPIN_SOURCE_ACTIVE"):
+    for key in ("SENDSPIN_SOURCES", "SENDSPIN_SOURCE_ACTIVE", "SENDSPIN_SOURCE_INPUT_STATE"):
         if key in existing:
             config[key] = existing[key]
 

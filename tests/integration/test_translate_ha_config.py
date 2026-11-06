@@ -1095,3 +1095,18 @@ def test_air_learned_latency_of_a_speaker_preserved_across_addon_restart(tmp_pat
     stored = [p for p in cfg.get("players") or [] if (p.get("backend") or {}).get("mac") == "AA:BB:CC:DD:EE:FF"]
     legacy = [d for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac") == "AA:BB:CC:DD:EE:FF"]
     assert (stored or legacy)[0]["air_learned_latency"] == [entry]
+
+
+def test_source_input_gain_survives_addon_restart(tmp_path):
+    _write_json(
+        tmp_path / "config.json",
+        {"SENDSPIN_SOURCE_INPUT_STATE": {"local:alsa_input.line": {"volume": 35, "muted": True}}},
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    assert _read_json(tmp_path / "config.json")["SENDSPIN_SOURCE_INPUT_STATE"] == {
+        "local:alsa_input.line": {"volume": 35, "muted": True}
+    }

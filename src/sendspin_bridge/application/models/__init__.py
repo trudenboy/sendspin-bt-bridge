@@ -11,7 +11,7 @@ from sendspin_bridge.application.models.bridge import (
     UpdateInfo,
 )
 from sendspin_bridge.application.models.devices import Device, DisabledDevice
-from sendspin_bridge.application.models.source import SourceInputs, SourceTargets
+from sendspin_bridge.application.models.source import SourceInputs, SourceInputStatus, SourceTargets
 
 __all__ = [
     "Bridge",
@@ -22,6 +22,7 @@ __all__ = [
     "Group",
     "GroupMember",
     "SendspinSourceStatus",
+    "SourceInputStatus",
     "SourceInputs",
     "SourceTargets",
     "StartupProgress",

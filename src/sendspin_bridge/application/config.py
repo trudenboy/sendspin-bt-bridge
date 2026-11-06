@@ -246,6 +246,12 @@ def _kept_player_state(existing_file: dict, players: list[dict]) -> dict[str, An
     return {pid: copy.deepcopy(entry) for pid, entry in state.items() if pid in kept and isinstance(entry, dict)}
 
 
+def _kept_source_input_state(existing_file: dict) -> dict[str, Any]:
+    """The stored per-input gain/mute (runtime state a client never supplies)."""
+    raw = existing_file.get("SENDSPIN_SOURCE_INPUT_STATE") if isinstance(existing_file, dict) else None
+    return copy.deepcopy(raw) if isinstance(raw, dict) else {}
+
+
 def _without_private_player_keys(payload: dict) -> dict:
     """*payload* without ``PLAYER_STATE`` and without the read-only ``_`` keys of its players."""
     cleaned = {k: v for k, v in payload.items() if k != "PLAYER_STATE"}
@@ -378,6 +384,7 @@ def get_config() -> dict:
     """The config for the settings screen: secrets removed, effective ports and live device facts added."""
     config = load_config()
     config.pop("PLAYER_STATE", None)
+    config.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     runtime = _detect_runtime()
 
     # Never expose secrets to the browser — but indicate whether password is set
@@ -723,9 +730,10 @@ def export_config() -> tuple[str, str]:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         logger.exception("Could not read config for download")
         raise _error("Could not read config file", 500, "config_unreadable") from exc
-    # The v6 file as it is, without the volatile per-player state.
+    # The v6 file as it is, without the volatile per-player and per-input state.
     config = _as_v6(config) if isinstance(config, dict) else {}
     config.pop("PLAYER_STATE", None)
+    config.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     raw = json.dumps(_sanitize_download_config(config), indent=2)
     bridge_name = (config.get("BRIDGE_NAME", "").strip() or "Bridge").replace(" ", "_")
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -771,6 +779,7 @@ def import_config(raw: bytes) -> dict:
     # profiles; a file that has it replaces them.
     keeps_sync_profiles = "SYNC_PROFILES" not in uploaded
     uploaded.pop("PLAYER_STATE", None)
+    uploaded.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     validation = validate_uploaded_config(uploaded, default_base_listen_port=resolve_base_listen_port())
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     if not validation.is_valid:
@@ -778,6 +787,7 @@ def import_config(raw: bytes) -> dict:
         raise _validation_error(errors, warnings)
     uploaded = validation.normalized_config
     uploaded.pop("PLAYER_STATE", None)
+    uploaded.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     warnings = _append_ma_duplicate_device_warnings(uploaded, warnings)
     _require_password_for_auth(uploaded)
     uploaded_players = [p for p in uploaded.get("players") or [] if isinstance(p, dict)]
@@ -796,6 +806,7 @@ def import_config(raw: bytes) -> dict:
             stored = store.read_stored() or {}
             players = _players_from_internal(_internal_view(uploaded), uploaded_players, stored, sinks_now)
             new_config = {**uploaded, "players": players, "PLAYER_STATE": _kept_player_state(stored, players)}
+            new_config["SENDSPIN_SOURCE_INPUT_STATE"] = _kept_source_input_state(stored)
             if keeps_sync_profiles:
                 new_config.pop("SYNC_PROFILES", None)
             store.replace(new_config, preserve=("SYNC_PROFILES",) if keeps_sync_profiles else (), owned=_PRESERVED_KEYS)
@@ -833,6 +844,7 @@ def validate_config(config: dict) -> dict:
     )
     normalized = validation.normalized_config
     normalized.pop("PLAYER_STATE", None)
+    normalized.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     payload_players = config.get("players")
@@ -913,6 +925,7 @@ def save_config(config: dict) -> dict:
         raise _validation_error(errors, warnings)
     normalized = validation.normalized_config
     normalized.pop("PLAYER_STATE", None)
+    normalized.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     warnings = _append_ma_duplicate_device_warnings(normalized, warnings)
     payload_players = [p for p in normalized.get("players") or [] if isinstance(p, dict)]
     config = {k: v for k, v in _internal_view(normalized).items() if k in _ALLOWED_POST_CONFIG_KEYS}
@@ -1199,6 +1212,7 @@ def save_config(config: dict) -> dict:
         new_file = {k: v for k, v in config.items() if k != "BLUETOOTH_DEVICES"}
         new_file["players"] = players
         new_file["PLAYER_STATE"] = _kept_player_state(existing_file, players)
+        new_file["SENDSPIN_SOURCE_INPUT_STATE"] = _kept_source_input_state(existing_file)
 
         try:
             write_config_file(new_file, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)

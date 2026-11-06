@@ -289,3 +289,23 @@ async def test_the_last_state_of_a_hardware_burst_is_published_on_the_trailing_e
         await hub.stop()
 
     assert [event["data"] for event in received] == [{"state": "A"}, {"state": "B"}]
+
+
+def test_source_level_is_a_known_but_not_default_event_type():
+    """Only the source card probes it; the default status stream must not carry 10 Hz of it."""
+    assert "source.level" in events.ALL_TYPES
+    assert "source.level" not in events.DEFAULT_TYPES
+    assert events._parse_types("source.level") == frozenset({"source.level"})
+    assert "source.level" not in events._parse_types(None)
+
+
+def test_source_level_reaches_only_the_listener_that_asks_for_it():
+    from sendspin_bridge.services.source import state as source_state
+
+    with make_client() as client, client.websocket_connect("/api/v1/events/ws?types=source.level") as ws:
+        source_state.publish_level(0.4, input_id="local:alsa_input.line", muted=True)
+
+        event = ws.receive_json()
+
+    assert event["type"] == "source.level"
+    assert event["data"] == {"id": "local:alsa_input.line", "level": 0.4, "muted": True}

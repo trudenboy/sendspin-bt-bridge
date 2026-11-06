@@ -17,6 +17,8 @@ from sendspin_bridge.services.source.capture import (
     CaptureStream,
     ProcessCapture,
     mac_from_node,
+    pactl_set_source_mute,
+    pactl_set_source_volume,
     run_command,
 )
 
@@ -161,3 +163,11 @@ class PipeWireBackend:
             channels=self._channels,
             spawn=self._spawn,
         )
+
+    async def set_gain(self, node: str, volume: int) -> bool:
+        """Set the capture node's gain (0..100); pipewire-pulse answers ``pactl``."""
+        return await pactl_set_source_volume(self._run, node, volume)
+
+    async def set_mute(self, node: str, muted: bool) -> bool:
+        """Mute or unmute the capture node without stopping the stream."""
+        return await pactl_set_source_mute(self._run, node, muted)

@@ -129,3 +129,43 @@ async def test_the_recording_command_is_parecord_raw_of_the_source():
 
     assert captured[0][:4] == ["parecord", "--raw", "--device", "bluez_source.34_C7_E9_25_A3_A3"]
     assert captured[0][-1] == "s16le"
+
+
+async def test_gain_is_applied_to_the_capture_node_through_pactl():
+    calls: list[list[str]] = []
+
+    async def run(argv, **_kwargs):
+        calls.append(list(argv))
+        return CommandResult(returncode=0)
+
+    applied = await PulseAudioBackend(run=run).set_gain("bluez_source.34_C7_E9_25_A3_A3", 42)
+
+    assert applied is True
+    assert calls == [["pactl", "set-source-volume", "bluez_source.34_C7_E9_25_A3_A3", "42%"]]
+
+
+async def test_mute_is_applied_to_the_capture_node_through_pactl():
+    calls: list[list[str]] = []
+
+    async def run(argv, **_kwargs):
+        calls.append(list(argv))
+        return CommandResult(returncode=0)
+
+    backend = PulseAudioBackend(run=run)
+
+    assert await backend.set_mute("bluez_source.34_C7_E9_25_A3_A3", True) is True
+    assert await backend.set_mute("bluez_source.34_C7_E9_25_A3_A3", False) is True
+    assert calls == [
+        ["pactl", "set-source-mute", "bluez_source.34_C7_E9_25_A3_A3", "1"],
+        ["pactl", "set-source-mute", "bluez_source.34_C7_E9_25_A3_A3", "0"],
+    ]
+
+
+async def test_a_node_that_is_gone_is_a_false_verdict_not_an_exception():
+    async def run(_argv, **_kwargs):
+        return CommandResult(returncode=1, stderr="Failure: No such entity")
+
+    backend = PulseAudioBackend(run=run)
+
+    assert await backend.set_gain("bluez_source.GONE", 30) is False
+    assert await backend.set_mute("bluez_source.GONE", True) is False

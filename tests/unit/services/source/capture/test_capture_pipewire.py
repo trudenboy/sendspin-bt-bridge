@@ -235,3 +235,30 @@ async def test_find_ignores_a_sink_with_a_bluez_name():
 
     assert endpoint is not None
     assert endpoint.node.endswith(".0"), "the A2DP sink was taken for a capture node"
+
+
+async def test_pipewire_gain_and_mute_go_through_pactl_against_the_node():
+    calls: list[list[str]] = []
+
+    async def run(argv, **_kwargs):
+        calls.append(list(argv))
+        return CommandResult(returncode=0)
+
+    backend = PipeWireBackend(run=run)
+
+    assert await backend.set_gain("bluez_input.80_99_E7_C2_0B_D3.0", 55) is True
+    assert await backend.set_mute("bluez_input.80_99_E7_C2_0B_D3.0", True) is True
+    assert calls == [
+        ["pactl", "set-source-volume", "bluez_input.80_99_E7_C2_0B_D3.0", "55%"],
+        ["pactl", "set-source-mute", "bluez_input.80_99_E7_C2_0B_D3.0", "1"],
+    ]
+
+
+async def test_a_missing_pipewire_node_is_a_false_verdict_not_an_exception():
+    async def run(_argv, **_kwargs):
+        return CommandResult(returncode=1, stderr="Failure: No such entity")
+
+    backend = PipeWireBackend(run=run)
+
+    assert await backend.set_gain("bluez_input.GONE.0", 30) is False
+    assert await backend.set_mute("bluez_input.GONE.0", True) is False

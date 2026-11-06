@@ -67,3 +67,31 @@ def test_monitors_are_offered_only_when_requested():
 
     assert inputs.local_candidates(audio) == []
     assert inputs.local_candidates(audio, include_monitors=True)[0].monitor is True
+
+
+def test_input_rows_carry_the_saved_gain_and_mute_per_input_id():
+    config = {
+        "SENDSPIN_SOURCES": [{"node": "alsa_input.line", "name": "Line"}],
+        "SENDSPIN_SOURCE_INPUT_STATE": {"local:alsa_input.line": {"volume": 35, "muted": True}},
+    }
+
+    found = inputs.build_inputs(
+        config,
+        bluetooth=[SourceDevice(mac=PHONE, name="Pixel")],
+        audio_sources=None,
+    )
+    rows = {entry.id: entry.as_dict() for entry in found}
+
+    assert (rows["local:alsa_input.line"]["volume"], rows["local:alsa_input.line"]["muted"]) == (35, True)
+    assert (rows["bluetooth:" + PHONE]["volume"], rows["bluetooth:" + PHONE]["muted"]) == (100, False)
+
+
+def test_an_invalid_saved_gain_falls_back_to_full_scale_and_unmuted():
+    config = {
+        "SENDSPIN_SOURCES": [{"node": "alsa_input.line", "name": "Line"}],
+        "SENDSPIN_SOURCE_INPUT_STATE": {"local:alsa_input.line": {"volume": 900, "muted": "yes"}},
+    }
+
+    rows = {entry.id: entry.as_dict() for entry in inputs.build_inputs(config, audio_sources=None)}
+
+    assert (rows["local:alsa_input.line"]["volume"], rows["local:alsa_input.line"]["muted"]) == (100, False)

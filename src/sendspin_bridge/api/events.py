@@ -8,7 +8,11 @@ Each event is an envelope ``{"v": 1, "type", "at", "data"}``:
 * ``log`` — one log line (only to listeners that ask for ``types=log``);
 * ``sync`` — a group sync-tuning session whenever its state changes;
 * ``hardware`` — the physical layer, coalesced to at most one event a second
-  and never in the default set: only the Hardware page asks for that payload.
+  and never in the default set: only the Hardware page asks for that payload;
+* ``source.level`` — the smoothed level of the active source input, ten times a
+  second while capture is open, and never in the default set: only the source
+  card asks for it, and rebuilding the status payload that often would cost more
+  than the stream itself.
 """
 
 from __future__ import annotations
@@ -34,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 EVENT_VERSION = 1
 DEFAULT_TYPES = frozenset({"status", "job", "sync"})
-ALL_TYPES = frozenset({"status", "job", "log", "sync", "hardware"})
+ALL_TYPES = frozenset({"status", "job", "log", "sync", "hardware", "source.level"})
 _QUEUE_SIZE = 64
 _HEARTBEAT_S = 15.0
 # A hardware snapshot is large; the page needs a live view, not a stream of them.

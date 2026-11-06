@@ -508,3 +508,34 @@ def test_import_with_sync_profiles_replaces_the_stored_ones(client, tmp_path):
     exported["SYNC_PROFILES"] = []
     assert _import(client, exported).status_code == 200
     assert _disk(tmp_path)["SYNC_PROFILES"] == []
+
+
+def _store_source_input_state(tmp_path):
+    disk = _disk(tmp_path)
+    disk["SENDSPIN_SOURCE_INPUT_STATE"] = {
+        "local:alsa_input.line": {"volume": 35, "muted": True},
+        "bluetooth:34:C7:E9:25:A3:A3": {"volume": 80},
+    }
+    (tmp_path / "config.json").write_text(json.dumps(disk))
+
+
+def test_a_settings_save_keeps_the_source_input_gain(client, tmp_path):
+    _store_source_input_state(tmp_path)
+    payload = client.get("/api/v1/config").json()
+
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+
+    assert _disk(tmp_path)["SENDSPIN_SOURCE_INPUT_STATE"] == {
+        "local:alsa_input.line": {"volume": 35, "muted": True},
+        "bluetooth:34:C7:E9:25:A3:A3": {"volume": 80},
+    }
+
+
+def test_import_never_takes_source_input_gain_from_the_file(client, tmp_path):
+    _store_source_input_state(tmp_path)
+    exported = json.loads(client.get("/api/v1/config/export").content)
+    exported["SENDSPIN_SOURCE_INPUT_STATE"] = {"local:alsa_input.line": {"volume": 1, "muted": False}}
+
+    assert _import(client, exported).status_code == 200
+
+    assert _disk(tmp_path)["SENDSPIN_SOURCE_INPUT_STATE"]["local:alsa_input.line"] == {"volume": 35, "muted": True}
