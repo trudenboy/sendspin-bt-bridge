@@ -81,6 +81,9 @@ async def test_the_backend_finds_the_node_and_opens_a_recording():
 
     async def run(argv, **_kwargs):
         seen.append(list(argv))
+        # No pw-dump on this host: the discovery falls back to wpctl.
+        if next(iter(argv)) == "pw-dump":
+            return CommandResult(returncode=127, stdout="")
         return CommandResult(returncode=0, stdout=WPCTL)
 
     backend = PipeWireBackend(run=run)
@@ -94,7 +97,7 @@ async def test_the_backend_finds_the_node_and_opens_a_recording():
     )
     stream = await backend.open(endpoint)
     assert isinstance(stream, ProcessCapture)
-    assert seen == [["wpctl", "status"]]
+    assert seen == [["pw-dump"], ["wpctl", "status"]]
 
 
 async def test_the_recording_command_is_pw_record_of_the_node():
@@ -164,3 +167,71 @@ async def test_helper_commands_do_not_leak_file_descriptors():
     after = len(os.listdir("/proc/self/fd"))
 
     assert after <= before + 2, f"helper commands leaked {after - before} file descriptors"
+
+
+#: ``wpctl status`` prints a node's *description* once the device has one, so a
+#: headset's HFP capture shows up as "WH-1000XM4" and never as ``bluez_input.*``.
+#: Measured on PipeWire 1.0.5 with a Sony WH-1000XM4 in headset-head-unit-msbc.
+WPCTL_NICKNAMED = """
+PipeWire 'pipewire-0' [1.0.5, renso@HP-ProDesk, cookie:1]
+ ├─ Sources:
+ │      53. Built-in Audio Analog Stereo        [vol: 0.99]
+ │  *   79. WH-1000XM4                          [vol: 1.00]
+ │
+"""
+
+PW_DUMP = """[
+  {"id": 79, "info": {"props": {
+    "node.name": "bluez_input.80_99_E7_C2_0B_D3.0",
+    "node.description": "WH-1000XM4",
+    "media.class": "Audio/Source"}}},
+  {"id": 80, "info": {"props": {
+    "node.name": "bluez_output.80_99_E7_C2_0B_D3.1",
+    "node.description": "WH-1000XM4",
+    "media.class": "Audio/Sink"}}}
+]"""
+
+
+class _DumpRunner:
+    """Answer ``pw-dump`` with the given payload and ``wpctl`` with a status."""
+
+    def __init__(self, dump: str, status: str = "", dump_ok: bool = True) -> None:
+        self.dump = dump
+        self.status = status
+        self.dump_ok = dump_ok
+        self.argv: list[list[str]] = []
+
+    async def __call__(self, argv) -> CommandResult:
+        self.argv.append(list(argv))
+        if list(argv)[:1] == ["pw-dump"]:
+            return CommandResult(0 if self.dump_ok else 1, self.dump if self.dump_ok else "")
+        return CommandResult(0, self.status)
+
+
+async def test_find_reads_the_node_name_from_pw_dump_when_wpctl_shows_a_nickname():
+    runner = _DumpRunner(PW_DUMP, WPCTL_NICKNAMED)
+
+    endpoint = await PipeWireBackend(run=runner).find()
+
+    assert endpoint is not None
+    assert endpoint.node == "bluez_input.80_99_E7_C2_0B_D3.0"
+    assert endpoint.phone_mac == "80:99:E7:C2:0B:D3"
+
+
+async def test_find_falls_back_to_wpctl_when_pw_dump_cannot_answer():
+    runner = _DumpRunner("", WPCTL, dump_ok=False)
+
+    endpoint = await PipeWireBackend(run=runner).find()
+
+    assert endpoint is not None
+    assert endpoint.node == "bluez_input.34_C7_E9_25_A3_A3.2"
+
+
+async def test_find_ignores_a_sink_with_a_bluez_name():
+    """A sink is not a capture node, whatever its name looks like."""
+    runner = _DumpRunner(PW_DUMP)
+
+    endpoint = await PipeWireBackend(run=runner).find()
+
+    assert endpoint is not None
+    assert endpoint.node.endswith(".0"), "the A2DP sink was taken for a capture node"
