@@ -29,12 +29,20 @@ const manualNode = ref('')
 const added = ref<string | null>(null)
 /**
  * The bonds the dialog knew before this window opened; growth above it is the
- * phone that just paired. ``null`` means not measured yet (the list is still
- * loading or the dialog mounted mid-window).
+ * phone that just paired. ``null`` means not measured yet (no trusted list read
+ * yet, the list is still loading, or the dialog mounted mid-window).
  */
 const knownBluetooth = ref<number | null>(null)
-/** The window opened before the input list arrived: measure the baseline on that first load. */
+/** At least one list read has succeeded; a failed read must never seed a baseline. */
+let listLoaded = false
+/** Pair was clicked before a baseline could be measured: the next trusted read measures it. */
 let baselinePending = false
+/** When the operator asked for the window; a list request begun before it predates the window. */
+let windowRequestedAt: number | null = null
+/** The phone the source status already knew the first time this window was seen. */
+let phoneMacAtWindowSeen: string | null = null
+/** The phone this window already reported, so a later status cannot report it twice. */
+let reportedPhoneMac: string | null = null
 let pairPoll: ReturnType<typeof setInterval> | undefined
 
 const feed = computed(() => source.status)
@@ -48,25 +56,91 @@ function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-/** Every bond already listed when the window opens is old; only growth is the phone. */
+function bluetoothOnly(inputs: SourceInputStatus[] = allInputs.value) {
+  return inputs.filter((input) => input.kind === 'bluetooth')
+}
+
+function bluetoothCount(inputs: SourceInputStatus[] = allInputs.value) {
+  return bluetoothOnly(inputs).length
+}
+
+/**
+ * Every bond already listed when the window opens is old; only growth is the
+ * phone. A failed read leaves ``allInputs`` empty, so it must never seed: that
+ * would turn the first recovered read into a phantom phone.
+ */
 function seedBaseline(inputs: SourceInputStatus[] = allInputs.value) {
-  knownBluetooth.value = inputs.filter((input) => input.kind === 'bluetooth').length
+  if (!listLoaded) {
+    baselinePending = true
+    return
+  }
+  knownBluetooth.value = bluetoothCount(inputs)
   baselinePending = false
 }
 
+/** The phone the server names in its status, if the list carries it and it post-dates the window. */
+function namedPhone(inputs: SourceInputStatus[]): SourceInputStatus | undefined {
+  const mac = source.status?.paired_phone_mac?.toLowerCase()
+  if (!mac || mac === phoneMacAtWindowSeen?.toLowerCase() || mac === reportedPhoneMac?.toLowerCase()) return undefined
+  return inputs.find((input) => input.kind === 'bluetooth' && (input.mac ?? '').toLowerCase() === mac)
+}
+
+function reportPhone(fresh: SourceInputStatus, inputs: SourceInputStatus[]) {
+  knownBluetooth.value = bluetoothCount(inputs)
+  baselinePending = false
+  reportedPhoneMac = (fresh.mac ?? '').toLowerCase() || null
+  stopPolling()
+  added.value = fresh.name ?? null
+  if (!inputs.some((entry) => entry.active)) {
+    // The first source added by pairing becomes active, without enabling
+    // the source itself; it starts when the operator flips the switch.
+    void source.selectInput(fresh.id).then(load).catch(() => {})
+  } else {
+    void load()
+  }
+  // The bond ended the server-side window even before its clock ran out; the
+  // fresh status read closes the local countdown at once.
+  void bridge.refresh()
+}
+
+/** The window is open: decide from a trusted list whether one of its bonds is the phone. */
+function observeInputs(inputs: SourceInputStatus[]) {
+  if (!pairing.value) return
+  const named = namedPhone(inputs)
+  if (named) {
+    reportPhone(named, inputs)
+    return
+  }
+  if (knownBluetooth.value === null) {
+    // First trusted read of this window: everything listed predates it (a
+    // dialog mounting mid-window sees the existing bonds for the first time).
+    seedBaseline(inputs)
+    return
+  }
+  const bonds = bluetoothOnly(inputs)
+  if (bonds.length <= knownBluetooth.value) return
+  const fresh = bonds[bonds.length - 1]
+  if (fresh) reportPhone(fresh, inputs)
+}
+
 async function load() {
+  const requestedAt = Date.now()
   loading.value = true
   error.value = ''
   try {
     const answer = await getSourceInputs(showMonitors.value)
     const inputs = answer.inputs ?? []
+    listLoaded = true
     // A dialog mounting during an open window sees the existing bonds for the
     // first time; without a baseline every one of them would look newly paired.
-    if (pairing.value && (knownBluetooth.value === null || baselinePending)) seedBaseline(inputs)
+    // The same holds for a read that was already loading when Pair was clicked:
+    // it predates the window even though it answers before the open does.
+    if (baselinePending && windowRequestedAt !== null && requestedAt <= windowRequestedAt) seedBaseline(inputs)
     allInputs.value = inputs
     candidates.value = answer.local_candidates ?? []
     captureAvailable.value = answer.capture_available !== false
     captureKind.value = answer.capture_kind ?? ''
+    observeInputs(inputs)
   } catch {
     error.value = t('addSpeaker.source.localFailed')
   } finally {
@@ -77,8 +151,11 @@ async function load() {
 async function refreshInputs() {
   try {
     const answer = await getSourceInputs(showMonitors.value)
-    allInputs.value = answer.inputs ?? []
+    const inputs = answer.inputs ?? []
+    listLoaded = true
+    allInputs.value = inputs
     candidates.value = answer.local_candidates ?? []
+    observeInputs(inputs)
   } catch {
     /* the poll retries; the visible list stays as it was */
   }
@@ -92,6 +169,7 @@ function stopPolling() {
 async function pair() {
   error.value = ''
   added.value = null
+  windowRequestedAt = Date.now()
   if (loading.value) baselinePending = true
   else seedBaseline()
   try {
@@ -156,6 +234,10 @@ watch(
   pairing,
   (open) => {
     if (open) {
+      // A new window: remember which phone the status knew before it, so a
+      // later change in the reported MAC identifies the phone that bonded.
+      phoneMacAtWindowSeen = source.status?.paired_phone_mac ?? null
+      reportedPhoneMac = null
       stopPolling()
       pairPoll = setInterval(() => void refreshInputs(), 2000)
       return
@@ -163,26 +245,6 @@ watch(
     stopPolling()
   },
   { immediate: true },
-)
-watch(
-  () => bluetoothInputs.value.length,
-  (count) => {
-    if (!pairing.value || knownBluetooth.value === null || count <= knownBluetooth.value) return
-    knownBluetooth.value = count
-    stopPolling()
-    const fresh = bluetoothInputs.value[bluetoothInputs.value.length - 1]
-    added.value = fresh?.name ?? null
-    if (fresh && !allInputs.value.some((entry) => entry.active)) {
-      // The first source added by pairing becomes active, without enabling
-      // the source itself; it starts when the operator flips the switch.
-      void source.selectInput(fresh.id).then(load).catch(() => {})
-    } else {
-      void load()
-    }
-    // The bond ended the server-side window even before its clock ran out; the
-    // fresh status read closes the local countdown at once.
-    void bridge.refresh()
-  },
 )
 </script>
 

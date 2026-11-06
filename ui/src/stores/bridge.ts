@@ -39,12 +39,13 @@ export const useBridgeStore = defineStore('bridge', () => {
   /** The version the bridge ran when an update began; another version means it is done. */
   let versionBeforeUpdate = ''
 
-  function apply(status: BridgeStatus, sourceEpoch?: number) {
+  function apply(status: BridgeStatus, sourceEpoch?: number, requestedAt?: number) {
     snapshot.value = status
     // The source feed has its own owner; it is fed from this one status, never
     // from a second stream or a second read. A read carries the epoch it began
-    // in so the source owner can drop what predates a completed command.
-    useSourceStore().applyStatus(status, sourceEpoch)
+    // in, and when it began, so the source owner can drop what predates a
+    // completed command and tell a post-command read from a pushed frame.
+    useSourceStore().applyStatus(status, { epoch: sourceEpoch, requestedAt })
     const inProgress = restartState.value === 'stopping' || restartState.value === 'restarting'
     if (inProgress && restartReason.value === 'update' && versionBeforeUpdate && status.bridge.version !== versionBeforeUpdate) {
       restartState.value = 'ready'
@@ -113,11 +114,12 @@ export const useBridgeStore = defineStore('bridge', () => {
     // The source owner's epoch when this read began: an answer that predates a
     // completed source command must not restate its pairing windows.
     const sourceEpoch = useSourceStore().commandEpoch
+    const requestedAt = Date.now()
     try {
       const status = await getStatus()
       if (seq < appliedSeq) return 'stale'
       appliedSeq = seq
-      apply(status, sourceEpoch)
+      apply(status, sourceEpoch, requestedAt)
       return 'applied'
     } catch {
       /* the event stream will catch up */

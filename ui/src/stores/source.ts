@@ -17,6 +17,17 @@ import {
 import type { BridgeStatus, SendspinSourceStatus } from '@/api/types'
 import { useBridgeStore, type RefreshOutcome } from './bridge'
 
+/**
+ * How long a command's change to a pairing window is protected from pushed
+ * status frames. The bridge batches status events into a 100 ms debounce, so a
+ * frame describing the state *before* a command can still be delivered after
+ * the command answered. The grace must comfortably exceed that debounce plus
+ * transport and event-loop delay; two seconds covers it while still letting a
+ * window opened or closed from another screen show up almost at once, because
+ * a poll after the grace applies it normally.
+ */
+export const PAIRING_GRACE_MS = 2000
+
 /** A failed source command: the server's stable code and its sentence. */
 export interface SourceFailure {
   code: string
@@ -31,7 +42,23 @@ interface Attempt {
 /** A status that arrived while a command was queued or running, with the epoch it began in. */
 interface BufferedStatus {
   source: SendspinSourceStatus | null
+  application: StatusApplication
+}
+
+/**
+ * A status application: the epoch it began in and, for a read, when its request
+ * started. A pushed frame has no request time — it may have been produced even
+ * before the command that preceded its delivery.
+ */
+interface StatusApplication {
   epoch: number
+  requestedAt?: number
+}
+
+/** A command's change to one pairing window, held against pushed status frames. */
+interface WindowGrace {
+  direction: 'opened' | 'closed'
+  at: number
 }
 
 /**
@@ -75,6 +102,17 @@ export const useSourceStore = defineStore('source', () => {
    * about the pairing windows — it predates the command's effect.
    */
   const commandEpoch = ref(0)
+  /**
+   * When a command last changed each window. A pushed frame may have been
+   * produced before that command even though it arrived after it, so until the
+   * grace ends it may not undo the change.
+   */
+  let pairingGrace: WindowGrace | null = null
+  let maPairingGrace: WindowGrace | null = null
+  /** Forgetting the Music Assistant pairing reopens a window as part of the same command. */
+  let maReopenAuthorised = false
+  /** When the last command completed; only a read begun after it can describe its effect. */
+  let lastCommandCompletedAt: number | null = null
 
   const pairingSecondsLeft = computed(() => {
     // ``pairingNow`` is the tick: Date.now() alone would not make this reactive.
@@ -188,19 +226,78 @@ export const useSourceStore = defineStore('source', () => {
     closeMaPairingClock()
   }
 
-  function applySource(next: SendspinSourceStatus | null, epoch = commandEpoch.value) {
+  /** Forget a grace that has run its course; its direction no longer constrains anything. */
+  function activeGrace(grace: WindowGrace | null): WindowGrace | null {
+    if (grace === null) return null
+    return Date.now() - grace.at < PAIRING_GRACE_MS ? grace : null
+  }
+
+  /**
+   * Whether a status may speak for a window a command just changed. During the
+   * grace a pushed frame may not reopen a closed window (no positive adoption),
+   * and it may not close an opened one unless the application is a read that
+   * began after the command completed. The one exception is a command that
+   * closes a window in order to reopen it: its own fresh read may adopt the new
+   * window, which the operator is waiting to see.
+   */
+  function mayApplyWindow(
+    grace: WindowGrace | null,
+    seconds: number,
+    trusted: boolean,
+    reopenAuthorised = false,
+  ): boolean {
+    if (grace === null) return true
+    if (grace.direction === 'closed') return trusted && reopenAuthorised && seconds > 0
+    return seconds > 0 || trusted
+  }
+
+  /** A read that began after the last command completed can describe that command's effect. */
+  function requestedAfterCommand(application: StatusApplication): boolean {
+    return (
+      application.requestedAt !== undefined &&
+      lastCommandCompletedAt !== null &&
+      application.requestedAt >= lastCommandCompletedAt
+    )
+  }
+
+  function rememberPairingChange(direction: WindowGrace['direction']) {
+    pairingGrace = { direction, at: Date.now() }
+  }
+
+  function rememberMaChange(direction: WindowGrace['direction']) {
+    maPairingGrace = { direction, at: Date.now() }
+    maReopenAuthorised = false
+  }
+
+  function applySource(
+    next: SendspinSourceStatus | null,
+    application: StatusApplication = { epoch: commandEpoch.value },
+  ) {
+    // A status older than the last completed command describes the server
+    // before that command: neither its snapshot nor its windows are facts about
+    // now. In particular the failed-reconcile fallback must not regress a newer
+    // snapshot the stream already delivered.
+    if (application.epoch < commandEpoch.value) return
     status.value = next
     if (!next) return
-    // A status older than the last completed command describes the server
-    // before that command: its windows, adapters and code are not facts about
-    // now. In particular a pre-command positive value must not reopen a window
-    // a command just closed, and a pre-command zero must not close one it just
-    // opened.
-    if (epoch < commandEpoch.value) return
-    if (next.ma_pairing_code) maPairingCode.value = next.ma_pairing_code
-    pairingAdapters.value = Array.isArray(next.pairing_adapters) ? next.pairing_adapters : []
-    adoptPairingSeconds(Number(next.pairing_seconds_left) || 0)
-    adoptMaPairingSeconds(Number(next.ma_pairing_seconds_left) || 0)
+    const trusted = requestedAfterCommand(application)
+
+    const phoneGrace = activeGrace(pairingGrace)
+    const phoneSeconds = Number(next.pairing_seconds_left) || 0
+    if (mayApplyWindow(phoneGrace, phoneSeconds, trusted)) {
+      pairingAdapters.value = Array.isArray(next.pairing_adapters) ? next.pairing_adapters : []
+      adoptPairingSeconds(phoneSeconds)
+    }
+
+    const maGrace = activeGrace(maPairingGrace)
+    const maSeconds = Number(next.ma_pairing_seconds_left) || 0
+    if (mayApplyWindow(maGrace, maSeconds, trusted, maReopenAuthorised)) {
+      if (maGrace !== null && maReopenAuthorised && trusted) maReopenAuthorised = false
+      // The code belongs to the window: a late frame must not resurrect an old
+      // one, so while the grace runs only the command's own read may replace it.
+      if (next.ma_pairing_code && (maGrace === null || trusted)) maPairingCode.value = next.ma_pairing_code
+      adoptMaPairingSeconds(maSeconds)
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -212,13 +309,17 @@ export const useSourceStore = defineStore('source', () => {
   /** The fresh read after a command is itself a status application, not an intermediate one. */
   let reconciling = false
 
-  function applyStatus(next: BridgeStatus | null | undefined, epoch = commandEpoch.value) {
+  function applyStatus(next: BridgeStatus | null | undefined, application: Partial<StatusApplication> = {}) {
     const source = next?.bridge?.sendspin_source ?? null
+    const resolved: StatusApplication = {
+      epoch: application.epoch ?? commandEpoch.value,
+      requestedAt: application.requestedAt,
+    }
     if (busy.value && !reconciling) {
-      buffered = { source, epoch }
+      buffered = { source, application: resolved }
       return
     }
-    applySource(source, epoch)
+    applySource(source, resolved)
   }
 
   async function reconcile() {
@@ -233,9 +334,9 @@ export const useSourceStore = defineStore('source', () => {
       reconciling = false
     }
     // Only a read that never answered may fall back to the status seen while the
-    // command ran. A read dropped as stale means a newer answer already applied,
-    // so the older one must not overwrite it.
-    if (answered === 'failed' && stale !== undefined) applySource(stale.source, stale.epoch)
+    // command ran; that fallback can only speak for the windows, because a
+    // status that began before the command is dropped by the epoch rule.
+    if (answered === 'failed' && stale !== undefined) applySource(stale.source, stale.application)
   }
 
   // -------------------------------------------------------------------------
@@ -275,6 +376,7 @@ export const useSourceStore = defineStore('source', () => {
           // The command is over: any status application that began before this
           // point predates its effect on the pairing windows.
           commandEpoch.value += 1
+          lastCommandCompletedAt = Date.now()
           if (pending === 0) await reconcile()
           busy.value = pending > 0
         }
@@ -304,7 +406,9 @@ export const useSourceStore = defineStore('source', () => {
       // Stopping the feed ends both pairing windows on the server as well; a
       // local countdown that kept running would offer a window that is gone.
       closePairingClock()
+      rememberPairingChange('closed')
       closeMaPairingClock()
+      rememberMaChange('closed')
     })
   }
 
@@ -337,12 +441,15 @@ export const useSourceStore = defineStore('source', () => {
           // A 200 that names the refusal is a failed command, not an open window.
           error.value = { code: answer.error, detail: '' }
           closePairingClock()
+          rememberPairingChange('closed')
         } else if (Number.isFinite(left) && left > 0) {
           serverPairingSeen = true
           setPairingDeadline(Date.now() + left * 1000)
           pairingAdapters.value = answer?.pairing_adapters ?? []
+          rememberPairingChange('opened')
         } else {
           closePairingClock()
+          rememberPairingChange('closed')
         }
       }
       return answer
@@ -353,6 +460,7 @@ export const useSourceStore = defineStore('source', () => {
     return enqueue('pairing.close', async () => {
       await closeSourcePairing()
       closePairingClock()
+      rememberPairingChange('closed')
     })
   }
 
@@ -366,8 +474,10 @@ export const useSourceStore = defineStore('source', () => {
         if (Number.isFinite(left) && left > 0) {
           serverMaPairingSeen = true
           setMaPairingDeadline(Date.now() + left * 1000)
+          rememberMaChange('opened')
         } else {
           closeMaPairingClock()
+          rememberMaChange('closed')
         }
       }
       return answer
@@ -378,8 +488,11 @@ export const useSourceStore = defineStore('source', () => {
     return enqueue('ma.forget', async () => {
       await apiForgetMaPairing()
       // The delete route forgets the PSK and opens a fresh window; the fresh
-      // read after the command carries its new code and deadline.
+      // read after the command carries its new code and deadline. The window
+      // stays closed to pushed frames, but that read may reopen it.
       closeMaPairingClock()
+      rememberMaChange('closed')
+      maReopenAuthorised = true
     })
   }
 

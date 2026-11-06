@@ -54,6 +54,14 @@ const existingBond = {
   node: null,
 }
 
+/** The phone that bonds during the window: it is the new source. */
+const phoneBond = {
+  ...existingBond,
+  id: 'bluetooth:34:C7:E9:25:A3:A3',
+  name: 'Pixel',
+  mac: '34:C7:E9:25:A3:A3',
+}
+
 const sourceBlock = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
   state: 'waiting',
@@ -197,12 +205,6 @@ describe('Add device: audio source', () => {
 
   it('a phone that bonds during the window is still taken for the new source', async () => {
     vi.useFakeTimers()
-    const phoneBond = {
-      ...existingBond,
-      id: 'bluetooth:34:C7:E9:25:A3:A3',
-      name: 'Pixel',
-      mac: '34:C7:E9:25:A3:A3',
-    }
     vi.mocked(getSourceInputs).mockResolvedValue({
       active_input: null,
       inputs: [existingBond],
@@ -217,6 +219,168 @@ describe('Add device: audio source', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     // The next poll sees the phone's new bond above the existing one.
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond, phoneBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(selectSource).toHaveBeenCalledWith(phoneBond.id)
+    expect(wrapper.get('[data-source-added]').text()).toContain('Pixel')
+    wrapper.unmount()
+  })
+
+  it('a list already loading when Pair is clicked measures the baseline before the window opens', async () => {
+    vi.useFakeTimers()
+    let resolveInputs!: (value: unknown) => void
+    vi.mocked(getSourceInputs).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveInputs = resolve
+      }) as never,
+    )
+    let resolveOpen!: (value: unknown) => void
+    vi.mocked(openSourcePairing).mockReturnValue(
+      new Promise((resolve) => {
+        resolveOpen = resolve
+      }) as never,
+    )
+    statusWith(sourceBlock({ pairing_seconds_left: 0 }))
+    const wrapper = mountPicker()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Pair is clicked while the first list is still loading.
+    await wrapper.get('[data-source-pair]').trigger('click')
+
+    // The list answers before the open does, with the bond that predates it.
+    resolveInputs({
+      active_input: null,
+      inputs: [existingBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The open answer lands afterwards and starts the window.
+    statusWith(sourceBlock({ pairing_seconds_left: 120 }))
+    resolveOpen({ pairing_seconds_left: 120, pairing_adapters: [], error: null })
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The next poll sees the phone's new bond above the one that was there.
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond, phoneBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(selectSource).toHaveBeenCalledWith(phoneBond.id)
+    expect(wrapper.get('[data-source-added]').text()).toContain('Pixel')
+    wrapper.unmount()
+  })
+
+  it('a list that answers after the window opened still measures the baseline before the phone', async () => {
+    vi.useFakeTimers()
+    let resolveInputs!: (value: unknown) => void
+    vi.mocked(getSourceInputs).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveInputs = resolve
+      }) as never,
+    )
+    let resolveOpen!: (value: unknown) => void
+    vi.mocked(openSourcePairing).mockReturnValue(
+      new Promise((resolve) => {
+        resolveOpen = resolve
+      }) as never,
+    )
+    statusWith(sourceBlock({ pairing_seconds_left: 0 }))
+    const wrapper = mountPicker()
+    await vi.advanceTimersByTimeAsync(0)
+
+    await wrapper.get('[data-source-pair]').trigger('click')
+
+    // The open answer lands first; the first list follows with the old bond.
+    statusWith(sourceBlock({ pairing_seconds_left: 120 }))
+    resolveOpen({ pairing_seconds_left: 120, pairing_adapters: [], error: null })
+    await vi.advanceTimersByTimeAsync(0)
+    resolveInputs({
+      active_input: null,
+      inputs: [existingBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond, phoneBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(selectSource).toHaveBeenCalledWith(phoneBond.id)
+    expect(wrapper.get('[data-source-added]').text()).toContain('Pixel')
+    wrapper.unmount()
+  })
+
+  it('a failed first list read never seeds a baseline from nothing', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getSourceInputs).mockRejectedValueOnce(new Error('bridge unreachable'))
+    statusWith(sourceBlock({ pairing_seconds_left: 120 }))
+    const wrapper = mountPicker()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Pair is clicked after the first read failed: there is no list to measure.
+    await wrapper.get('[data-source-pair]').trigger('click')
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The 2 s poll recovers and lists the bond that was already there.
+    vi.mocked(getSourceInputs).mockResolvedValue({
+      active_input: null,
+      inputs: [existingBond],
+      local_candidates: [candidate],
+      capture_available: true,
+      capture_kind: 'pulseaudio',
+    } as never)
+    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(selectSource).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-source-added]').exists()).toBe(false)
+
+    // The poll keeps running: the old bond was not mistaken for the phone.
+    const reads = vi.mocked(getSourceInputs).mock.calls.length
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(vi.mocked(getSourceInputs).mock.calls.length).toBe(reads + 1)
+    wrapper.unmount()
+  })
+
+  it('identifies the phone from the mac the server reports when the first list failed', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getSourceInputs).mockRejectedValueOnce(new Error('bridge unreachable'))
+    statusWith(sourceBlock({ pairing_seconds_left: 120 }))
+    const wrapper = mountPicker()
+    await vi.advanceTimersByTimeAsync(0)
+    await wrapper.get('[data-source-pair]').trigger('click')
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The phone bonded before the first trusted list; the status names it.
+    useSourceStore().applyStatus({
+      bridge: { sendspin_source: sourceBlock({ pairing_seconds_left: 120, paired_phone_mac: phoneBond.mac }) },
+      devices: [],
+      groups: [],
+    } as never)
     vi.mocked(getSourceInputs).mockResolvedValue({
       active_input: null,
       inputs: [existingBond, phoneBond],

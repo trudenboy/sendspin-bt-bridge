@@ -32,7 +32,7 @@ import {
   useSourceDevice,
 } from '@/api/source'
 import { useBridgeStore } from '@/stores/bridge'
-import { useSourceStore } from '@/stores/source'
+import { PAIRING_GRACE_MS, useSourceStore } from '@/stores/source'
 import type { SourcePairingWindow } from '@/api/source'
 
 /** The bridge status's source block, with every field the generated type requires. */
@@ -182,12 +182,15 @@ describe('useSourceStore', () => {
     expect(store.error).toMatchObject({ code: 'no_adapter' })
   })
 
-  it('a server terminal answer closes the phone countdown immediately', async () => {
+  it('a server terminal answer closes the phone countdown once the post-command grace passes', async () => {
     vi.useFakeTimers()
     vi.mocked(getStatus).mockResolvedValue(bridgeStatus(sourceStatus({ pairing_seconds_left: 120 })) as never)
     await store.openPairingWindow()
     expect(store.pairingSecondsLeft).toBeGreaterThan(0)
 
+    // A pushed zero is indistinguishable from a pre-open frame for the length
+    // of the grace (see the regression above), so the close is applied after it.
+    await vi.advanceTimersByTimeAsync(PAIRING_GRACE_MS + 1)
     store.applyStatus(bridgeStatus(sourceStatus({ pairing_seconds_left: 0 })))
 
     expect(store.pairingSecondsLeft).toBe(0)
@@ -481,7 +484,108 @@ describe('useSourceStore', () => {
     expect(store.maPairingCode).toBe('12345678')
   })
 
-  it('a server terminal answer closes the Music Assistant countdown immediately', async () => {
+  it('a pushed status produced before a cancel cannot reopen the phone window', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockResolvedValue(bridgeStatus(sourceStatus({ pairing_seconds_left: 120 })) as never)
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    // The cancel succeeds but its reconciling read fails, so the only status
+    // that reaches the store afterwards is a frame the server produced while
+    // the window was still open.
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.closePairingWindow()
+    expect(store.pairingSecondsLeft).toBe(0)
+
+    store.applyStatus(bridgeStatus(sourceStatus({ pairing_seconds_left: 120 })))
+
+    expect(store.pairingSecondsLeft).toBe(0)
+  })
+
+  it('a pushed status carrying the pre-open zero cannot close the new phone window', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    // A frame produced before the open landed still says there is no window.
+    store.applyStatus(bridgeStatus(sourceStatus({ pairing_seconds_left: 0 })))
+
+    expect(store.pairingSecondsLeft).toBe(120)
+  })
+
+  it('a server-side close after the post-command grace still closes the phone window', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    await vi.advanceTimersByTimeAsync(PAIRING_GRACE_MS + 1)
+    store.applyStatus(bridgeStatus(sourceStatus({ pairing_seconds_left: 0 })))
+
+    expect(store.pairingSecondsLeft).toBe(0)
+  })
+
+  it('a phone window opened from another screen is adopted after the post-command grace', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockResolvedValue(bridgeStatus(sourceStatus({ pairing_seconds_left: 120 })) as never)
+    await store.openPairingWindow()
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.closePairingWindow()
+    expect(store.pairingSecondsLeft).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(PAIRING_GRACE_MS + 1)
+    store.applyStatus(bridgeStatus(sourceStatus({ pairing_seconds_left: 90 })))
+
+    expect(store.pairingSecondsLeft).toBe(90)
+  })
+
+  it('a pushed status carrying the pre-open zero cannot close the new Music Assistant window', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.openMaPairing()
+    expect(store.maPairingSecondsLeft).toBe(300)
+
+    store.applyStatus(bridgeStatus(sourceStatus({ ma_paired: false, ma_pairing_seconds_left: 0 })))
+
+    expect(store.maPairingSecondsLeft).toBe(300)
+    expect(store.maPairingCode).toBe('12345678')
+  })
+
+  it('a failed reconcile never restores the buffered pre-command snapshot over a newer read', async () => {
+    vi.useFakeTimers()
+    store.applyStatus(bridgeStatus(sourceStatus({ enabled: false, state: 'off' })))
+    vi.mocked(getStatus).mockResolvedValue(bridgeStatus(sourceStatus({ enabled: true, state: 'streaming' })) as never)
+
+    let finishCommand!: (value: unknown) => void
+    vi.mocked(setSourceEnabled).mockReturnValue(
+      new Promise((resolve) => {
+        finishCommand = resolve
+      }) as never,
+    )
+    let rejectStatus!: (error: unknown) => void
+    vi.mocked(getStatus).mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectStatus = reject
+      }) as never,
+    )
+
+    const enabling = store.enable()
+    // A frame produced before the enable is buffered while the command runs.
+    store.applyStatus(bridgeStatus(sourceStatus({ enabled: false, state: 'off' })))
+    finishCommand({})
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The post-enable snapshot arrives from the stream while the reconciling
+    // read is still pending, and the read then fails.
+    store.applyStatus(bridgeStatus(sourceStatus({ enabled: true, state: 'streaming' })))
+    rejectStatus(new Error('bridge unreachable'))
+    await enabling
+
+    expect(store.status).toMatchObject({ enabled: true, state: 'streaming' })
+  })
+
+  it('a server terminal answer closes the Music Assistant countdown once the post-command grace passes', async () => {
     vi.useFakeTimers()
     vi.mocked(getStatus).mockResolvedValue(
       bridgeStatus(sourceStatus({ ma_paired: false, ma_pairing_code: '12345678', ma_pairing_seconds_left: 300 })) as never,
@@ -489,6 +593,7 @@ describe('useSourceStore', () => {
     await store.openMaPairing()
     expect(store.maPairingSecondsLeft).toBe(300)
 
+    await vi.advanceTimersByTimeAsync(PAIRING_GRACE_MS + 1)
     store.applyStatus(bridgeStatus(sourceStatus({ ma_paired: false, ma_pairing_seconds_left: 0 })))
 
     expect(store.maPairingSecondsLeft).toBe(0)
