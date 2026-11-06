@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.25] - 2026-11-07
+
 ### Fixed
 
 - The Diagnostics page, the guidance and recovery panels and the diagnostics bundle attached to a bug report now report the same health as the header: disabled speakers no longer turn "All devices disabled" into "Waiting for setup", and the recovery and latency panels use the same host check the header does.
@@ -7035,7 +7037,14 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.17...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.24...HEAD
+[3.2.0-beta.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.23...v3.2.0-beta.24
+[3.2.0-beta.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.22...v3.2.0-beta.23
+[3.2.0-beta.22]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.21...v3.2.0-beta.22
+[3.2.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.20...v3.2.0-beta.21
+[3.2.0-beta.20]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.19...v3.2.0-beta.20
+[3.2.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.18...v3.2.0-beta.19
+[3.2.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.17...v3.2.0-beta.18
 [3.2.0-beta.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.16...v3.2.0-beta.17
 [3.2.0-beta.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.15...v3.2.0-beta.16
 [3.2.0-beta.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.14...v3.2.0-beta.15
