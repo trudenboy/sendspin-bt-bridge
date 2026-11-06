@@ -30,6 +30,41 @@ def test_alignment_holds_when_the_first_member_was_not_heard():
     assert lag == pytest.approx(30.0, abs=1.0)
 
 
+def test_alignment_holds_when_the_last_member_was_not_heard():
+    """A silent last member: the slot pattern shifted one member earlier explains the clicks just as
+    well, and it used to win, handing a's phase to b and b's to c."""
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, silent=frozenset({"c"}))
+    offset, m = _measure(pcm, slots)
+    assert offset == pytest.approx(1.7, abs=0.6)
+    assert (m["a"].status, m["b"].status, m["c"].status) == ("ok", "ok", "not_heard")
+    assert planner.unwrap_lag_ms(m["b"].phase_ms, m["a"].phase_ms) == pytest.approx(30.0, abs=1.0)
+
+
+def test_alignment_holds_when_the_last_two_members_were_not_heard():
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, silent=frozenset({"b", "c"}))
+    offset, m = _measure(pcm, slots)
+    assert offset == pytest.approx(1.7, abs=0.6)
+    assert (m["a"].status, m["b"].status, m["c"].status) == ("ok", "not_heard", "not_heard")
+
+
+def test_an_alignment_the_clicks_cannot_decide_is_refused_not_guessed():
+    """Long silence on both sides and a silent end member: two offsets one member apart fit equally,
+    and nothing in the clicks tells them apart. A guess would measure the wrong speakers."""
+    pcm, slots = sequence_recording(
+        {"a": 0.0, "b": 0.030, "c": 0.012}, silent=frozenset({"c"}), started_at_s=14.0, tail_s=14.0
+    )
+    assert seq.align(seq.click_times(pcm, 16000), slots, len(pcm) / 32000) is None
+
+
+def test_an_expected_offset_decides_an_otherwise_ambiguous_alignment():
+    """A recorder the bridge started knows where the sequence began; that settles it."""
+    pcm, slots = sequence_recording(
+        {"a": 0.0, "b": 0.030, "c": 0.012}, silent=frozenset({"c"}), started_at_s=14.0, tail_s=14.0
+    )
+    offset = seq.align(seq.click_times(pcm, 16000), slots, len(pcm) / 32000, expected=(13.0, 15.0))
+    assert offset == pytest.approx(14.0, abs=0.6)
+
+
 def test_a_recording_without_clicks_cannot_be_aligned():
     pcm, slots = sequence_recording({"a": 0.0, "b": 0.0}, silent=frozenset({"a", "b"}))
     assert seq.align(seq.click_times(pcm, 16000), slots, len(pcm) / 32000) is None

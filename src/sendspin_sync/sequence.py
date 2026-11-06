@@ -115,19 +115,55 @@ def click_times(pcm: bytes, sample_rate: int) -> list[float]:
     return [t for t, _e in found]
 
 
-def align(events: Sequence[float], slots: Sequence[Slot], duration_s: float) -> float | None:
+_SAME_FIT_S = 2.0  # best-scoring runs closer than this are one fit, not two
+
+
+def offset_bounds(slots: Sequence[Slot], duration_s: float) -> tuple[float, float]:
+    """The offsets at which the whole sequence lies in a recording of *duration_s*, give or take half
+    a member's period at either end.
+
+    Every member plays for the same time with the same gap, so the slot pattern shifted by one member
+    explains the clicks as well as the true one whenever the first or the last member is silent. That
+    shift moves the sequence a whole member's period past one end of the file; a recording that holds
+    the sequence (the recorder runs from before the first member until it has finished) rules it out.
+    Half a period of slack keeps a recording that starts or stops a little late measurable.
+    """
+    slots = list(slots)
+    period = slots[1].start_s - slots[0].start_s if len(slots) > 1 else math.inf
+    slack = min(period / 2, MAX_LEAD_S)
+    return -slots[0].start_s - slack, max(0.0, duration_s) - slots[-1].end_s + slack
+
+
+def align(
+    events: Sequence[float],
+    slots: Sequence[Slot],
+    duration_s: float,
+    *,
+    expected: tuple[float, float] | None = None,
+) -> float | None:
     """The file time at which the sequence began: the offset that puts the most clicks inside the
     members' stretches and the fewest in the lead-in and the gaps; the middle of the best run of
-    offsets. None when no click was found."""
+    offsets.
+
+    Only offsets at which the sequence lies in the recording are considered (``offset_bounds``);
+    *expected* narrows them further when the caller knows roughly where the sequence began (a
+    recorder the bridge started itself). None when no click was found, and when two fits a member
+    apart score the same: which speakers were heard is then undecidable, and a guess would measure
+    the wrong ones.
+    """
     if not events or not slots:
         return None
     slots = list(slots)[:MAX_MEMBERS]
     times = sorted(events)[:_MAX_EVENTS]
     end = slots[-1].end_s
+    lo_s, hi_s = offset_bounds(slots, min(max(0.0, duration_s), 3600.0))
+    if expected is not None:
+        lo_s, hi_s = max(lo_s, expected[0]), min(hi_s, expected[1])
+    if hi_s < lo_s:
+        return None
     best_score: float = -math.inf
-    best: list[float] = []
-    steps = int(min(max(0.0, duration_s), 3600.0) / _STEP_S) + 1
-    for k in range(-int(end / _STEP_S), steps):
+    runs: list[list[float]] = []  # the runs of consecutive offsets that share the best score
+    for k in range(math.ceil(lo_s / _STEP_S), math.floor(hi_s / _STEP_S) + 1):
         offset = k * _STEP_S
         # counted with binary searches: O(members * log events) per offset
         lo = bisect.bisect_left(times, offset - MAX_LEAD_S)
@@ -138,12 +174,18 @@ def align(events: Sequence[float], slots: Sequence[Slot], duration_s: float) -> 
         outside = (hi - lo) - inside
         score = inside - 2 * outside
         if score > best_score:
-            best_score, best = score, [offset]
-        elif score == best_score and best and abs(offset - best[-1] - _STEP_S) < 1e-9:
-            best.append(offset)
-    if best_score <= 0 or not best:
+            best_score, runs = score, [[offset]]
+        elif score == best_score:
+            if abs(offset - runs[-1][-1] - _STEP_S) < 1e-9:
+                runs[-1].append(offset)
+            else:
+                runs.append([offset])
+    if best_score <= 0 or not runs:
         return None
-    return (best[0] + best[-1]) / 2
+    first = runs[0]
+    if any(run[0] - first[-1] > _SAME_FIT_S for run in runs[1:]):
+        return None
+    return (first[0] + first[-1]) / 2
 
 
 def windows(pcm: bytes, sample_rate: int, slots: Sequence[Slot], offset: float) -> list[Recording]:

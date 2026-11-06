@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Group sync no longer measures the wrong speakers when the last speaker in the sequence stays silent (muted, asleep or at volume 0): each speaker's phase is taken from its own solo, and a recording whose timing cannot be told apart is reported as not heard instead of being guessed.
+
 ## [3.2.0-beta.24] - 2026-11-06
 
 ### Added
