@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "El audio del teléfono no se puede capturar en este host.",
       "errorCaptureNext": "El puente necesita nodos de captura de PipeWire para el teléfono; revisa el motor de audio del host.",
+      "errorHeadsetA2dp": "El micrófono del auricular se liberó, pero su salida de audio Bluetooth no volvió.",
+      "errorHeadsetA2dpNext": "Vuelve a conectar el auricular y reintenta su salida A2DP desde la tarjeta del dispositivo. El reproductor sigue detenido hasta que funcione.",
       "errorNoAdapter": "Ningún adaptador Bluetooth aceptó ponerse en modo detectable.",
       "errorNoAgent": "El puente no pudo registrar un agente de emparejamiento Bluetooth.",
       "errorBluetoothNext": "Revisa los controladores Bluetooth de arriba y vuelve a intentar el emparejamiento.",

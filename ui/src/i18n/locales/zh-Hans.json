@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "此主机无法采集手机的音频。",
       "errorCaptureNext": "桥接器需要手机的 PipeWire 采集节点；请检查主机的音频后端。",
+      "errorHeadsetA2dp": "耳机的麦克风已释放，但它的 Bluetooth 音频输出没有恢复。",
+      "errorHeadsetA2dpNext": "重新连接耳机，然后在设备卡片中重试 A2DP 输出。在恢复正常之前，播放器会保持停止状态。",
       "errorNoAdapter": "没有 Bluetooth 适配器可进入可被发现状态。",
       "errorNoAgent": "桥接器无法注册 Bluetooth 配对代理。",
       "errorBluetoothNext": "请检查上方的 Bluetooth 控制器，然后再次尝试配对。",

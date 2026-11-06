@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "Das Audio des Smartphones kann auf diesem Host nicht abgegriffen werden.",
       "errorCaptureNext": "Die Bridge benötigt PipeWire-Aufnahmeknoten für das Smartphone; prüfe das Audio-Backend des Hosts.",
+      "errorHeadsetA2dp": "Das Mikrofon des Headsets wurde freigegeben, aber seine Bluetooth-Audioausgabe ist nicht zurückgekommen.",
+      "errorHeadsetA2dpNext": "Verbinde das Headset erneut und wiederhole die A2DP-Ausgabe in der Gerätekarte. Der Player bleibt gestoppt, bis es funktioniert.",
       "errorNoAdapter": "Kein Bluetooth-Adapter hat die Sichtbarkeit akzeptiert.",
       "errorNoAgent": "Die Bridge konnte keinen Bluetooth-Kopplungsagenten registrieren.",
       "errorBluetoothNext": "Prüfe die Bluetooth-Controller oben und versuche die Kopplung erneut.",

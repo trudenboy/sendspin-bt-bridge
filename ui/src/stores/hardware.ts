@@ -11,17 +11,6 @@ import {
   setSinkVolume,
   suspendSink,
 } from '@/api/audio'
-import {
-  cancelMaPairing,
-  closeSourcePairing,
-  openMaPairing,
-  openSourcePairing,
-  forgetSourceDevice as apiForgetSourceDevice,
-  setSourceEnabled,
-  useSourceDevice as apiUseSourceDevice,
-  SOURCE_PAIRING_WINDOW_S,
-  type SourcePairingWindow,
-} from '@/api/source'
 import { DEFAULT_EVENT_TYPES, useEventStream, type EventType } from '@/composables/useEventStream'
 import type {
   AudioCardDetail,
@@ -39,14 +28,6 @@ export const HARDWARE_POLL_MS = 5000
 
 /** An audio section that says nothing, for a bridge whose read has no audio half. */
 export const EMPTY_AUDIO: AudioSection = { cards: [], sinks: [], sources: [] }
-
-/** A failed source command: the server's code, its message, and the speaker it concerned. */
-export interface SourceFailure {
-  code: string
-  detail: string
-  /** The player a relay command was about; the server's sink refusal names it. */
-  player: string | null
-}
 
 /**
  * The physical layer: one aggregate read, the 5 s poll behind it, and the
@@ -76,34 +57,11 @@ export const useHardwareStore = defineStore('hardware', () => {
   const audio = computed<AudioSection>(() => snapshot.value?.audio ?? EMPTY_AUDIO)
   const audioReported = ref(false)
   /**
-   * The source strip's model: ``null`` means this bridge does not report a
+   * The source strip's read data: ``null`` means this bridge does not report a
    * source (the feature is off), which is a different story from a stopped one.
+   * Commands, pairing clocks and their errors belong to the source store.
    */
   const source = computed<SourceFeed | null>(() => snapshot.value?.source ?? null)
-  /** The last source command's failure, with the server's stable code kept intact. */
-  const sourceError = ref<SourceFailure | null>(null)
-  /** A source command is in flight: the strip's buttons rest while it runs. */
-  const sourceBusy = ref(false)
-
-  /** A phone pairing window, counted down from the server's own answer. */
-  const pairingEndsAt = ref<number | null>(null)
-  /** The Music Assistant pairing window, counted down from the server's own answer. */
-  const maPairingEndsAt = ref<number | null>(null)
-  const pairingNow = ref(Date.now())
-  /** The last non-zero countdown the server reported; zero after it means "closed early". */
-  const serverPairingSeen = ref(0)
-  const pairingSecondsLeft = computed(() => {
-    // ``pairingNow`` is the tick: Date.now() alone would not make this reactive.
-    pairingNow.value
-    if (pairingEndsAt.value === null) return 0
-    return Math.max(0, Math.ceil((pairingEndsAt.value - Date.now()) / 1000))
-  })
-  const maPairingSecondsLeft = computed(() => {
-    pairingNow.value
-    if (maPairingEndsAt.value === null) return 0
-    return Math.max(0, Math.ceil((maPairingEndsAt.value - Date.now()) / 1000))
-  })
-  let pairingTimer: ReturnType<typeof setInterval> | null = null
 
   /** The API has no `/hardware` route: the page shows its unsupported screen. */
   const unsupported = ref(false)
@@ -160,12 +118,6 @@ export const useHardwareStore = defineStore('hardware', () => {
     return nextAt > currentAt
   }
 
-  /** A feed that answered without an error: a command refusal about it no longer applies. */
-  function sourceHealthy(next: HardwareSnapshot) {
-    if (!next.source) return false
-    return next.source.state !== 'error' && !next.source.error
-  }
-
   function apply(next: HardwareSnapshot) {
     // SSE, the poll and a manual refresh race: the read's own timestamp decides.
     if (snapshot.value && !isNewerRead(next, snapshot.value)) return
@@ -175,7 +127,6 @@ export const useHardwareStore = defineStore('hardware', () => {
     loading.value = false
     // A route that answers now is supported again.
     unsupported.value = false
-    if (sourceHealthy(next)) sourceError.value = null
   }
 
   /** True when the answer means this bridge will never accept the type. */
@@ -410,213 +361,6 @@ export const useHardwareStore = defineStore('hardware', () => {
     return detail
   }
 
-  // -------------------------------------------------------------------------
-  // Source commands
-  // -------------------------------------------------------------------------
-
-  function failure(e: unknown, player: string | null = null): SourceFailure {
-    if (e instanceof ApiError) return { code: e.code, detail: e.message, player }
-    return { code: 'request_failed', detail: e instanceof Error ? e.message : String(e), player }
-  }
-
-  /** Every command clears the previous refusal first, so the strip never shows a stale one. */
-  async function command<T>(run: () => Promise<T>): Promise<T> {
-    sourceError.value = null
-    sourceBusy.value = true
-    try {
-      return await run()
-    } finally {
-      sourceBusy.value = false
-    }
-  }
-
-  function stopPairingTicker() {
-    if (pairingTimer) clearInterval(pairingTimer)
-    pairingTimer = null
-  }
-
-  function tickPairingWindows() {
-    pairingNow.value = Date.now()
-    if (pairingSecondsLeft.value <= 0) pairingEndsAt.value = null
-    if (maPairingSecondsLeft.value <= 0) maPairingEndsAt.value = null
-    if (pairingEndsAt.value === null && maPairingEndsAt.value === null) stopPairingTicker()
-  }
-
-  function ensurePairingTicker() {
-    pairingNow.value = Date.now()
-    if (pairingTimer) return
-    // Four ticks a second: the shown second never lags by a whole second.
-    pairingTimer = setInterval(tickPairingWindows, 250)
-  }
-
-  function setPairingWindow(seconds: number) {
-    pairingNow.value = Date.now()
-    if (seconds <= 0) {
-      pairingEndsAt.value = null
-      if (maPairingEndsAt.value === null) stopPairingTicker()
-      return
-    }
-    pairingEndsAt.value = Date.now() + seconds * 1000
-    ensurePairingTicker()
-  }
-
-  function setMaPairingWindow(seconds: number) {
-    pairingNow.value = Date.now()
-    if (seconds <= 0) {
-      maPairingEndsAt.value = null
-      if (pairingEndsAt.value === null) stopPairingTicker()
-      return
-    }
-    maPairingEndsAt.value = Date.now() + seconds * 1000
-    ensurePairingTicker()
-  }
-
-  function clearPairingWindow() {
-    pairingEndsAt.value = null
-    pairingNow.value = Date.now()
-    if (maPairingEndsAt.value === null) stopPairingTicker()
-  }
-
-  function clearMaPairingWindow() {
-    maPairingEndsAt.value = null
-    pairingNow.value = Date.now()
-    if (pairingEndsAt.value === null) stopPairingTicker()
-  }
-
-  // The status stream already carries the window's remaining seconds. The view
-  // hands it over, so a page reloaded mid-window picks the countdown up again
-  // instead of offering to open a second one. Adopted only when it is longer
-  // than what we already count, so a lagging status event cannot shorten a
-  // window a command has just opened.
-  function adoptPairingWindow(seconds: number) {
-    if (seconds > 0) {
-      serverPairingSeen.value = seconds
-      if (seconds > pairingSecondsLeft.value) setPairingWindow(seconds)
-      return
-    }
-    // The backend closes the window as soon as the phone bonds; the local countdown must
-    // stop then, not keep counting a window the server already ended.
-    if (serverPairingSeen.value > 0) {
-      serverPairingSeen.value = 0
-      clearPairingWindow()
-    }
-  }
-
-  /** The MA window comes from the status stream; never let a lagging event shorten it. */
-  function adoptMaPairingWindow(seconds: number) {
-    if (seconds > maPairingSecondsLeft.value) setMaPairingWindow(seconds)
-  }
-
-  async function useSourceDevice(mac: string) {
-    return command(async () => {
-      await apiUseSourceDevice(mac)
-      await refresh()
-    })
-  }
-
-  async function forgetSourceDevice(mac: string) {
-    return command(async () => {
-      await apiForgetSourceDevice(mac)
-      await refresh()
-    })
-  }
-
-  async function startSource() {
-    return command(async () => {
-      try {
-        await setSourceEnabled(true)
-        await refresh()
-      } catch (e) {
-        sourceError.value = failure(e)
-        throw e
-      }
-    })
-  }
-
-  async function stopSource() {
-    return command(async () => {
-      try {
-        await setSourceEnabled(false)
-        // The source stops both pairing windows too; a local countdown would lie.
-        clearPairingWindow()
-        clearMaPairingWindow()
-        await refresh()
-      } catch (e) {
-        sourceError.value = failure(e)
-        throw e
-      }
-    })
-  }
-
-  async function openMaPairingWindow() {
-    clearMaPairingWindow()
-    return command(async () => {
-      try {
-        const window = await openMaPairing()
-        setMaPairingWindow(Number(window?.seconds_left) || 0)
-        await refresh()
-        return window
-      } catch (e) {
-        sourceError.value = failure(e)
-        throw e
-      }
-    })
-  }
-
-  async function forgetMaPairing() {
-    return command(async () => {
-      try {
-        await cancelMaPairing()
-        clearMaPairingWindow()
-        await refresh()
-      } catch (e) {
-        sourceError.value = failure(e)
-        throw e
-      }
-    })
-  }
-
-  async function startPairingWindow(seconds = SOURCE_PAIRING_WINDOW_S) {
-    // A new attempt replaces any leftover countdown, however the previous one ended.
-    clearPairingWindow()
-    return command(async () => {
-      try {
-        const window: SourcePairingWindow = await openSourcePairing(seconds)
-        const left = Number(window?.pairing_seconds_left)
-        setPairingWindow(Number.isFinite(left) ? left : seconds)
-        // Read after the window is set: a healthy feed clears the previous refusal,
-        // then this window's own answer lands (and stays until the next read).
-        await refresh()
-        if (window?.error) {
-          // A 200 that names the refusal is a failed command, not an open window:
-          // the caller must not offer Undo for a window that never existed.
-          sourceError.value = { code: window.error, detail: '', player: null }
-        }
-        return window
-      } catch (e) {
-        sourceError.value = failure(e)
-        throw e
-      }
-    })
-  }
-
-  async function stopPairingWindow() {
-    return command(async () => {
-      try {
-        await closeSourcePairing()
-        clearPairingWindow()
-        await refresh()
-      } catch (e) {
-        sourceError.value = failure(e)
-        throw e
-      }
-    })
-  }
-
-  function clearSourceError() {
-    sourceError.value = null
-  }
-
   function startPolling() {
     if (pollTimer) return
     pollTimer = setInterval(() => void refresh(), HARDWARE_POLL_MS)
@@ -637,10 +381,8 @@ export const useHardwareStore = defineStore('hardware', () => {
   function disconnect() {
     disposed = true
     stopPolling()
-    // A countdown belongs to the page visit: a returned page must be able to pair again.
-    clearPairingWindow()
-    clearMaPairingWindow()
-    clearSourceError()
+    // The source feed's pairing windows and errors outlive a page visit: they
+    // belong to the source store, not to this page's hardware snapshot.
     stream.disconnect()
     hardwareStream?.disconnect()
     hardwareStream = null
@@ -659,10 +401,6 @@ export const useHardwareStore = defineStore('hardware', () => {
     audio,
     audioReported,
     source,
-    sourceError,
-    sourceBusy,
-    pairingSecondsLeft,
-    maPairingSecondsLeft,
     connect,
     disconnect,
     refresh,
@@ -673,16 +411,5 @@ export const useHardwareStore = defineStore('hardware', () => {
     resume,
     chooseCardProfile,
     chooseSinkPort,
-    startSource,
-    stopSource,
-    useSourceDevice,
-    forgetSourceDevice,
-    openMaPairingWindow,
-    forgetMaPairing,
-    startPairingWindow,
-    adoptPairingWindow,
-    adoptMaPairingWindow,
-    stopPairingWindow,
-    clearSourceError,
   }
 })

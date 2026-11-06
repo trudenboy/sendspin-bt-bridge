@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "L’audio del telefono non può essere catturato su questo host.",
       "errorCaptureNext": "Il bridge ha bisogno dei nodi di cattura PipeWire per il telefono; controlla il backend audio dell’host.",
+      "errorHeadsetA2dp": "Il microfono delle cuffie è stato rilasciato, ma la sua uscita audio Bluetooth non è tornata.",
+      "errorHeadsetA2dpNext": "Riconnetti le cuffie e riprova l’uscita A2DP dalla scheda del dispositivo. Il player resta fermo finché non funziona.",
       "errorNoAdapter": "Nessun adattatore Bluetooth ha accettato la visibilità.",
       "errorNoAgent": "Il bridge non è riuscito a registrare un agente di associazione Bluetooth.",
       "errorBluetoothNext": "Controlla i controller Bluetooth qui sopra, poi prova di nuovo ad associare.",

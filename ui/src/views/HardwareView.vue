@@ -36,16 +36,6 @@ const notifications = useNotificationStore()
 onMounted(() => store.connect())
 onUnmounted(() => store.disconnect())
 
-// The status stream is the bridge's own word on how long the pairing window
-// stays open, so a page opened mid-window picks the countdown up from it.
-watch(
-  () => bridge.bridge?.sendspin_source?.pairing_seconds_left ?? 0,
-  (left) => {
-    if (left > 0) store.adoptPairingWindow(left)
-  },
-  { immediate: true },
-)
-
 const snapshot = computed(() => store.snapshot)
 const controllers = computed(() => snapshot.value?.controllers ?? [])
 const devices = computed(() => snapshot.value?.bluetooth_devices ?? [])

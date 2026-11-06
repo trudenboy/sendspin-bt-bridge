@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useBridgeStore } from '@/stores/bridge'
-import { useHardwareStore } from '@/stores/hardware'
+import { useSourceStore } from '@/stores/source'
 import { useNotificationStore } from '@/stores/notifications'
 import { confirmAction } from '@/composables/useActionPolicy'
 import { describeSourceCode } from '@/utils/sourceErrors'
@@ -15,18 +14,21 @@ import SettingsRow from './SettingsRow.vue'
  * eight-digit static code.  That is a property of the Music Assistant
  * connection, so it lives here, next to the account — the phone's Bluetooth
  * pairing stays on the Hardware page.
+ *
+ * The countdown is the source store's single clock; this section only renders
+ * it. Navigating away and back must not restart or extend the window.
  */
 const { t } = useI18n()
-const bridge = useBridgeStore()
-const hardware = useHardwareStore()
+const source = useSourceStore()
 const notifications = useNotificationStore()
 
-const source = computed(() => bridge.bridge?.sendspin_source ?? null)
-const enabled = computed(() => !!source.value?.enabled)
-const paired = computed(() => !!source.value?.ma_paired)
-const connected = computed(() => !!source.value?.ma_connected)
-const code = computed(() => source.value?.ma_pairing_code ?? '')
-const busy = computed(() => hardware.sourceBusy)
+const feed = computed(() => source.status)
+const enabled = computed(() => !!feed.value?.enabled)
+const paired = computed(() => !!feed.value?.ma_paired)
+const connected = computed(() => !!feed.value?.ma_connected)
+const code = computed(() => source.maPairingCode ?? '')
+const busy = computed(() => source.busy)
+const secondsLeft = computed(() => source.maPairingSecondsLeft)
 
 const statusText = computed(() => {
   if (!enabled.value) return t('hardware.source.maOff')
@@ -35,50 +37,16 @@ const statusText = computed(() => {
   return t('settings.parts.maPairing.notPaired')
 })
 
-const now = ref(Date.now())
-const windowEndsAt = ref<number | null>(null)
-let timer: ReturnType<typeof setInterval> | null = null
-const secondsLeft = computed(() => {
-  now.value
-  if (windowEndsAt.value === null) return 0
-  return Math.max(0, Math.ceil((windowEndsAt.value - Date.now()) / 1000))
-})
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
-function stopTicker() {
-  if (timer) clearInterval(timer)
-  timer = null
-}
-function tick() {
-  now.value = Date.now()
-  if (secondsLeft.value <= 0) stopTicker()
-}
-watch(secondsLeft, (left) => {
-  if (left > 0 && timer === null) timer = setInterval(tick, 250)
-})
-watch(
-  () => source.value?.ma_pairing_seconds_left ?? 0,
-  (seconds) => {
-    if (seconds > 0) {
-      const end = Date.now() + seconds * 1000
-      if (windowEndsAt.value === null || end > windowEndsAt.value) windowEndsAt.value = end
-      return
-    }
-    // The server ends the window as soon as Music Assistant pairs; do not keep counting.
-    if (!code.value) windowEndsAt.value = null
-  },
-  { immediate: true },
-)
-onBeforeUnmount(stopTicker)
-
 const error = computed(() => {
-  const code = source.value?.ma_error || source.value?.error || hardware.sourceError?.code
+  const code = feed.value?.ma_error || feed.value?.error || source.error?.code
   return describeSourceCode(code, t)
 })
 
 async function pair() {
   try {
-    await hardware.openMaPairingWindow()
+    await source.openMaPairing()
   } catch {
     notifications.error(t('hardware.source.maError'))
   }
@@ -92,7 +60,7 @@ async function forget() {
   })
   if (!ok) return
   try {
-    await hardware.forgetMaPairing()
+    await source.forgetMaPairing()
     notifications.success(t('hardware.source.maForgetDone'))
   } catch {
     notifications.error(t('hardware.source.maError'))

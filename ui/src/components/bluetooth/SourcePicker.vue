@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { Bluetooth, Plus, Radio, RotateCw } from 'lucide-vue-next'
 import { SbBadge, SbButton, SbInput } from '@/kit'
 import { useBridgeStore } from '@/stores/bridge'
-import { useHardwareStore } from '@/stores/hardware'
-import { addLocalSource, getSourceInputs, selectSource } from '@/api/source'
+import { useSourceStore } from '@/stores/source'
+import { addLocalSource, getSourceInputs } from '@/api/source'
 import type { SourceInputStatus } from '@/api/types'
 
 /** Pair a Bluetooth source or save a local audio input; neither needs MA. */
@@ -13,7 +13,7 @@ const emit = defineEmits<{ close: []; added: [] }>()
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
-const hardware = useHardwareStore()
+const source = useSourceStore()
 
 const mode = ref<'bluetooth' | 'local'>('bluetooth')
 const allInputs = ref<SourceInputStatus[]>([])
@@ -27,14 +27,15 @@ const showMonitors = ref(false)
 const name = ref('')
 const manualNode = ref('')
 const added = ref<string | null>(null)
-const pairing = ref(false)
 const knownBluetooth = ref(0)
 let pairPoll: ReturnType<typeof setInterval> | undefined
 
-const source = computed(() => bridge.bridge?.sendspin_source ?? null)
+const feed = computed(() => source.status)
 const bluetoothInputs = computed(() => allInputs.value.filter((input) => input.kind === 'bluetooth'))
 const localCandidates = computed(() => candidates.value)
-const timer = computed(() => hardware.pairingSecondsLeft)
+/** The window belongs to the source store: it survives this dialog closing. */
+const pairing = computed(() => source.pairingSecondsLeft > 0)
+const timer = computed(() => source.pairingSecondsLeft)
 
 function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
@@ -75,22 +76,26 @@ async function pair() {
   error.value = ''
   added.value = null
   knownBluetooth.value = bluetoothInputs.value.length
-  pairing.value = true
-  await hardware.startPairingWindow()
-  if (hardware.sourceError) {
-    pairing.value = false
+  try {
+    await source.openPairingWindow()
+  } catch {
     error.value = t('addSpeaker.source.pairFailed')
     return
   }
-  stopPolling()
-  pairPoll = setInterval(() => void refreshInputs(), 2000)
+  if (source.error) {
+    error.value = t('addSpeaker.source.pairFailed')
+    return
+  }
+  // The watcher below starts the input poll as soon as the window is counted.
 }
 
 async function stopPairing() {
-  pairing.value = false
   stopPolling()
-  await hardware.stopPairingWindow()
-  await bridge.refresh()
+  try {
+    await source.closePairingWindow()
+  } catch {
+    error.value = t('common.error')
+  }
   await refreshInputs()
 }
 
@@ -123,34 +128,43 @@ function choose(candidate: SourceInputStatus) {
 
 onMounted(load)
 onBeforeUnmount(() => {
+  // Leaving the dialog stops this view's polling only. The server-side window
+  // stays open until the phone pairs, the operator cancels, or it expires.
   stopPolling()
-  if (pairing.value) void hardware.stopPairingWindow()
 })
 
 watch(showMonitors, () => void load())
 watch(
+  pairing,
+  (open) => {
+    if (open) {
+      stopPolling()
+      pairPoll = setInterval(() => void refreshInputs(), 2000)
+      return
+    }
+    stopPolling()
+  },
+  { immediate: true },
+)
+watch(
   () => bluetoothInputs.value.length,
   (count) => {
     if (!pairing.value || count <= knownBluetooth.value) return
-    pairing.value = false
     stopPolling()
     const fresh = bluetoothInputs.value[bluetoothInputs.value.length - 1]
     added.value = fresh?.name ?? null
     if (fresh && !allInputs.value.some((entry) => entry.active)) {
       // The first source added by pairing becomes active, without enabling
       // the source itself; it starts when the operator flips the switch.
-      void selectSource(fresh.id).then(() => bridge.refresh()).then(load).catch(() => {})
+      void source.selectInput(fresh.id).then(load).catch(() => {})
     } else {
       void load()
     }
+    // The bond ended the server-side window even before its clock ran out; the
+    // fresh status read closes the local countdown at once.
+    void bridge.refresh()
   },
 )
-watch(timer, (value) => {
-  if (pairing.value && value === 0) {
-    pairing.value = false
-    stopPolling()
-  }
-})
 </script>
 
 <template>
@@ -171,7 +185,7 @@ watch(timer, (value) => {
       </SbButton>
     </div>
 
-    <p v-if="source && !source.ma_paired" data-source-ma-hint class="rounded-(--radius-card) border border-info/30 bg-info/10 px-3 py-2 text-sm text-text-secondary">
+    <p v-if="feed && !feed.ma_paired" data-source-ma-hint class="rounded-(--radius-card) border border-info/30 bg-info/10 px-3 py-2 text-sm text-text-secondary">
       {{ t('addSpeaker.source.maHint') }}
       <a href="#settings-musicAssistant" class="text-primary-text underline-offset-2 hover:underline">{{ t('nav.settings') }}</a>
     </p>
@@ -185,7 +199,7 @@ watch(timer, (value) => {
         </SbButton>
       </div>
       <div v-else class="flex flex-wrap items-center gap-2">
-        <SbButton size="sm" variant="outline" data-source-pair :loading="hardware.sourceBusy" @click="pair">
+        <SbButton size="sm" variant="outline" data-source-pair :loading="source.busy" @click="pair">
           <template #icon-left><Bluetooth class="size-4" aria-hidden="true" /></template>
           {{ t('addSpeaker.source.pair') }}
         </SbButton>

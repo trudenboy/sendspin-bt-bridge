@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "このホストではスマートフォンの音声を取り込めません。",
       "errorCaptureNext": "ブリッジはスマートフォン用の PipeWire キャプチャノードを必要とします。ホストの音声バックエンドを確認してください。",
+      "errorHeadsetA2dp": "ヘッドセットのマイクは解放されましたが、Bluetooth 音声出力が戻りませんでした。",
+      "errorHeadsetA2dpNext": "ヘッドセットを再接続し、デバイスカードから A2DP 出力を再試行してください。成功するまでプレーヤーは停止したままです。",
       "errorNoAdapter": "検出可能モードを受け入れた Bluetooth アダプターがありません。",
       "errorNoAgent": "ブリッジは Bluetooth ペアリングエージェントを登録できませんでした。",
       "errorBluetoothNext": "上記の Bluetooth コントローラーを確認し、もう一度ペアリングしてください。",

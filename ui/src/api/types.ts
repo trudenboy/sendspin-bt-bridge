@@ -138,6 +138,8 @@ export type SourceFeed = Schemas['SourceFeed']
 export type SourceCapture = Schemas['SourceCapture']
 export type SourceState = SourceFeed['state']
 export type SourceCaptureKind = SourceCapture['kind']
+/** The bridge status's source block: capture, pairing windows and the Music Assistant link. */
+export type SendspinSourceStatus = Schemas['SendspinSourceStatus']
 export type SourceTarget = Schemas['SourceTarget']
 export type SourceTargets = Schemas['SourceTargets']
 export type SourceInputStatus = Schemas['SourceInputStatus']

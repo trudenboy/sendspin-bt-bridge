@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "Telefonun sesi bu ana bilgisayarda yakalanamıyor.",
       "errorCaptureNext": "Köprünün telefon için PipeWire yakalama düğümlerine ihtiyacı var; ana bilgisayarın ses altyapısını denetle.",
+      "errorHeadsetA2dp": "Kulaklığın mikrofonu serbest bırakıldı ancak Bluetooth ses çıkışı geri gelmedi.",
+      "errorHeadsetA2dpNext": "Kulaklığı yeniden bağla, ardından cihaz kartından A2DP çıkışını yeniden dene. Çalışana kadar oynatıcı durdurulmuş kalır.",
       "errorNoAdapter": "Hiçbir Bluetooth bağdaştırıcısı keşfedilebilirliği kabul etmedi.",
       "errorNoAgent": "Köprü bir Bluetooth eşleştirme aracısı kaydedemedi.",
       "errorBluetoothNext": "Yukarıdaki Bluetooth denetleyicilerini denetle, sonra eşleştirmeyi yeniden dene.",

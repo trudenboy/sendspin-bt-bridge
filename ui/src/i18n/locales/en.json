@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "The phone's audio cannot be captured on this host.",
       "errorCaptureNext": "The bridge needs PipeWire capture nodes for the phone; check the host's audio backend.",
+      "errorHeadsetA2dp": "The headset's microphone was released, but its Bluetooth audio output did not come back.",
+      "errorHeadsetA2dpNext": "Reconnect the headset, then retry its A2DP output from the device card. The player stays stopped until it works.",
       "errorNoAdapter": "No Bluetooth adapter accepted discoverability.",
       "errorNoAgent": "The bridge could not register a Bluetooth pairing agent.",
       "errorBluetoothNext": "Check the Bluetooth controllers above, then try pairing again.",

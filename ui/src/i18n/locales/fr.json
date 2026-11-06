@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "L’audio du téléphone ne peut pas être capturé sur cet hôte.",
       "errorCaptureNext": "Le pont a besoin de nœuds de capture PipeWire pour le téléphone ; vérifiez le moteur audio de l’hôte.",
+      "errorHeadsetA2dp": "Le micro du casque a été libéré, mais sa sortie audio Bluetooth n’est pas revenue.",
+      "errorHeadsetA2dpNext": "Reconnectez le casque, puis réessayez sa sortie A2DP depuis la fiche de l’appareil. Le lecteur reste arrêté tant que cela ne fonctionne pas.",
       "errorNoAdapter": "Aucun adaptateur Bluetooth n’a accepté le mode découvrable.",
       "errorNoAgent": "Le pont n’a pas pu enregistrer d’agent d’appairage Bluetooth.",
       "errorBluetoothNext": "Vérifiez les contrôleurs Bluetooth ci-dessus, puis réessayez l’appairage.",

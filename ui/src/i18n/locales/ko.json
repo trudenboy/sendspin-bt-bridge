@@ -817,6 +817,8 @@
     "source": {
       "errorCapture": "이 호스트에서는 스마트폰 오디오를 캡처할 수 없습니다.",
       "errorCaptureNext": "브리지가 스마트폰용 PipeWire 캡처 노드를 필요로 합니다. 호스트의 오디오 백엔드를 확인하세요.",
+      "errorHeadsetA2dp": "헤드셋 마이크는 해제되었지만 Bluetooth 오디오 출력이 돌아오지 않았습니다.",
+      "errorHeadsetA2dpNext": "헤드셋을 다시 연결한 뒤 기기 카드에서 A2DP 출력을 다시 시도하세요. 성공할 때까지 플레이어는 멈춘 상태로 유지됩니다.",
       "errorNoAdapter": "검색 가능 모드를 허용한 Bluetooth 어댑터가 없습니다.",
       "errorNoAgent": "브리지가 Bluetooth 페어링 에이전트를 등록하지 못했습니다.",
       "errorBluetoothNext": "위의 Bluetooth 컨트롤러를 확인한 뒤 다시 페어링하세요.",

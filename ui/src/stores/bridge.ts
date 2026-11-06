@@ -4,6 +4,7 @@ import { useEventStream } from '@/composables/useEventStream'
 import { getStatus, restartBridge } from '@/api/status'
 import { getAdapters } from '@/api/bluetooth'
 import { useJobsStore } from './jobs'
+import { useSourceStore } from './source'
 import { useSyncStore } from './sync'
 import type { Adapter, BridgeStatus, Device, Group, Job, SyncSession } from '@/api/types'
 
@@ -34,6 +35,9 @@ export const useBridgeStore = defineStore('bridge', () => {
 
   function apply(status: BridgeStatus) {
     snapshot.value = status
+    // The source feed has its own owner; it is fed from this one status, never
+    // from a second stream or a second read.
+    useSourceStore().applyStatus(status)
     const inProgress = restartState.value === 'stopping' || restartState.value === 'restarting'
     if (inProgress && restartReason.value === 'update' && versionBeforeUpdate && status.bridge.version !== versionBeforeUpdate) {
       restartState.value = 'ready'
@@ -92,11 +96,22 @@ export const useBridgeStore = defineStore('bridge', () => {
     }
   }
 
-  async function refresh() {
+  /** A read that started before a newer one — or before a source command — never wins. */
+  let refreshSeq = 0
+  let appliedSeq = 0
+
+  /** A fresh read; false means the bridge did not answer, so callers can keep what they had. */
+  async function refresh(): Promise<boolean> {
+    const seq = ++refreshSeq
     try {
-      apply(await getStatus())
+      const status = await getStatus()
+      if (seq < appliedSeq) return false
+      appliedSeq = seq
+      apply(status)
+      return true
     } catch {
       /* the event stream will catch up */
+      return false
     }
   }
 
