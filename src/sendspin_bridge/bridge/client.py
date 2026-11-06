@@ -2118,13 +2118,20 @@ class SendspinClient:
         """Restart subprocess to recover from zombie playback."""
         await self._restart_daemon(settle_s=1.0)
 
+    def _headset_owns_link(self) -> bool:
+        """Whether the Source feed owns this link (microphone, or a restore in flight)."""
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        mac = getattr(getattr(self, "bt_manager", None), "mac_address", None)
+        return isinstance(mac, str) and bool(mac) and get_headset_profiles().blocked(mac)
+
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
         from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
 
         mac = getattr(getattr(self, "bt_manager", None), "mac_address", None)
         if isinstance(mac, str) and mac:
-            if get_headset_profiles().blocked(mac):
+            if self._headset_owns_link():
                 return
             async with get_headset_profiles().player_start(mac) as allowed:
                 if allowed:
@@ -2196,6 +2203,11 @@ class SendspinClient:
 
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
+        if self._headset_owns_link():
+            # The Source feed has taken the card (microphone) or is restoring
+            # it; it resumes the Player itself once the A2DP sink is proven.
+            logger.debug("[%s] Source capture owns the link — not starting the daemon", self.player_name)
+            return
         is_pulse_sink = getattr(self, "backend_type", BLUETOOTH) == PULSE_SINK
         if is_pulse_sink:
             await self._rematch_output()
@@ -3025,19 +3037,19 @@ class SendspinClient:
             await self.stop_sendspin()
             if settle_s:
                 await asyncio.sleep(settle_s)
-            if self.running:
+            if self.running and not self._headset_owns_link():
                 await self._start_sendspin_inner()
             return
         async with lock:
             await self.stop_sendspin()
             if settle_s:
                 await asyncio.sleep(settle_s)
-            if self.running:
+            if self.running and not self._headset_owns_link():
                 # Every start request raised up to this point is served by the
                 # spawn below — including the ones that queued while we were
                 # stopping.  Stamped here rather than on entry so those are
                 # counted, and not at all when nothing is spawned: a stopped
-                # client has served nobody.
+                # client or a blocked gate has served nobody.
                 self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 

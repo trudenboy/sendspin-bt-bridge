@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -22,7 +23,15 @@ SINK = "bluez_sink.80_99_E7_C2_0B_D3.a2dp_sink"
 def rig(monkeypatch, tmp_path):
     state.reset()
     events = []
-    audio = SimpleNamespace(profile="a2dp_sink", restore=True, sink=True, stop_error=False, missing=False)
+    audio = SimpleNamespace(
+        profile="a2dp_sink",
+        restore=True,
+        sink=True,
+        stop_error=False,
+        missing=False,
+        refusals=0,
+        sink_misses=0,
+    )
     player = SimpleNamespace(status={}, running=True, starts=0, bt_manager=SimpleNamespace(mac_address=MAC))
     player.is_running = lambda: player.running
     player._update_status = player.status.update
@@ -43,14 +52,26 @@ def rig(monkeypatch, tmp_path):
 
     def switch(_name, profile):
         events.append(profile)
-        if profile == "a2dp_sink" and not audio.restore:
-            return False
+        if profile == "a2dp_sink":
+            if not audio.restore:
+                return False
+            if audio.refusals:
+                audio.refusals -= 1
+                return False
         audio.profile = profile
         return True
 
+    def list_sinks():
+        if not audio.sink:
+            return []
+        if audio.sink_misses:
+            audio.sink_misses -= 1
+            return []
+        return [{"name": SINK}]
+
     monkeypatch.setattr(headset, "_client_for_mac", lambda _: player)
     monkeypatch.setattr(headset, "set_card_profile", switch)
-    monkeypatch.setattr(headset.bt_audio, "list_sinks", lambda: [{"name": SINK}] if audio.sink else [])
+    monkeypatch.setattr(headset.bt_audio, "list_sinks", list_sinks)
     monkeypatch.setattr(
         headset.bt_audio,
         "card_profile_state",
@@ -104,7 +125,15 @@ def rig(monkeypatch, tmp_path):
             events.append("feed-stop")
 
     client._client = SimpleNamespace(create_source_capture=lambda _: Capture(), disconnect=lambda: asyncio.sleep(0))
-    yield SimpleNamespace(client=client, router=router, owner=service, audio=audio, player=player, events=events)
+    yield SimpleNamespace(
+        client=client,
+        router=router,
+        owner=service,
+        audio=audio,
+        player=player,
+        events=events,
+        switch=switch,
+    )
     state.reset()
 
 
@@ -166,6 +195,122 @@ async def test_restore_requires_actual_a2dp_and_sink_then_explicit_recovery(rig,
     assert rig.player.bt_manager.audio_sink_ready
     assert rig.player.bt_manager.profile_mode == "a2dp"
     assert rig.player.bluetooth_sink_name == SINK
+
+
+@pytest.mark.parametrize("transient", ["profile_refusal", "late_sink"])
+async def test_a_transient_restore_hiccup_is_not_terminal(rig, monkeypatch, transient):
+    """The configure path retries; a one-off hiccup must not fail the call for good.
+
+    PipeWire/PulseAudio routinely answers the first ``set-card-profile`` with
+    "Input/output error" and publishes the bluez sink a moment late.  A
+    restore failure is sticky by design, so the restore must use the
+    manager's own retrying configure path instead of one bare switch and one
+    ``list_sinks()`` read.
+    """
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    await rig.owner.acquire_microphone(MAC)
+
+    sink_found: list[tuple[str, int | None]] = []
+    manager = object.__new__(BluetoothManager)
+    manager.mac_address = MAC
+    manager.device_name = "Test headset"
+    manager.connected = True
+    manager.management_enabled = True
+    manager._cancel_reconnect = threading.Event()
+    manager._enable_a2dp_dance = False
+    manager._early_flip_seq = 0
+    manager._transition_seq = 0
+    manager.prefer_sbc = False
+    manager.allow_hfp = False
+    manager.host = None
+    manager.audio_sink_ready = False
+    manager.profile_mode = "microphone"
+    manager.on_sink_found = lambda name, volume: sink_found.append((name, volume))
+    manager.is_device_connected = lambda: True
+    manager._adapter_handle = SimpleNamespace(hci_name="")
+    manager._device = SimpleNamespace(controller="", transport_state_blocking=lambda: "idle")
+    rig.player.bt_manager = manager
+
+    # The manager's real configure path, with only its external audio IO faked.
+    monkeypatch.setattr(headset.bt_audio, "set_card_profile", rig.switch)
+    monkeypatch.setattr(headset.bt_audio, "PROFILE_SWITCH_RETRY_S", (0.0, 0.0))
+    monkeypatch.setattr(headset.bt_audio, "_A2DP_PROFILE_DELAY", 0.0)
+    monkeypatch.setattr(headset.bt_audio, "_SINK_RETRY_DELAY", 0.0)
+    monkeypatch.setattr(headset.bt_audio, "set_sink_mute", lambda *_: True)
+    monkeypatch.setattr(headset.bt_audio, "save_device_sink", lambda *_: None)
+    monkeypatch.setattr(
+        headset.bt_audio,
+        "list_cards",
+        lambda: [
+            {
+                "name": f"bluez_card.{MAC.replace(':', '_')}",
+                "active_profile": rig.audio.profile,
+                "profiles": ["handsfree_head_unit", "a2dp_sink"],
+            }
+        ],
+    )
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "load_player_state_for_mac", lambda *_: {})
+
+    rig.audio.refusals = 1 if transient == "profile_refusal" else 0
+    rig.audio.sink_misses = 2 if transient == "late_sink" else 0
+    await rig.owner.release_microphone(MAC)
+
+    assert state.snapshot().error is None
+    assert not rig.owner.blocked(MAC)
+    assert rig.audio.profile == "a2dp_sink"
+    assert rig.player.starts == 1
+    assert rig.player.bluetooth_sink_name == SINK
+    assert manager.audio_sink_ready is True
+    assert manager.profile_mode == "a2dp"
+    # The restore also registers/persists the sink, which the bare switch skipped.
+    assert sink_found == [(SINK, None)]
+
+
+async def test_a_missing_microphone_endpoint_releases_the_headset(rig, monkeypatch):
+    import sendspin_bridge.services.source.capture.router as router_module
+
+    rig.audio.missing = True
+
+    async def instant(_delay):
+        return None
+
+    monkeypatch.setattr(router_module, "asyncio", SimpleNamespace(sleep=instant))
+
+    assert await rig.router.find() is None
+
+    # The router found no endpoint, so it must have released the microphone
+    # (restoring A2DP and resuming the Player) rather than leaving it held.
+    assert rig.events.index("handsfree_head_unit") < rig.events.index("a2dp_sink")
+    assert not rig.owner.blocked(MAC)
+    assert rig.player.starts == 1
+
+
+async def test_cancelling_find_while_waiting_for_the_microphone_releases_the_headset(rig, monkeypatch):
+    import sendspin_bridge.services.source.capture.router as router_module
+
+    rig.audio.missing = True
+    entered = asyncio.Event()
+
+    async def wait_forever(_delay):
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(router_module, "asyncio", SimpleNamespace(sleep=wait_forever))
+
+    task = asyncio.create_task(rig.router.find())
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Cancellation is cleaned up: the release restores A2DP and the Player
+    # before the cancellation is delivered.
+    assert "a2dp_sink" in rig.events
+    assert not rig.owner.blocked(MAC)
+    assert rig.player.starts == 1
 
 
 async def test_failed_selection_restores_choice_without_reusing_waiting_grant(rig):

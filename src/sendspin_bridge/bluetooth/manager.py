@@ -1221,6 +1221,16 @@ class BluetoothManager:
         Returns whether the disconnect was made. At most ``SINK_RECONNECT_TRIES`` per
         ``SINK_RECONNECT_WINDOW_S``: a speaker that simply has no sink profile must not loop.
         """
+        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+        if get_headset_profiles().blocked(self.mac_address):
+            # The Source feed owns the card (HFP microphone, or a restore in
+            # flight); dropping the link here would end the call.
+            logger.debug(
+                "[%s] Not reconnecting for a missing sink — the Source feed owns this link",
+                self.device_name,
+            )
+            return False
         now = time.monotonic()
         if now - self._sink_reconnect_since > SINK_RECONNECT_WINDOW_S:
             self._sink_reconnect_since = now

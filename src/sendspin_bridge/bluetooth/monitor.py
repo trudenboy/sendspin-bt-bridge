@@ -196,6 +196,11 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
     if lease is None:
         return False
     try:
+        if _headset_owns_link(mgr):
+            # The microphone owns this link: the Player is stopped and the
+            # Source feed resumes it after its own verified A2DP restore.
+            logger.debug("[%s] Link is owned by the Source capture — leaving it alone", mgr.device_name)
+            return True
         logger.info("[%s] Connected without a player — configuring audio and starting sendspin", mgr.device_name)
         if mgr.early_role_flip_pending:
             # Waits briefly for a flip another path has in flight, so audio
@@ -204,6 +209,12 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         sink_ok = await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     finally:
         lease.release()
+    if _headset_owns_link(mgr):
+        # Capture began while audio was being configured: the owner refused
+        # the configuration on purpose, so a False sink_ok is not a missing
+        # sink and must not be reported or reconnected.
+        logger.debug("[%s] Source capture took the link during configuration — leaving it alone", mgr.device_name)
+        return True
     if mgr.host:
         if not sink_ok:
             # #476: a link with no A2DP sink has nowhere to play. Starting the
@@ -228,6 +239,20 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         await mgr.host.start_subprocess()
     _spawn_background(_correct_other_devices_routing(mgr))
     return True
+
+
+def _headset_owns_link(mgr: BluetoothManager) -> bool:
+    """Is a Source capture/restore transaction using this link?
+
+    The Source feed deliberately stops the Player and switches the card to
+    HFP, so the heartbeat sees "connected with no player" and no A2DP sink.
+    That is the expected shape of a live call, not the broken link of #476 —
+    reporting a missing sink there would warn on every heartbeat and, with
+    sink recovery on, drop the call.
+    """
+    from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+    return get_headset_profiles().blocked(mgr.mac_address)
 
 
 def _report_missing_sink(mgr: BluetoothManager) -> None:

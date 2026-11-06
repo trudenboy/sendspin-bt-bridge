@@ -226,13 +226,13 @@ class HeadsetProfileService:
 
         self._publish(wanted, "restoring")
         client = _client_for_mac(wanted)
+        manager = getattr(client, "bt_manager", None)
         try:
-            evidence = await asyncio.to_thread(self._restore_audio, wanted)
+            evidence = await asyncio.to_thread(self._restore_audio, wanted, manager)
         except Exception:
             evidence = None
         if evidence is None:
             self._publish(wanted, "failed")
-            manager = getattr(client, "bt_manager", None)
             if manager is not None:
                 manager.audio_sink_ready = False
                 manager.profile_mode = "unknown"
@@ -240,7 +240,6 @@ class HeadsetProfileService:
             state.publish(error="headset_a2dp_restore_failed", streaming=False)
             raise SourceError("headset_a2dp_restore_failed", "Could not restore the headset A2DP profile and output.")
         card, sink = evidence
-        manager = getattr(client, "bt_manager", None)
         if manager is not None:
             manager.audio_sink_ready = True
             manager.a2dp_available = card.a2dp_available
@@ -254,15 +253,31 @@ class HeadsetProfileService:
             state.publish(error=None)
         return self._resume.pop(wanted, False)
 
-    def _restore_audio(self, wanted: str) -> tuple[bt_audio.CardProfileState, str] | None:
+    def _restore_audio(self, wanted: str, manager: Any | None = None) -> tuple[bt_audio.CardProfileState, str] | None:
+        """Switch the card back to A2DP and prove it, with a real sink.
+
+        A manager's own configure path retries the profile switch and the late
+        sink publication (the reason it is retried everywhere else); a restore
+        failure is sticky, so one transient refusal must not become terminal.
+        The lightweight rigs have no manager; they keep the direct switch, and
+        either way the card and sink are read back rather than trusted.
+        """
         from sendspin_bridge.services.audio.sink_names import sink_name_candidates
 
         address = bt_audio.DeviceAddress.require(wanted)
         with self._audio_lock:
-            card = bt_audio.card_profile_state(address.underscores)
-            profile = _pick_a2dp(card.profiles) if card else None
-            if profile is None or not set_card_profile(f"bluez_card.{address.underscores}", profile):
-                return None
+            configure_owned = getattr(manager, "_configure_bluetooth_audio_owned", None)
+            if callable(configure_owned):
+                # The owner doing its own work bypasses the automatic fence;
+                # this also fires on_sink_found (sink registration/persist),
+                # which the hand-rolled switch never did.
+                if not configure_owned():
+                    return None
+            else:
+                card = bt_audio.card_profile_state(address.underscores)
+                profile = _pick_a2dp(card.profiles) if card else None
+                if profile is None or not set_card_profile(f"bluez_card.{address.underscores}", profile):
+                    return None
             card = bt_audio.card_profile_state(address.underscores)
             names = {entry["name"] for entry in bt_audio.list_sinks() or ()}
             sink = next((name for name in sink_name_candidates(address) if name in names), None)
