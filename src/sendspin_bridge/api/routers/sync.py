@@ -22,12 +22,14 @@ from sendspin_bridge.application.models.sync import (
     AirCalibrationSaveIn,
     ApplyIn,
     CaptureIn,
+    CaptureInputIn,
     CaptureLinkIn,
     CaptureLinkOut,
     CaptureResultOut,
     CaptureStartIn,
     CaptureStateOut,
     DelaysIn,
+    ListeningDevicesOut,
     MeasurementOut,
     MemberDelayIn,
     MemberVolumeIn,
@@ -188,6 +190,20 @@ router = APIRouter(
 
 
 # -- groups -------------------------------------------------------------------------------
+
+
+@router.get(
+    "/listening-devices",
+    response_model=ListeningDevicesOut,
+    summary="The inputs the bridge can record the sequence from",
+    description=(
+        "The Sources UI's input list (configured inputs and local nodes that can still be added), "
+        "wrapped in an object so it can grow. available is false when the node is not present; a "
+        "device the source feed is capturing is listed but cannot be borrowed (input_busy)."
+    ),
+)
+async def listening_devices() -> ListeningDevicesOut:
+    return await uc.list_listening_devices()
 
 
 @router.get("/groups", response_model=list[SyncGroup], summary="Music Assistant sync groups with their members")
@@ -426,6 +442,22 @@ def finish(session_id: str) -> SyncSessionOut:
 )
 def capture_link(session_id: str, body: CaptureLinkIn) -> CaptureLinkOut:
     return uc.capture_link(session_id, body.lang)
+
+
+@router.post(
+    "/sessions/{session_id}/capture/input",
+    response_model=CaptureResultOut,
+    summary="Record this measurement's sequence from one of the bridge's inputs",
+    description=(
+        "Records the input for seconds (null: the sequence's own length, clamped to the estimator's range) "
+        "on a worker thread, decodes it like a phone upload and measures every member of the finished "
+        "sequence. The input is borrowed: the source feed's active input, the source client and the "
+        "headset profile are untouched. 404 unknown_input; 409 input_unavailable, input_busy (the source "
+        "feed is capturing it), capture_running (one recording at a time per session) or session_state."
+    ),
+)
+async def capture_input(session_id: str, body: CaptureInputIn) -> CaptureResultOut:
+    return await uc.capture_input(session_id, body.input_id, body.seconds)
 
 
 @router.post(

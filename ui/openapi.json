@@ -3014,6 +3014,34 @@
         "title": "CaptureIn",
         "type": "object"
       },
+      "CaptureInputIn": {
+        "properties": {
+          "input_id": {
+            "description": "One id from GET /api/v1/sync/listening-devices.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Input Id",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Seconds to record; null takes the session's own sequence length. The bridge clamps it to the sequence's recording bound instead of trusting the client.",
+            "title": "Seconds"
+          }
+        },
+        "required": [
+          "input_id"
+        ],
+        "title": "CaptureInputIn",
+        "type": "object"
+      },
       "CaptureLinkIn": {
         "properties": {
           "lang": {
@@ -6577,6 +6605,58 @@
           "reason"
         ],
         "title": "LinkStatus",
+        "type": "object"
+      },
+      "ListeningDeviceOut": {
+        "description": "An input the sync measurement can record from (the Sources UI's list).",
+        "properties": {
+          "available": {
+            "description": "The input's node is present and can be opened now; the source feed may still own it.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "local",
+              "bluetooth",
+              "headset_microphone"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "available"
+        ],
+        "title": "ListeningDeviceOut",
+        "type": "object"
+      },
+      "ListeningDevicesOut": {
+        "description": "The listening-device list, as an object so it can grow without breaking its clients.",
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/ListeningDeviceOut"
+            },
+            "title": "Devices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "title": "ListeningDevicesOut",
         "type": "object"
       },
       "LogLevel": {
@@ -18732,6 +18812,50 @@
         ]
       }
     },
+    "/api/v1/sync/listening-devices": {
+      "get": {
+        "description": "The Sources UI's input list (configured inputs and local nodes that can still be added), wrapped in an object so it can grow. available is false when the node is not present; a device the source feed is capturing is listed but cannot be borrowed (input_busy).",
+        "operationId": "listening_devices_api_v1_sync_listening_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListeningDevicesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "The inputs the bridge can record the sequence from",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/api/v1/sync/profiles": {
       "get": {
         "operationId": "list_profiles_api_v1_sync_profiles_get",
@@ -19461,6 +19585,71 @@
           }
         },
         "summary": "A link (and QR) to the phone capture page of this measurement",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/capture/input": {
+      "post": {
+        "description": "Records the input for seconds (null: the sequence's own length, clamped to the estimator's range) on a worker thread, decodes it like a phone upload and measures every member of the finished sequence. The input is borrowed: the source feed's active input, the source client and the headset profile are untouched. 404 unknown_input; 409 input_unavailable, input_busy (the source feed is capturing it), capture_running (one recording at a time per session) or session_state.",
+        "operationId": "capture_input_api_v1_sync_sessions__session_id__capture_input_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureInputIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Record this measurement's sequence from one of the bridge's inputs",
         "tags": [
           "sync"
         ]

@@ -308,6 +308,42 @@ class CaptureResultOut(ResponseModel):
     results: list[MeasurementOut]
 
 
+#: One of the bridge's own inputs as the measurement's listening device.
+ListeningDeviceKind = Literal["local", "bluetooth", "headset_microphone"]
+
+
+class ListeningDeviceOut(ResponseModel):
+    """An input the sync measurement can record from (the Sources UI's list)."""
+
+    id: str
+    name: str
+    kind: ListeningDeviceKind
+    available: bool = Field(
+        description="The input's node is present and can be opened now; the source feed may still own it."
+    )
+
+
+class ListeningDevicesOut(ResponseModel):
+    """The listening-device list, as an object so it can grow without breaking its clients."""
+
+    devices: list[ListeningDeviceOut]
+
+
+class CaptureInputIn(BaseModel):
+    input_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="One id from GET /api/v1/sync/listening-devices.",
+    )
+    seconds: float | None = Field(
+        default=None,
+        description=(
+            "Seconds to record; null takes the session's own sequence length. The bridge clamps it to the "
+            "sequence's recording bound instead of trusting the client."
+        ),
+    )
+
+
 class ApplyIn(BaseModel):
     rows: dict[str, DelayMs] | None = Field(default=None, description="Delays to write instead of the proposal.")
 
