@@ -330,7 +330,8 @@ async def test_set_target_without_an_ma_token_is_refused(monkeypatch):
     assert raised.value.code == "ma_api_unavailable"
 
 
-def _snapshot(sources):
+def _snapshot(sources, *, capture: bool = True):
+    """A hardware read built here, never measured: the host decides nothing in a test."""
     from sendspin_bridge.services.audio.sink_inventory import LocalSource
     from sendspin_bridge.services.hardware import inventory
 
@@ -345,7 +346,15 @@ def _snapshot(sources):
         ],
         inventory.CaptureFacts(),
     )
-    return inventory._assemble([], [], dbus=True, bluetooth=True, degraded=[], audio=audio, server_name="PulseAudio")
+    # inventory calls the probe itself; patch the name it actually looks up.
+    original = inventory.probe_capture
+    inventory.probe_capture = lambda _name: capture
+    try:
+        return inventory._assemble(
+            [], [], dbus=True, bluetooth=True, degraded=[], audio=audio, server_name="PulseAudio"
+        )
+    finally:
+        inventory.probe_capture = original
 
 
 async def test_inputs_lists_configured_sources_and_local_candidates(monkeypatch):
