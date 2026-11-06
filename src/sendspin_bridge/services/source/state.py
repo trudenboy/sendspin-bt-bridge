@@ -103,11 +103,50 @@ _lock = threading.Lock()
 _state = SourceState()
 
 
+#: Fields the bridge status exposes, so a change to one is worth a status frame.
+#: ``devices`` and the pairing clocks are included: a bond that closes a window
+#: and a window that opens both have to reach the SPA on their own.
+_VISIBLE = (
+    "enabled",
+    "state",
+    "phone",
+    "phone_mac",
+    "paired_phone_mac",
+    "streaming",
+    "server",
+    "ma_connected",
+    "ma_paired",
+    "ma_pairing_code",
+    "ma_pairing_until",
+    "ma_error",
+    "pairing_until",
+    "pairing_adapters",
+    "pairing_error",
+    "error",
+    "target_player",
+    "target_error",
+    "active_input",
+    "devices",
+)
+
+
 def publish(**changes: Any) -> None:
-    """Replace the snapshot with a copy carrying *changes* (unknown fields raise)."""
+    """Replace the snapshot with a copy carrying *changes* (unknown fields raise).
+
+    A change the status payload shows is announced to the event stream, because
+    nothing else will: the source owns no heartbeat of its own, so a window that
+    closed or a phone that bonded would otherwise wait for an unrelated device's
+    status tick.  A publish that changes nothing visible stays silent.
+    """
     global _state
     with _lock:
+        previous = _state
         _state = replace(_state, **changes)
+        announced = any(getattr(previous, name) != getattr(_state, name) for name in _VISIBLE)
+    if announced:
+        from sendspin_bridge.services.lifecycle.bridge_runtime_state import notify_status_changed
+
+        notify_status_changed()
 
 
 def snapshot() -> SourceState:

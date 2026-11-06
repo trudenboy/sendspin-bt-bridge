@@ -99,3 +99,34 @@ def test_an_unknown_field_cannot_corrupt_the_snapshot():
         state.publish(not_a_field=True)
 
     assert state.snapshot() == state.SourceState()
+
+
+def test_a_publish_that_changes_a_visible_field_announces_the_status(monkeypatch):
+    """A pairing window opening or closing must reach the event stream on its own.
+
+    The status stream is only built when something announces a change; a source
+    that closed its window silently left the SPA counting down a window the
+    server had already ended.
+    """
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    announced: list[int] = []
+    monkeypatch.setattr(bridge_runtime_state, "notify_status_changed", lambda: announced.append(1))
+
+    state.publish(pairing_until=1.0, pairing_adapters=("AA:BB:CC:DD:EE:FF",))
+    state.publish(pairing_until=0.0, pairing_adapters=())
+
+    assert announced == [1, 1]
+
+
+def test_a_publish_that_changes_nothing_visible_stays_silent(monkeypatch):
+    """Re-publishing an identical snapshot must not spend a status build."""
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    announced: list[int] = []
+    monkeypatch.setattr(bridge_runtime_state, "notify_status_changed", lambda: announced.append(1))
+    state.publish(enabled=True, state="waiting")
+
+    state.publish(enabled=True, state="waiting")
+
+    assert announced == [1]
