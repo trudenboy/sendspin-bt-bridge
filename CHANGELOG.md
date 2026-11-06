@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bluetooth source pairing stays open when switching pages or closing the input picker, until pairing succeeds, it is cancelled, or its window expires. Settings and device pages share the same pairing countdowns.
+
+### Fixed
+
+- Source inputs and hardware status share discovery results, so newly paired or forgotten devices appear consistently and failed refreshes retain the last known hardware state.
+- Leaving headset microphone mode resumes music only after the A2DP output is confirmed ready. A failed restoration keeps playback stopped and reports an error for manual recovery.
+
 ## [3.2.0-beta.23] - 2026-11-05
 
 ### Fixed
