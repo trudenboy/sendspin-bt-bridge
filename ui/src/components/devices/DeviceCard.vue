@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import SpeakerActionsMenu from "./SpeakerActionsMenu.vue";
 import PlayerCardContext from "./PlayerCardContext.vue";
+import SourceCommandError from "./SourceCommandError.vue";
 import DeviceCardShell from "./card/DeviceCardShell.vue";
 import { playerCardView, sourceToggleAction } from "./card/viewModels";
 import { SbBadge } from "@/kit";
@@ -41,14 +42,21 @@ const notifications = useNotificationStore();
 const featureEnabled = computed(
   () => !!bridge.bridge?.sendspin_source?.enabled,
 );
+/** The multi-second HFP switch this card is waiting on, if any. */
+const transition = computed(() =>
+  source.transitionFor(props.device.bluetooth?.mac),
+);
+/** The refusal of this card's last source command, shown on the card itself. */
+const failure = computed(() => source.failureFor(props.device.bluetooth?.mac));
 const toggle = computed(() =>
   sourceToggle(props.device, {
     featureEnabled: featureEnabled.value,
     mode: "player",
+    switching: transition.value !== null,
   }),
 );
 const view = computed(() => {
-  const base = playerCardView(props.device);
+  const base = playerCardView(props.device, transition.value);
   const primary = sourceToggleAction("source-mode", toggle.value);
   return primary ? { ...base, primary } : base;
 });
@@ -94,5 +102,8 @@ async function onAction(id: string) {
       <SbBadge v-if="microphone" size="sm" tone="info">{{ t("device.microphone") }}</SbBadge>
     </template>
     <template #context><PlayerCardContext :device="device" :selectable="selectable" /></template>
+    <template #extra>
+      <SourceCommandError v-if="failure" :failure="failure" />
+    </template>
   </DeviceCardShell>
 </template>

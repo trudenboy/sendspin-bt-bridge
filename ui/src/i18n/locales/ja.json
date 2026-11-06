@@ -482,6 +482,8 @@
       "renameFailed": "ソースの名前を変更できませんでした。",
       "enterSourceMode": "ソース",
       "backToPlayback": "再生に戻る",
+      "switchingToSource": "ソースに切り替えています…",
+      "switchingToPlayback": "再生に戻しています…",
       "sourceMode": "ソースモード",
       "waitingForStream": "ストリームを待っています",
       "capturing": "このデバイスのマイクをキャプチャ中",

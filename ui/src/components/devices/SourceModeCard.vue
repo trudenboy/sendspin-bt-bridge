@@ -11,6 +11,7 @@ import { useSourceStore } from '@/stores/source'
 import { headsetMicId, sourceToggle } from '@/utils/sourceMode'
 import DeviceCardShell from './card/DeviceCardShell.vue'
 import { sourceModeCardView, sourceToggleAction } from './card/viewModels'
+import SourceCommandError from './SourceCommandError.vue'
 import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import type { Device } from '@/api/types'
 
@@ -36,11 +37,19 @@ const featureEnabled = computed(() => !!bridge.bridge?.sendspin_source?.enabled)
 const input = computed(() => source.status?.inputs?.find((row) => row.id === inputId.value) ?? null)
 /** Capture is open exactly while the bridge says the source is streaming. */
 const captureOpen = computed(() => source.status?.state === 'streaming' && input.value?.active === true)
+/** The multi-second A2DP restore this card is waiting on, if any. */
+const transition = computed(() => source.transitionFor(props.device.bluetooth?.mac))
+/** The refusal of this card's last source command, shown on the card itself. */
+const failure = computed(() => source.failureFor(props.device.bluetooth?.mac))
 const view = computed(() => {
-  const base = sourceModeCardView(props.device, source.status?.state ?? undefined)
+  const base = sourceModeCardView(props.device, source.status?.state ?? undefined, transition.value)
   const primary = sourceToggleAction(
     'back-to-playback',
-    sourceToggle(props.device, { featureEnabled: featureEnabled.value, mode: 'source' }),
+    sourceToggle(props.device, {
+      featureEnabled: featureEnabled.value,
+      mode: 'source',
+      switching: transition.value !== null,
+    }),
   )
   return primary ? { ...base, primary } : base
 })
@@ -77,7 +86,9 @@ async function run(action: () => Promise<unknown>) {
 }
 
 function onAction(id: string) {
-  if (id === 'back-to-playback') void run(() => source.release())
+  if (id === 'back-to-playback') {
+    void run(() => source.release(props.device.bluetooth?.mac))
+  }
 }
 
 /** Five seconds of a real zero while the capture is open is "check the mute". */
@@ -176,6 +187,7 @@ onBeforeUnmount(clearZeroTimer)
     </template>
 
     <template #extra>
+      <SourceCommandError v-if="failure" :failure="failure" />
       <div
         v-if="restoreFailed"
         data-source-a2dp-failure

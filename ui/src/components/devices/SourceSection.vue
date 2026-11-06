@@ -17,10 +17,19 @@ import SourceModeCard from './SourceModeCard.vue'
  * the players switched into source mode (their own card moves here). Pairing
  * and adding live in Add device.
  */
-const props = withDefaults(defineProps<{ query?: string; devices?: Device[] }>(), {
-  query: '',
-  devices: () => [],
-})
+const props = withDefaults(
+  defineProps<{
+    query?: string
+    devices?: Device[]
+    /** MACs whose card still represents its microphone though it is not in this list yet. */
+    representedMacs?: string[]
+  }>(),
+  {
+    query: '',
+    devices: () => [],
+    representedMacs: () => [],
+  },
+)
 const emit = defineEmits<{ add: [] }>()
 
 const { t } = useI18n()
@@ -32,7 +41,11 @@ const source = computed(() => bridge.bridge?.sendspin_source ?? null)
 const sourceDevices = computed(() => props.devices ?? [])
 /** The MACs whose own moving card already represents their microphone input. */
 const representedMacs = computed(
-  () => new Set(sourceDevices.value.map((device) => device.bluetooth?.mac).filter((mac): mac is string => !!mac)),
+  () =>
+    new Set([
+      ...props.representedMacs,
+      ...sourceDevices.value.map((device) => device.bluetooth?.mac).filter((mac): mac is string => !!mac),
+    ]),
 )
 const inputs = computed<SourceInputStatus[]>(() => {
   const all = sectionSourceInputs(source.value?.inputs ?? [], representedMacs.value)

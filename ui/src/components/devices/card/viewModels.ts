@@ -9,7 +9,7 @@ import type {
   SourceState,
 } from "@/api/types";
 import type { DisabledPlayer } from "@/stores/devices";
-import type { SourceToggleState } from "@/utils/sourceMode";
+import type { SourceToggleState, SourceTransition } from "@/utils/sourceMode";
 import type {
   CardDot,
   CardTone,
@@ -62,7 +62,28 @@ function playerTransport(device: Device): string | null {
   return device.bluetooth?.adapter?.hci || "bluetooth";
 }
 
-export function playerCardView(device: Device): DeviceCardView {
+/**
+ * The chip a card wears instead of its mode while a source-mode command runs:
+ * the switch is the one thing the operator is waiting for, so it takes the
+ * status chip's place rather than sitting beside the stale state.
+ */
+const TRANSITION_STATUS: Record<SourceTransition, DeviceCardStatus> = {
+  "to-source": {
+    labelKey: "devices.sources.switchingToSource",
+    tone: "warning",
+    dot: "connecting",
+  },
+  "to-playback": {
+    labelKey: "devices.sources.switchingToPlayback",
+    tone: "warning",
+    dot: "connecting",
+  },
+};
+
+export function playerCardView(
+  device: Device,
+  transition: SourceTransition | null = null,
+): DeviceCardView {
   const name = speakerName(device.name, device.bluetooth?.mac ?? device.id);
   return {
     id: device.id,
@@ -72,7 +93,7 @@ export function playerCardView(device: Device): DeviceCardView {
       room: device.room?.name,
       technicalId: device.bluetooth?.mac ?? device.id,
     },
-    status: playerStatus(device),
+    status: transition ? TRANSITION_STATUS[transition] : playerStatus(device),
     meta: {
       room: device.room?.name,
       transport: playerTransport(device),
@@ -149,6 +170,7 @@ export function hardwareCardView(
 export function sourceModeCardView(
   device: Device,
   state: SourceState | undefined,
+  transition: SourceTransition | null = null,
 ): DeviceCardView {
   const name = speakerName(device.name, device.bluetooth?.mac ?? device.id);
   // A disconnect does not change the mode: the card waits for the stream to
@@ -156,19 +178,21 @@ export function sourceModeCardView(
   const streaming = state === "streaming";
   const failed = state === "error" && isDeviceConnected(device);
   const status: DeviceCardStatus =
-    failed
-      ? { labelKey: "devices.sources.error", tone: "error", dot: "error" }
-      : streaming
-        ? {
-            labelKey: "devices.sources.streaming",
-            tone: "success",
-            dot: "streaming",
-          }
-        : {
-            labelKey: "devices.sources.waitingForStream",
-            tone: "neutral",
-            dot: "standby",
-          };
+    transition !== null
+      ? TRANSITION_STATUS[transition]
+      : failed
+        ? { labelKey: "devices.sources.error", tone: "error", dot: "error" }
+        : streaming
+          ? {
+              labelKey: "devices.sources.streaming",
+              tone: "success",
+              dot: "streaming",
+            }
+          : {
+              labelKey: "devices.sources.waitingForStream",
+              tone: "neutral",
+              dot: "standby",
+            };
   return {
     id: device.id,
     role: "input",

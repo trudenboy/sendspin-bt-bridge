@@ -482,6 +482,8 @@
       "renameFailed": "No se pudo cambiar el nombre de la fuente.",
       "enterSourceMode": "Fuente",
       "backToPlayback": "Volver a la reproducción",
+      "switchingToSource": "Cambiando a la fuente…",
+      "switchingToPlayback": "Volviendo a la reproducción…",
       "sourceMode": "Modo fuente",
       "waitingForStream": "Esperando el flujo",
       "capturing": "Capturando el micrófono de este dispositivo",

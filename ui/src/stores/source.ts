@@ -20,6 +20,7 @@ import {
 } from '@/api/source'
 import { DEFAULT_EVENT_TYPES, useEventStream, type EventType } from '@/composables/useEventStream'
 import type { BridgeStatus, SendspinSourceStatus, SourceLevelEvent } from '@/api/types'
+import { headsetMicMac, type SourceTransition } from '@/utils/sourceMode'
 import { useBridgeStore, type RefreshOutcome } from './bridge'
 
 /**
@@ -91,6 +92,14 @@ export const useSourceStore = defineStore('source', () => {
   const busy = ref(false)
   /** The latest attempt's failure, with the server's stable code. A status read never clears it. */
   const error = ref<SourceFailure | null>(null)
+  /**
+   * The source-mode command a device's card is waiting on, keyed by its bare
+   * MAC. A card reads its own entry to hold its section and to replace its
+   * status chip with the transition.
+   */
+  const transitions = ref<Record<string, SourceTransition>>({})
+  /** The device whose source-mode command failed; only that card shows ``error``. */
+  const errorTarget = ref<string | null>(null)
   /**
    * The latest ``source.level`` frame per input id, 0..1. Only the active input
    * is published; keeping them keyed means a card that is handed the input
@@ -392,11 +401,44 @@ export const useSourceStore = defineStore('source', () => {
     return { code: 'request_failed', detail: e instanceof Error ? e.message : String(e) }
   }
 
+  /** One comparable key for a MAC: a card and an input id never disagree on spelling. */
+  function deviceKey(mac: string | null | undefined): string | null {
+    const key = String(mac ?? '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase()
+    return key || null
+  }
+
+  function beginTransition(mac: string | null | undefined, transition: SourceTransition) {
+    const key = deviceKey(mac)
+    if (!key) return
+    transitions.value = { ...transitions.value, [key]: transition }
+  }
+
+  function endTransition(mac: string | null | undefined, transition: SourceTransition) {
+    const key = deviceKey(mac)
+    if (!key || transitions.value[key] !== transition) return
+    const next = { ...transitions.value }
+    delete next[key]
+    transitions.value = next
+  }
+
+  /** The transition a device's card is showing, or null when no command is running for it. */
+  function transitionFor(mac: string | null | undefined): SourceTransition | null {
+    const key = deviceKey(mac)
+    return key ? (transitions.value[key] ?? null) : null
+  }
+
+  /** The refusal to show on that device's card; a command for another card leaves it alone. */
+  function failureFor(mac: string | null | undefined): SourceFailure | null {
+    const key = deviceKey(mac)
+    return key && errorTarget.value === key ? error.value : null
+  }
+
   function enqueue<T>(key: string, run: (attempt: Attempt) => Promise<T>): Promise<T> {
     const running = inflight.get(key)
     if (running) return running as Promise<T>
     const attempt: Attempt = { id: ++generation }
     error.value = null
+    errorTarget.value = null
     pending += 1
     busy.value = true
     const result = chain
@@ -466,8 +508,19 @@ export const useSourceStore = defineStore('source', () => {
   }
 
   function selectInput(sourceId: string) {
-    return enqueue(`source.select:${sourceId}`, async () => {
-      await selectSource(sourceId)
+    // A headset microphone belongs to one player: the card that pressed this
+    // shows the switch and keeps its section until the answer arrives.
+    const mac = headsetMicMac(sourceId)
+    return enqueue(`source.select:${sourceId}`, async (attempt) => {
+      beginTransition(mac, 'to-source')
+      try {
+        await selectSource(sourceId)
+      } catch (e) {
+        if (mac && attempt.id === generation) errorTarget.value = deviceKey(mac)
+        throw e
+      } finally {
+        endTransition(mac, 'to-source')
+      }
     })
   }
 
@@ -638,14 +691,26 @@ export const useSourceStore = defineStore('source', () => {
   }
 
   /** Release the active input so its player can resume; the feature stays enabled. */
-  function release() {
-    return enqueue('source.release', async () => {
-      await clearActiveSource()
+  function release(mac?: string | null) {
+    // The card that pressed Back to playback names its device so it can show
+    // the A2DP restore and stay in the Sources section until it settles.
+    const key = deviceKey(mac)
+    return enqueue(`source.release${key ? `:${key}` : ''}`, async (attempt) => {
+      beginTransition(mac, 'to-playback')
+      try {
+        await clearActiveSource()
+      } catch (e) {
+        if (mac && attempt.id === generation) errorTarget.value = key
+        throw e
+      } finally {
+        endTransition(mac, 'to-playback')
+      }
     })
   }
 
   function clearError() {
     error.value = null
+    errorTarget.value = null
   }
 
   /**
@@ -656,12 +721,16 @@ export const useSourceStore = defineStore('source', () => {
   function teardown() {
     stopTicker()
     closeLevelProbe()
+    transitions.value = {}
+    errorTarget.value = null
   }
 
   return {
     status,
     busy,
     error,
+    transitionFor,
+    failureFor,
     pairingSecondsLeft,
     maPairingSecondsLeft,
     maPairingCode,

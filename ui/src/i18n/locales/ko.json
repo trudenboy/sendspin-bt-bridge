@@ -482,6 +482,8 @@
       "renameFailed": "소스 이름을 변경하지 못했습니다.",
       "enterSourceMode": "소스",
       "backToPlayback": "재생으로 돌아가기",
+      "switchingToSource": "소스로 전환 중…",
+      "switchingToPlayback": "재생으로 돌아가는 중…",
       "sourceMode": "소스 모드",
       "waitingForStream": "스트림 대기 중",
       "capturing": "이 기기의 마이크를 캡처하는 중",

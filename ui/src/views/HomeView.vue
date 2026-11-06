@@ -8,10 +8,12 @@ import { isPulseSink, resolveAdapter } from '@/utils/deviceBackend'
 import { fleetSummary } from '@/utils/fleetSummary'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
-import { isSourceModeDevice, matchesSourceQuery, sectionSourceInputs } from '@/utils/sourceMode'
+import { useSourceStore } from '@/stores/source'
+import { isSourceSectionDevice, matchesSourceQuery, sectionSourceInputs } from '@/utils/sourceMode'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
 import { useRowExpansion } from '@/composables/useRowExpansion'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
+import type { Device } from '@/api/types'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
@@ -35,6 +37,7 @@ const route = useRoute()
 const router = useRouter()
 const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
+const sourceStore = useSourceStore()
 
 const drawerOpen = ref(false)
 const selectedId = ref<string | null>(null)
@@ -45,12 +48,32 @@ const sourceFeed = computed(() => bridge.bridge?.sendspin_source ?? null)
 const sourceEnabled = computed(() => !!sourceFeed.value?.enabled)
 /** The one input being captured now; its owner's card lives in the Sources section. */
 const activeInput = computed(() => sourceFeed.value?.active_input ?? null)
-const allSourceDevices = computed(() =>
-  bridge.devices.filter((device) => isSourceModeDevice(device, activeInput.value)),
+/**
+ * A source-mode command in flight pins its card to the section the operator
+ * pressed the toggle in; only the command's answer may move it.
+ */
+function inSourceSection(device: Device): boolean {
+  return isSourceSectionDevice(
+    device,
+    activeInput.value,
+    sourceStore.transitionFor(device.bluetooth?.mac),
+  )
+}
+const allSourceDevices = computed(() => bridge.devices.filter(inSourceSection))
+/** MACs whose card is switching to source: their microphone is already represented. */
+const enteringSourceMacs = computed(() =>
+  bridge.devices
+    .map((device) => device.bluetooth?.mac)
+    .filter((mac): mac is string => !!mac && sourceStore.transitionFor(mac) === 'to-source'),
 )
-const sourceModeMacs = computed(
-  () => new Set(allSourceDevices.value.map((device) => device.bluetooth?.mac).filter((mac): mac is string => !!mac)),
-)
+const sourceModeMacs = computed(() => {
+  const macs = allSourceDevices.value
+    .map((device) => device.bluetooth?.mac)
+    .filter((mac): mac is string => !!mac)
+  // A status frame can turn the input live before the switch answers; that
+  // must not add a second card for a microphone the pinned card represents.
+  return new Set([...macs, ...enteringSourceMacs.value])
+})
 
 function openAdd(mode: 'bluetooth' | 'audio' | 'source' = 'bluetooth') {
   addMode.value = mode
@@ -94,20 +117,22 @@ const shownView = computed<ViewMode>(() => (wide.value ? viewMode.value : 'grid'
 /*
  * One list of cards, partitioned by the mode the link is in: a player whose
  * MAC owns the active headset microphone input renders in the Sources section
- * instead of the players grid. Counts follow the section a card is in.
+ * instead of the players grid. A source-mode command in flight pins its card to
+ * the section it was pressed in, so only the command's answer moves it. Counts
+ * follow the section a card is in.
  */
 const playerDevices = computed(() =>
-  bridge.devices.filter((device) => !isSourceModeDevice(device, activeInput.value)),
+  bridge.devices.filter((device) => !inSourceSection(device)),
 )
 const filteredPlayerDevices = computed(() =>
-  deviceStore.filteredDevices.filter((device) => !isSourceModeDevice(device, activeInput.value)),
+  deviceStore.filteredDevices.filter((device) => !inSourceSection(device)),
 )
 const filteredSourceDevices = computed(() =>
-  deviceStore.filteredDevices.filter((device) => isSourceModeDevice(device, activeInput.value)),
+  deviceStore.filteredDevices.filter((device) => inSourceSection(device)),
 )
 const playerEntries = computed(() =>
   deviceStore.filteredPlayers.filter(
-    (entry) => entry.kind !== 'device' || !isSourceModeDevice(entry.device, activeInput.value),
+    (entry) => entry.kind !== 'device' || !inSourceSection(entry.device),
   ),
 )
 
@@ -346,6 +371,7 @@ watch(
         v-if="sourceEnabled"
         :query="deviceStore.filter.search"
         :devices="filteredSourceDevices"
+        :represented-macs="enteringSourceMacs"
         @add="openAdd('source')"
       />
 

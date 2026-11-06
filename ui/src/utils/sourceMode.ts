@@ -7,6 +7,9 @@ import type { Device, SourceInputStatus } from '@/api/types'
  */
 export type SourceCardMode = 'player' | 'source'
 
+/** The direction of the source-mode command a device's card is waiting on. */
+export type SourceTransition = 'to-source' | 'to-playback'
+
 /** What the card's one toggle says and whether it can be used. */
 export interface SourceToggleState {
   visible: boolean
@@ -49,12 +52,27 @@ export function isSourceModeDevice(device: Device, activeInput: string | null | 
 }
 
 /**
+ * Whether the card belongs to the Sources section right now. A command in
+ * flight pins the card to the section the operator pressed the toggle in, so a
+ * status frame produced by the still-running switch cannot move it mid-press.
+ */
+export function isSourceSectionDevice(
+  device: Device,
+  activeInput: string | null | undefined,
+  transition: SourceTransition | null,
+): boolean {
+  if (transition === 'to-source') return false
+  if (transition === 'to-playback') return true
+  return isSourceModeDevice(device, activeInput)
+}
+
+/**
  * The one control, two labels. It is drawn only for a capable device while
  * the feature exists, disabled with the reason the device is not ready.
  */
 export function sourceToggle(
   device: Device,
-  options: { featureEnabled: boolean; mode: SourceCardMode },
+  options: { featureEnabled: boolean; mode: SourceCardMode; switching?: boolean },
 ): SourceToggleState {
   const labelKey =
     options.mode === 'source' ? 'devices.sources.backToPlayback' : 'devices.sources.enterSourceMode'
@@ -62,6 +80,11 @@ export function sourceToggle(
     device.bluetooth?.microphone_available === true || device.bluetooth?.hfp_available === true
   if (!options.featureEnabled || !capable) {
     return { visible: false, disabled: false, labelKey, reasonKey: null }
+  }
+  if (options.switching) {
+    // The status chip on the same card already says what is running, and a
+    // second press could only queue a command that fights the first.
+    return { visible: true, disabled: true, labelKey, reasonKey: null }
   }
   if (!device.enabled) {
     return { visible: true, disabled: true, labelKey, reasonKey: 'devices.sources.unavailableDisabled' }

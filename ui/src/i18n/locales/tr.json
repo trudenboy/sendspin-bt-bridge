@@ -482,6 +482,8 @@
       "renameFailed": "Kaynak yeniden adlandırılamadı.",
       "enterSourceMode": "Kaynak",
       "backToPlayback": "Oynatmaya dön",
+      "switchingToSource": "Kaynağa geçiliyor…",
+      "switchingToPlayback": "Oynatmaya dönülüyor…",
       "sourceMode": "Kaynak modu",
       "waitingForStream": "Akış bekleniyor",
       "capturing": "Bu cihazın mikrofonu yakalanıyor",

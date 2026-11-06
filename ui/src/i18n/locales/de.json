@@ -482,6 +482,8 @@
       "renameFailed": "Die Quelle konnte nicht umbenannt werden.",
       "enterSourceMode": "Quelle",
       "backToPlayback": "Zurück zur Wiedergabe",
+      "switchingToSource": "Wechsle zur Quelle…",
+      "switchingToPlayback": "Zurück zur Wiedergabe…",
       "sourceMode": "Quellenmodus",
       "waitingForStream": "Warte auf Stream",
       "capturing": "Mikrofon dieses Geräts wird aufgenommen",

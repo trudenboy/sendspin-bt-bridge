@@ -482,6 +482,8 @@
       "renameFailed": "无法重命名源。",
       "enterSourceMode": "音源",
       "backToPlayback": "返回播放",
+      "switchingToSource": "正在切换到音源…",
+      "switchingToPlayback": "正在返回播放…",
       "sourceMode": "音源模式",
       "waitingForStream": "等待音频流",
       "capturing": "正在采集此设备的麦克风",

@@ -482,6 +482,8 @@
       "renameFailed": "Не удалось переименовать источник.",
       "enterSourceMode": "Источник",
       "backToPlayback": "Вернуться к воспроизведению",
+      "switchingToSource": "Переключаюсь на источник…",
+      "switchingToPlayback": "Возвращаюсь к воспроизведению…",
       "sourceMode": "Режим источника",
       "waitingForStream": "Ожидание потока",
       "capturing": "Захват микрофона этого устройства",

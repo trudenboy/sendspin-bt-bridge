@@ -482,6 +482,8 @@
       "renameFailed": "Impossible de renommer la source.",
       "enterSourceMode": "Source",
       "backToPlayback": "Retour à la lecture",
+      "switchingToSource": "Passage à la source…",
+      "switchingToPlayback": "Retour à la lecture…",
       "sourceMode": "Mode source",
       "waitingForStream": "En attente du flux",
       "capturing": "Capture du microphone de cet appareil",

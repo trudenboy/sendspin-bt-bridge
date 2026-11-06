@@ -482,6 +482,8 @@
       "renameFailed": "Could not rename the source.",
       "enterSourceMode": "Source",
       "backToPlayback": "Back to playback",
+      "switchingToSource": "Switching to source…",
+      "switchingToPlayback": "Back to playback…",
       "sourceMode": "Source mode",
       "waitingForStream": "Waiting for stream",
       "capturing": "Capturing this device's microphone",

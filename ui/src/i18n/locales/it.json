@@ -482,6 +482,8 @@
       "renameFailed": "Impossibile rinominare la sorgente.",
       "enterSourceMode": "Sorgente",
       "backToPlayback": "Torna alla riproduzione",
+      "switchingToSource": "Passaggio alla sorgente…",
+      "switchingToPlayback": "Ritorno alla riproduzione…",
       "sourceMode": "Modalità sorgente",
       "waitingForStream": "In attesa del flusso",
       "capturing": "Cattura del microfono di questo dispositivo",
