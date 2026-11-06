@@ -79,3 +79,21 @@ runs 22 s, and truncating it silently drops the last speaker's solo.
   Source feed holds it: the operator returns it to playback first.
 * Input latency calibration — loopback measurement, model estimate for
   Bluetooth inputs, and a stored `delay_ms` per input — is designed separately.
+
+## Amendment (2026-11-06) — the bridge records around the sequence; what "constant" means
+
+* **§4 is replaced.** A recording sized to the sequence's nominal length and
+  started after the sequence ran short: Music Assistant's mute round trips are
+  not in that length, and the last member's solo could fall off the end. With
+  `members` in the request, `POST /sync/sessions/{sid}/capture/input` now opens
+  the recorder first, plays the sequence once the recorder delivers audio,
+  and stops it a second after the sequence has finished. The session stamps
+  the recorder's start on its own clock, which narrows where in the file the
+  sequence can have begun. A request without `members` keeps the earlier
+  behaviour for existing clients.
+* **§3 holds for a constant latency only.** A recorder's clock that runs fast
+  or slow, a Bluetooth input resampled adaptively by the audio server, or a
+  browser recorder that drops frames shifts later members more than earlier
+  ones; that does not cancel. Members are measured 12–15 s apart, so 50 ppm is
+  already a couple of milliseconds. Fitting the recording's rate from the
+  click period (exactly 2 s) is the follow-up, not input calibration.

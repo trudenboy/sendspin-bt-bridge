@@ -4234,6 +4234,11 @@ export interface components {
              */
             input_id: string;
             /**
+             * Members
+             * @description Members to play the sequence for. When given, the bridge opens the recorder, plays the sequence itself and stops the recorder once it has finished (seconds is ignored); when null, a sequence already playing is recorded for seconds.
+             */
+            members?: string[] | null;
+            /**
              * Seconds
              * @description Seconds to record; null takes the session's own sequence length. The bridge clamps it to the sequence's recording bound instead of trusting the client.
              */

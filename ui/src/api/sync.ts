@@ -300,7 +300,7 @@ interface ListeningClient {
   }>
   POST(
     path: '/api/v1/sync/sessions/{session_id}/capture/input',
-    init: { params: { path: { session_id: string } }; body: { input_id: string; seconds: number } },
+    init: { params: { path: { session_id: string } }; body: { input_id: string; members: string[] } },
   ): Promise<{ data?: InputCaptureAnswer; error?: unknown; response: Response }>
 }
 
@@ -312,15 +312,16 @@ export function getListeningDevices(): Promise<ListeningDevicesPayload> {
 }
 
 /**
- * Record the running sequence on the bridge from one of its inputs for ``seconds`` (its
- * played length) and measure every member from that one recording. The device is borrowed:
- * the source's active input is not changed.
+ * Measure *members* with one of the bridge's inputs: the bridge opens the recorder, plays the
+ * sequence (every member alone in turn), stops the recorder once the sequence has finished and
+ * measures every member from that one recording. The device is borrowed: the source's active input
+ * is not changed. Resolves when the measurement is done; the sequence's progress arrives as events.
  */
-export function captureInput(id: string, inputId: string, seconds: number): Promise<InputCaptureAnswer> {
+export function captureInput(id: string, inputId: string, members: string[]): Promise<InputCaptureAnswer> {
   return unwrap(
     listeningClient().POST('/api/v1/sync/sessions/{session_id}/capture/input', {
       params: { path: { session_id: id } },
-      body: { input_id: inputId, seconds },
+      body: { input_id: inputId, members },
     }),
   )
 }

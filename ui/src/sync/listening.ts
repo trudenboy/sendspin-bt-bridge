@@ -20,13 +20,3 @@ const KIND_LABEL = {
 export function inputKindKey(input: ListeningDevice): string {
   return KIND_LABEL[input.kind] ?? KIND_LABEL.local
 }
-
-/**
- * The sequence's own length, in seconds: the lead-in, each member alone for ``solo_s``, and the
- * ``gap_s`` between two members. The bridge uses the same number for a recording that omits the
- * client's: the last gap is silence after the last solo, so it need not be recorded.
- */
-export function sequenceLengthS(sequence: SyncSequence): number {
-  const members = sequence.members.length
-  return sequence.lead_s + members * sequence.solo_s + Math.max(0, members - 1) * sequence.gap_s
-}

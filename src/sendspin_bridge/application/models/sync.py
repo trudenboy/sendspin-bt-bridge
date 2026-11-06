@@ -38,6 +38,7 @@ ErrorCode = Literal[
     # the phone capture's sequence
     "no_sequence",
     "sequence_running",
+    "sequence_too_long",
     "upload_running",
     # a click track or listening sound file that cannot be written
     "disk_full",
@@ -340,6 +341,15 @@ class CaptureInputIn(BaseModel):
         description=(
             "Seconds to record; null takes the session's own sequence length. The bridge clamps it to the "
             "sequence's recording bound instead of trusting the client."
+        ),
+    )
+    members: list[str] | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Members to play the sequence for. When given, the bridge opens the recorder, plays the sequence "
+            "itself and stops the recorder once it has finished (seconds is ignored); when null, a sequence "
+            "already playing is recorded for seconds."
         ),
     )
 

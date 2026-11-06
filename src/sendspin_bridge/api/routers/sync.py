@@ -457,7 +457,7 @@ def capture_link(session_id: str, body: CaptureLinkIn) -> CaptureLinkOut:
     ),
 )
 async def capture_input(session_id: str, body: CaptureInputIn) -> CaptureResultOut:
-    return await uc.capture_input(session_id, body.input_id, body.seconds)
+    return await uc.capture_input(session_id, body.input_id, body.seconds, body.members)
 
 
 @router.post(

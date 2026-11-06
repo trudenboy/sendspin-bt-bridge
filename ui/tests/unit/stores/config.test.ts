@@ -77,8 +77,29 @@ describe('useConfigStore', () => {
     store.config!.BRIDGE_NAME = 'modified'
     expect(store.isDirty).toBe(true)
     await store.saveConfig()
-    expect(saveConfig).toHaveBeenCalledWith(store.config)
+    const { players: _players, ...settings } = store.config!
+    expect(saveConfig).toHaveBeenCalledWith(settings)
     expect(store.isDirty).toBe(false)
+  })
+
+  it('a settings save leaves the players to the bridge', async () => {
+    // The players list was read when the page opened. Since then the bridge
+    // may have written a speaker's latency compensation, an air calibration or
+    // a learned latency; sending the old list would put the old values back.
+    const loaded = {
+      ...MOCK_CONFIG,
+      players: [{ id: 'p1', name: 'Kitchen', static_delay_ms: 0 }],
+    } as unknown as BridgeConfig
+    vi.mocked(getConfig).mockResolvedValue(loaded)
+    const store = useConfigStore()
+    await store.fetchConfig()
+    store.config!.LOG_LEVEL = 'DEBUG'
+
+    await store.saveConfig()
+
+    const sent = vi.mocked(saveConfig).mock.calls[0][0] as Record<string, unknown>
+    expect(sent).not.toHaveProperty('players')
+    expect(sent.LOG_LEVEL).toBe('DEBUG')
   })
 
   it('updateField sets nested value', async () => {

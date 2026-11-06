@@ -439,6 +439,7 @@
         "recording_invalid",
         "restore_pending",
         "sequence_running",
+        "sequence_too_long",
         "session_active",
         "session_expired",
         "session_state",

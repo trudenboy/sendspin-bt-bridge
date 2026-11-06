@@ -48,6 +48,9 @@ PLAYBACK_POLL_S = 2.0
 # A member Music Assistant does not list (its player has not registered again after a restart) keeps
 # its unmute owed this long after the restore began; then the restore gives it up and finishes.
 RESTORE_GIVE_UP_S = 600.0
+#: A recorder the bridge opens delivers its first sample within this long (pw-record/parecord).
+RECORDER_STARTUP_S = 3.0
+_ALIGN_TOLERANCE_S = 0.5
 _SEQUENCE_RUNNING = ("starting", "lead", "solo", "gap")
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
 _ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "tuning")
@@ -139,6 +142,11 @@ class SyncSession:
         # each member's volume before this session first changed it; put back at the end
         self.volumes_before: dict[str, int] = {}
         self._clicker_started: float | None = None  # clock at the last clicker start
+        self._seq_t0: float | None = None  # clock when the last sequence's lead-in began
+        # Where the phases of this round come from: one sequence recording (its file's clock), or the
+        # browser's microphone (its audio clock). Phases from the two are never compared.
+        self._round_source: Literal["sequence", "microphone"] | None = None
+        self._round_sequence: dict[str, Any] | None = None
         # the phone capture's sequence (every member alone in turn, recorded once); None before one
         self.sequence: dict[str, Any] | None = None
         self._seq_slots: list[seq.Slot] = []
@@ -166,6 +174,10 @@ class SyncSession:
     @_locked
     def touch(self) -> None:
         self.last_activity = self._clock()
+
+    def now(self) -> float:
+        """The session's clock: a recorder the bridge starts stamps its start with it."""
+        return self._clock()
 
     def expired(self) -> bool:
         # lock-free on purpose: the store's ticker must not wait behind a session busy in MA I/O
@@ -195,6 +207,14 @@ class SyncSession:
         if member.delay_ms is not None:
             return member.delay_ms
         return self.snapshot.delays.get(member.ma_player_id, 0) if self.snapshot else 0
+
+    def _measurements_changed(self) -> None:
+        """Under the lock: a measurement was added, replaced or skipped. A proposal planned from the
+        earlier measurements no longer describes them: it is withdrawn, and applying waits for a new
+        one."""
+        if self.proposal is not None or self.state == "proposed":
+            self.proposal = None
+            self.state = "measuring"
 
     def _set_member_delay(self, mid: str, ms: int) -> None:
         self.members = [dataclasses.replace(m, delay_ms=ms) if m.ma_player_id == mid else m for m in self.members]
@@ -273,9 +293,11 @@ class SyncSession:
         self.clicker_starts += 1
         self._clicker_started = self._clock()
         if self.state in _MEASURING and self.measurements:
-            # phases from two playbacks cannot be compared: the round starts again
-            self.measurements = {}
+            # phases from two playbacks cannot be compared: the round starts again (a skip is not a
+            # phase: it stays)
+            self.measurements = {mid: m for mid, m in self.measurements.items() if m.status == "skipped"}
             self._generation += 1
+            self._round_source, self._round_sequence = None, None
         self.touch()
         self._changed()
 
@@ -466,8 +488,20 @@ class SyncSession:
             m = self._member(mid)
             if not m.adjustable:
                 raise ControlError("not_adjustable", m.name, member=mid)
+        lead = max(seq.LEAD_S, min(seq.MAX_LEAD_S, float(lead_s)))
+        needed = seq.needed_s(len(set(members)), self.point, lead)
+        if needed > click_track.DURATION_S:
+            raise ControlError(
+                "sequence_too_long",
+                f"the sequence needs {needed:.0f} s of clicks; the click track lasts {click_track.DURATION_S} s",
+            )
         self._require_clicker()
+        left = self._clicker_left()
+        if left is not None and left < needed:
+            # the clicks would end part-way through the last solo: start them over first
+            self._start_clicker()
         self._seq_slots = []
+        self._seq_t0 = None
         self._seq_clicks = self.clicker_starts
         self.sequence = {
             "members": list(dict.fromkeys(members)),
@@ -478,7 +512,7 @@ class SyncSession:
             "error_member": None,
             "solo_s": seq.solo_seconds(self.point),
             "gap_s": seq.gap_seconds(self.point),
-            "lead_s": max(seq.LEAD_S, min(seq.MAX_LEAD_S, float(lead_s))),
+            "lead_s": lead,
             "uploaded": False,
         }
         self.touch()
@@ -511,6 +545,7 @@ class SyncSession:
                 self._sequence_failed(current, exc)
                 return
             t0 = self._clock()
+            self._seq_t0 = t0
             current["phase"] = "lead"
             self.touch()
             self._changed()
@@ -555,10 +590,16 @@ class SyncSession:
             self.touch()
             self._changed()
 
-    def record_sequence(self, pcm: bytes, sample_rate: int) -> dict[str, Measurement]:
+    def record_sequence(
+        self, pcm: bytes, sample_rate: int, *, recorder_started_at: float | None = None
+    ) -> dict[str, Measurement]:
         """Measure every member of the finished sequence from one recording of it (int16 mono PCM):
         the clicks are lined up against the sequence's timing and each member's stretch is estimated
-        on the recording's one clock. Refused (``session_state``) when the clicks started over since."""
+        on the recording's one clock. Refused (``session_state``) when the clicks started over since.
+
+        *recorder_started_at* (this session's clock, ``now()``) is when a recorder the bridge started
+        itself was opened: the recording's first sample is then known to within the recorder's start-up
+        time, which pins the alignment even where the clicks alone could not decide it."""
         if not estimator.MIN_SAMPLE_RATE <= sample_rate <= estimator.MAX_SAMPLE_RATE or len(pcm) % 2:
             raise ControlError("recording_invalid", f"a sample rate of {sample_rate} Hz is not supported")
         current_members = self._membership()
@@ -578,8 +619,12 @@ class SyncSession:
                 raise ControlError("session_state", "the clicks started over since the sequence")
             slots = list(self._seq_slots)
             clicks = self._seq_clicks
+            expected = None
+            if recorder_started_at is not None and self._seq_t0 is not None:
+                began = self._seq_t0 - recorder_started_at  # the sequence's start, in file time, at the latest
+                expected = (began - RECORDER_STARTUP_S, began + _ALIGN_TOLERANCE_S)
         events = seq.click_times(pcm, sample_rate)  # slow: outside the lock
-        offset = seq.align(events, slots, len(pcm) / 2 / sample_rate)
+        offset = seq.align(events, slots, len(pcm) / 2 / sample_rate, expected=expected)
         results: dict[str, Measurement] = {}
         if offset is None:
             for s in slots:
@@ -593,12 +638,21 @@ class SyncSession:
                 raise ControlError("session_state", "the measurement changed while estimating")
             present = {m.ma_player_id for m in self.members}
             results = {mid: m for mid, m in results.items() if mid in present}
+            heard = sum(1 for m in results.values() if m.status == "ok")
+            if self._round_source == "sequence" and self._round_sequence is current:
+                had = sum(1 for m in self.measurements.values() if m.status == "ok")
+                if heard < had:
+                    # the same sequence recorded again, worse: the better recording stays
+                    self.touch()
+                    return results
             # one clock per round: a phase measured on another recording (the microphone, an earlier
             # sequence) cannot be compared with these, so only skips are kept beside them
             self.measurements = {
                 mid: m for mid, m in self.measurements.items() if m.status == "skipped" and mid not in results
             }
             self.measurements.update(results)
+            self._round_source, self._round_sequence = "sequence", current
+            self._measurements_changed()
             current["uploaded"] = True
             self.touch()
             self._changed()
@@ -685,7 +739,12 @@ class SyncSession:
             if self._generation != generation:
                 raise ControlError("session_state", "the measurement round changed while estimating")
             self._member(recording.member)
+            if self._round_source == "sequence":
+                # the round so far was measured on a sequence's file: the microphone starts a new one
+                self.measurements = {mid: x for mid, x in self.measurements.items() if x.status == "skipped"}
+            self._round_source, self._round_sequence = "microphone", None
             self.measurements[recording.member] = m
+            self._measurements_changed()
             self.touch()
             self._changed()
         return m
@@ -700,6 +759,7 @@ class SyncSession:
         self._apply_membership(current)
         self._member(member)
         self.measurements[member] = Measurement(member=member, status="skipped", reason="skipped")
+        self._measurements_changed()
         self.touch()
         self._changed()
 

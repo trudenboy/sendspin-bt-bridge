@@ -17,16 +17,20 @@ worker thread, never on the bridge loop.
 
 from __future__ import annotations
 
+import os
 import shutil
 import struct
 import subprocess
+import threading
 
 from sendspin_bridge.sync_tuning.audio_decode import DECODE_RATE
 
 __all__ = [
     "CHANNELS",
     "RecorderUnavailable",
+    "RunningCapture",
     "capture_argv",
+    "open_capture",
     "recorder_tool",
     "run_capture",
     "to_wav",
@@ -134,6 +138,74 @@ def run_capture(argv: list[str], seconds: float) -> bytes:
     if not out:
         raise RecorderUnavailable(f"{argv[0]} recorded nothing from the input")
     return out
+
+
+class RunningCapture:
+    """A recorder that runs until it is stopped: the sequence plays while it records.
+
+    ``run_capture`` records for a length fixed in advance, which a sequence started first and
+    timed by Music Assistant's round trips can outrun; this one is opened before the sequence
+    starts and stopped once it has finished, so the whole sequence is in the file.
+    """
+
+    def __init__(self, argv: list[str]) -> None:
+        self._argv = argv
+        try:
+            self._proc: subprocess.Popen[bytes] = subprocess.Popen(
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except (FileNotFoundError, PermissionError, OSError) as exc:
+            raise RecorderUnavailable(f"{argv[0]} could not start: {exc}") from exc
+        self._out = bytearray()
+        self._err = b""
+        self._got_audio = threading.Event()
+        self._reader = threading.Thread(target=self._read, name="sync-input-recorder", daemon=True)
+        self._reader.start()
+
+    def _read(self) -> None:
+        stdout = self._proc.stdout
+        assert stdout is not None
+        fd = stdout.fileno()
+        while chunk := os.read(fd, 65536):  # what is there now; b"" once the recorder has ended
+            self._out.extend(chunk)
+            self._got_audio.set()
+        self._got_audio.set()  # ended: whoever waits for audio stops waiting
+
+    def wait_for_audio(self, timeout: float) -> bool:
+        """True once the recorder delivers samples; False when it ended, or delivered none in time."""
+        self._got_audio.wait(timeout)
+        return bool(self._out)
+
+    def stop(self) -> bytes:
+        """Stop the recorder and return everything it recorded."""
+        proc = self._proc
+        # its output closed (the reader finished) or it was reaped: it ended before being asked to
+        exited_by_itself = not self._reader.is_alive() or proc.poll() is not None
+        if not exited_by_itself:
+            proc.terminate()
+        try:
+            proc.wait(timeout=STOP_GRACE_S)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        self._reader.join(timeout=STOP_GRACE_S)
+        if proc.stderr is not None:
+            self._err = proc.stderr.read() or b""
+        if exited_by_itself and proc.returncode not in (0, None) and not self._out:
+            reason = self._err.decode("utf-8", "replace").strip().splitlines()
+            detail = f": {reason[-1][:200]}" if reason else ""
+            raise RecorderUnavailable(f"{self._argv[0]} refused the input (exit {proc.returncode}){detail}")
+        if not self._out:
+            raise RecorderUnavailable(f"{self._argv[0]} recorded nothing from the input")
+        return bytes(self._out)
+
+
+def open_capture(argv: list[str]) -> RunningCapture:
+    """Start the recorder; it records until ``stop()``."""
+    return RunningCapture(argv)
 
 
 def to_wav(pcm: bytes, *, rate: int = DECODE_RATE, channels: int = CHANNELS) -> bytes:
