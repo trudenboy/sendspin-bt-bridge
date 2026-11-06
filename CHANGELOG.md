@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Group sync can measure with any input the bridge knows — a line-in, a headset microphone or a paired phone — instead of requiring a phone browser. The input is borrowed for the measurement, so whatever you were listening to keeps playing.
 - A device that can carry input now has a **Source** switch on its own card. Turning it on moves the card into Sources, stops its player and shows the input's gain, mute and a live level; turning it off returns the device to playback with its A2DP output restored.
 - The Sources section shows what is an input right now — paired phones, saved line-in and microphone inputs, and devices switched into source mode — with their input gain, mute and level.
 

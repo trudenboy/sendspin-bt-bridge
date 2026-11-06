@@ -86,6 +86,13 @@ input is active at a time: switching steals it and the previous device returns
 to playback. The mode belongs to the device, so a restart or a lost link keeps
 it; a lost link only means the capture is waiting.
 
+**Listening device** — the input a group-sync measurement hears the room with:
+the bridge records it itself — a local line-in, a headset microphone, a phone —
+instead of a phone's browser page. It is borrowed for the measurement and never
+becomes the Source feed's active input. Its own latency does not need
+calibrating: a constant shift moves every speaker's measurement equally, and
+the proposal is the difference between them.
+
 **Input level** — how loud the selected input is right now, as a peak of the
 frames already captured, reported continuously while a capture is open. Zero is
 silence and is information: five seconds of it means "check the mute on the

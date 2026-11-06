@@ -2402,6 +2402,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/listening-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The inputs the bridge can record the sequence from
+         * @description The Sources UI's input list (configured inputs and local nodes that can still be added), wrapped in an object so it can grow. available is false when the node is not present; a device the source feed is capturing is listed but cannot be borrowed (input_busy).
+         */
+        get: operations["listening_devices_api_v1_sync_listening_devices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/profiles": {
         parameters: {
             query?: never;
@@ -2578,6 +2598,26 @@ export interface paths {
          * @description The link carries a short-lived, unguessable token for this session only; it allows reading the capture state and uploading a recording, nothing else. A new link revokes the previous one; the token is revoked when the session ends.
          */
         post: operations["capture_link_api_v1_sync_sessions__session_id__capture_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/capture/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record this measurement's sequence from one of the bridge's inputs
+         * @description Records the input for seconds (null: the sequence's own length, clamped to the estimator's range) on a worker thread, decodes it like a phone upload and measures every member of the finished sequence. The input is borrowed: the source feed's active input, the source client and the headset profile are untouched. 404 unknown_input; 409 input_unavailable, input_busy (the source feed is capturing it), capture_running (one recording at a time per session) or session_state.
+         */
+        post: operations["capture_input_api_v1_sync_sessions__session_id__capture_input_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4186,6 +4226,19 @@ export interface components {
              */
             notes?: string;
         };
+        /** CaptureInputIn */
+        CaptureInputIn: {
+            /**
+             * Input Id
+             * @description One id from GET /api/v1/sync/listening-devices.
+             */
+            input_id: string;
+            /**
+             * Seconds
+             * @description Seconds to record; null takes the session's own sequence length. The bridge clamps it to the sequence's recording bound instead of trusting the client.
+             */
+            seconds?: number | null;
+        };
         /** CaptureLinkIn */
         CaptureLinkIn: {
             /**
@@ -5656,6 +5709,34 @@ export interface components {
              * @description success, warning, error or neutral.
              */
             tone: string;
+        };
+        /**
+         * ListeningDeviceOut
+         * @description An input the sync measurement can record from (the Sources UI's list).
+         */
+        ListeningDeviceOut: {
+            /**
+             * Available
+             * @description The input's node is present and can be opened now; the source feed may still own it.
+             */
+            available: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "local" | "bluetooth" | "headset_microphone";
+            /** Name */
+            name: string;
+        };
+        /**
+         * ListeningDevicesOut
+         * @description The listening-device list, as an object so it can grow without breaking its clients.
+         */
+        ListeningDevicesOut: {
+            /** Devices */
+            devices: components["schemas"]["ListeningDeviceOut"][];
         };
         /** LogLevel */
         LogLevel: {
@@ -13765,6 +13846,46 @@ export interface operations {
             };
         };
     };
+    listening_devices_api_v1_sync_listening_devices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListeningDevicesOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     list_profiles_api_v1_sync_profiles_get: {
         parameters: {
             query: {
@@ -14305,6 +14426,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaptureLinkOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    capture_input_api_v1_sync_sessions__session_id__capture_input_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureInputIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureResultOut"];
                 };
             };
             /** @description Client error */
