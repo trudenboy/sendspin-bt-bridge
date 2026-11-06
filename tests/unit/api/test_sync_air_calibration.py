@@ -275,7 +275,7 @@ def sync_air_env(monkeypatch, tmp_config, tmp_path, api_client):
             return Measurement(member=rec.member, status="ok", phase_ms=phase, confidence=1.0, clicks=5, spread_ms=2.5)
 
         monkeypatch.setattr(seq, "click_times", lambda _pcm, _rate: [])
-        monkeypatch.setattr(seq, "align", lambda _events, _slots, _duration: 0.0)
+        monkeypatch.setattr(seq, "align", lambda _events, _slots, _duration, **_kw: 0.0)
         monkeypatch.setattr(seq, "windows", windows)
         monkeypatch.setattr("sendspin_sync.session.estimator.estimate", estimate)
         from sendspin_bridge.sync_tuning import audio_decode

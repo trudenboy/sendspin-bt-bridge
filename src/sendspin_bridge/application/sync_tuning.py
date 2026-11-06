@@ -697,10 +697,12 @@ def _capture_upload(session: SyncSession, body: bytes) -> CaptureResultOut:
     return _measure_sequence(session, pcm, rate)
 
 
-def _measure_sequence(session: SyncSession, pcm: bytes, rate: int) -> CaptureResultOut:
+def _measure_sequence(
+    session: SyncSession, pcm: bytes, rate: int, *, recorder_started_at: float | None = None
+) -> CaptureResultOut:
     """The one measurement path: the phone's upload and a bridge input's recording both end here."""
     try:
-        results = session.record_sequence(pcm, rate)
+        results = session.record_sequence(pcm, rate, recorder_started_at=recorder_started_at)
     except (ControlError, MaApiError) as exc:
         logger.info("Sync capture measurement refused (%s): %s", exc.code, exc.detail)
         _raise(exc)
@@ -759,8 +761,15 @@ def _listening_device(entry: Mapping[str, Any]) -> ListeningDeviceOut:
     )
 
 
-async def capture_input(sid: str, input_id: str, seconds: float | None = None) -> CaptureResultOut:
-    """Record one input of the bridge for ``seconds`` and measure the sequence from it.
+async def capture_input(
+    sid: str, input_id: str, seconds: float | None = None, members: list[str] | None = None
+) -> CaptureResultOut:
+    """Record one input of the bridge and measure the sequence from it.
+
+    With *members*, the bridge plays the sequence itself while it records: the recorder is opened
+    first, the sequence runs once it delivers audio, and the recorder stops after the sequence has
+    finished — the whole sequence is in the file, and where it began is known. Without, a sequence
+    already playing is recorded for ``seconds`` (the earlier flow).
 
     The recording happens on a worker thread (the route awaits it off the bridge loop), in the
     same raw format the phone decode produces, and the result goes through the same measurement
@@ -779,6 +788,10 @@ async def capture_input(sid: str, input_id: str, seconds: float | None = None) -
     node = await _input_node(entry)
     if node is None:
         _refuse_input("input_unavailable", f"No capture node answers for {entry.get('name') or input_id}")
+    if members is not None:
+        tool = _recorder_tool(view)
+        with _one_recording(session):
+            return await asyncio.to_thread(_record_sequence_sync, session, node, tool, list(members))
     current = session.sequence
     if current is None:
         _refuse_input("session_state", "The measurement has no sequence to record: play it first")
@@ -797,6 +810,76 @@ async def capture_input(sid: str, input_id: str, seconds: float | None = None) -
             _decode_gate.release()
     finally:
         lock.release()
+
+
+@contextlib.contextmanager
+def _one_recording(session: SyncSession) -> Iterator[None]:
+    """One recording per session, and one decode in the bridge, at a time."""
+    with _upload_locks_lock:
+        lock = _upload_locks.setdefault(session.id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        _refuse_input("capture_running", "A recording is being measured; wait a moment")
+    try:
+        if not _decode_gate.acquire(blocking=False):
+            _refuse_input("capture_running", "Another recording is being measured; try again in a moment")
+        try:
+            yield
+        finally:
+            _decode_gate.release()
+    finally:
+        lock.release()
+
+
+#: The recorder must deliver its first samples within this long, or the input is unavailable.
+RECORDER_START_TIMEOUT_S = 3.0
+#: Recorded after the sequence has finished: the last member's clicks are still in the room.
+RECORD_TAIL_S = 1.0
+
+
+def _record_sequence_sync(session: SyncSession, node: str, tool: str, members: list[str]) -> CaptureResultOut:
+    """Worker thread: open the recorder, play the sequence, stop the recorder after it, measure."""
+    from sendspin_bridge.sync_tuning import audio_decode, input_recorder
+
+    argv = input_recorder.capture_argv(node, tool=tool)
+    started = session.now()  # the first sample comes at, or shortly after, this moment
+    try:
+        capture = input_recorder.open_capture(argv)
+    except input_recorder.RecorderUnavailable as exc:
+        _refuse_input("input_unavailable", str(exc))
+    try:
+        if not capture.wait_for_audio(RECORDER_START_TIMEOUT_S):
+            _refuse_input("input_unavailable", "The input delivered no audio")
+        try:
+            session.start_sequence(members)
+        except (ControlError, MaApiError) as exc:
+            _raise(exc)
+        _start_air_watch(session)
+        session.run_sequence(sleep=_sequence_sleep)
+        current = session.sequence
+        if current is None or current["phase"] != "done":
+            failed = current is not None and current["phase"] == "failed"
+            _refuse_input(
+                "session_state",
+                "The sequence failed while the input was recording"
+                if failed
+                else "The sequence ended while the input was recording",
+            )
+        _sequence_sleep(RECORD_TAIL_S)
+    except BaseException:
+        with contextlib.suppress(input_recorder.RecorderUnavailable):
+            capture.stop()
+        raise
+    try:
+        raw = capture.stop()
+    except input_recorder.RecorderUnavailable as exc:
+        _refuse_input("input_unavailable", str(exc))
+    try:
+        pcm, rate = audio_decode.decode_to_mono(
+            input_recorder.to_wav(raw), max_seconds=seq.max_duration_s(len(current["members"]), session.point)
+        )
+    except ControlError as exc:
+        _raise(exc)
+    return _measure_sequence(session, pcm, rate, recorder_started_at=started)
 
 
 def _input_busy(view: Mapping[str, Any], input_id: str) -> bool:

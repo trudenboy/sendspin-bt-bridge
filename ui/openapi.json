@@ -3023,6 +3023,22 @@
             "title": "Input Id",
             "type": "string"
           },
+          "members": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Members to play the sequence for. When given, the bridge opens the recorder, plays the sequence itself and stops the recorder once it has finished (seconds is ignored); when null, a sequence already playing is recorded for seconds.",
+            "title": "Members"
+          },
           "seconds": {
             "anyOf": [
               {

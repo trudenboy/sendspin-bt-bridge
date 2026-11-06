@@ -3,11 +3,11 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Mic } from 'lucide-vue-next'
 import { SbBadge, SbButton } from '@/kit'
-import { captureInput, getSession, startSequence, type ListeningDevice } from '@/api/sync'
+import { captureInput, getSession, type ListeningDevice } from '@/api/sync'
 import type { SyncMeasurement, SyncMember, SyncSession } from '@/api/types'
 import { errorCode, useSyncStore } from '@/stores/sync'
 import { formatClock } from '@/sync/format'
-import { inputKindKey, sequenceLengthS } from '@/sync/listening'
+import { inputKindKey } from '@/sync/listening'
 import { speakerName } from '@/sync/names'
 
 /**
@@ -77,9 +77,10 @@ const progress = computed(() => {
 })
 
 /**
- * Start the sequence and, once it runs, hand the chosen input to the bridge for the sequence's
- * length. The server measures every member from that one recording; the session then holds the
- * results exactly as after a phone upload, so the wizard goes on to the same result screen.
+ * Hand the chosen input and the members to the bridge: it opens the recorder, plays the sequence,
+ * stops the recorder once the sequence has finished and measures every member from that one
+ * recording. The sequence's progress arrives as session events; the session then holds the results
+ * exactly as after a phone upload, so the wizard goes on to the same result screen.
  */
 async function recordSequence() {
   const sid = props.session.id
@@ -91,23 +92,9 @@ async function recordSequence() {
   failure.value = ''
   playError.value = ''
   try {
-    let started: SyncSession
-    try {
-      started = await startSequence(sid, members)
-    } catch (e) {
-      if (stillHere()) playError.value = t('sync.wizard.failed', { code: errorCode(e) })
-      return
-    }
-    if (!stillHere()) return
-    sync.applyEvent(started)
-    const seq = started?.sequence
-    if (!seq) {
-      playError.value = t('sync.wizard.failed', { code: 'no_sequence' })
-      return
-    }
     let answer: { results: SyncMeasurement[] }
     try {
-      answer = await captureInput(sid, props.input.id, sequenceLengthS(seq))
+      answer = await captureInput(sid, props.input.id, members)
     } catch (e) {
       if (!stillHere()) return
       const code = errorCode(e)

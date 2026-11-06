@@ -343,6 +343,15 @@ class CaptureInputIn(BaseModel):
             "sequence's recording bound instead of trusting the client."
         ),
     )
+    members: list[str] | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Members to play the sequence for. When given, the bridge opens the recorder, plays the sequence "
+            "itself and stops the recorder once it has finished (seconds is ignored); when null, a sequence "
+            "already playing is recorded for seconds."
+        ),
+    )
 
 
 class ApplyIn(BaseModel):

@@ -48,6 +48,9 @@ PLAYBACK_POLL_S = 2.0
 # A member Music Assistant does not list (its player has not registered again after a restart) keeps
 # its unmute owed this long after the restore began; then the restore gives it up and finishes.
 RESTORE_GIVE_UP_S = 600.0
+#: A recorder the bridge opens delivers its first sample within this long (pw-record/parecord).
+RECORDER_STARTUP_S = 3.0
+_ALIGN_TOLERANCE_S = 0.5
 _SEQUENCE_RUNNING = ("starting", "lead", "solo", "gap")
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
 _ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "tuning")
@@ -139,6 +142,7 @@ class SyncSession:
         # each member's volume before this session first changed it; put back at the end
         self.volumes_before: dict[str, int] = {}
         self._clicker_started: float | None = None  # clock at the last clicker start
+        self._seq_t0: float | None = None  # clock when the last sequence's lead-in began
         # the phone capture's sequence (every member alone in turn, recorded once); None before one
         self.sequence: dict[str, Any] | None = None
         self._seq_slots: list[seq.Slot] = []
@@ -166,6 +170,10 @@ class SyncSession:
     @_locked
     def touch(self) -> None:
         self.last_activity = self._clock()
+
+    def now(self) -> float:
+        """The session's clock: a recorder the bridge starts stamps its start with it."""
+        return self._clock()
 
     def expired(self) -> bool:
         # lock-free on purpose: the store's ticker must not wait behind a session busy in MA I/O
@@ -488,6 +496,7 @@ class SyncSession:
             # the clicks would end part-way through the last solo: start them over first
             self._start_clicker()
         self._seq_slots = []
+        self._seq_t0 = None
         self._seq_clicks = self.clicker_starts
         self.sequence = {
             "members": list(dict.fromkeys(members)),
@@ -531,6 +540,7 @@ class SyncSession:
                 self._sequence_failed(current, exc)
                 return
             t0 = self._clock()
+            self._seq_t0 = t0
             current["phase"] = "lead"
             self.touch()
             self._changed()
@@ -575,10 +585,16 @@ class SyncSession:
             self.touch()
             self._changed()
 
-    def record_sequence(self, pcm: bytes, sample_rate: int) -> dict[str, Measurement]:
+    def record_sequence(
+        self, pcm: bytes, sample_rate: int, *, recorder_started_at: float | None = None
+    ) -> dict[str, Measurement]:
         """Measure every member of the finished sequence from one recording of it (int16 mono PCM):
         the clicks are lined up against the sequence's timing and each member's stretch is estimated
-        on the recording's one clock. Refused (``session_state``) when the clicks started over since."""
+        on the recording's one clock. Refused (``session_state``) when the clicks started over since.
+
+        *recorder_started_at* (this session's clock, ``now()``) is when a recorder the bridge started
+        itself was opened: the recording's first sample is then known to within the recorder's start-up
+        time, which pins the alignment even where the clicks alone could not decide it."""
         if not estimator.MIN_SAMPLE_RATE <= sample_rate <= estimator.MAX_SAMPLE_RATE or len(pcm) % 2:
             raise ControlError("recording_invalid", f"a sample rate of {sample_rate} Hz is not supported")
         current_members = self._membership()
@@ -598,8 +614,12 @@ class SyncSession:
                 raise ControlError("session_state", "the clicks started over since the sequence")
             slots = list(self._seq_slots)
             clicks = self._seq_clicks
+            expected = None
+            if recorder_started_at is not None and self._seq_t0 is not None:
+                began = self._seq_t0 - recorder_started_at  # the sequence's start, in file time, at the latest
+                expected = (began - RECORDER_STARTUP_S, began + _ALIGN_TOLERANCE_S)
         events = seq.click_times(pcm, sample_rate)  # slow: outside the lock
-        offset = seq.align(events, slots, len(pcm) / 2 / sample_rate)
+        offset = seq.align(events, slots, len(pcm) / 2 / sample_rate, expected=expected)
         results: dict[str, Measurement] = {}
         if offset is None:
             for s in slots:

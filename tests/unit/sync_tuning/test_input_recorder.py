@@ -64,3 +64,39 @@ def test_to_wav_drops_a_torn_sample_and_declares_the_format():
     wav = input_recorder.to_wav(b"\x01\x00\x02\x00\x03")
     assert wav[:4] == b"RIFF" and wav[8:12] == b"WAVE"
     assert len(wav) == 44 + 4
+
+
+# -- a recorder that runs until it is stopped ------------------------------------------------------
+
+import sys  # noqa: E402
+
+import pytest  # noqa: E402
+
+_STREAMING = [
+    sys.executable,
+    "-c",
+    "import sys, time\nwhile True:\n    sys.stdout.buffer.write(b'\\x01\\x00' * 160)\n    sys.stdout.flush()\n    time.sleep(0.01)",
+]
+
+
+def test_a_running_capture_records_until_it_is_stopped():
+    capture = input_recorder.open_capture(_STREAMING)
+    try:
+        assert capture.wait_for_audio(5.0)
+    finally:
+        raw = capture.stop()
+    assert raw and len(raw) % 2 == 0
+
+
+def test_a_recorder_that_refuses_the_node_is_unavailable_when_stopped():
+    capture = input_recorder.open_capture(
+        [sys.executable, "-c", "import sys; sys.stderr.write('no such node'); sys.exit(1)"]
+    )
+    assert not capture.wait_for_audio(5.0)
+    with pytest.raises(input_recorder.RecorderUnavailable, match="no such node"):
+        capture.stop()
+
+
+def test_a_recorder_that_cannot_start_is_unavailable():
+    with pytest.raises(input_recorder.RecorderUnavailable):
+        input_recorder.open_capture(["/nonexistent/recorder"])

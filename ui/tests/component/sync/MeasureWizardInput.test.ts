@@ -138,9 +138,9 @@ describe('MeasureWizard: a bridge input as the listening device', () => {
     expect(w.find('[data-phone]').exists()).toBe(false)
     await w.get('[data-record-sequence]').trigger('click')
     await flushPromises()
-    expect(api.startSequence).toHaveBeenCalledWith('s1', ['a', 'b'])
-    // 3 s lead-in + 2 × 7 s alone + 5 s between: the sequence's own length
-    expect(api.captureInput).toHaveBeenCalledWith('s1', 'line', 22)
+    // the bridge plays the sequence itself, around its own recording: no separate start from here
+    expect(api.startSequence).not.toHaveBeenCalled()
+    expect(api.captureInput).toHaveBeenCalledWith('s1', 'line', ['a', 'b'])
     expect(w.find('[data-tune]').exists()).toBe(true)            // the same result screen as the phone
   })
 
@@ -152,6 +152,9 @@ describe('MeasureWizard: a bridge input as the listening device', () => {
     await chooseInput(w)
     await toMembers(w)
     await w.get('[data-record-sequence]').trigger('click')
+    await flushPromises()
+    expect(w.get('[data-sequence-status]').text()).toBe('The bridge is recording the sequence…')
+    useSyncStore().applyEvent(session({ sequence: sequence() }))
     await flushPromises()
     expect(w.get('[data-sequence-status]').text()).toBe('Starting: every speaker is quiet for a moment…')
     useSyncStore().applyEvent(session({ sequence: sequence({ phase: 'solo', index: 0, member: 'a' }) }))
