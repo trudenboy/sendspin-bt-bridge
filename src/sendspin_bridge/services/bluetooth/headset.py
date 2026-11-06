@@ -416,14 +416,33 @@ def get_headset_profiles() -> HeadsetProfileService:
 # -- source-input discovery ---------------------------------------------------
 
 
-def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Configured Bluetooth players whose running client reports an HFP profile.
+def _headset_mac_from_input(source_id: str | None) -> str | None:
+    """The MAC of a ``headset-mic:`` id, or None for any other (or no) input."""
+    from sendspin_bridge.services.source.inputs import parse_source_id
+
+    parsed = parse_source_id(str(source_id or ""))
+    if parsed is None or parsed[0] != "headset_microphone":
+        return None
+    return parsed[1]
+
+
+def headset_inputs(config: dict[str, Any] | None, *, active_input: str | None = None) -> list[dict[str, Any]]:
+    """Configured Bluetooth players whose card offers an HFP profile.
 
     Reads the client's already-published status, never PulseAudio: the source
     status is built on the bridge loop and must not block on a subprocess.
+
+    The selected input is the one being captured, so it stays listed whatever
+    the stopped player's status says: while the Source feed owns the card, the
+    daemon is down and its last status no longer reports ``hfp_available``.
+    The manager's card evidence is the capability that counts for it, and a
+    capture that is still opening (``profile_mode == "microphone"``) is the
+    same commitment.
     """
     from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 
+    selected = active_input if active_input is not None else (config or {}).get("SENDSPIN_SOURCE_ACTIVE")
+    selected_mac = _headset_mac_from_input(selected)
     clients = {
         str(getattr(getattr(client, "bt_manager", None), "mac_address", "") or "").upper(): client
         for client in get_device_registry_snapshot().active_clients
@@ -441,10 +460,15 @@ def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
             continue
         client = clients.get(mac)
         status = getattr(client, "status", {}) if client is not None else {}
-        if status.get("hfp_available") is not True:
+        owns_input = mac == selected_mac or str(status.get("profile_mode") or "") == "microphone"
+        hfp_available = status.get("hfp_available") is True
+        if not hfp_available and not owns_input:
             continue
+        if not hfp_available:
+            known = getattr(getattr(client, "bt_manager", None), "hfp_available", None)
+            hfp_available = known if isinstance(known, bool) else True
         caps = classify(
-            hfp_available=True,
+            hfp_available=hfp_available,
             a2dp_available=status.get("a2dp_available") is not False,
             form_factor=None,
         )
@@ -454,7 +478,7 @@ def headset_inputs(config: dict[str, Any] | None) -> list[dict[str, Any]]:
                 "name": str(player.get("name") or mac),
                 "kind": caps.kind,
                 "a2dp_available": caps.a2dp_available,
-                "hfp_available": True,
+                "hfp_available": hfp_available,
             }
         )
     return found

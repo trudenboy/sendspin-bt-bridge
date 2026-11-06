@@ -1139,3 +1139,43 @@ def test_operator_guidance_prioritizes_runtime_access_over_disabled_devices():
     assert data["issue_groups"][0]["key"] == "runtime_access"
     assert data["onboarding_card"]["headline"] == "Restore host service access first"
     assert data["onboarding_card"]["checklist"]["current_step_key"] == "runtime_access"
+
+
+def _source_mode_guidance(config):
+    return build_operator_guidance_snapshot(
+        config=config,
+        onboarding_assistant={
+            "checklist": {"overall_status": "warning", "progress_percent": 60},
+            "counts": {"configured_devices": 1, "connected_devices": 1, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "One speaker needs attention."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Sony WH-1000XM4",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                bluetooth_mac="AA:BB:CC:DD:EE:FF",
+                has_sink=False,
+                server_connected=False,
+            )
+        ],
+    ).to_dict()
+
+
+def test_a_source_mode_headset_is_not_told_its_a2dp_output_is_missing():
+    """The card is on HFP on purpose: no A2DP sink is the expected shape, not a fault."""
+    mac = "AA:BB:CC:DD:EE:FF"
+    config = {
+        "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
+        "SENDSPIN_SOURCE_ACTIVE": f"headset-mic:{mac}",
+        **v6_players([{"mac": mac}]),
+    }
+
+    source_mode = _source_mode_guidance(config)
+
+    assert "missing_sink" not in [group["key"] for group in source_mode["issue_groups"]]
+
+    not_the_source = _source_mode_guidance({**config, "SENDSPIN_SOURCE_ACTIVE": "none"})
+
+    assert "missing_sink" in [group["key"] for group in not_the_source["issue_groups"]]

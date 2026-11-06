@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable
+    from collections.abc import Collection, Iterable, Mapping
 
     from sendspin_bridge.services.source.state import SourceDevice
 
@@ -14,6 +14,7 @@ __all__ = [
     "DEFAULT_INPUT_VOLUME",
     "NO_SOURCE",
     "SourceInput",
+    "active_headset_mac",
     "bluetooth_id",
     "build_inputs",
     "headset_mic_id",
@@ -89,6 +90,20 @@ def local_id(node: str) -> str:
 
 def headset_mic_id(mac: str) -> str:
     return f"headset-mic:{mac.upper()}"
+
+
+def active_headset_mac(config: Mapping[str, Any] | None) -> str | None:
+    """The MAC whose microphone is the selected source input, if any.
+
+    The selection is persisted in ``SENDSPIN_SOURCE_ACTIVE``; a ``headset-mic:``
+    value is the bridge's own statement that this device's capture owns its
+    Bluetooth card on purpose.
+    """
+    raw = str((config or {}).get("SENDSPIN_SOURCE_ACTIVE") or "")
+    parsed = parse_source_id(raw)
+    if parsed is None or parsed[0] != "headset_microphone":
+        return None
+    return parsed[1]
 
 
 def parse_source_id(source_id: str) -> tuple[SourceKind, str] | None:

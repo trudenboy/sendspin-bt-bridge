@@ -14,7 +14,7 @@ const device = () =>
 
 describe('source mode card view model', () => {
   it('keeps the player identity and wears the input role', () => {
-    const view = sourceModeCardView(device(), 'streaming')
+    const view = sourceModeCardView(device(), 'streaming', null, true)
     expect(view.role).toBe('input')
     expect(view.identity.name).toBe('Sony WH-1000XM4')
     expect(view.identity.room).toBe('Study')
@@ -23,19 +23,25 @@ describe('source mode card view model', () => {
   })
 
   it('says Streaming only while the capture is open', () => {
-    expect(sourceModeCardView(device(), 'streaming').status.labelKey).toBe('devices.sources.streaming')
-    expect(sourceModeCardView(device(), 'waiting').status.labelKey).toBe('devices.sources.waitingForStream')
-    expect(sourceModeCardView(device(), 'pairing').status.labelKey).toBe('devices.sources.waitingForStream')
+    expect(sourceModeCardView(device(), 'streaming', null, true).status.labelKey).toBe('devices.sources.streaming')
+    expect(sourceModeCardView(device(), 'waiting', null, false).status.labelKey).toBe('devices.sources.waitingForStream')
+    expect(sourceModeCardView(device(), 'pairing', null, false).status.labelKey).toBe('devices.sources.waitingForStream')
+  })
+
+  it('does not say Streaming for a device that is not the captured input', () => {
+    expect(sourceModeCardView(device(), 'streaming', null, false).status.labelKey).toBe(
+      'devices.sources.waitingForStream',
+    )
   })
 
   it('says Error when the source itself failed', () => {
-    expect(sourceModeCardView(device(), 'error').status.labelKey).toBe('devices.sources.error')
+    expect(sourceModeCardView(device(), 'error', null, false).status.labelKey).toBe('devices.sources.error')
   })
 
   it('keeps the waiting story when a disconnect leaves the source in error', () => {
     const disconnected = device()
     disconnected.bluetooth!.connected = false
-    expect(sourceModeCardView(disconnected, 'error').status.labelKey).toBe('devices.sources.waitingForStream')
+    expect(sourceModeCardView(disconnected, 'error', null, false).status.labelKey).toBe('devices.sources.waitingForStream')
   })
 })
 

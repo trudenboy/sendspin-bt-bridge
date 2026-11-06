@@ -42,7 +42,7 @@ const transition = computed(() => source.transitionFor(props.device.bluetooth?.m
 /** The refusal of this card's last source command, shown on the card itself. */
 const failure = computed(() => source.failureFor(props.device.bluetooth?.mac))
 const view = computed(() => {
-  const base = sourceModeCardView(props.device, source.status?.state ?? undefined, transition.value)
+  const base = sourceModeCardView(props.device, source.status?.state ?? undefined, transition.value, captureOpen.value)
   const primary = sourceToggleAction(
     'back-to-playback',
     sourceToggle(props.device, {
@@ -141,11 +141,10 @@ onBeforeUnmount(clearZeroTimer)
     </template>
 
     <template #context>
-      <p v-if="!captureOpen" data-source-waiting class="text-sm text-text-secondary">
+      <p v-if="!captureOpen" data-source-waiting class="mb-2 text-sm text-text-secondary">
         {{ t('devices.sources.waitingForStream') }}
       </p>
-      <template v-else>
-        <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2">
           <button
             type="button"
             class="-ml-2 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
@@ -183,7 +182,6 @@ onBeforeUnmount(clearZeroTimer)
         <p v-if="noSignal" data-source-no-signal class="mt-2 text-xs text-warning-text">
           {{ t('devices.sources.noSignal') }}
         </p>
-      </template>
     </template>
 
     <template #extra>

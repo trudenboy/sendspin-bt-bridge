@@ -284,3 +284,54 @@ def test_restore_audio_reports_success_only_with_a_real_a2dp_card_and_sink(monke
     card, sink = evidence
     assert card.mode == "a2dp"
     assert sink == _SINK
+
+
+def _configured_headset(status: dict, manager_hfp: bool | None = True):
+    from types import SimpleNamespace
+
+    manager = SimpleNamespace(mac_address=_MAC, hfp_available=manager_hfp)
+    return SimpleNamespace(bt_manager=manager, status=status)
+
+
+def test_an_active_headset_microphone_survives_a_missing_daemon_capability(monkeypatch):
+    """The selected input is the one being captured: the stopped player's status cannot hide it.
+
+    While the Source mode owns the card the player's daemon is stopped, so its
+    status stops reporting ``hfp_available``.  The input the operator selected
+    must stay in the list anyway; the manager's card evidence is the capability
+    that counts for it.
+    """
+    from sendspin_bridge.services.bluetooth import device_registry
+
+    client = _configured_headset({"a2dp_available": True})
+    monkeypatch.setattr(
+        device_registry,
+        "get_device_registry_snapshot",
+        lambda: SimpleNamespace(active_clients=[client]),
+    )
+    player = {"name": "Sony WH-1000XM4", "backend": {"type": "bluetooth_a2dp", "mac": _MAC}}
+
+    active = headset.headset_inputs({"players": [player], "SENDSPIN_SOURCE_ACTIVE": f"headset-mic:{_MAC}"})
+
+    assert [row["mac"] for row in active] == [_MAC]
+    assert active[0]["hfp_available"] is True
+
+    idle = headset.headset_inputs({"players": [player], "SENDSPIN_SOURCE_ACTIVE": None})
+
+    assert idle == []
+
+
+def test_a_headset_whose_capture_is_still_opening_stays_listed(monkeypatch):
+    """Between selection and the first frame the client already says ``microphone``."""
+    from sendspin_bridge.services.bluetooth import device_registry
+
+    client = _configured_headset({"profile_mode": "microphone"}, manager_hfp=None)
+    monkeypatch.setattr(
+        device_registry,
+        "get_device_registry_snapshot",
+        lambda: SimpleNamespace(active_clients=[client]),
+    )
+
+    rows = headset.headset_inputs({"players": [{"name": "Sony", "backend": {"type": "bluetooth_a2dp", "mac": _MAC}}]})
+
+    assert [row["mac"] for row in rows] == [_MAC]

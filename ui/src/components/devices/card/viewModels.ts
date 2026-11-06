@@ -171,11 +171,14 @@ export function sourceModeCardView(
   device: Device,
   state: SourceState | undefined,
   transition: SourceTransition | null = null,
+  captured = true,
 ): DeviceCardView {
   const name = speakerName(device.name, device.bluetooth?.mac ?? device.id);
   // A disconnect does not change the mode: the card waits for the stream to
-  // come back rather than reporting the capture's transient error.
-  const streaming = state === "streaming";
+  // come back rather than reporting the capture's transient error. The feed can
+  // also be streaming to Music Assistant while another input is the one open,
+  // so "streaming" only describes this card when its own capture is open.
+  const streaming = state === "streaming" && captured;
   const failed = state === "error" && isDeviceConnected(device);
   const status: DeviceCardStatus =
     transition !== null

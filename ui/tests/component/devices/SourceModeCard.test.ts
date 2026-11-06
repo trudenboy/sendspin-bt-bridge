@@ -163,12 +163,23 @@ describe('SourceModeCard', () => {
     expect(meter.attributes('aria-valuenow')).toBe('50')
   })
 
-  it('shows waiting for stream while the capture is not open', () => {
+  it('shows waiting for stream while the capture is not open, with the input controls', () => {
     setStatus({ state: 'waiting', streaming: false })
     const w = mountCard()
 
     expect(w.find('[data-source-waiting]').exists()).toBe(true)
-    expect(w.find('input[aria-label="Gain"]').exists()).toBe(false)
+    expect(w.find('input[aria-label="Gain"]').exists()).toBe(true)
+    expect(w.find('[data-source-mute]').exists()).toBe(true)
+    expect(w.find('[role="meter"]').exists()).toBe(true)
+  })
+
+  it('does not call this device Streaming while it is not the captured input', () => {
+    setStatus({ state: 'streaming', streaming: true, inputs: [micInput({ active: false })] })
+    const w = mountCard()
+
+    expect(w.find('[data-source-waiting]').exists()).toBe(true)
+    expect(w.get('[data-status]').text()).toContain(en.devices.sources.waitingForStream)
+    expect(w.get('[data-status]').text()).not.toContain(en.devices.sources.streaming)
   })
 
   it('hints after five seconds of silence while the capture is open', async () => {

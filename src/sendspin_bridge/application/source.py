@@ -365,7 +365,8 @@ def _headsets(config: dict[str, Any] | None) -> list[dict[str, Any]]:
     from sendspin_bridge.services.bluetooth.headset import headset_inputs
 
     try:
-        return headset_inputs(config)
+        active = _active_id(config or {}, source_state.snapshot())
+        return headset_inputs(config, active_input=active)
     except Exception:
         logger.debug("Source: headset inputs could not be read", exc_info=True)
         return []
