@@ -65,6 +65,7 @@ __all__ = [
     "classify_capture",
     "classify_owner",
     "clear_cache",
+    "invalidate_cache",
     "read_inventory",
 ]
 
@@ -856,14 +857,16 @@ def read_inventory() -> InventoryRead:
                     raise
                 raise HardwareUnavailable(str(exc)) from exc
             logger.warning("Hardware inventory refresh failed; serving the last read: %s", exc)
-            return replace(
+            _cached = replace(
                 _cached,
                 stale=True,
                 degraded=(
-                    *_cached.degraded,
+                    *(entry for entry in _cached.degraded if entry.code != "refresh_failed"),
                     Degraded("hardware", "refresh_failed", f"The last hardware refresh failed: {exc}"),
                 ),
             )
+            _cached_at = _monotonic()
+            return _cached
         _cached = fresh
         _cached_at = _monotonic()
         return fresh
@@ -875,3 +878,14 @@ def clear_cache() -> None:
     with _reader_lock:
         _cached = None
         _cached_at = 0.0
+
+
+def invalidate_cache() -> None:
+    """Expire a changed inventory without erasing the last successful read.
+
+    A subsequent failure can still return those facts as stale/degraded.
+    ``clear_cache`` remains the cold-reset operation.
+    """
+    global _cached_at
+    with _reader_lock:
+        _cached_at = float("-inf")

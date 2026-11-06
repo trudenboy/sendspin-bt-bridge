@@ -6,33 +6,25 @@ is built from the paired devices that advertise the A2DP Source role and are
 not configured as bridge players.
 
 One ``GetManagedObjects`` read feeds the whole list (the hardware page's normal
-inventory call); a short cache keeps the bridge status read from asking D-Bus
-on every status frame.  Pairing and forgetting invalidate it.
+inventory call), cached by the process-wide hardware reader. Pairing and
+forgetting expire that reader while retaining the last known facts.
 """
 
 from __future__ import annotations
 
-import logging
-import threading
-import time
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.uuids import A2DP_SOURCE_UUID
 from sendspin_bridge.services.source.state import SourceDevice
 
-logger = logging.getLogger(__name__)
-
 __all__ = ["devices_from_inventory", "invalidate", "list_source_devices"]
 
-_CACHE_TTL_S = 20.0
 _UUID_SHORT = A2DP_SOURCE_UUID[:8]
-_cache: tuple[SourceDevice, ...] = ()
-_cache_at = 0.0
-_lock = threading.Lock()
 
 
 def _uuid_matches(raw: Iterable[str]) -> bool:
@@ -74,23 +66,16 @@ def devices_from_inventory(
 
 
 def _base_devices(excluded_macs: Iterable[str]) -> tuple[SourceDevice, ...]:
-    global _cache, _cache_at
-    now = time.monotonic()
-    with _lock:
-        if _cache and now - _cache_at < _CACHE_TTL_S:
-            return _cache
-    try:
-        from sendspin_bridge.bluetooth.controller import get_controller
+    from sendspin_bridge.services.hardware.inventory import HardwareUnavailable, read_inventory
+    from sendspin_bridge.services.source.read_model import devices_from_read
+    from sendspin_bridge.services.source.state import SourceState
 
-        inventory = get_controller().dbus.inventory()
-    except Exception:
-        logger.debug("Source devices: BlueZ inventory failed", exc_info=True)
+    try:
+        read = read_inventory()
+    except HardwareUnavailable:
         return ()
-    devices = devices_from_inventory(inventory, excluded_macs=excluded_macs)
-    with _lock:
-        _cache = devices
-        _cache_at = now
-    return devices
+    config = {"players": [{"backend": {"type": "bluetooth_a2dp", "mac": mac}} for mac in excluded_macs]}
+    return devices_from_read(config, SourceState(), read)
 
 
 def list_source_devices(
@@ -98,14 +83,14 @@ def list_source_devices(
     active_mac: str | None = None,
     excluded_macs: Iterable[str] = (),
 ) -> tuple[SourceDevice, ...]:
-    """Paired source devices, with the currently captured one marked active."""
-    active = str(active_mac or "").upper()
+    """Compatibility query through the one shared two-second inventory reader."""
+    address = DeviceAddress.parse(active_mac)
+    active = address.colons if address else None
     return tuple(replace(device, active=device.mac == active) for device in _base_devices(excluded_macs))
 
 
 def invalidate() -> None:
-    """Drop the cache after a bond is added, removed or changes state."""
-    global _cache, _cache_at
-    with _lock:
-        _cache = ()
-        _cache_at = 0.0
+    """Expire the shared inventory after a bond change, retaining its last good facts."""
+    from sendspin_bridge.services.hardware.inventory import invalidate_cache
+
+    invalidate_cache()

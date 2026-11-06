@@ -9,9 +9,13 @@ from sendspin_bridge.services.source import state as source_state
 
 
 @pytest.fixture(autouse=True)
-def _clean_state():
+def _clean_state(installed_bluez):
+    from sendspin_bridge.services.hardware import inventory
+
+    inventory.clear_cache()
     source_state.reset()
     yield
+    inventory.clear_cache()
     source_state.reset()
 
 

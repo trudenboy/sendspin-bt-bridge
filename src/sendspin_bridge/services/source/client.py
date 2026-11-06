@@ -517,10 +517,10 @@ class SourceClient:
             self._set_backend_preference(None)
         if (source_state.snapshot().paired_phone_mac or "").upper() == address:
             source_state.publish(paired_phone_mac=None)
-        source_devices.invalidate()
         from sendspin_bridge.services.bluetooth import bt_remove_device
 
         await asyncio.to_thread(bt_remove_device, address)
+        await asyncio.to_thread(source_devices.invalidate)
 
     async def _nudge_profile(self, endpoint: CaptureEndpoint | None) -> None:
         if (self._active_input or "").startswith("headset-mic:"):

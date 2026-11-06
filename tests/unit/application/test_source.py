@@ -13,11 +13,15 @@ SERVER_URL = "ws://ma.local:8927/sendspin"
 
 
 @pytest.fixture(autouse=True)
-def _clean_state(monkeypatch, tmp_path):
+def _clean_state(monkeypatch, tmp_path, installed_bluez):
+    from sendspin_bridge.services.hardware import inventory
+
+    inventory.clear_cache()
     source_state.reset()
     manager.reset()
     monkeypatch.setattr("sendspin_bridge.bridge.orchestrator._resolve_config_dir", lambda: tmp_path)
     yield
+    inventory.clear_cache()
     source_state.reset()
     manager.reset()
 
@@ -327,12 +331,21 @@ async def test_set_target_without_an_ma_token_is_refused(monkeypatch):
 
 
 def _snapshot(sources):
-    from types import SimpleNamespace
+    from sendspin_bridge.services.audio.sink_inventory import LocalSource
+    from sendspin_bridge.services.hardware import inventory
 
-    return SimpleNamespace(
-        audio=SimpleNamespace(sources=sources),
-        capabilities=SimpleNamespace(capture=True, audio_server="pulseaudio"),
+    audio = inventory.build_audio_facts(
+        [],
+        [],
+        [
+            LocalSource(
+                source.name, source.description, "idle", "s16le 2ch 48000Hz", False, 100, monitor_of=source.monitor_of
+            )
+            for source in sources
+        ],
+        inventory.CaptureFacts(),
     )
+    return inventory._assemble([], [], dbus=True, bluetooth=True, degraded=[], audio=audio, server_name="PulseAudio")
 
 
 async def test_inputs_lists_configured_sources_and_local_candidates(monkeypatch):
@@ -405,14 +418,32 @@ async def test_selecting_an_unknown_source_is_refused(monkeypatch):
     assert raised.value.status == 404
 
 
-async def test_status_exposes_local_inputs_and_marks_the_active_one(monkeypatch):
-    from sendspin_bridge.services.source.state import SourceDevice
+async def test_status_exposes_local_inputs_and_marks_the_active_one(monkeypatch, installed_bluez):
+    from dataclasses import replace
 
-    monkeypatch.setattr(
-        source_uc.source_devices,
-        "list_source_devices",
-        lambda **_kw: (SourceDevice("34:C7:E9:25:A3:A3", "Pixel", True),),
+    from sendspin_bridge.services.hardware import inventory
+
+    phone = "34:C7:E9:25:A3:A3"
+    facts = inventory.DeviceFacts(
+        mac=phone,
+        name="Pixel",
+        alias="Pixel",
+        paired=True,
+        bonded=True,
+        trusted=True,
+        blocked=False,
+        connected=True,
+        controller_macs=(),
+        uuids=("0000110a-0000-1000-8000-00805f9b34fb",),
+        modalias=None,
+        services_resolved=True,
+        battery_pct=None,
+        rssi_delta_db=None,
+        rssi_at=None,
+        transport_state=None,
+        roles=(),
     )
+    monkeypatch.setattr(inventory, "read_inventory", lambda: replace(_snapshot([]), devices=(facts,)))
     source_state.publish(enabled=True, state="waiting", active_input="local:alsa_input.line")
 
     view = source_uc.status(

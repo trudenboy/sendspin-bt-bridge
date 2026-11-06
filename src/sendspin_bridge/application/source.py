@@ -10,8 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from sendspin_bridge.application.errors import UseCaseError
@@ -19,6 +18,18 @@ from sendspin_bridge.services.source import devices as source_devices
 from sendspin_bridge.services.source import inputs as source_inputs
 from sendspin_bridge.services.source import manager, pairing
 from sendspin_bridge.services.source import state as source_state
+from sendspin_bridge.services.source.read_model import (
+    SourceStatus,
+    audio_sources_from_read,
+    devices_from_read,
+    project_status,
+)
+from sendspin_bridge.services.source.read_model import (
+    active_id as _active_id,
+)
+
+if TYPE_CHECKING:
+    from sendspin_bridge.services.hardware.inventory import InventoryRead
 
 __all__ = [
     "SourceStatus",
@@ -44,115 +55,24 @@ DEFAULT_PAIRING_WINDOW_S = 120
 DEFAULT_SENDSPIN_PORT = 8927
 
 
-@dataclass(frozen=True, slots=True)
-class SourceStatus:
-    """The source's state, for the bridge status and the hardware read model."""
-
-    enabled: bool
-    state: str
-    phone: str | None
-    phone_mac: str | None
-    paired_phone_mac: str | None
-    streaming: bool
-    server: str | None
-    ma_connected: bool
-    ma_paired: bool
-    ma_pairing_required: bool
-    ma_pairing_code: str | None
-    ma_pairing_seconds_left: int
-    ma_error: str | None
-    pairing_seconds_left: int
-    pairing_adapters: tuple[str, ...]
-    devices: tuple[source_state.SourceDevice, ...]
-    target_player: str | None
-    target_error: str | None
-    active_input: str | None
-    inputs: tuple[source_inputs.SourceInput, ...]
-    error: str | None
-
-    def as_status_dict(self) -> dict[str, Any]:
-        """The bridge-status shape (the keys ``SendspinSourceStatus`` reads)."""
-        return {
-            "enabled": self.enabled,
-            "state": self.state,
-            "phone": self.phone,
-            "phone_mac": self.phone_mac,
-            "paired_phone_mac": self.paired_phone_mac,
-            "streaming": self.streaming,
-            "server": self.server,
-            "ma_connected": self.ma_connected,
-            "ma_paired": self.ma_paired,
-            "ma_pairing_required": self.ma_pairing_required,
-            "ma_pairing_code": self.ma_pairing_code,
-            "ma_pairing_seconds_left": self.ma_pairing_seconds_left,
-            "ma_error": self.ma_error,
-            "pairing_seconds_left": self.pairing_seconds_left,
-            "pairing_adapters": list(self.pairing_adapters),
-            "devices": [device.as_dict() for device in self.devices],
-            "target_player": self.target_player,
-            "target_error": self.target_error,
-            "active_input": self.active_input,
-            "inputs": [entry.as_dict() for entry in self.inputs],
-            "error": self.error,
-        }
-
-
-def _configured_player_macs(config: dict[str, Any]) -> set[str]:
-    """MACs the bridge already plays to; they are not source devices."""
-    macs: set[str] = set()
-    for player in config.get("players") or ():
-        if not isinstance(player, dict):
-            continue
-        backend = player.get("backend")
-        if isinstance(backend, dict) and backend.get("type") == "bluetooth_a2dp":
-            mac = str(backend.get("mac") or "").strip().upper()
-            if mac:
-                macs.add(mac)
-    return macs
-
-
-def _source_devices(
-    config: dict[str, Any], phone_mac: str | None, paired_mac: str | None
-) -> tuple[source_state.SourceDevice, ...]:
-    devices = source_devices.list_source_devices(active_mac=phone_mac, excluded_macs=_configured_player_macs(config))
-    if paired_mac and not any(device.mac == paired_mac.upper() for device in devices):
-        devices = (*devices, source_state.SourceDevice(mac=paired_mac.upper(), name=paired_mac.upper(), active=False))
-    return devices
-
-
-def status(config: dict[str, Any]) -> SourceStatus:
-    """The source's state, for the bridge status and the hardware read model."""
+def status(config: dict[str, Any], *, inventory: InventoryRead | None = None) -> SourceStatus:
+    """Synchronous query; async callers supply their already-offloaded inventory."""
     current = source_state.snapshot()
-    return SourceStatus(
-        enabled=current.enabled,
-        state=current.state,
-        phone=current.phone,
-        phone_mac=current.phone_mac,
-        paired_phone_mac=current.paired_phone_mac,
-        streaming=current.streaming,
-        server=current.server,
-        ma_connected=current.ma_connected,
-        ma_paired=current.ma_paired,
-        ma_pairing_required=current.enabled and not current.ma_paired,
-        ma_pairing_code=current.ma_pairing_code,
-        ma_pairing_seconds_left=current.ma_pairing_seconds_left(),
-        ma_error=current.ma_error,
-        pairing_seconds_left=current.pairing_seconds_left(),
-        pairing_adapters=tuple(current.pairing_adapters),
-        devices=_source_devices(config, current.phone_mac, current.paired_phone_mac) if current.enabled else (),
-        target_player=current.target_player,
-        target_error=current.target_error,
-        active_input=_effective_active(current),
-        inputs=tuple(
-            source_inputs.build_inputs(
-                config,
-                active_input=_effective_active(current),
-                bluetooth=_source_devices(config, current.phone_mac, current.paired_phone_mac),
-                headsets=_headsets(config),
-            )
-        ),
-        error=current.error,
-    )
+    if inventory is None and (
+        current.enabled or config.get("SENDSPIN_SOURCE") or current.pairing_until or current.paired_phone_mac
+    ):
+        inventory = _read_inventory()
+    return project_status(config, current, inventory, headsets=_headsets(config))
+
+
+def _read_inventory() -> InventoryRead | None:
+    from sendspin_bridge.services.hardware import inventory
+
+    try:
+        return inventory.read_inventory()
+    except inventory.HardwareUnavailable:
+        logger.debug("Source: hardware inventory unavailable", exc_info=True)
+        return None
 
 
 async def resolve_server_url(config: dict[str, Any]) -> str | None:
@@ -303,7 +223,7 @@ async def use_device(mac: str) -> dict[str, Any]:
     except Exception as exc:
         code = getattr(exc, "code", None) or "device_not_streaming"
         raise UseCaseError(409, code, str(exc)) from exc
-    source_devices.invalidate()
+    await asyncio.to_thread(source_devices.invalidate)
     return {"active": mac.upper()}
 
 
@@ -321,7 +241,7 @@ async def forget_device(mac: str) -> None:
         from sendspin_bridge.services.bluetooth import bt_remove_device
 
         await asyncio.to_thread(bt_remove_device, address.colons)
-    source_devices.invalidate()
+    await asyncio.to_thread(source_devices.invalidate)
 
 
 def _selected_target(config: dict[str, Any] | None) -> str | None:
@@ -405,16 +325,9 @@ async def set_target(target: str | None) -> dict[str, Any]:
     return {"target_player": chosen, "target_name": name, "target_error": target_error}
 
 
-async def _hardware_audio() -> Any:
-    """The audio half of the hardware read, or None when the host cannot answer."""
-    try:
-        from sendspin_bridge.application import hardware as hardware_uc
-
-        snapshot = await hardware_uc.snapshot()
-    except Exception:
-        logger.warning("Source: local audio inputs could not be read", exc_info=True)
-        return None
-    return snapshot
+async def _hardware_audio() -> InventoryRead | None:
+    """Read the shared physical facts off the bridge loop, without building hardware UI."""
+    return await asyncio.to_thread(_read_inventory)
 
 
 def _active_headset_mac(config: dict[str, Any] | None, active_input: str | None) -> str | None:
@@ -450,32 +363,11 @@ def _headsets(config: dict[str, Any] | None) -> list[dict[str, Any]]:
         return []
 
 
-def _effective_active(current: Any) -> str | None:
-    raw = current.active_input
-    if raw is None and current.phone_mac:
-        return source_inputs.bluetooth_id(current.phone_mac)
-    return None if raw in (None, "none") else raw
-
-
-def _active_id(config: dict[str, Any], current: Any) -> str | None:
-    if current.enabled:
-        return _effective_active(current)
-    raw = str(config.get("SENDSPIN_SOURCE_ACTIVE") or "").strip() or None
-    return None if raw in (None, "none") else raw
-
-
-def _configured_inputs(config: dict[str, Any], current: Any, snapshot: Any) -> tuple[list[Any], list[Any]]:
-    bluetooth = _source_devices(config, current.phone_mac, current.paired_phone_mac)
-    audio = getattr(getattr(snapshot, "audio", None), "sources", None)
-    active = _active_id(config, current)
-    configured = source_inputs.build_inputs(
-        config,
-        active_input=active,
-        bluetooth=bluetooth,
-        audio_sources=audio,
-        headsets=_headsets(config),
-    )
-    return configured, list(audio or ())
+def _configured_inputs(
+    config: dict[str, Any], current: source_state.SourceState, snapshot: InventoryRead | None
+) -> tuple[list[Any], list[Any]]:
+    view = project_status(config, current, snapshot, headsets=_headsets(config))
+    return list(view.inputs), list(audio_sources_from_read(snapshot) or ())
 
 
 async def inputs(*, include_monitors: bool = False) -> dict[str, Any]:
@@ -487,20 +379,6 @@ async def inputs(*, include_monitors: bool = False) -> dict[str, Any]:
     current = source_state.snapshot()
     snapshot = await _hardware_audio()
     active = _active_id(config, current)
-    if snapshot is None:
-        configured = source_inputs.build_inputs(
-            config,
-            active_input=active,
-            bluetooth=_source_devices(config, current.phone_mac, current.paired_phone_mac),
-            headsets=_headsets(config),
-        )
-        return {
-            "active_input": active,
-            "inputs": [entry.as_dict() for entry in configured],
-            "local_candidates": [],
-            "capture_available": False,
-            "capture_kind": "unknown",
-        }
     configured, audio = _configured_inputs(config, current, snapshot)
     configured_ids = {entry.id for entry in configured}
     candidates = [
@@ -508,13 +386,15 @@ async def inputs(*, include_monitors: bool = False) -> dict[str, Any]:
         for entry in source_inputs.local_candidates(audio, include_monitors=include_monitors)
         if entry.id not in configured_ids
     ]
-    capabilities = snapshot.capabilities
+    capabilities = snapshot.capabilities if snapshot is not None else None
     return {
         "active_input": active,
         "inputs": [entry.as_dict() for entry in configured],
         "local_candidates": candidates,
-        "capture_available": bool(capabilities.capture),
-        "capture_kind": classify_audio_server(capabilities.audio_server or ""),
+        "capture_available": bool(capabilities and capabilities.capture.available),
+        "capture_kind": classify_audio_server(capabilities.audio_server or "")
+        if capabilities is not None
+        else "unknown",
     }
 
 
@@ -530,9 +410,9 @@ async def add_local_input(node: str, name: str | None = None, *, allow_monitor: 
     if any(profile["node"] == cleaned_node for profile in existing):
         raise UseCaseError(409, "source_duplicate", "That local audio input is already saved.")
     snapshot = await _hardware_audio()
-    if snapshot is not None and not snapshot.capabilities.capture:
+    if snapshot is not None and not snapshot.capabilities.capture.available:
         raise UseCaseError(422, "capture_unavailable", "This host cannot capture audio.")
-    audio = getattr(getattr(snapshot, "audio", None), "sources", None) if snapshot is not None else None
+    audio = audio_sources_from_read(snapshot)
     match = next((source for source in audio or () if str(getattr(source, "name", "")) == cleaned_node), None)
     if match is not None and getattr(match, "monitor_of", None) and not allow_monitor:
         raise UseCaseError(
@@ -624,7 +504,7 @@ async def remove_input(source_id: str) -> None:
         return
     known = {
         source_inputs.bluetooth_id(device.mac)
-        for device in source_devices.list_source_devices(excluded_macs=_configured_player_macs(config))
+        for device in devices_from_read(config, source_state.snapshot(), await _hardware_audio())
     }
     if source_id not in known:
         raise UseCaseError(404, "input_unknown", "That Bluetooth source is not paired.")
@@ -636,7 +516,7 @@ async def remove_input(source_id: str) -> None:
     await asyncio.to_thread(update_config, lambda cfg: cfg.__setitem__("SENDSPIN_SOURCE_ACTIVE", active))
     source_state.publish(active_input=active)
     await asyncio.to_thread(bt_remove_device, value)
-    source_devices.invalidate()
+    await asyncio.to_thread(source_devices.invalidate)
 
 
 async def select_input(source_id: str) -> dict[str, Any]:
@@ -658,7 +538,7 @@ async def select_input(source_id: str) -> dict[str, Any]:
             raise UseCaseError(404, "input_unknown", "That headset microphone is not available.")
     else:
         known_macs = {
-            device.mac for device in source_devices.list_source_devices(excluded_macs=_configured_player_macs(config))
+            device.mac for device in devices_from_read(config, source_state.snapshot(), await _hardware_audio())
         }
         if value not in known_macs:
             raise UseCaseError(404, "input_unknown", "That Bluetooth source is not paired.")

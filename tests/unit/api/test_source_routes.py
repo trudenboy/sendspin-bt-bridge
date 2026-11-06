@@ -9,11 +9,15 @@ from sendspin_bridge.application.errors import UseCaseError
 
 
 @pytest.fixture(autouse=True)
-def _clean_state():
+def _clean_state(installed_bluez):
+    from sendspin_bridge.services.hardware import inventory
+
+    inventory.clear_cache()
     from sendspin_bridge.services.source import state
 
     state.reset()
     yield
+    inventory.clear_cache()
     state.reset()
 
 
