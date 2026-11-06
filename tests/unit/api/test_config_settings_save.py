@@ -25,11 +25,13 @@ PLAYER = {
 
 @pytest.fixture
 def config_file(tmp_path, monkeypatch):
+    import sendspin_bridge.application.config as api_config
     import sendspin_bridge.config as config
 
     path = tmp_path / "config.json"
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", path)
+    monkeypatch.setattr(api_config, "CONFIG_FILE", path)
     path.write_text(json.dumps({"CONFIG_SCHEMA_VERSION": 6, "players": [PLAYER], "LOG_LEVEL": "INFO"}))
     return path
 
