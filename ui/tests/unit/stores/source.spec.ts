@@ -540,6 +540,25 @@ describe('useSourceStore', () => {
     expect(store.pairingSecondsLeft).toBe(90)
   })
 
+  it('rereads once when a legitimate change arrived during the post-command grace', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))
+    await store.openPairingWindow()
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    // Another screen closes the window while this one still protects its own
+    // open: the frame cannot close it now, so the store must look again once the
+    // grace has run out instead of waiting for some later unrelated event.
+    vi.mocked(getStatus).mockResolvedValue(bridgeStatus(sourceStatus({ pairing_seconds_left: 0 })) as never)
+    store.applyStatus(bridgeStatus(sourceStatus({ pairing_seconds_left: 0 })))
+    expect(store.pairingSecondsLeft).toBe(120)
+
+    await vi.advanceTimersByTimeAsync(PAIRING_GRACE_MS + 1)
+
+    expect(getStatus).toHaveBeenCalledTimes(2)
+    expect(store.pairingSecondsLeft).toBe(0)
+  })
+
   it('a pushed status carrying the pre-open zero cannot close the new Music Assistant window', async () => {
     vi.useFakeTimers()
     vi.mocked(getStatus).mockRejectedValue(new Error('bridge unreachable'))

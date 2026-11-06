@@ -23,8 +23,9 @@ import { useBridgeStore, type RefreshOutcome } from './bridge'
  * frame describing the state *before* a command can still be delivered after
  * the command answered. The grace must comfortably exceed that debounce plus
  * transport and event-loop delay; two seconds covers it while still letting a
- * window opened or closed from another screen show up almost at once, because
- * a poll after the grace applies it normally.
+ * window opened or closed from another screen show up almost at once: a change
+ * that arrives during the grace is discarded, and the store rereads once when
+ * the grace runs out rather than waiting for some later unrelated event.
  */
 export const PAIRING_GRACE_MS = 2000
 
@@ -251,6 +252,23 @@ export const useSourceStore = defineStore('source', () => {
     return seconds > 0 || trusted
   }
 
+  /** A reread armed because a pushed status had to be dropped during a grace. */
+  let graceReread: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * Look again once the grace has run out. A status that had to be dropped
+   * while a window was protected is the only evidence this screen has that a
+   * change happened elsewhere, so without this the change would wait for an
+   * unrelated event — and a bridge with nothing else changing may never send one.
+   */
+  function rereadAfterGrace() {
+    if (graceReread !== null) return
+    graceReread = setTimeout(() => {
+      graceReread = null
+      void useBridgeStore().refresh()
+    }, PAIRING_GRACE_MS + 1)
+  }
+
   /** A read that began after the last command completed can describe that command's effect. */
   function requestedAfterCommand(application: StatusApplication): boolean {
     return (
@@ -287,6 +305,8 @@ export const useSourceStore = defineStore('source', () => {
     if (mayApplyWindow(phoneGrace, phoneSeconds, trusted)) {
       pairingAdapters.value = Array.isArray(next.pairing_adapters) ? next.pairing_adapters : []
       adoptPairingSeconds(phoneSeconds)
+    } else if (phoneSeconds !== pairingSecondsLeft.value) {
+      rereadAfterGrace()
     }
 
     const maGrace = activeGrace(maPairingGrace)
@@ -297,6 +317,8 @@ export const useSourceStore = defineStore('source', () => {
       // one, so while the grace runs only the command's own read may replace it.
       if (next.ma_pairing_code && (maGrace === null || trusted)) maPairingCode.value = next.ma_pairing_code
       adoptMaPairingSeconds(maSeconds)
+    } else if (maSeconds !== maPairingSecondsLeft.value) {
+      rereadAfterGrace()
     }
   }
 
@@ -334,8 +356,8 @@ export const useSourceStore = defineStore('source', () => {
       reconciling = false
     }
     // Only a read that never answered may fall back to the status seen while the
-    // command ran; that fallback can only speak for the windows, because a
-    // status that began before the command is dropped by the epoch rule.
+    // command ran. That status began before the command, so the epoch rule drops
+    // it: the snapshot is left as the stream last had it rather than regressing.
     if (answered === 'failed' && stale !== undefined) applySource(stale.source, stale.application)
   }
 
