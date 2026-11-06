@@ -191,17 +191,22 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
 
 
 def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
-    """The source's state, also while the feed is off and a phone pairing is under way.
+    """The source's state, also while the feed is off and its error must show.
 
     A bridge configured for the source always reports it. A bridge whose feed is
     off reports the phone pairing window (or the bond it produced) with
     ``enabled`` false: the Hardware page shows the window the operator opened,
-    and capture stays off. Any other off bridge reports nothing.
+    and capture stays off. It also keeps reporting a failed headset hand-off:
+    the operator switched the feed off, the return to A2DP failed, and that
+    error is the only public explanation for a silent speaker. Any other off
+    bridge reports nothing.
     """
     from sendspin_bridge.services.source import state as source_state
 
     current = source_state.snapshot()
-    if not (config.get("SENDSPIN_SOURCE") or current.pairing_until or current.paired_phone_mac):
+    if not (
+        config.get("SENDSPIN_SOURCE") or current.pairing_until or current.paired_phone_mac or _headset_restore_failed()
+    ):
         return None
     from sendspin_bridge.application import source as source_uc
 
@@ -209,6 +214,13 @@ def _sendspin_source(config: dict) -> SendspinSourceStatus | None:
     if not config.get("SENDSPIN_SOURCE"):
         data["enabled"] = False
     return SendspinSourceStatus(**data)
+
+
+def _headset_restore_failed() -> bool:
+    """Is a headset stuck after its A2DP restore failed (manual retry pending)?"""
+    from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+
+    return get_headset_profiles().restore_failed()
 
 
 def find_client(device_id: str):

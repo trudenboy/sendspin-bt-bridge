@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -95,3 +96,43 @@ async def test_a_restart_spawns_again_once_the_microphone_releases_the_link(monk
     await client.warm_restart({})
 
     assert recorder.spawns == 1
+
+
+async def test_a_direct_spawn_request_refuses_a_microphone_owned_link(monkeypatch, owned):
+    """The guard inside ``_start_sendspin_inner`` itself, not only via restarts.
+
+    ``warm_restart``/the watchdog are covered above; a caller that reaches the
+    spawn path directly (reroute, standby wake, a future caller) must hit the
+    same gate before any rematch, status write or spawn IO.
+    """
+    from sendspin_bridge.config.players import PULSE_SINK
+
+    client = _client(lock=False)
+    client.backend_type = PULSE_SINK
+    rematch = AsyncMock()
+    stop = AsyncMock()
+    monkeypatch.setattr(client, "_rematch_output", rematch)
+    monkeypatch.setattr(client, "stop_sendspin", stop)
+
+    await client._start_sendspin_inner()
+
+    rematch.assert_not_awaited()
+    stop.assert_not_awaited()
+
+
+async def test_a_direct_spawn_request_proceeds_once_the_microphone_releases(monkeypatch, owned):
+    from sendspin_bridge.config.players import PULSE_SINK
+
+    client = _client(lock=False)
+    client.backend_type = PULSE_SINK
+    rematch = AsyncMock()
+    monkeypatch.setattr(client, "_rematch_output", rematch)
+    # Reach the "no sink yet" early return without any spawn IO.
+    client.bluetooth_sink_name = None
+
+    await client._start_sendspin_inner()
+    rematch.assert_not_awaited()  # still owned: the guard precedes the rematch
+
+    owned._publish(MAC, None)
+    await client._start_sendspin_inner()
+    rematch.assert_awaited_once()

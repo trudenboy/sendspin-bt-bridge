@@ -56,11 +56,16 @@ DEFAULT_SENDSPIN_PORT = 8927
 
 
 def status(config: dict[str, Any], *, inventory: InventoryRead | None = None) -> SourceStatus:
-    """Synchronous query; async callers supply their already-offloaded inventory."""
+    """Synchronous query; async callers supply their already-offloaded inventory.
+
+    Only an enabled feed needs hardware facts: its inputs and the paired source
+    devices come from the audio server and BlueZ.  A bridge whose feed is off
+    still reports a pairing window, the bond it produced or an error, and those
+    are runtime facts — building that block must not refresh the shared
+    inventory on every status tick for the life of the process.
+    """
     current = source_state.snapshot()
-    if inventory is None and (
-        current.enabled or config.get("SENDSPIN_SOURCE") or current.pairing_until or current.paired_phone_mac
-    ):
+    if inventory is None and (current.enabled or config.get("SENDSPIN_SOURCE")):
         inventory = _read_inventory()
     return project_status(config, current, inventory, headsets=_headsets(config))
 

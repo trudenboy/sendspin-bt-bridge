@@ -107,6 +107,37 @@ def _set_status(client: Any | None, **values: Any) -> None:
         client._update_status(values)
 
 
+def _clear_missing_sink_error(client: Any | None) -> None:
+    """Clear the monitor's "link has no sink" card error once A2DP is proven back.
+
+    That error is published to ``last_error``; nothing else owns it after a call
+    ends, so without this it outlives the microphone and keeps the device card
+    degraded until an unrelated reconnect.
+    """
+    if client is None or not hasattr(client, "status"):
+        return
+    from sendspin_bridge.bluetooth.monitor import _MISSING_SINK_ERROR
+
+    if client.status.get("last_error") == _MISSING_SINK_ERROR:
+        _set_status(client, last_error=None)
+
+
+def _profile_mode_now(mac: str) -> str:
+    """The card's own word on its profile, for the failed-restore branch.
+
+    A refused switch leaves the card on HFP; a switch that claims success may
+    still not have moved it.  Publishing ``a2dp`` (or the acquisition's
+    ``microphone``) after a failed restore would lie about what the operator
+    can expect, so read it back instead.
+    """
+    try:
+        address = bt_audio.DeviceAddress.require(mac)
+        card = bt_audio.card_profile_state(address.underscores)
+    except Exception:
+        return "unknown"
+    return card.mode if card is not None else "unknown"
+
+
 class HeadsetProfileService:
     """Own profile transitions on the bridge loop, and fence monitor threads.
 
@@ -144,6 +175,17 @@ class HeadsetProfileService:
     def capture_owned(self, mac: str) -> bool:
         """Explicit recovery is forbidden until capture and its transition finish."""
         return self._phase(mac) in {"acquiring", "microphone", "restoring"}
+
+    def restore_failed(self) -> bool:
+        """Is any headset stuck after a failed A2DP restore, awaiting retry?
+
+        The bridge status uses this to keep the source error visible while the
+        feed itself is off: the operator turned capture off, the hand-off back
+        to A2DP failed, and without the block nothing would say why the speaker
+        is silent.
+        """
+        with self._view_lock:
+            return "failed" in self._owners.values()
 
     @contextmanager
     def automatic_audio(self, mac: str) -> Iterator[bool]:
@@ -233,10 +275,26 @@ class HeadsetProfileService:
             evidence = None
         if evidence is None:
             self._publish(wanted, "failed")
+            profile_mode = await asyncio.to_thread(_profile_mode_now, wanted)
             if manager is not None:
                 manager.audio_sink_ready = False
-                manager.profile_mode = "unknown"
-            _set_status(client, profile_mode="unknown", sink_missing=True, playing=False)
+                manager.a2dp_available = False
+                manager.profile_mode = profile_mode
+            if client is not None:
+                # HFP removed this sink: keeping its name makes the volume
+                # slider, transfer readiness and the health view claim a sink
+                # that is no longer there.
+                client.bluetooth_sink_name = None
+            # These are the facts the existing a2dp_unavailable health path and
+            # the SPA's retry control already read. No new health code is
+            # needed for the operator's manual recovery to be reachable.
+            _set_status(
+                client,
+                profile_mode=profile_mode,
+                a2dp_available=False,
+                sink_missing=True,
+                playing=False,
+            )
             state.publish(error="headset_a2dp_restore_failed", streaming=False)
             raise SourceError("headset_a2dp_restore_failed", "Could not restore the headset A2DP profile and output.")
         card, sink = evidence
@@ -248,6 +306,7 @@ class HeadsetProfileService:
         if client is not None:
             client.bluetooth_sink_name = sink
         _set_status(client, profile_mode="a2dp", a2dp_available=True, sink_missing=False)
+        _clear_missing_sink_error(client)
         self._publish(wanted, None)
         if state.snapshot().error == "headset_a2dp_restore_failed":
             state.publish(error=None)

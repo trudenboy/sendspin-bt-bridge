@@ -121,10 +121,18 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
     quiet period); this helper then mirrors the external-reconnect path:
     configure audio, restart the player subprocess and correct sink
     routing for the other devices.
+
+    A link the Source feed owns is reclaimed as usual — the link is back —
+    but the Player stays stopped: the feed resumes it itself after its own
+    verified A2DP restore, and a fenced configure is not a missing sink.
     """
     if not mgr.maybe_auto_reclaim(connected=connected):
         return False
-    await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
+    owned = _headset_owns_link(mgr)
+    if owned:
+        logger.debug("[%s] Link is owned by the Source capture — leaving the player stopped", mgr.device_name)
+    else:
+        await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     mgr.policy.record_reconnect()
     if mgr.host:
         mgr.host.update_status(
@@ -133,8 +141,11 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
                 "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
             }
         )
-        logger.info("BT management reclaimed for %s, starting sendspin...", mgr.device_name)
-        await mgr.host.start_subprocess()
+        if owned:
+            logger.info("BT management reclaimed for %s — the Source feed owns the link", mgr.device_name)
+        else:
+            logger.info("BT management reclaimed for %s, starting sendspin...", mgr.device_name)
+            await mgr.host.start_subprocess()
     _spawn_background(_correct_other_devices_routing(mgr))
     return True
 
@@ -253,6 +264,17 @@ def _headset_owns_link(mgr: BluetoothManager) -> bool:
     from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
 
     return get_headset_profiles().blocked(mgr.mac_address)
+
+
+def _link_ready_or_owned(mgr: BluetoothManager) -> bool:
+    """Does this link have a sink, or is a Source capture owning it on purpose?
+
+    Every reconnect success/failure decision asks this instead of
+    ``audio_sink_ready`` alone: while a capture owns the link the manager's
+    configuration is fenced and the card stays on HFP, so a missing sink is
+    the expected shape of a call, not a failed reconnect.
+    """
+    return bool(mgr.audio_sink_ready) or _headset_owns_link(mgr)
 
 
 def _report_missing_sink(mgr: BluetoothManager) -> None:
@@ -509,9 +531,10 @@ async def _inner_dbus_monitor(
                 if not await _start_player_on_established_link(mgr, loop):
                     await asyncio.sleep(2)  # adapter busy: look again shortly
                     continue
-            # Clear reconnect state — only once the speaker has a sink; a
-            # link without one is the failure being counted (#414).
-            if mgr.audio_sink_ready:
+            # Clear reconnect state — only once the speaker has a sink, or the
+            # Source capture owns the link on purpose; a genuinely sinkless
+            # speaker is the failure being counted (#414).
+            if _link_ready_or_owned(mgr):
                 if mgr.host and mgr.host.get_status_value("reconnecting"):
                     mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
                 mgr.reconnect_attempt = 0
@@ -617,7 +640,8 @@ async def _inner_dbus_monitor(
                 mgr.reconnect_attempt = 0
                 continue
 
-            if success and not mgr.audio_sink_ready:
+            owned = _headset_owns_link(mgr)
+            if success and not mgr.audio_sink_ready and not owned:
                 logger.warning(
                     "[%s] Link is up but the speaker offers no audio sink — counting attempt %d as failed",
                     mgr.device_name,
@@ -640,7 +664,14 @@ async def _inner_dbus_monitor(
                 # Re-subscribe signals — device object may have changed
                 logger.info("[%s] Reconnected, restarting D-Bus subscription...", mgr.device_name)
                 if mgr.host:
-                    if mgr.audio_sink_ready:
+                    if owned:
+                        # The Source feed owns the card: no A2DP sink is the
+                        # expected shape of a live call, it never publishes the
+                        # missing-sink error, and it resumes the Player after
+                        # its own verified restore.
+                        _clear_missing_sink_error(mgr)
+                        logger.debug("[%s] Link is owned by the Source capture — leaving it alone", mgr.device_name)
+                    elif mgr.audio_sink_ready:
                         _clear_missing_sink_error(mgr)
                         logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                         await mgr.host.start_subprocess()
@@ -673,9 +704,17 @@ async def _inner_dbus_monitor(
                 except Exception as exc:
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:
-                    logger.info("[%s] External reconnect detected, configuring audio...", mgr.device_name)
-                    sink_ok = await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
-                    if sink_ok:
+                    owned = _headset_owns_link(mgr)
+                    if owned:
+                        sink_ok = False
+                        logger.debug(
+                            "[%s] External reconnect, but the Source capture owns the link — leaving it alone",
+                            mgr.device_name,
+                        )
+                    else:
+                        logger.info("[%s] External reconnect detected, configuring audio...", mgr.device_name)
+                        sink_ok = await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
+                    if sink_ok or owned:
                         mgr.reconnect_attempt = 0
                     mgr.policy.record_reconnect()
                     if mgr.host:
@@ -687,7 +726,9 @@ async def _inner_dbus_monitor(
                                 "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
-                        if sink_ok:
+                        if owned:
+                            _clear_missing_sink_error(mgr)
+                        elif sink_ok:
                             _clear_missing_sink_error(mgr)
                             logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                             await mgr.host.start_subprocess()
