@@ -238,6 +238,10 @@ async def test_a_transient_restore_hiccup_is_not_terminal(rig, monkeypatch, tran
     monkeypatch.setattr(headset.bt_audio, "_A2DP_PROFILE_DELAY", 0.0)
     monkeypatch.setattr(headset.bt_audio, "_SINK_RETRY_DELAY", 0.0)
     monkeypatch.setattr(headset.bt_audio, "set_sink_mute", lambda *_: True)
+    # The configure path also asks PulseAudio for a sink's volume; without this
+    # the rig reads the host's real sinks and a connected speaker on the
+    # developer's machine decides the test's outcome.
+    monkeypatch.setattr(headset.bt_audio, "get_sink_volume", lambda *_: None)
     monkeypatch.setattr(headset.bt_audio, "save_device_sink", lambda *_: None)
     monkeypatch.setattr(
         headset.bt_audio,
