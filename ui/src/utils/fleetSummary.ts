@@ -1,5 +1,5 @@
 import type { Device } from '@/api/types'
-import { isDeviceConnected } from './deviceBackend'
+import { isDeviceConnected } from './deviceStatus'
 
 export interface FleetSummary {
   /** Speakers the bridge is meant to run: enabled and not handed over by the user. */

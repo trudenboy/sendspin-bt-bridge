@@ -6,7 +6,7 @@ import os
 import socket
 from dataclasses import asdict
 
-from sendspin_bridge.application import diagnostics as _diag
+from sendspin_bridge.application import read_model
 from sendspin_bridge.application.models import (
     Bridge,
     BridgeStatus,
@@ -21,9 +21,7 @@ from sendspin_bridge.application.models import (
 from sendspin_bridge.application.models.devices import LinkStatus
 from sendspin_bridge.config import load_config
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
-from sendspin_bridge.services.diagnostics.status_model import ma_account_state, verdict_from_issues
-from sendspin_bridge.services.ipc.bridge_state_model import build_bridge_state_model
-from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
+from sendspin_bridge.services.diagnostics.status_model import ma_account_state
 
 
 def bridge_name(config: dict) -> str:
@@ -98,55 +96,15 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
     """Bridge, devices and groups, with guidance — what the dashboard renders."""
     from sendspin_bridge.bridge import state
 
-    registry = get_device_registry_snapshot()
-    snapshot = build_bridge_snapshot(registry.active_clients)
-    config = load_config()
-    preflight = _diag._sampled_preflight_status()
-    startup = snapshot.startup_progress.to_dict() if snapshot.startup_progress else {}
-    bridge_state = build_bridge_state_model(
-        config=config,
-        preflight=preflight,
-        devices=snapshot.devices,
-        ma_connected=snapshot.ma_connected,
-        runtime_mode=snapshot.runtime_mode,
-        startup_progress=startup,
-        update_available=bool(snapshot.update_available),
-        disabled_devices=snapshot.disabled_devices,
-    )
-    onboarding = _diag._build_onboarding_assistant_payload(
-        preflight=preflight,
-        config=config,
-        devices=snapshot.devices,
-        runtime_mode=snapshot.runtime_mode,
-        ma_connected=snapshot.ma_connected,
-        bridge_state=bridge_state,
-    )
-    recovery = _diag._build_recovery_assistant_payload(
-        preflight=preflight,
-        config=config,
-        devices=snapshot.devices,
-        onboarding_assistant=onboarding,
-        startup_progress=startup,
-        bridge_state=bridge_state,
-    )
-    guidance = _diag._build_operator_guidance_payload(
-        config=config,
-        devices=snapshot.devices,
-        disabled_devices=snapshot.disabled_devices,
-        onboarding_assistant=onboarding,
-        recovery_assistant=recovery,
-        startup_progress=startup,
-        preflight=preflight,
-        runtime_mode=snapshot.runtime_mode,
-        ma_connected=snapshot.ma_connected,
-        bridge_state=bridge_state,
-    )
+    inputs = read_model.inputs_now(registry=get_device_registry_snapshot(), config=load_config())
+    view = read_model.build(inputs)
+    snapshot, config, startup = inputs.snapshot, inputs.config, inputs.startup_progress
     # A speaker disabled since the bridge started keeps its client until a
     # restart; it belongs with the disabled speakers all the same.
     running = [d for d in snapshot.devices if d.enabled]
     off = [d for d in snapshot.devices if not d.enabled]
     info = state.get_bridge_system_info()
-    verdict = verdict_from_issues(guidance.get("issue_groups") or [])
+    verdict = view.verdict
     bridge = Bridge(
         name=bridge_name(config),
         version=info.get("version", ""),
@@ -177,11 +135,11 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
         update_available=UpdateInfo(**snapshot.update_available) if snapshot.update_available else None,
         mock_runtime=snapshot.mock_runtime.to_dict() if snapshot.mock_runtime else None,
         sendspin_source=_sendspin_source(config),
-        preflight=preflight,
-        state_model=bridge_state.to_dict(),
-        guidance=guidance,
-        onboarding=onboarding,
-        recovery=recovery,
+        preflight=inputs.preflight,
+        state_model=view.bridge_state.to_dict(),
+        guidance=view.guidance,
+        onboarding=view.onboarding,
+        recovery=view.recovery,
     )
     return BridgeStatus(
         bridge=bridge,

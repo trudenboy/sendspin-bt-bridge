@@ -49,17 +49,21 @@ def bluetooth_connection_state(
     connected: bool,
     never_paired: bool,
 ) -> LinkState:
-    """connected, connecting, disconnected, standby, released, disabled or not_paired."""
+    """connected, connecting, disconnected, standby, released, disabled or not_paired.
+
+    A reconnect outranks standby: a speaker waking from standby is connecting,
+    which is also what its card says.
+    """
     if not enabled:
         return LinkState("disabled", "neutral")
     if not managed:
         return LinkState(
             "released", "warning" if released_by == "auto" else "neutral", "auto" if released_by == "auto" else "user"
         )
-    if standby:
-        return LinkState("standby", "neutral")
     if reconnecting:
         return LinkState("connecting", "warning", "reconnecting")
+    if standby:
+        return LinkState("standby", "neutral")
     if connected:
         return LinkState("connected", "success")
     if never_paired:

@@ -50,7 +50,7 @@ class _Recorder:
 @pytest.fixture
 def owned(monkeypatch):
     service = headset.HeadsetProfileService()
-    service._publish(MAC, "microphone")
+    service._set_handoff(MAC, "microphone")
     monkeypatch.setattr(headset, "_service", service)
     return service
 
@@ -92,7 +92,7 @@ async def test_a_restart_spawns_again_once_the_microphone_releases_the_link(monk
     await client.warm_restart({})
     assert recorder.spawns == 0
 
-    owned._publish(MAC, None)
+    owned._set_handoff(MAC, "none")
     await client.warm_restart({})
 
     assert recorder.spawns == 1
@@ -133,6 +133,6 @@ async def test_a_direct_spawn_request_proceeds_once_the_microphone_releases(monk
     await client._start_sendspin_inner()
     rematch.assert_not_awaited()  # still owned: the guard precedes the rematch
 
-    owned._publish(MAC, None)
+    owned._set_handoff(MAC, "none")
     await client._start_sendspin_inner()
     rematch.assert_awaited_once()

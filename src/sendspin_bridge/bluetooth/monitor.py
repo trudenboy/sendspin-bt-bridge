@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.adapter_session import bt_executor
+from sendspin_bridge.services.bluetooth.headset import owns_link
 from sendspin_bridge.services.ipc.commands import Pause
 
 if TYPE_CHECKING:
@@ -128,7 +129,7 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
     """
     if not mgr.maybe_auto_reclaim(connected=connected):
         return False
-    owned = _headset_owns_link(mgr)
+    owned = owns_link(mgr.mac_address)
     if owned:
         logger.debug("[%s] Link is owned by the Source capture — leaving the player stopped", mgr.device_name)
     else:
@@ -207,7 +208,7 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
     if lease is None:
         return False
     try:
-        if _headset_owns_link(mgr):
+        if owns_link(mgr.mac_address):
             # The microphone owns this link: the Player is stopped and the
             # Source feed resumes it after its own verified A2DP restore.
             logger.debug("[%s] Link is owned by the Source capture — leaving it alone", mgr.device_name)
@@ -220,7 +221,7 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
         sink_ok = await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     finally:
         lease.release()
-    if _headset_owns_link(mgr):
+    if owns_link(mgr.mac_address):
         # Capture began while audio was being configured: the owner refused
         # the configuration on purpose, so a False sink_ok is not a missing
         # sink and must not be reported or reconnected.
@@ -252,20 +253,6 @@ async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool
     return True
 
 
-def _headset_owns_link(mgr: BluetoothManager) -> bool:
-    """Is a Source capture/restore transaction using this link?
-
-    The Source feed deliberately stops the Player and switches the card to
-    HFP, so the heartbeat sees "connected with no player" and no A2DP sink.
-    That is the expected shape of a live call, not the broken link of #476 —
-    reporting a missing sink there would warn on every heartbeat and, with
-    sink recovery on, drop the call.
-    """
-    from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
-
-    return get_headset_profiles().blocked(mgr.mac_address)
-
-
 def _link_ready_or_owned(mgr: BluetoothManager) -> bool:
     """Does this link have a sink, or is a Source capture owning it on purpose?
 
@@ -274,7 +261,7 @@ def _link_ready_or_owned(mgr: BluetoothManager) -> bool:
     configuration is fenced and the card stays on HFP, so a missing sink is
     the expected shape of a call, not a failed reconnect.
     """
-    return bool(mgr.audio_sink_ready) or _headset_owns_link(mgr)
+    return bool(mgr.audio_sink_ready) or owns_link(mgr.mac_address)
 
 
 def _report_missing_sink(mgr: BluetoothManager) -> None:
@@ -640,7 +627,7 @@ async def _inner_dbus_monitor(
                 mgr.reconnect_attempt = 0
                 continue
 
-            owned = _headset_owns_link(mgr)
+            owned = owns_link(mgr.mac_address)
             if success and not mgr.audio_sink_ready and not owned:
                 logger.warning(
                     "[%s] Link is up but the speaker offers no audio sink — counting attempt %d as failed",
@@ -704,7 +691,7 @@ async def _inner_dbus_monitor(
                 except Exception as exc:
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:
-                    owned = _headset_owns_link(mgr)
+                    owned = owns_link(mgr.mac_address)
                     if owned:
                         sink_ok = False
                         logger.debug(

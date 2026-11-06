@@ -35,7 +35,7 @@ def _manager(installed_bluez, *, enable_a2dp_dance: bool = True):
 def owned_link(monkeypatch):
     """Publish a live microphone capture for MAC through the real service."""
     service = headset.HeadsetProfileService()
-    service._publish(MAC, "microphone")
+    service._set_handoff(MAC, "microphone")
     monkeypatch.setattr(headset, "_service", service)
     return service
 
@@ -98,7 +98,7 @@ async def test_the_manager_refuses_a_sink_reconnect_while_the_microphone_owns_th
 
         # The guard — not a spent retry budget — is what refused: once the
         # link is free again the same call does drop it.
-        owned_link._publish(MAC, None)
+        owned_link._set_handoff(MAC, "none")
         assert await asyncio.to_thread(mgr.request_sink_reconnect) is True
         disconnect.assert_called_once()
 

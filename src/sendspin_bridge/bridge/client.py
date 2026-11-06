@@ -2119,11 +2119,11 @@ class SendspinClient:
         await self._restart_daemon(settle_s=1.0)
 
     def _headset_owns_link(self) -> bool:
-        """Whether the Source feed owns this link (microphone, or a restore in flight)."""
-        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
+        """Whether the Source feed owns this link: a Microphone hand-off is under way or stuck."""
+        from sendspin_bridge.services.bluetooth.headset import owns_link
 
         mac = getattr(getattr(self, "bt_manager", None), "mac_address", None)
-        return isinstance(mac, str) and bool(mac) and get_headset_profiles().blocked(mac)
+        return isinstance(mac, str) and owns_link(mac)
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""

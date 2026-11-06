@@ -34,6 +34,7 @@ from sendspin_bridge.bluetooth.reconnect_policy import (
 )
 from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID, A2DP_SOURCE_UUID, AUDIO_SINK_UUIDS, describe_uuids
 from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS, bt_rssi_mgmt
+from sendspin_bridge.services.bluetooth.headset import owns_link
 
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
 # socket (``MGMT_OP_GET_CONN_INFO`` opcode 0x0031), wrapped in
@@ -795,12 +796,6 @@ class BluetoothManager:
         with get_headset_profiles().automatic_audio(self.mac_address) as allowed:
             return self._configure_bluetooth_audio_owned() if allowed else False
 
-    def _headset_owns_link(self) -> bool:
-        """Is a Source capture using this link (microphone, or a restore in flight)?"""
-        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
-
-        return get_headset_profiles().blocked(self.mac_address)
-
     def _recover_sink_after_connect(self) -> bool:
         """Ask a freshly connected speaker for an A2DP sink, and prove it.
 
@@ -833,7 +828,7 @@ class BluetoothManager:
             # The dance is experimental/opt-in because on some headless setups
             # it hurts more than it helps (see #174 / forum #78).
             sink_ok = self.configure_bluetooth_audio()
-            if get_headset_profiles().blocked(self.mac_address):
+            if owns_link(self.mac_address):
                 # A capture took the card while the configure ran; its drain is
                 # waiting for this lock. The profile belongs to it now.
                 logger.debug(
@@ -944,7 +939,7 @@ class BluetoothManager:
             self._paired_unknown_count = 0
             if self._abort_connect_if_cancelled():
                 return False
-            if self._headset_owns_link():
+            if owns_link(self.mac_address):
                 # The Source feed owns the card (HFP microphone, or a restore
                 # in flight): its profile is not ours to flip or reconfigure.
                 logger.debug("[%s] Link is owned by the Source capture — leaving its profile alone", self.device_name)
@@ -995,7 +990,7 @@ class BluetoothManager:
                 self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
                     return False
-                if self._headset_owns_link():
+                if owns_link(self.mac_address):
                     # A call was already running when the link came back: the
                     # Source feed keeps the card on HFP and restores A2DP (and
                     # the Player) itself. Nothing here is ours to change.
@@ -1271,9 +1266,8 @@ class BluetoothManager:
         Returns whether the disconnect was made. At most ``SINK_RECONNECT_TRIES`` per
         ``SINK_RECONNECT_WINDOW_S``: a speaker that simply has no sink profile must not loop.
         """
-        from sendspin_bridge.services.bluetooth.headset import get_headset_profiles
 
-        if get_headset_profiles().blocked(self.mac_address):
+        if owns_link(self.mac_address):
             # The Source feed owns the card (HFP microphone, or a restore in
             # flight); dropping the link here would end the call.
             logger.debug(

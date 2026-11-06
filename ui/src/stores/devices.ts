@@ -14,8 +14,12 @@ import {
 } from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
-import { isDeviceConnected, isOutputMissing, isPulseSink, resolveAdapter } from '@/utils/deviceBackend'
+import { isPulseSink, resolveAdapter } from '@/utils/deviceBackend'
+import { deviceState, isDeviceConnected } from '@/utils/deviceStatus'
 import type { Device, DisabledDevice } from '@/api/types'
+
+/** The player's status lives in one module; re-exported where callers have always found it. */
+export { deviceState } from '@/utils/deviceStatus'
 
 export type DeviceSortField = 'activity' | 'name' | 'status' | 'adapter'
 export type SortDirection = 'asc' | 'desc'
@@ -163,37 +167,6 @@ export function sortDevices(list: Device[], by: DeviceSortField, dir: SortDirect
     )
   else sorted = [...list].sort(byName)
   return dir === 'asc' ? sorted : sorted.reverse()
-}
-
-/**
- * One status per speaker, most decisive first (stable 2.76's order): switched
- * off, handed over to other devices, stopping, reconnecting, parked on
- * standby, output gone, muted at system level, playing, starting to play,
- * then its health.
- */
-export function deviceState(d: Device): string {
-  if (!d.enabled) return 'disabled'
-  if (d.bluetooth?.management_enabled === false) return 'released'
-  if (d.sendspin.stopping) return 'stopping'
-  if (d.bluetooth?.reconnecting || d.music_assistant.reconnecting) return 'reconnecting'
-  if (d.bluetooth?.standby) return 'standby'
-  if (isOutputMissing(d)) return 'output_missing'
-  const connected = isDeviceConnected(d)
-  if (connected && d.audio.has_sink && d.audio.sink_muted && !d.audio.muted) return 'sink_muted'
-  if (d.playback.playing && d.audio.streaming) return 'streaming'
-  if (connected && isBuffering(d)) return 'buffering'
-  // A local output has no Bluetooth link: present means connected, whatever an
-  // older bridge's Bluetooth-only health said.
-  if (isPulseSink(d) && d.health.state === 'offline') return connected ? 'ready' : 'offline'
-  if (d.health.state && d.health.state !== 'unknown') return d.health.state
-  return connected ? 'ready' : 'offline'
-}
-
-/** Audio is buffering, or Music Assistant plays to the speaker but it has not started yet. */
-function isBuffering(d: Device): boolean {
-  if (d.audio.buffering) return true
-  const np = d.music_assistant.now_playing as { state?: unknown } | null
-  return np?.state === 'playing' && d.playback.server_connected && d.audio.has_sink && !d.playback.playing
 }
 
 export const useDeviceStore = defineStore('devices', () => {

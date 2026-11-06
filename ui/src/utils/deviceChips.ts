@@ -6,8 +6,8 @@
  * dashboard.
  */
 import type { AudioSink, Device, Group } from '@/api/types'
-import { isDeviceConnected, isPulseSink, resolveAdapter } from './deviceBackend'
-import { deviceState } from '@/stores/devices'
+import { isPulseSink, resolveAdapter } from './deviceBackend'
+import { deviceState, isDeviceConnected } from './deviceStatus'
 import { safeHttpUrl } from './safeUrl'
 import { queueControls } from './queueControls'
 

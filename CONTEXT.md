@@ -105,7 +105,13 @@ per input so a restart does not move a level the operator set.
 **Microphone hand-off** — temporarily using a headset's HFP microphone instead
 of its A2DP output. Its Player rests while the microphone is in use and can
 resume only when the A2DP output is confirmed ready. A failed return leaves
-the Player stopped until the operator requests recovery.
+the Player stopped until the operator requests recovery. Its phases are
+`none` (the device plays as an output), `acquiring`, `microphone`,
+`restoring` and `restore_failed`; anything but `none` means the Source feed
+owns the link and automatic output work — reconnects, sink recovery, Player
+starts — stays out. One owner switches the card and is the only writer of the
+profile facts the rest of the bridge reads. Not the same thing as the Link
+role, which is read from evidence rather than held.
 
 **Pairing window** — the limited time in which a phone can pair with the
 bridge, or Music Assistant can pair with the Source feed using its code.
@@ -138,6 +144,20 @@ same client after a restart.
 paired with, plus the last playback server. Persisted next to the identity.
 PIN pairing is optional and off by default; unpaired access still uses Noise
 transport encryption.
+
+## Health
+
+**Read model** — the bridge's health story, built once from one set of read
+inputs: the config, the host probe and the runtime snapshot. The state
+model, onboarding, recovery, guidance and the verdict are all derived from
+those inputs, so the header pill, the guidance and recovery panels and the
+diagnostics bundle cannot disagree. The only difference a surface may ask for
+is a fresh host probe instead of the sampled one — a diagnostics bundle does,
+because it is taken when something looks wrong.
+
+**Verdict** — the worst severity among the guidance issues (`ok`, `warning`,
+`error`) and how many stand behind it. The header pill's tone and the
+Diagnostics status are the same verdict.
 
 ## Music Assistant
 

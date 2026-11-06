@@ -420,7 +420,7 @@ def test_a2dp_retry_rejects_microphone_ownership(api_client, registry, monkeypat
     from sendspin_bridge.services.bluetooth import headset
 
     owner = headset.HeadsetProfileService()
-    owner._publish(MAC, "acquiring")
+    owner._set_handoff(MAC, "acquiring")
     monkeypatch.setattr(headset, "_service", owner)
     speaker = _speaker()
     speaker.bt_manager.connected = True

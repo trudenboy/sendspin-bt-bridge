@@ -1,5 +1,6 @@
 import type { Device } from '@/api/types'
-import { isDeviceConnected, isPulseSink } from './deviceBackend'
+import { isPulseSink } from './deviceBackend'
+import { isDeviceConnected } from './deviceStatus'
 import { canDo } from './supportedActions'
 
 /** Power actions the selection bar applies to many speakers at once. */
