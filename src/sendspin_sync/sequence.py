@@ -390,6 +390,7 @@ def needed_s(members: int, point: str, lead_s: float = LEAD_S) -> float:
 
 _SKEW_MIN_CLICKS = 3  # clicks a stretch needs to count towards the fit
 _SKEW_MAX_MS_PER_S = 0.5  # 500 ppm: a larger fit is a bad click, not a clock
+_SKEW_AGREEMENT_MS_PER_S = 0.04  # 40 ppm: members must agree before a common clock rate is inferred
 
 
 def rate_skew(clicks_by_window: Sequence[Sequence[tuple[float, float]]]) -> float:
@@ -397,11 +398,12 @@ def rate_skew(clicks_by_window: Sequence[Sequence[tuple[float, float]]]) -> floa
     recording (1 ms/s is 1000 ppm), from each stretch's clicks as (capture time s, phase ms): the
     slope of phase over time with every stretch keeping its own level. 0.0 when fewer than two
     stretches have enough clicks, or the fit is implausible."""
+    from statistics import median
+
     from sendspin_sync import click_track
 
     cycle_ms = click_track.CYCLE_S * 1000.0
-    num = den = 0.0
-    used = 0
+    fits: list[tuple[float, float]] = []
     for clicks in clicks_by_window:
         if len(clicks) < _SKEW_MIN_CLICKS:
             continue
@@ -409,10 +411,15 @@ def rate_skew(clicks_by_window: Sequence[Sequence[tuple[float, float]]]) -> floa
         points = [(t, ((p - p0 + cycle_ms / 2) % cycle_ms) - cycle_ms / 2) for t, p in clicks]
         t_mean = sum(t for t, _ in points) / len(points)
         p_mean = sum(p for _, p in points) / len(points)
-        num += sum((t - t_mean) * (p - p_mean) for t, p in points)
-        den += sum((t - t_mean) ** 2 for t, _ in points)
-        used += 1
-    if used < 2 or den <= 0.0:
+        num = sum((t - t_mean) * (p - p_mean) for t, p in points)
+        den = sum((t - t_mean) ** 2 for t, _ in points)
+        if den > 0.0 and abs(num / den) <= _SKEW_MAX_MS_PER_S:
+            fits.append((num, den))
+    if len(fits) < 2:
         return 0.0
-    slope = num / den
+    centre = median(num / den for num, den in fits)
+    agreeing = [(num, den) for num, den in fits if abs(num / den - centre) <= _SKEW_AGREEMENT_MS_PER_S]
+    if len(agreeing) < 2:
+        return 0.0  # drift in a single speaker is not the recorder's clock
+    slope = sum(num for num, _den in agreeing) / sum(den for _num, den in agreeing)
     return slope if abs(slope) <= _SKEW_MAX_MS_PER_S else 0.0

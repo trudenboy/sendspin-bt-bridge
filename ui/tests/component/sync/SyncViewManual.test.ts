@@ -168,7 +168,7 @@ describe('SyncView manual tuning', () => {
     expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 130)
     expect(api.finishSession).toHaveBeenCalledWith('s1')
     expect(confirmDialog).not.toHaveBeenCalled()
-    expect(w.get('[data-manual-saved]').text()).toBe('Saved')
+    expect(w.get('[data-manual-saved]').text()).toBe('Tuning finished')
     expect(w.find('[data-manual-ended]').exists()).toBe(false)
     w.unmount()
   })

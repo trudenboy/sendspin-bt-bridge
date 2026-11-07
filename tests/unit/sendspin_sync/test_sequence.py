@@ -228,3 +228,16 @@ def test_the_uncorrected_estimate_is_skewed_by_the_recorder_clock():
     assert placed is not None
     m = {r.member: estimator.estimate(r) for r in placed[1]}
     assert abs(planner.unwrap_lag_ms(m["c"].phase_ms, m["a"].phase_ms) - 12.0) > 1.0
+
+
+def test_a_speakers_own_drift_is_not_taken_for_the_recorders_clock():
+    steady = [(0.0, 0.0), (2.0, 0.0), (4.0, 0.0)]
+    moving = [(12.0, 30.0), (14.0, 30.6), (16.0, 31.2)]
+    assert seq.rate_skew([steady, moving]) == 0.0
+    assert seq.rate_skew([steady, steady, moving]) == 0.0
+
+
+def test_recorder_drift_across_phase_wrap_is_measured():
+    first = [(0.0, 9999.9), (2.0, 0.1), (4.0, 0.3)]
+    second = [(12.0, 29.0), (14.0, 29.2), (16.0, 29.4)]
+    assert seq.rate_skew([first, second]) == pytest.approx(0.1, abs=0.001)

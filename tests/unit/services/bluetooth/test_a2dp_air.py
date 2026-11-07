@@ -56,6 +56,20 @@ def media_sdu(seq: int, ts: int, frames: int = 7) -> bytes:
     return struct.pack(">BBHII", 0x80, 0x60, seq, ts, 1) + bytes([frames]) + REAL_SBC_FRAME * frames
 
 
+@pytest.mark.parametrize("decode_frames", [True, False])
+def test_a_payload_with_an_sbc_sync_byte_but_no_valid_frame_is_not_sbc(decode_frames):
+    stats = air.ParseStats()
+    streams: set[int] = set()
+    fake_frame = bytearray(REAL_SBC_FRAME)
+    fake_frame[3] ^= 0xFF  # sync word and header match; CRC proves this is not a valid SBC frame
+    payload = REAL_RTP_HEADER + b"\x01" + bytes(fake_frame)
+    fields = air._media_fields(1.0, 0, HANDLE, CID, payload, stats, streams, decode_frames=decode_frames)
+    assert fields is not None
+    packet = air._packet(fields, None)
+    assert packet.codec == "unknown"
+    assert CID not in streams
+
+
 def fragments(sdu: bytes, cid: int = CID, sizes: tuple[int, ...] = (300, 300)) -> list[tuple[int, bytes]]:
     """Split an L2CAP PDU into (pb, chunk) ACL fragments: first-flushable then continuations."""
     pdu = l2cap(cid, sdu)

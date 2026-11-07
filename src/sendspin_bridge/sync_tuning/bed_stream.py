@@ -119,6 +119,20 @@ class BedStreams:
         self._spawn = spawn
         self._beds: dict[str, _Bed] = {}
         self._lock = threading.Lock()
+        self._owners_lock = threading.RLock()
+        self._owners: dict[str, set[str]] = {}
+
+    def acquire(self, owner: str, sinks: Iterable[str]) -> None:
+        """Keep these sinks awake for *owner*, without disturbing another session's sinks."""
+        with self._owners_lock:
+            self._owners[owner] = {sink for sink in sinks if sink}
+            self.sync(set().union(*self._owners.values()))
+
+    def release(self, owner: str) -> None:
+        """Release only this owner's sinks; shared sinks stay awake for their other owners."""
+        with self._owners_lock:
+            self._owners.pop(owner, None)
+            self.sync(set().union(*self._owners.values()))
 
     def active(self) -> list[str]:
         with self._lock:
@@ -145,10 +159,12 @@ class BedStreams:
             logger.info("Tuning keep-awake stream started on %s", sink)
 
     def stop_all(self) -> None:
-        with self._lock:
-            beds = list(self._beds.values())
-            self._beds.clear()
-        for bed in beds:
-            bed.stop()
+        with self._owners_lock:
+            self._owners.clear()
+            with self._lock:
+                beds = list(self._beds.values())
+                self._beds.clear()
+            for bed in beds:
+                bed.stop()
         if beds:
             logger.info("Tuning keep-awake streams stopped (%d)", len(beds))

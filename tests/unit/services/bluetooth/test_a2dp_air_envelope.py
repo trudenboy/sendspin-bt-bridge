@@ -511,6 +511,23 @@ def test_too_many_frames_per_second_is_unsupported():
     assert (s.state, s.reason) == ("unsupported_codec", "sbc_params")
 
 
+@pytest.mark.parametrize("rate", [44100, 48000])
+def test_twelve_block_sbc_is_within_the_envelope_work_budget(rate):
+    tracker = AirLinkTracker()
+    pk = [
+        replace(
+            p,
+            frames=tuple(replace(f, sampling_rate=rate, blocks=12, subbands=8) for f in p.frames),
+            rtp_ts=k * 7 * 96,
+            t_send=10.0 + k * 7 * 96 / rate,
+        )
+        for k, p in enumerate(packets(40))
+    ]
+    feed(tracker, pk)
+    assert tracker.take_batches(1e12, force=True)
+    assert tracker.state(pk[-1].t_send * 1e6).reason != "sbc_params"
+
+
 def test_non_sbc_is_unsupported_after_2s():
     tr = AirLinkTracker(codec_hint=lambda: "aac")
     for k in range(150):

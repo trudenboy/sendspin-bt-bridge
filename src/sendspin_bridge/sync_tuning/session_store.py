@@ -78,6 +78,7 @@ class SessionStore:
         self._file_lock = threading.Lock()  # leaf: the persisted entries and the file
         self._sessions: dict[str, SyncSession] = {}
         self._controls: dict[str, GroupControl] = {}
+        self._cleanups: dict[str, list[Callable[[], None]]] = {}
         self._closed: set[str] = set()
         self._next_restore: dict[str, float] = {}
         self._attempts: dict[str, int] = {}
@@ -193,6 +194,8 @@ class SessionStore:
     def publish_change(self, session: SyncSession) -> None:
         """``on_change`` of every session: persist what it did to the group and publish its state."""
         data = session.to_dict()
+        if data["state"] in (*_ENDED, "restoring"):
+            self._release_resources(session.id)
         clicker = session.clicker_url
         volumes = data["volumes_before"]
         if data["state"] in _ENDED or (not data["muted"] and clicker is None and not volumes):
@@ -218,6 +221,35 @@ class SessionStore:
             self._publish(payload)
         except Exception:
             logger.warning("Publishing a sync event failed", exc_info=True)
+
+    def own_resource(self, session_id: str, cleanup: Callable[[], None]) -> None:
+        """Release a runtime resource when the session begins restoring, on every end path.
+
+        Register outside the session lock. If it already ended, release immediately; cleanup
+        runs on a worker so stopping an audio process never holds the session's lock.
+        """
+        session = self.get(session_id)
+        with self._lock:
+            self._cleanups.setdefault(session_id, []).append(cleanup)
+        # Append before reading state: either the ending publisher drains it, or this read sees
+        # that the publisher has already ended the session. No session lock is needed here.
+        if session.state in (*_ENDED, "restoring"):
+            self._release_resources(session_id)
+
+    def _release_resources(self, session_id: str) -> None:
+        with self._lock:
+            cleanups = self._cleanups.pop(session_id, [])
+        if not cleanups:
+            return
+
+        def release() -> None:
+            for cleanup in cleanups:
+                try:
+                    cleanup()
+                except Exception:
+                    logger.warning("Releasing sync session %s resource failed", session_id, exc_info=True)
+
+        run_in_background(release, name=f"sync-cleanup-{session_id[:8]}")
 
     # -- last measurement per member ---------------------------------------------------
     def mark_measured(self, group_id: str, member: str, at: str) -> None:

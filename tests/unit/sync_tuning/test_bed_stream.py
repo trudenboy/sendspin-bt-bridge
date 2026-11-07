@@ -113,3 +113,22 @@ def test_stopping_twice_is_harmless():
     beds.stop_all()
     beds.stop_all()
     assert beds.active() == []
+
+
+def test_sessions_keep_their_own_sinks_and_share_a_single_stream():
+    beds, spawned = _manager()
+    try:
+        beds.acquire("first", ["a", "shared"])
+        shared = spawned["shared"]
+        beds.acquire("second", ["b", "shared"])
+        assert beds.active() == ["a", "b", "shared"]
+        assert spawned["shared"] is shared
+        beds.release("first")
+        assert beds.active() == ["b", "shared"]
+        assert spawned["a"].closed
+        assert not shared.closed
+        beds.release("second")
+        assert beds.active() == []
+        assert shared.closed
+    finally:
+        beds.stop_all()
