@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.26] - 2026-11-07
+
 ### Fixed
 
 - A new `PULSE_LATENCY_MSEC` saved in Settings now takes effect when the speakers restart, instead of only after the whole bridge restarts; its lowest accepted value is 1 ms everywhere.
@@ -7049,7 +7051,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.24...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.25...HEAD
+[3.2.0-beta.25]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.24...v3.2.0-beta.25
 [3.2.0-beta.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.23...v3.2.0-beta.24
 [3.2.0-beta.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.22...v3.2.0-beta.23
 [3.2.0-beta.22]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.21...v3.2.0-beta.22
