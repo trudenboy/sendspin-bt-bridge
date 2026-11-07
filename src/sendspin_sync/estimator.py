@@ -248,8 +248,9 @@ def estimate_per_click(recording: Recording, *, epoch_s: float = 0.0) -> Measure
 
 def _per_click(
     recording: Recording, epoch_s: float, x: list[float], env: list[float]
-) -> tuple[Measurement, float | None]:
-    """The per-click measurement, and the phase of a click sequence it found but judged too weak (else None)."""
+) -> tuple[Measurement, float | None, list[tuple[float, float]]]:
+    """The per-click measurement, the phase of a click sequence it found but judged too weak (else None), and
+    each click it measured as (capture time, phase in ms) — empty unless the measurement holds."""
     sr, member = recording.sample_rate, recording.member
     n = len(x)
     frame = max(1, round(sr / 1000))
@@ -269,9 +270,9 @@ def _per_click(
         events = sorted(sorted(events, key=lambda e: e[1], reverse=True)[:plausible])
     pairs = _click_sequence(_clusters(_chirps(x, sr, events, frame), sr), sr)
     if not pairs:  # in a crowded room "no clicks" means they did not stand out of the noise
-        return _not_heard(member, "low_snr" if crowded else "no_clicks", x), None
+        return _not_heard(member, "low_snr" if crowded else "no_clicks", x), None, []
     if len(pairs) < MIN_CLICKS:
-        return _not_heard(member, "too_few_clicks", x, clicks=len(pairs)), None
+        return _not_heard(member, "too_few_clicks", x, clicks=len(pairs)), None, []
     cycle_ms = ct.CYCLE_S * 1000.0
     phases = [
         ((recording.start_time_s + a.pos / sr - ct.LEAD_IN_S - k * ct.PERIOD_S - epoch_s) * 1000.0) % cycle_ms
@@ -281,27 +282,36 @@ def _per_click(
     snrs = sorted(10 * math.log10(max(min(a.env_peak, b.env_peak), 1e-12) / floor) for a, b, _ in pairs)
     snr_db = snrs[len(snrs) // 2]
     mean, spread = circular_mean_ms(phases, cycle_ms)
+    clicks = [(recording.start_time_s + a.pos / sr, phase) for (a, _b, _k), phase in zip(pairs, phases, strict=True)]
     if snr_db < MIN_SNR_DB:
-        return _not_heard(member, "low_snr", x, clicks=len(pairs)), mean
+        return _not_heard(member, "low_snr", x, clicks=len(pairs)), mean, []
     confidence = round(max(0.0, min(1.0, (snr_db - MIN_SNR_DB) / 20.0)) * (1.0 if spread <= 1.0 else 0.7), 3)
     if spread > MAX_SPREAD_MS:
-        return Measurement(
+        return (
+            Measurement(
+                member=member,
+                status="unstable",
+                reason="spread",
+                phase_ms=round(mean, 2),
+                clicks=len(pairs),
+                spread_ms=round(spread, 2),
+                confidence=confidence,
+            ),
+            None,
+            [],
+        )
+    return (
+        Measurement(
             member=member,
-            status="unstable",
-            reason="spread",
+            status="ok",
             phase_ms=round(mean, 2),
             clicks=len(pairs),
             spread_ms=round(spread, 2),
             confidence=confidence,
-        ), None
-    return Measurement(
-        member=member,
-        status="ok",
-        phase_ms=round(mean, 2),
-        clicks=len(pairs),
-        spread_ms=round(spread, 2),
-        confidence=confidence,
-    ), None
+        ),
+        None,
+        clicks,
+    )
 
 
 # --- coherent estimate: every click of the window accumulated on the click track's known schedule ----------------
@@ -529,19 +539,27 @@ def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
     A per-click ``unstable`` stands: its clicks were heard and disagree, and the coherent sum would average a
     speaker whose timing moved into one confident number. A click sequence it found but judged too weak
     (``low_snr``) is measured by the coherent path when the two agree within MAX_SPREAD_MS."""
+    return estimate_with_clicks(recording, epoch_s=epoch_s)[0]
+
+
+def estimate_with_clicks(
+    recording: Recording, *, epoch_s: float = 0.0
+) -> tuple[Measurement, list[tuple[float, float]]]:
+    """``estimate``, and the clicks it measured one by one as (capture time s, phase ms): their trend over
+    one window shows the recorder's clock rate (empty when the coherent path measured)."""
     if not _valid(recording, epoch_s):
-        return _invalid(recording.member)
+        return _invalid(recording.member), []
     x = pcm_to_floats(recording.pcm)
     env = band_envelope(x, recording.sample_rate)
-    per_click, weak_phase = _per_click(recording, epoch_s, x, env)
+    per_click, weak_phase, clicks = _per_click(recording, epoch_s, x, env)
     if per_click.status != "not_heard":
-        return per_click
+        return per_click, clicks
     found = _coherent(x, env, recording.sample_rate, recording.start_time_s - epoch_s)
     coherent = _coherent_measurement(recording.member, found)
     if coherent.status != "ok" or coherent.phase_ms is None:  # an unstable sum over weak clicks proves nothing
-        return per_click
+        return per_click, []
     if weak_phase is not None:
         cycle_ms = ct.CYCLE_S * 1000.0
         if abs((coherent.phase_ms - weak_phase + cycle_ms / 2) % cycle_ms - cycle_ms / 2) > MAX_SPREAD_MS:
-            return per_click
-    return coherent
+            return per_click, []
+    return coherent, []

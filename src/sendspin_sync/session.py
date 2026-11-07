@@ -59,6 +59,23 @@ _ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "tuning")
 _MEASURING: tuple[State, ...] = ("measuring", "proposed")
 
 
+def measure_windows(recordings: list[Recording]) -> dict[str, Measurement]:
+    """Each member's stretch of one recording measured, with the recorder's clock rate taken out: a
+    phase measured later in the file is moved back by the rate times its place in the file."""
+    from sendspin_sync import click_track
+
+    measured = [(rec, *estimator.estimate_with_clicks(rec)) for rec in recordings]
+    skew = seq.rate_skew([clicks for _rec, _m, clicks in measured])
+    cycle_ms = click_track.CYCLE_S * 1000.0
+    out: dict[str, Measurement] = {}
+    for rec, m, _clicks in measured:
+        if skew and m.phase_ms is not None and rec.sample_rate:
+            middle_s = rec.start_time_s + len(rec.pcm) / 2 / rec.sample_rate / 2
+            m = dataclasses.replace(m, phase_ms=round((m.phase_ms - skew * middle_s) % cycle_ms, 2))
+        out[rec.member] = m
+    return out
+
+
 def _locked[**P, R](fn: Callable[Concatenate[SyncSession, P], R]) -> Callable[Concatenate[SyncSession, P], R]:
     @functools.wraps(fn)
     def wrapper(self: SyncSession, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -629,8 +646,7 @@ class SyncSession:
             for s in slots:
                 results[s.member] = Measurement(member=s.member, status="not_heard", reason="no_clicks")
         else:
-            for rec in placed[1]:
-                results[rec.member] = estimator.estimate(rec)
+            results.update(measure_windows(placed[1]))
         with self._lock:
             self._require(*_MEASURING)
             if self.sequence is not current or self.clicker_starts != clicks:

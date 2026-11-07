@@ -200,3 +200,31 @@ def test_clicks_before_the_sequence_began_do_not_move_a_noisy_alignment():
 
     assert placed is not None and placed[0] == pytest.approx(1.7, abs=1.0)
     assert all(estimator.estimate(r).status == "ok" for r in placed[1])
+
+
+# -- the recorder's clock -------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("ppm", [-150.0, 100.0])
+def test_a_recorder_clock_that_runs_fast_or_slow_does_not_skew_later_members(ppm):
+    """Members play 12 s apart: 100 ppm off is 1.2 ms for b and 2.4 ms for c, against a 3 ms
+    target; the click period (exactly 2 s) measures the recorder's rate and takes it out."""
+    from sendspin_sync import session as session_mod
+
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, drift_ppm=ppm)
+    placed = seq.cut(pcm, 16000, slots, "device")
+    assert placed is not None
+
+    m = session_mod.measure_windows(placed[1])
+
+    assert planner.unwrap_lag_ms(m["b"].phase_ms, m["a"].phase_ms) == pytest.approx(30.0, abs=0.5)
+    assert planner.unwrap_lag_ms(m["c"].phase_ms, m["a"].phase_ms) == pytest.approx(12.0, abs=0.5)
+
+
+def test_the_uncorrected_estimate_is_skewed_by_the_recorder_clock():
+    """Pins why the correction exists: without it, c reads well over a millisecond off."""
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, drift_ppm=100.0)
+    placed = seq.cut(pcm, 16000, slots, "device")
+    assert placed is not None
+    m = {r.member: estimator.estimate(r) for r in placed[1]}
+    assert abs(planner.unwrap_lag_ms(m["c"].phase_ms, m["a"].phase_ms) - 12.0) > 1.0

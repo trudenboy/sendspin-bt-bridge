@@ -29,6 +29,7 @@ def sequence_recording(
     noise: float = 0.01,
     silent: frozenset[str] = frozenset(),
     capture_start_s: float = 20.0,
+    drift_ppm: float = 0.0,
 ) -> tuple[bytes, list[seq.Slot]]:
     """int16 mono PCM of a recording that began ``started_at_s`` before the sequence did; member m
     plays ``lags[m]`` late. Returns the PCM and the slots the bridge timed."""
@@ -47,6 +48,7 @@ def sequence_recording(
             duration_s=duration,
             noise=0.0,
             sample_rate=sample_rate,
+            drift_ppm=drift_ppm,
         )
         y = struct.unpack(f"<{n}h", rec.pcm[: 2 * n])
         lo, hi = round((started_at_s + s.start_s) * sample_rate), round((started_at_s + s.end_s) * sample_rate)

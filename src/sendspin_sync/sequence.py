@@ -378,3 +378,41 @@ def needed_s(members: int, point: str, lead_s: float = LEAD_S) -> float:
     """How much click track a sequence of *members* uses up, Music Assistant's steps included: the
     clicks must still play when the last member's solo ends."""
     return length_s(members, point, lead_s) + members * STEP_OVERHEAD_S + MARGIN_S
+
+
+# -- the recorder's clock ---------------------------------------------------------------------------
+#
+# One recording of the sequence is one clock, but the recorder's clock is not the bridge's: a phone or a
+# USB microphone runs some tens of ppm fast or slow, and members play 12-15 s apart, so the later a member
+# plays the more its phase is off (50 ppm over 45 s is 2.3 ms). Every click of one member plays at the
+# same phase of the click track, so within each member's stretch the phase of its clicks should not move;
+# what it does move is the recorder's rate. A pooled fit over every stretch measures it.
+
+_SKEW_MIN_CLICKS = 3  # clicks a stretch needs to count towards the fit
+_SKEW_MAX_MS_PER_S = 0.5  # 500 ppm: a larger fit is a bad click, not a clock
+
+
+def rate_skew(clicks_by_window: Sequence[Sequence[tuple[float, float]]]) -> float:
+    """How fast the recorder's clock runs against the click track, in ms of phase per second of
+    recording (1 ms/s is 1000 ppm), from each stretch's clicks as (capture time s, phase ms): the
+    slope of phase over time with every stretch keeping its own level. 0.0 when fewer than two
+    stretches have enough clicks, or the fit is implausible."""
+    from sendspin_sync import click_track
+
+    cycle_ms = click_track.CYCLE_S * 1000.0
+    num = den = 0.0
+    used = 0
+    for clicks in clicks_by_window:
+        if len(clicks) < _SKEW_MIN_CLICKS:
+            continue
+        p0 = clicks[0][1]
+        points = [(t, ((p - p0 + cycle_ms / 2) % cycle_ms) - cycle_ms / 2) for t, p in clicks]
+        t_mean = sum(t for t, _ in points) / len(points)
+        p_mean = sum(p for _, p in points) / len(points)
+        num += sum((t - t_mean) * (p - p_mean) for t, p in points)
+        den += sum((t - t_mean) ** 2 for t, _ in points)
+        used += 1
+    if used < 2 or den <= 0.0:
+        return 0.0
+    slope = num / den
+    return slope if abs(slope) <= _SKEW_MAX_MS_PER_S else 0.0
