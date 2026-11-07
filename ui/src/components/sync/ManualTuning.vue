@@ -79,8 +79,8 @@ watch(
 )
 
 /*
- * Simple layout: "unsaved" is measured against where the session started; when a session starts or
- * ends, what is on screen is the new starting point (after Save the delays are the held ones).
+ * Simple layout: changed values are measured against where the session started; they are applied
+ * live. Finishing keeps them; Discard explicitly puts the starting delays back.
  */
 /** The session while it runs (a finished one that is restoring the group no longer edits anything). */
 const running = computed(() => {

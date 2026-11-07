@@ -12,7 +12,7 @@ Defect ids refer to the audit: **A** group sync tuning, **B** playout engine, **
 **D** timing model and UI. "Confirmed" means the code path was traced; "runtime" means the size
 of the effect needs a measurement on real speakers before a fix is designed.
 
-## Done (branch `fix/sync-measurement-round`)
+## Released in 3.2.0-beta.25 (`fix/sync-measurement-round`)
 
 | Id | What was wrong | What changed |
 |---|---|---|
@@ -26,24 +26,30 @@ of the effect needs a measurement on real speakers before a fix is designed.
 ADR-0005 is amended (§4 replaced, §3 limited to a constant latency). `CONTEXT.md` gains a Group
 sync section.
 
-Also unmerged: `refactor/status-read-model` (one read model for every health surface, link-state
-driven device status in the UI, the Microphone hand-off owner with a card seam).
+Also released in beta.25: `refactor/status-read-model` (one read model for every health surface,
+link-state driven device status in the UI, the Microphone hand-off owner with a card seam).
 
-## Phase 0 — point fixes (hours each, no design)
+## Implemented next (`fix/sync-phase0`, not released)
+
+| Id | Implementation and checks |
+|---|---|
+| D-M3 | Saved `PULSE_LATENCY_MSEC` replaces the inherited startup value in each daemon's environment; spawn regression test. Minimum is 1 ms in model, schema and UI. |
+| D-M8 | Diagnostics finds compensation by Bluetooth address, then name (including bridge-suffixed names); regression tests. The normalised state still lacks a config id, so a fully id-keyed projection belongs to Phase 2. |
+| D-M4 | Local outputs persist compensation and buffer settings by config id; HTTP PUT and file reload tests. |
+| A14 | Per-click shape normalisation removes DC and low-frequency hum; quiet-click tests with DC and 50 Hz hum. |
+| A2 | A `sequence.cut()` module owns alignment plus windows: event-based alignment first, matched-filter envelope fallback for noisy recordings. Block FFT keeps memory bounded. Regression fixtures include noise 0.05–0.2, a silent last member and pre-sequence clicks; pure noise and ambiguous fits are refused. Hardware recordings still need validation. |
+| A9 (partial) | Click times feed a pooled clock-rate fit; at least two windows with three precise clicks each must agree within 40 ppm. Implausible fits above 500 ppm are ignored. Synthetic −150/+100 ppm recordings, wraparound and a single moving speaker are tested. Coherent-only and browser-live measurements remain uncorrected; fitted ppm is not yet published. |
+| A11 | Beds have session owners (shared sinks stay open), released through the store's runtime-resource cleanup on restoring or any terminal state. Process shutdown is off the session lock. Finish, timeout and shared-owner tests. |
+| D-M7 | All ten locales explain live persistence, including tab close; Finish tuning replaces Save, and Discard retains explicit rollback. Existing cancellation semantics are preserved. |
+| C-D9 | A new unfragmented stream is identified as SBC only after parsing a frame, not from its sync byte alone. Already known SBC streams retain damaged-frame accounting. Both decoded and undecoded paths are tested. |
+| C-D15 | Default work budget is 500 frames/s, enough for 12-block/8-subband SBC at 48 kHz; smaller, high-cost configurations remain refused. |
+| C-D10 | Receive buffer covers the full monitor payload; `MSG_TRUNC` is discarded and counted in loss telemetry so the next record invalidates consumers' continuity. |
+
+## Phase 0 — remaining point fixes
 
 | Id | Problem | Fix | Test |
 |---|---|---|---|
-| D-M3 | `PULSE_LATENCY_MSEC` saved in Settings is "applied" but daemons respawn with the value from bridge start (`os.environ` is set once at boot) | Pass it as a spawn parameter like `compensate_output_latency`, or refresh the environment in the global-restart action | A respawned daemon receives the saved value |
-| D-M8 | The latency assistant looks configured delays up by player name; runtime names carry " @ bridge", so it never finds one and advises a bigger PulseAudio buffer | Key by player id | Assistant with suffixed runtime names sees the delays |
-| D-M4 | The Timing panel saves a local output's latency compensation only for Bluetooth (needs a MAC); lost on restart | Persist by config id for every backend | PUT then reload config for a `pulse_sink` player |
-| D-M7 | Manual tuning says "Save keeps them", but edits are written to Music Assistant and persisted live; cancel or closing the tab keeps them | Either restore delays on cancel/pagehide of a manual session, or reword to "applied live; Discard puts back" | Cancel restores (or the text no longer promises otherwise) |
-| A11 | Keep-awake beds are one global set: finish, timeout and failure leave `pacat` running; one group's sync stops another's | Tie beds to the session (create/end with it) | Two sessions; beds stopped on each end path |
 | A12 | One global decode gate is held for a whole bridge-input recording (up to minutes): other groups cannot measure; cancel does not stop the recorder | Per-session recorder lock; cancel stops the recorder | Cancel during recording ends the child |
-| A14 | The per-click correlation normalises by unfiltered energy; DC offset or rumble rejects good chirps | Normalise on the comb-filtered signal | Estimator with DC offset and 50 Hz hum |
-| C-D9 | An AAC payload with 0x9C at byte 1 is taken for SBC; the codec state flickers | Require a valid CRC on the first frame | Synthetic AAC packet |
-| C-D15 | SBC with 12 blocks is refused (`max_frames_per_s=400`) | Derive the bound from blocks | 12-block stream accepted |
-| C-D10 | Oversized monitor datagrams are dropped uncounted (`MSG_TRUNC` ignored) | Count truncation; 64 KiB buffer | Truncated datagram counted |
-| — | `PULSE_LATENCY_MSEC` minimum is 0 in schema/model/UI but 1 on save | One bound | Schema and save agree |
 | D-C1 follow-up | Only the Settings page is fixed; any other client sending a full document can still put back runtime-owned player keys | The server keeps `static_delay_*` and `air_*` keys of existing players unless the save carries the config revision it was based on (If-Match) | Stale full save leaves runtime keys; current one may change them |
 
 ## Phase 1 — finish the Measurement round (candidate #1)
@@ -51,14 +57,11 @@ driven device status in the UI, the Microphone hand-off owner with a card seam).
 The round now has one clock and a fresh proposal. What is left makes the measurement itself
 more robust and closes the loop.
 
-1. **A2 — alignment as sensitive as the estimator.** Alignment needs a frame ~15 dB above the
-   median; the estimator measures rooms far noisier (#553), so phone and input paths report "not
-   heard" where a measurement is possible. Align on a soft click-band envelope correlated against
-   the slot mask, or on a coherent fold of the whole file. *Test:* the sequence fixture at noise
-   0.05–0.2 aligns and measures every member.
-2. **A9 — recorder clock drift.** Fit one rate correction from all click times in the file (the
-   period is exactly 2 s) before estimating; report the fitted ppm. *Test:* fixture recorded at
-   ±100 ppm measures within 1 ms.
+1. **A2 — validate real-room recordings.** The synthetic noise fixtures now pass through the
+   matched-filter fallback. Validate speech, reverberation and impulsive room sounds on real
+   recordings, including a silent first/last member and the shorter position-mode gaps.
+2. **A9 — finish recorder clock drift.** The precise per-click path now supplies a consensus
+   fit. Extend it to coherent-only and browser-live measurements, and publish the fitted ppm.
 3. **Phone live mode prior.** The phone page starts its recorder and then asks for the sequence;
    stamp that request on the session clock and pass the same `recorder_started_at` window the
    bridge input uses. Recorder (hand-started) mode keeps the unconstrained search.
@@ -180,6 +183,8 @@ Needed before or after the phases marked *runtime*:
 
 ## Order
 
-Phase 0 and Phase 1 items 1–3 first: they decide whether a measurement is right at all. Then
-Phase 2 with Phase 3 (where mechanisms collide and compensate twice), Phase 4, Phase 5. Phases
-6 and 7 wait for their hardware measurements. Phase 8 follows whichever area is touched next.
+Next: Phase 0's remaining A12 (recorder cancellation and gate lifetime), then server revision checks
+for stale player writes. Validate A2 against real room recordings while finishing A9's coherent/live
+path and the phone's clock prior. Then Phase 2 with Phase 3 (where mechanisms collide and compensate
+twice), Phase 4, Phase 5. Phases 6 and 7 wait for their hardware measurements. Phase 8 follows whichever
+area is touched next.

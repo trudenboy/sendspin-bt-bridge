@@ -373,7 +373,9 @@ def create_session(body: SessionCreate) -> SyncSessionOut:
         sinks = _keep_awake_sinks(body.group_id)
         if sinks:
             logger.info("Tuning keep-awake for %d speaker(s): %s", len(sinks), ", ".join(sinks))
-        _BEDS.sync(sinks)
+        beds = _BEDS
+        beds.acquire(session.id, sinks)
+        get_store().own_resource(session.id, lambda: beds.release(session.id))
     except Exception:  # a keep-awake stream must never cost the session
         logger.warning("Could not start the tuning keep-awake streams", exc_info=True)
     return _session_out(session)
@@ -386,12 +388,9 @@ def get_session(sid: str) -> SyncSessionOut:
 def end_session(sid: str) -> None:
     """Cancel (a session already restoring or finished keeps its outcome); the store restores the group."""
     try:
-        _BEDS.stop_all()
-    finally:
-        try:
-            get_store().end(sid)
-        except ControlError as exc:
-            _raise(exc)
+        get_store().end(sid)
+    except ControlError as exc:
+        _raise(exc)
 
 
 def signal(sid: str, action: str) -> SyncSessionOut:

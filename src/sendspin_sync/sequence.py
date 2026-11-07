@@ -188,14 +188,169 @@ def align(
     return (first[0] + first[-1]) / 2
 
 
-def windows(pcm: bytes, sample_rate: int, slots: Sequence[Slot], offset: float) -> list[Recording]:
-    """Each member's stretch of the recording, trimmed at both ends, with its offset in the file as
-    the capture clock (one clock for all of them)."""
+# -- alignment in a noisy room ------------------------------------------------------------------
+#
+# ``click_times`` needs a 10 ms frame of the click band 15 dB above the room; the estimator measures
+# rooms far noisier than that, because it correlates against the chirp itself. When no click stands
+# out on its own, the recording is aligned on the chirp's matched-filter envelope instead: every
+# frame's excess over the room counts towards the slot it falls in, so the clicks of a whole solo add
+# up even when none of them could be found alone.
+
+_SOFT_FRAME_S = 0.01
+_SOFT_CAP = 30.0  # a frame counts at most this many times the room's level: a door slam is one frame
+_SOFT_MIN_Z = 4.0  # the best fit stands this many noise deviations clear of a fit made by noise alone
+_SOFT_AMBIGUOUS = 0.85  # a fit more than _SAME_FIT_S away scoring this share of the best: undecidable
+_SOFT_RAMP_S = 1.5
+
+
+def _matched_envelope(pcm: bytes, sample_rate: int):  # -> numpy.ndarray | None
+    """The chirp's matched-filter energy per frame, in units of the room's level minus its mean; None
+    without numpy (the event-based alignment is then the only one)."""
+    try:
+        import numpy as np
+    except ImportError:  # pragma: no cover - numpy ships with the bridge
+        return None
+    from sendspin_sync import estimator
+
+    samples = np.frombuffer(pcm[: len(pcm) - len(pcm) % 2], dtype="<i2")
+    c, q = estimator._quadrature(sample_rate)
+    taps = len(c)
+    n = len(samples)
+    frame = max(1, round(sample_rate * _SOFT_FRAME_S))
+    if n <= taps or n < frame:
+        return None
+    # the matched filter block by block (overlap-save), keeping only each frame's peak: a five-minute
+    # recording costs a few hundred kB beyond its own size, as the event-based path does
+    size = 1 << 16
+    step = (size - taps + 1) // frame * frame  # whole frames per block
+    kernels = [np.fft.rfft(np.asarray(t[::-1], dtype=np.float32), size) for t in (c, q)]
+    usable = n // frame * frame
+    parts = []
+    for start in range(0, usable, step):
+        block = samples[start : start + size].astype(np.float32) / 32768.0
+        spectrum = np.fft.rfft(block, size)
+        count = min(step, usable - start)
+        acc = np.zeros(count, dtype=np.float32)
+        for kernel in kernels:
+            y = np.fft.irfft(spectrum * kernel, size)[taps - 1 : taps - 1 + count]
+            acc += y * y
+        parts.append(acc.reshape(-1, frame).max(axis=1))
+    peaks = np.concatenate(parts).astype(np.float64)
+    floor = float(np.median(peaks))
+    if floor <= 0.0:
+        return None
+    level = np.minimum(peaks / floor, _SOFT_CAP)
+    return level - float(np.median(level))  # the room sits at 0: frames outside the file (padding) score like it
+
+
+def soft_align(
+    pcm: bytes,
+    sample_rate: int,
+    slots: Sequence[Slot],
+    *,
+    expected: tuple[float, float] | None = None,
+) -> float | None:
+    """The sequence's start in the file from the chirp's matched-filter envelope (see above); None when
+    the best fit is no better than noise, or when a fit a member away is almost as good."""
+    import numpy as np
+
+    excess = _matched_envelope(pcm, sample_rate)
+    if excess is None or not slots:
+        return None
+    slots = list(slots)[:MAX_MEMBERS]
+    frames = len(excess)
+    fr = _SOFT_FRAME_S
+    # the lead-in and the gaps count against a fit (the group is muted there), and one gap after the
+    # last member; before the sequence began nothing counts — every member still played there, and
+    # a recorder started first holds that
+    end = slots[-1].end_s
+    tail_s = slots[1].start_s - slots[0].end_s if len(slots) > 1 else GAP_S
+    # the weight of a frame at each place of the sequence: a member's stretch counts, rising over
+    # _SOFT_RAMP_S at both ends so the best fit puts the clicks in the middle of the stretches (a flat
+    # mask scores a whole click period of offsets alike); the lead-in and the gaps count against
+    span = round((end + tail_s) / fr) + 1
+    weight = np.full(span, -1.0)
+    ramp = max(1, round(_SOFT_RAMP_S / fr))
+    inside_frames = 0
+    for slot in slots:
+        a_i, b_i = round(slot.start_s / fr), round(slot.end_s / fr)
+        n_i = max(0, b_i - a_i)
+        inside_frames += n_i
+        k = np.arange(n_i)
+        weight[a_i:b_i] = np.minimum(1.0, np.minimum(k + 1, n_i - k) / ramp)
+    # every frame offset scored at once; the file is padded so a fit may put part of the sequence
+    # outside it
+    padded = np.concatenate([np.zeros(span), excess, np.zeros(span)])
+    # index i: the weights laid on padded[i:i+span] (a correlation, through the FFT: a long group's
+    # weights and recording are tens of thousands of frames each)
+    size = 1 << int(np.ceil(np.log2(len(padded) + span)))
+    corr = np.fft.irfft(np.fft.rfft(padded, size) * np.conj(np.fft.rfft(weight, size)), size)
+    scores_all = corr[: len(padded) - span + 1]
+    lo_s, hi_s = offset_bounds(slots, frames * fr)
+    if expected is not None:
+        lo_s, hi_s = max(lo_s, expected[0]), min(hi_s, expected[1])
+    if hi_s < lo_s:
+        return None
+    # the weights start at the sequence's start: offset o sits at padded index span + o/fr
+    first_i, last_i = span + math.ceil(lo_s / fr), span + math.floor(hi_s / fr)
+    first_i, last_i = max(0, first_i), min(len(scores_all) - 1, last_i)
+    if last_i < first_i:
+        return None
+    scores = scores_all[first_i : last_i + 1]
+    best = int(np.argmax(scores))
+    # how far noise alone could push a score: the room's per-frame deviation over the weighted frames
+    deviation = 1.4826 * float(np.median(np.abs(excess - np.median(excess)))) or 1e-12
+    noise = deviation * math.sqrt(float(np.sum(weight * weight)))
+    if scores[best] < _SOFT_MIN_Z * noise:
+        return None
+    median = float(np.median(scores))
+    keep = round(_SAME_FIT_S / fr)
+    far = np.concatenate([scores[: max(0, best - keep)], scores[best + keep + 1 :]])
+    if far.size and float(far.max()) - median >= _SOFT_AMBIGUOUS * (float(scores[best]) - median):
+        return None
+    return (first_i + best - span) * fr
+
+
+def soft_widen_s(point: str) -> float:
+    """How far a member's window reaches into the silent gaps on either side when the alignment came
+    from the envelope: clicks fix the sequence only to within half a click period, and a quiet room
+    needs every click of the solo. The gap stays wider than that error plus the reach, so a
+    neighbour's clicks never enter."""
+    return max(0.0, min(1.0, gap_seconds(point) / 2 - 0.5))
+
+
+def cut(
+    pcm: bytes,
+    sample_rate: int,
+    slots: Sequence[Slot],
+    point: str,
+    *,
+    expected: tuple[float, float] | None = None,
+) -> tuple[float, list[Recording]] | None:
+    """Where the sequence began in the recording, and each member's stretch of it: from the clicks
+    that stand out (exact), else from the chirp's matched-filter envelope (a noisy room, with the
+    windows reaching into the gaps). None when neither can place the sequence."""
+    duration = len(pcm) / 2 / sample_rate
+    offset = align(click_times(pcm, sample_rate), slots, duration, expected=expected)
+    widen = 0.0
+    if offset is None:
+        offset = soft_align(pcm, sample_rate, slots, expected=expected)
+        widen = soft_widen_s(point)
+    if offset is None:
+        return None
+    return offset, windows(pcm, sample_rate, slots, offset, widen_s=widen)
+
+
+def windows(
+    pcm: bytes, sample_rate: int, slots: Sequence[Slot], offset: float, *, widen_s: float = 0.0
+) -> list[Recording]:
+    """Each member's stretch of the recording, trimmed at both ends (or reaching *widen_s* into the
+    gaps), with its offset in the file as the capture clock (one clock for all of them)."""
     n = len(pcm) // 2
     out: list[Recording] = []
     for s in slots:
-        lo = max(0, round((offset + s.start_s + SETTLE_S) * sample_rate))
-        hi = min(n, round((offset + s.end_s - TAIL_S) * sample_rate))
+        lo = max(0, round((offset + s.start_s + SETTLE_S - widen_s) * sample_rate))
+        hi = min(n, round((offset + s.end_s - TAIL_S + widen_s) * sample_rate))
         if hi - lo < sample_rate:  # less than a second of it in the file
             out.append(Recording(member=s.member, start_time_s=lo / sample_rate, sample_rate=sample_rate, pcm=b""))
             continue
@@ -223,3 +378,48 @@ def needed_s(members: int, point: str, lead_s: float = LEAD_S) -> float:
     """How much click track a sequence of *members* uses up, Music Assistant's steps included: the
     clicks must still play when the last member's solo ends."""
     return length_s(members, point, lead_s) + members * STEP_OVERHEAD_S + MARGIN_S
+
+
+# -- the recorder's clock ---------------------------------------------------------------------------
+#
+# One recording of the sequence is one clock, but the recorder's clock is not the bridge's: a phone or a
+# USB microphone runs some tens of ppm fast or slow, and members play 12-15 s apart, so the later a member
+# plays the more its phase is off (50 ppm over 45 s is 2.3 ms). Every click of one member plays at the
+# same phase of the click track, so within each member's stretch the phase of its clicks should not move;
+# what it does move is the recorder's rate. A pooled fit over every stretch measures it.
+
+_SKEW_MIN_CLICKS = 3  # clicks a stretch needs to count towards the fit
+_SKEW_MAX_MS_PER_S = 0.5  # 500 ppm: a larger fit is a bad click, not a clock
+_SKEW_AGREEMENT_MS_PER_S = 0.04  # 40 ppm: members must agree before a common clock rate is inferred
+
+
+def rate_skew(clicks_by_window: Sequence[Sequence[tuple[float, float]]]) -> float:
+    """How fast the recorder's clock runs against the click track, in ms of phase per second of
+    recording (1 ms/s is 1000 ppm), from each stretch's clicks as (capture time s, phase ms): the
+    slope of phase over time with every stretch keeping its own level. 0.0 when fewer than two
+    stretches have enough clicks, or the fit is implausible."""
+    from statistics import median
+
+    from sendspin_sync import click_track
+
+    cycle_ms = click_track.CYCLE_S * 1000.0
+    fits: list[tuple[float, float]] = []
+    for clicks in clicks_by_window:
+        if len(clicks) < _SKEW_MIN_CLICKS:
+            continue
+        p0 = clicks[0][1]
+        points = [(t, ((p - p0 + cycle_ms / 2) % cycle_ms) - cycle_ms / 2) for t, p in clicks]
+        t_mean = sum(t for t, _ in points) / len(points)
+        p_mean = sum(p for _, p in points) / len(points)
+        num = sum((t - t_mean) * (p - p_mean) for t, p in points)
+        den = sum((t - t_mean) ** 2 for t, _ in points)
+        if den > 0.0 and abs(num / den) <= _SKEW_MAX_MS_PER_S:
+            fits.append((num, den))
+    if len(fits) < 2:
+        return 0.0
+    centre = median(num / den for num, den in fits)
+    agreeing = [(num, den) for num, den in fits if abs(num / den - centre) <= _SKEW_AGREEMENT_MS_PER_S]
+    if len(agreeing) < 2:
+        return 0.0  # drift in a single speaker is not the recorder's clock
+    slope = sum(num for num, _den in agreeing) / sum(den for _num, den in agreeing)
+    return slope if abs(slope) <= _SKEW_MAX_MS_PER_S else 0.0

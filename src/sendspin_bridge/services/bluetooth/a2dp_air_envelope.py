@@ -254,7 +254,7 @@ class AirLinkTracker:
         self,
         *,
         codec_hint: Callable[[], str | None] = lambda: None,
-        max_frames_per_s: int = 400,
+        max_frames_per_s: int = 500,  # includes 48 kHz / (12 blocks * 8 subbands); tiny frames stay refused
         first_epoch: int = 0,
     ) -> None:
         self._codec_hint = codec_hint

@@ -151,6 +151,23 @@ def test_records_reach_consumers_with_a_raw_time(fake_hub_socket):
     assert c.seen[0].t_raw_us > 0
 
 
+def test_truncated_datagrams_are_counted_and_not_delivered(fake_hub_socket):
+    first = frame(hs.MONITOR_ACL_RX_PKT, 0, b"\x46\x00\x00\x00")
+    second = frame(hs.MONITOR_ACL_RX_PKT, 0, b"\x47\x00\x00\x00")
+    c = consumer()
+    hub = HciMonitorHub(
+        open_socket=fake_hub_socket([(first, [], socket.MSG_TRUNC, None), (second, [])]),
+        seed=lambda m: None,
+    )
+    hub.add_consumer(c)
+    hub.start()
+    hub.stop()
+    assert len(c.seen) == 1
+    assert c.seen[0].payload == b"\x47\x00\x00\x00"
+    assert c.seen[0].drops == 1
+    assert hub.counters()["truncated_records"] == 1
+
+
 def test_acl_tx_only_to_consumers_that_want_it(fake_hub_socket):
     a, b = consumer(False), consumer(True)
     hub = HciMonitorHub(

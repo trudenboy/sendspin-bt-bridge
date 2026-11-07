@@ -170,7 +170,7 @@
     "PULSE_LATENCY_MSEC": {
       "type": "integer",
       "default": 600,
-      "minimum": 0,
+      "minimum": 1,
       "maximum": 5000,
       "description": "PulseAudio latency in milliseconds."
     },

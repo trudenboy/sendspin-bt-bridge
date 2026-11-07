@@ -17,7 +17,13 @@ from typing import Any, Literal, TypeGuard
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.runtime import bridge_loop, run_on_loop, submit_on_loop
 from sendspin_bridge.application.status import find_client
-from sendspin_bridge.config import load_config, save_device_buffer_setting, save_device_static_delay, save_device_volume
+from sendspin_bridge.config import (
+    load_config,
+    save_device_buffer_setting,
+    save_device_static_delay,
+    save_device_volume,
+    save_player_static_delay,
+)
 from sendspin_bridge.services.audio.pulse import get_sink_mute, set_sink_mute, set_sink_volume
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.ipc.commands import OpenPairingWindow, Pause, Play, SetMute, SetVolume
@@ -259,13 +265,18 @@ def set_latency(
     applied = run_on_loop(client.apply_hot_config({field: value}), timeout=2.0, description="Latency hot-apply")
     if field not in (applied or ()):
         raise UseCaseError(503, "not_applied", "Latency value was not applied")
+    # A Bluetooth speaker is found by its address; a local output (no Bluetooth manager) by its id.
     mac = _mac_of(client)
+    config_id = getattr(client, "config_id", None) if not mac else None
     if field == "static_delay_ms" and mac:
         codec = client.status.get("bt_codec_name") or client.status.get("audio_format")
         save_device_static_delay(mac, round(value), source=source, codec=codec)
         client._update_status({"static_delay_source": source, "static_delay_codec": codec})
-    elif mac:
-        save_device_buffer_setting(mac, field, round(value))
+    elif field == "static_delay_ms" and config_id:
+        save_player_static_delay(config_id, round(value), source=source)
+        client._update_status({"static_delay_source": source, "static_delay_codec": None})
+    elif mac or config_id:
+        save_device_buffer_setting(mac, field, round(value), player_id=config_id)
     return {"field": field, "value": round(value)}
 
 

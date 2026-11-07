@@ -687,7 +687,6 @@ def _media_fields(
     starts_frame = len(body) > SBC_HEADER_LEN and body[1] == SBC_SYNCWORD
     if starts_frame or (body[0] & 0x80 and not body[0] & 0x40 and cid in sbc_streams):
         codec = "sbc"
-        sbc_streams.add(cid)
         fragmented = bool(body[0] & 0x80)
         if not fragmented:
             frame_count = body[0] & 0x0F
@@ -699,6 +698,13 @@ def _media_fields(
                 parsed = len(undecoded)
             if not complete or parsed != frame_count:
                 stats.sbc_errors += 1
+            # A sync byte alone also occurs in AAC and other payloads. A new stream must yield
+            # at least one valid frame before it is known as SBC; an already known SBC stream
+            # may still carry damaged frames whose count the envelope needs to account for.
+            if not parsed and cid not in sbc_streams:
+                codec = "unknown"
+        if codec == "sbc":
+            sbc_streams.add(cid)
     return (
         t,
         index,

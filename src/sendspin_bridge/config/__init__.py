@@ -662,9 +662,13 @@ def save_player_static_delay(
         logger.warning("Could not save static_delay_ms for player %s: %s", player_id, e)
 
 
-def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> None:
-    """Persist a confirmed per-device Sendspin buffer setting."""
-    if not mac or field not in {"required_lead_time_ms", "min_buffer_ms"} or not CONFIG_FILE.exists():
+def save_device_buffer_setting(mac: str | None, field: str, value_ms: int, *, player_id: str | None = None) -> None:
+    """Persist a confirmed per-device Sendspin buffer setting, by Bluetooth address or by config id."""
+    if (
+        (not mac and not player_id)
+        or field not in {"required_lead_time_ms", "min_buffer_ms"}
+        or not CONFIG_FILE.exists()
+    ):
         return
     try:
         clamped = max(0, min(30000, int(value_ms)))
@@ -672,9 +676,9 @@ def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> No
         return
 
     def _set_value(cfg: dict) -> None:
-        from sendspin_bridge.config.players import find_player_by_mac
+        from sendspin_bridge.config.players import find_player_by_id, find_player_by_mac
 
-        player = find_player_by_mac(cfg, mac)
+        player = find_player_by_mac(cfg, mac) if mac else find_player_by_id(cfg, str(player_id))
         if player is not None:
             player[field] = clamped
 

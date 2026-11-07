@@ -387,7 +387,7 @@ describe('ManualTuning: the Manual tab on one screen (simple)', () => {
     await w.findAll('[data-delay-row]')[0]!.find('[aria-label="+10 ms (earlier)"]').trigger('click')
     vi.advanceTimersByTime(300); await flushPromises()
     expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 110)
-    expect(w.get('[data-manual-unsaved]').text()).toBe('Unsaved changes')
+    expect(w.get('[data-manual-unsaved]').text()).toBe('Changed since tuning started')
     w.findComponent({ name: 'VolumeSlider' }).vm.$emit('update:volume', 70); await flushPromises()
     expect(api.sessionVolume).toHaveBeenCalledWith('s1', 'a', 70)
     await w.get('[data-manual-stop]').trigger('click')
@@ -413,7 +413,7 @@ describe('ManualTuning: the Manual tab on one screen (simple)', () => {
     const store = useSyncStore()
     store.session = { ...store.session!, state: 'done' } as never
     await w.setProps({ saved: true }); await flushPromises()
-    expect(w.get('[data-manual-saved]').text()).toBe('Saved')
+    expect(w.get('[data-manual-saved]').text()).toBe('Tuning finished')
     expect(w.find('[data-manual-unsaved]').exists()).toBe(false)
   })
 

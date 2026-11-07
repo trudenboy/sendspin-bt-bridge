@@ -36,6 +36,7 @@ import logging
 import math
 import os
 import select
+import socket
 import sys
 import threading
 import time
@@ -66,7 +67,6 @@ from sendspin_bridge.services.bluetooth.hci_socket import (
 )
 
 if TYPE_CHECKING:
-    import socket
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 HubState = Literal["open", "error", "closed"]
 UnavailableReason = Literal["no_cap_net_raw", "unsupported_platform", "monitor_error"]
 
-_RECV_BUFSIZE = 4096
+_RECV_BUFSIZE = 65536 + 6  # the monitor header plus any uint16-length payload, also on recv-only Python
 _ANC_BUFSIZE = 256
 _TICK_S = 0.25  # clock pair + SO_MEMINFO poll cadence; also the longest readability wait
 # R-20: sleep this long after the socket turns readable, then drain. Live on the HAOS VM the bare
@@ -248,6 +248,7 @@ class HciMonitorHub:
         self._drops: int | None = None
         self._last_record_drops: int | None = None  # drops of the previous record (routing)
         self._records = 0
+        self._truncated_records = 0
         self._recv_stamped = 0
         # Python 3.14 refuses recvmsg/recvfrom on AF_BLUETOOTH (see _read_datagram),
         # so the reader falls back to plain recv and receive-time stamps.
@@ -377,7 +378,8 @@ class HciMonitorHub:
             streaming = sum(1 for t in self._tx_links.values() if now - t <= _STREAMING_WINDOW_S)
             return {
                 "records": self._records,
-                "drops": self._drops,
+                "drops": self._record_drops(),
+                "truncated_records": self._truncated_records,
                 "drop_source": self._drop_source,
                 "clock_steps": self._clock_map.epoch - self._clock_epoch0,
                 "cpu_fraction": self._cpu_fraction_now(),
@@ -564,7 +566,10 @@ class HciMonitorHub:
         """One monitor record and its ancillary data (the kernel timestamps)."""
         if not self._recv_only:
             try:
-                data, ancdata, _flags, _addr = sock.recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
+                data, ancdata, flags, _addr = sock.recvmsg(_RECV_BUFSIZE, _ANC_BUFSIZE)
+                if flags & socket.MSG_TRUNC:
+                    self._truncated_records += 1
+                    return b"", []  # never parse a truncated frame, even if its prefix looks valid
                 return data, ancdata
             except BlockingIOError:
                 raise
@@ -614,6 +619,12 @@ class HciMonitorHub:
             self._window_start = (now, cpu)
             self._cpu_windows += 1
 
+    def _record_drops(self) -> int | None:
+        """Kernel drops plus datagrams discarded by the reader: consumers reset after either loss."""
+        if self._truncated_records:
+            return (self._drops or 0) + self._truncated_records
+        return self._drops
+
     def _on_datagram(self, data: bytes, ancdata: list[tuple[int, int, bytes]]) -> None:
         t_recv_us = self._raw_ns() / 1000.0
         frame = parse_monitor_packet(data)
@@ -628,7 +639,7 @@ class HciMonitorHub:
                 self._drops, self._drop_source = drop_counter.drops, drop_counter.source
         self._update_maps(opcode, index, payload)
         self._records += 1
-        drops = self._drops
+        drops = self._record_drops()
         key = (opcode, payload[0] if opcode == MONITOR_EVENT_PKT and payload else -1)
         if drops != self._last_record_drops:
             # A drop count change goes to every consumer, also one that skips this kind of record.

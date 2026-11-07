@@ -7,11 +7,13 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sendspin_bridge.services.audio.sink_inventory import LocalSink
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
 
 from sendspin_bridge.config import get_config_migration_error
-from sendspin_bridge.config.players import device_entries
+from sendspin_bridge.config.players import device_entries, normalize_mac
 from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_params, reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 from sendspin_bridge.services.diagnostics.recovery_timeline import build_recovery_timeline
@@ -1435,6 +1437,34 @@ def _build_known_good_test_path(devices: list[Any], onboarding_assistant: dict[s
     }
 
 
+def _configured_delays(config: dict[str, Any]) -> Callable[[str | None, str | None], Any]:
+    """A lookup of each configured player's ``static_delay_ms``, by Bluetooth address first.
+
+    Runtime player names carry the bridge's suffix (``Kitchen @ bridge``) and the config names the
+    player without it, so a name is tried as it is and without the suffix.
+    """
+    by_mac: dict[str, Any] = {}
+    by_name: dict[str, Any] = {}
+    for entry in device_entries(config) or config.get("devices") or []:
+        if mac := normalize_mac(entry.get("mac")):
+            by_mac[mac] = entry.get("static_delay_ms")
+        if name := entry.get("player_name"):
+            by_name[str(name)] = entry.get("static_delay_ms")
+    for player in config.get("players") or ():
+        if isinstance(player, dict) and (name := player.get("name")):
+            by_name.setdefault(str(name), player.get("static_delay_ms"))
+
+    def delay_of(name: str | None, mac: str | None) -> Any:
+        if (key := normalize_mac(mac)) and key in by_mac:
+            return by_mac[key]
+        name = str(name or "")
+        if name in by_name:
+            return by_name[name]
+        return by_name.get(name.rsplit(" @ ", 1)[0])
+
+    return delay_of
+
+
 def build_recovery_assistant_snapshot(
     *,
     config: dict[str, Any],
@@ -1446,18 +1476,14 @@ def build_recovery_assistant_snapshot(
     local_sinks: list[LocalSink] | None = None,
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
-        delay_by_name: dict[str, Any] = {}
-        for dev_cfg in device_entries(config) or config.get("devices") or []:
-            name = dev_cfg.get("player_name") or ""
-            if name:
-                delay_by_name[name] = dev_cfg.get("static_delay_ms")
+        delay_of = _configured_delays(config)
         devices = [
             NormalizedRecoveryDevice(
                 player_name=state.player_name,
                 state_model=state.to_dict(),
                 health_summary=state.health,
                 recent_events=state.recent_events,
-                static_delay_ms=delay_by_name.get(state.player_name),
+                static_delay_ms=delay_of(state.player_name, (state.bluetooth or {}).get("mac")),
                 enabled=state.enabled,
             )
             for state in bridge_state.devices

@@ -134,3 +134,46 @@ async def test_a_stop_clears_the_engine_snapshot_so_a_restart_in_off_is_not_stal
     assert client.status["playout"] is None
     assert client.status["effective_required_lead_time_ms"] is None
     assert client.status["playback_sync_error_ms"] is None
+
+
+# -- PULSE_LATENCY_MSEC: the saved value, not the one from bridge start -------------------------
+
+
+async def _spawn_env(monkeypatch, config: dict) -> dict:
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8930)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: dict(config))
+    client = SendspinClient("ENEBY Portable", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bluetooth_sink_name = "bluez_sink.6C_5C_3D_35_17_99.a2dp_sink"
+    envs: list[dict] = []
+
+    async def _fake_exec(*args, **kw):
+        envs.append(dict(kw.get("env") or {}))
+        raise RuntimeError("intentional short-circuit")
+
+    with (
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        await client.start_sendspin()
+    return envs[0]
+
+
+@pytest.mark.asyncio
+async def test_a_respawned_daemon_gets_the_saved_pulse_latency(monkeypatch):
+    """Settings saves PULSE_LATENCY_MSEC and respawns every daemon; the bridge's own environment
+    still holds the value from start-up, so the daemon must get the config's."""
+    monkeypatch.setenv("PULSE_LATENCY_MSEC", "600")
+
+    env = await _spawn_env(monkeypatch, {"PULSE_LATENCY_MSEC": 900})
+
+    assert env["PULSE_LATENCY_MSEC"] == "900"
+
+
+@pytest.mark.asyncio
+async def test_without_a_saved_pulse_latency_the_bridge_default_stays(monkeypatch):
+    monkeypatch.setenv("PULSE_LATENCY_MSEC", "700")
+
+    env = await _spawn_env(monkeypatch, {})
+
+    assert env["PULSE_LATENCY_MSEC"] == "700"

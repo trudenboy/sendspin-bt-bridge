@@ -28,10 +28,12 @@ def synth(
     agc: bool = False,
     seed: int = 1,
     masked: float = 0.0,
+    drift_ppm: float = 0.0,
 ) -> Recording:
     """A recording that starts at capture time ``start_time_s`` of a track whose epoch is 0 and which this
     speaker plays ``lag_s`` late (positive = later). ``echo`` is (delay_s, amplitude). ``masked`` rides white
-    noise on each chirp (standard deviation ``masked / 2`` of its amplitude), roughening its shape."""
+    noise on each chirp (standard deviation ``masked / 2`` of its amplitude), roughening its shape. ``drift_ppm``
+    runs the recorder's clock that much fast: everything lands later in the file the longer it records."""
     rnd = random.Random(seed)
     n = round(duration_s * sample_rate)
     x = [rnd.gauss(0.0, noise) for _ in range(n)]
@@ -43,7 +45,7 @@ def synth(
         if idx in drop:
             continue
         for chirp_t in (t, t + ct.gap_ms(k) / 1000):
-            at = chirp_t + lag_s - start_time_s
+            at = (chirp_t + lag_s - start_time_s) * (1.0 + drift_ppm * 1e-6)
             for d, a in taps:
                 start = round((at + d) * sample_rate)
                 if -len(template) < start < n:
