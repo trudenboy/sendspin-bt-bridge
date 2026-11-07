@@ -217,7 +217,7 @@ class BridgeConfig(BaseModel):
     """
     Timezone (IANA format).
     """
-    PULSE_LATENCY_MSEC: int | None = Field(600, ge=0, le=5000)
+    PULSE_LATENCY_MSEC: int | None = Field(600, ge=1, le=5000)
     """
     PulseAudio latency in milliseconds.
     """

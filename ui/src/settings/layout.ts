@@ -170,7 +170,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: 'audio',
     icon: 'audio',
     fields: [
-      { key: 'PULSE_LATENCY_MSEC', kind: 'number', min: 0, max: 5000, step: 50, unit: 'ms' },
+      { key: 'PULSE_LATENCY_MSEC', kind: 'number', min: 1, max: 5000, step: 50, unit: 'ms' },
       { key: 'PREFER_SBC_CODEC', kind: 'toggle' },
       { key: 'SMOOTH_RESTART', kind: 'toggle', advanced: true },
       { key: 'DISABLE_PA_RESCUE_STREAMS', kind: 'toggle', advanced: true },

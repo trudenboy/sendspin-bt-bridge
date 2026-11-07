@@ -2505,6 +2505,11 @@ class SendspinClient:
 
                 env = os.environ.copy()
                 env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
+                # The bridge's own environment holds PULSE_LATENCY_MSEC as of start-up; a value
+                # saved since (Settings respawns every daemon) must reach the new daemon.
+                saved_latency = spawn_config.get("PULSE_LATENCY_MSEC")
+                if isinstance(saved_latency, int) and not isinstance(saved_latency, bool) and saved_latency > 0:
+                    env["PULSE_LATENCY_MSEC"] = str(saved_latency)
                 if is_pulse_sink and spawn_sink:
                     env["PULSE_SINK"] = spawn_sink
 
