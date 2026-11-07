@@ -136,3 +136,25 @@ def test_the_volume_slider_drives_the_sink_when_pa_was_chosen(api_client, runnin
     assert api_client.put("/api/v1/devices/dac-1/volume", json={"level": 30}).status_code == 200
 
     assert writes == [(SINK, 30)]
+
+
+# -- the Timing panel's values survive a restart for a local output too --------------------------
+
+
+def _with_hot_apply(client):
+    async def _apply(updates):
+        return list(updates)
+
+    client.apply_hot_config = _apply
+    return client
+
+
+@pytest.mark.parametrize(("field", "value"), [("static_delay_ms", 120), ("min_buffer_ms", 400)])
+def test_a_local_outputs_latency_setting_is_saved(api_client, running, tmp_config, bridge_loop, field, value):
+    running.append(_with_hot_apply(_pulse_client(sink=SINK)))
+
+    resp = api_client.put("/api/v1/devices/dac-1/latency", json={"field": field, "value": value})
+
+    assert resp.status_code == 200, resp.text
+    player = json.loads(tmp_config.read_text())["players"][0]
+    assert player[field] == value
