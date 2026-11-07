@@ -60,6 +60,13 @@ def _runtime_client(player_id: str, name: str, mac: str, **status_fields):
 @pytest.fixture
 def bridge(monkeypatch, tmp_config):
     """A bridge with a pinned healthy host and a registry the test fills."""
+    # Another test on this worker may have left a boot in progress. These cases describe an
+    # idle, already configured bridge; resetting only after the test left its first run order-dependent.
+    state.reset_startup_progress()
+    state.set_disabled_devices([])
+    state.set_ma_groups({}, [])
+    state.set_ma_api_credentials("", "")
+    state.set_runtime_mode_info(None)
     clients: list = []
 
     def _registry():
