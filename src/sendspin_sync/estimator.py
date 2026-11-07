@@ -124,6 +124,23 @@ def _events(env: list[float], threshold: float) -> list[tuple[int, float]]:
     return out
 
 
+_LOW_CUT_S = 0.002  # a moving average this long holds DC and hum (< ~250 Hz) and none of the 2-6 kHz chirp
+
+
+def _without_low_frequencies(seg: list[float], sr: int) -> list[float]:
+    """*seg* minus its centred moving average: DC and low hum removed, the chirp band left as it is."""
+    half = max(1, round(sr * _LOW_CUT_S / 2))
+    n = len(seg)
+    prefix = [0.0]
+    for v in seg:
+        prefix.append(prefix[-1] + v)
+    out = []
+    for i in range(n):
+        lo, hi = max(0, i - half), min(n, i + half + 1)
+        out.append(seg[i] - (prefix[hi] - prefix[lo]) / (hi - lo))
+    return out
+
+
 def _chirps(x: list[float], sr: int, events: list[tuple[int, float]], frame: int) -> list[_Chirp]:
     template = ct.chirp(sr)
     t_norm = math.sqrt(sum(v * v for v in template))
@@ -140,8 +157,11 @@ def _chirps(x: list[float], sr: int, events: list[tuple[int, float]], frame: int
             prev, prev_strength = matched_peak(x, template, (lo + hi) // 2, (hi - lo) // 2, step)
             if prev < pos and prev_strength >= _EARLIER_RATIO * strength:
                 pos, strength = prev, prev_strength
-        seg_norm = math.sqrt(sum(v * v for v in x[pos : pos + n]))
-        if seg_norm <= 0.0 or strength / (seg_norm * t_norm) < _MIN_NCC:
+        # the chirp's shape is judged in its own band: a DC offset or mains hum in the segment is not
+        # evidence against it (the matched filter above is not swayed by them, the energy here was)
+        seg = _without_low_frequencies(x[pos : pos + n], sr)
+        seg_norm = math.sqrt(sum(v * v for v in seg))
+        if seg_norm <= 0.0 or abs(sum(map(operator.mul, seg, template))) / (seg_norm * t_norm) < _MIN_NCC:
             continue
         if found and pos - found[-1].pos < n // 2:  # two fragments of the same chirp
             if strength > found[-1].strength:
