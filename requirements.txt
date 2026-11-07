@@ -9,7 +9,7 @@ aiohttp==3.14.5
     #   sendspin-bt-bridge
 aiomqtt==2.5.1
     # via sendspin-bt-bridge
-aiooui==0.1.9
+aiooui==0.1.11
     # via bluetooth-adapters
 aiosendspin==10.2.1
     # via sendspin-bt-bridge
