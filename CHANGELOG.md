@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The latency assistant in Diagnostics now sees the latency compensation each speaker has, instead of reporting a tuned multi-room group as having none and suggesting a larger PulseAudio buffer.
 - A local audio output's latency compensation and buffer settings set in its Timing panel are now saved and survive a restart, as a Bluetooth speaker's always were.
 - Group sync measures quiet clicks precisely even when the microphone adds a DC offset or mains hum, instead of falling back to its coarser estimate.
+- Group sync measures a noisy room from a phone or bridge-input recording instead of reporting every speaker as not heard: when no single click stands out, the sequence is placed from all the clicks together.
 
 ## [3.2.0-beta.25] - 2026-11-07
 

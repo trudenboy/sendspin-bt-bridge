@@ -265,7 +265,7 @@ def sync_air_env(monkeypatch, tmp_config, tmp_path, api_client):
         monkeypatch.setattr(uc, "_sequence_sleep", sleep)
 
         # The estimator: each member's acoustic phase on the recording's clock.
-        def windows(_pcm, sample_rate, slots, _offset):
+        def windows(_pcm, sample_rate, slots, _offset, **_kw):
             return [Recording(member=s.member, start_time_s=0.0, sample_rate=sample_rate, pcm=b"") for s in slots]
 
         def estimate(rec):

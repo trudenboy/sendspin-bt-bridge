@@ -131,3 +131,72 @@ def test_click_detection_stays_small_in_memory_for_the_longest_recording_allowed
     finally:
         tracemalloc.stop()
     assert peak < 64 * 1024 * 1024, f"peak {peak / 1e6:.1f} MB"
+
+
+# -- a noisy room: no click stands out on its own -------------------------------------------------
+
+
+@pytest.mark.parametrize("noise", [0.05, 0.1, 0.2])
+def test_a_noisy_room_is_aligned_from_the_chirps_envelope(noise):
+    """The estimator measures these rooms; alignment needed a click 15 dB above them and gave up, so
+    the phone and bridge-input paths reported every speaker not heard."""
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, noise=noise)
+    duration = len(pcm) / 32000
+    assert seq.align(seq.click_times(pcm, 16000), slots, duration) is None  # the old path: nothing
+
+    placed = seq.cut(pcm, 16000, slots, "device")
+
+    assert placed is not None and placed[0] == pytest.approx(1.7, abs=1.0)
+    m = {r.member: estimator.estimate(r) for r in placed[1]}
+    assert all(x.status == "ok" for x in m.values())
+    assert planner.unwrap_lag_ms(m["b"].phase_ms, m["a"].phase_ms) == pytest.approx(30.0, abs=2.0)
+
+
+def test_a_noisy_room_with_a_silent_last_member_still_measures_the_right_speakers():
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, noise=0.2, silent=frozenset({"c"}))
+
+    placed = seq.cut(pcm, 16000, slots, "device")
+
+    assert placed is not None and placed[0] == pytest.approx(1.7, abs=1.0)
+    m = {r.member: estimator.estimate(r) for r in placed[1]}
+    assert (m["a"].status, m["b"].status, m["c"].status) == ("ok", "ok", "not_heard")
+
+
+def test_noise_alone_is_never_aligned():
+    import random
+    import struct
+
+    _pcm, slots = sequence_recording({"a": 0.0, "b": 0.0})
+    for seed in range(4):
+        rnd = random.Random(seed)
+        n = 16000 * 40
+        pcm = struct.pack(f"<{n}h", *(int(rnd.gauss(0.0, 0.1) * 32767) for _ in range(n)))
+        assert seq.cut(pcm, 16000, slots, "device") is None
+
+
+def test_a_noisy_alignment_the_clicks_cannot_decide_is_refused():
+    pcm, slots = sequence_recording(
+        {"a": 0.0, "b": 0.030, "c": 0.012}, silent=frozenset({"c"}), started_at_s=14.0, tail_s=14.0, noise=0.1
+    )
+    assert seq.cut(pcm, 16000, slots, "device") is None
+
+
+def test_clicks_before_the_sequence_began_do_not_move_a_noisy_alignment():
+    """A recorder started before the sequence hears every member before the lead-in mutes them."""
+    import struct
+
+    from tests.support.sync_synth import synth
+
+    pcm, slots = sequence_recording({"a": 0.0, "b": 0.030, "c": 0.012}, noise=0.2)
+    n = len(pcm) // 2
+    x = list(struct.unpack(f"<{n}h", pcm))
+    before = synth("all", lag_s=0.0, start_time_s=20.0 - 1.7, duration_s=1.6, noise=0.0, gain=0.3)
+    y = struct.unpack(f"<{len(before.pcm) // 2}h", before.pcm)
+    for i, v in enumerate(y):
+        x[i] = max(-32767, min(32767, x[i] + v))
+    pcm = struct.pack(f"<{n}h", *x)
+
+    placed = seq.cut(pcm, 16000, slots, "device")
+
+    assert placed is not None and placed[0] == pytest.approx(1.7, abs=1.0)
+    assert all(estimator.estimate(r).status == "ok" for r in placed[1])

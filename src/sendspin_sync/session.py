@@ -623,14 +623,13 @@ class SyncSession:
             if recorder_started_at is not None and self._seq_t0 is not None:
                 began = self._seq_t0 - recorder_started_at  # the sequence's start, in file time, at the latest
                 expected = (began - RECORDER_STARTUP_S, began + _ALIGN_TOLERANCE_S)
-        events = seq.click_times(pcm, sample_rate)  # slow: outside the lock
-        offset = seq.align(events, slots, len(pcm) / 2 / sample_rate, expected=expected)
+        placed = seq.cut(pcm, sample_rate, slots, self.point, expected=expected)  # slow: outside the lock
         results: dict[str, Measurement] = {}
-        if offset is None:
+        if placed is None:
             for s in slots:
                 results[s.member] = Measurement(member=s.member, status="not_heard", reason="no_clicks")
         else:
-            for rec in seq.windows(pcm, sample_rate, slots, offset):
+            for rec in placed[1]:
                 results[rec.member] = estimator.estimate(rec)
         with self._lock:
             self._require(*_MEASURING)
