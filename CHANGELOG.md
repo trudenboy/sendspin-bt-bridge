@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A new `PULSE_LATENCY_MSEC` saved in Settings now takes effect when the speakers restart, instead of only after the whole bridge restarts; its lowest accepted value is 1 ms everywhere.
+- The latency assistant in Diagnostics now sees the latency compensation each speaker has, instead of reporting a tuned multi-room group as having none and suggesting a larger PulseAudio buffer.
 
 ## [3.2.0-beta.25] - 2026-11-07
 
