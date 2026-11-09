@@ -2071,9 +2071,17 @@
       },
       "startPhone": "Démarrer"
     },
+    "verification": {
+      "start": "Vérifier avec un nouvel enregistrement",
+      "help": "Enregistrez à nouveau les clics avec l’entrée du pont ou le téléphone pour mesurer l’écart restant après application. Cette vérification ne modifie pas les délais appliqués.",
+      "predicted": "Mesuré avant application : {before} ms ; écart restant prévu pour la proposition initiale : {after} ms (non remesuré).",
+      "measured": "Écart restant mesuré : {ms} ms.",
+      "passed": "Toutes les enceintes vérifiées respectent l’écart autorisé.",
+      "needsWork": "La vérification est incomplète ou le groupe nécessite encore un réglage.",
+      "changed": "Le timing a changé pendant la vérification. Vérifiez à nouveau ; les délais appliqués ont été conservés."
+    },
     "tune": {
       "help": "Les délais mesurés sont appliqués et les clics continuent. Écoutez chaque enceinte seule ou comparez-en deux, ajustez un délai à la main, puis terminez.",
-      "spread": "Écart maximal entre enceintes : {before} ms mesurés → environ {after} ms maintenant.",
       "kept": "Non entendues ou passées, leur délai est inchangé : {names}",
       "ready": "Les délais mesurés sont appliqués. Écoutez et ajustez.",
       "finish": "Terminer",
@@ -2148,7 +2156,6 @@
       "restoringHelp": "Remise des volumes, rétablissement du son des enceintes et arrêt des clics. Les délais restent tels que vous les avez laissés.",
       "restored": "Groupe restauré",
       "restoredHelp": "Chaque enceinte est rétablie, les volumes sont revenus et les clics se sont arrêtés. Les nouveaux délais restent ; relancez votre musique dans Music Assistant.",
-      "spread": "Écart maximal entre enceintes : {before} ms → environ {after} ms",
       "saved": "Enregistré comme profil « {name} ».",
       "saveFailed": "Les délais sont conservés, mais le profil n’a pas pu être enregistré ({code}).",
       "listen": "Écoute rapide",
@@ -2881,6 +2888,12 @@
       }
     },
     "problem": {
+      "timing_changed": {
+        "detail": "Le timing des enceintes a été modifié ailleurs. Actualisez les valeurs et mesurez à nouveau le groupe avant d’appliquer une proposition."
+      },
+      "config_conflict": {
+        "detail": "Les paramètres des lecteurs ont changé depuis l’ouverture de cette page. Rechargez la configuration avant d’enregistrer. Les compensations et calibrations actuelles ont été conservées."
+      },
       "already_in_standby": {
         "detail": "L’enceinte est déjà en veille."
       },

@@ -495,6 +495,36 @@ def test_a_skip_after_the_proposal_withdraws_it():
     assert s.state == "measuring" and s.proposal is None
 
 
+def test_a_delay_changed_outside_the_session_invalidates_the_round_before_planning():
+    s, ctl, _ = started()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    ctl.delays_now["b"] = 80
+    with pytest.raises(ControlError) as error:
+        s.propose()
+    assert error.value.code == "timing_changed"
+    assert s.proposal is None and s.state == "measuring"
+    assert not [m for m in s.measurements.values() if m.status == "ok"]
+
+
+def test_a_delay_changed_after_planning_is_not_overwritten_on_apply():
+    s, ctl, _ = _measured_and_proposed()
+    ctl.delays_now["b"] = 80
+    with pytest.raises(ControlError) as error:
+        s.apply()
+    assert error.value.code == "timing_changed"
+    assert ctl.delays_now["b"] == 80
+    assert s.proposal is None and s.state == "measuring"
+
+
+def test_an_explicit_session_write_during_measurement_also_withdraws_old_results():
+    s, ctl, _ = _measured_and_proposed()
+    s.write_delay("b", 40)
+    assert ctl.delays_now["b"] == 40
+    assert s.proposal is None and s.state == "measuring"
+    assert not [m for m in s.measurements.values() if m.status == "ok"]
+
+
 def test_finish_is_refused_before_the_session_started_and_while_restoring():
     s, _ctl, _ = make()
     with pytest.raises(ControlError) as exc:

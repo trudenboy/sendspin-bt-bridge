@@ -451,6 +451,7 @@ def test_inventory_is_read_outside_config_lock_and_only_for_pulse_sinks(client, 
     assert calls == [True]  # lock was free while the inventory was read
 
     calls.clear()
+    payload = client.get("/api/v1/config").json()  # the first save may have refreshed backend.match
     payload["players"] = [p for p in payload["players"] if p["backend"]["type"] != "pulse_sink"]
     assert client.put("/api/v1/config", json=payload).status_code == 200
     assert calls == []

@@ -746,7 +746,8 @@ async function computeAndApply() {
       p = await computeProposal(sid)
     } catch (e) {
       if (stale$(sid)) return
-      proposalError.value = t('sync.wizard.proposalFailed', { code: errorCode(e) })
+      proposalError.value = errorCode(e) === 'timing_changed' ? t('server.problem.timing_changed.detail')
+        : t('sync.wizard.proposalFailed', { code: errorCode(e) })
       message.value = proposalError.value
       return
     } finally {
@@ -776,7 +777,8 @@ async function computeAndApply() {
     if (code === 'ma_forbidden') forbidden.value = true
     else {
       if (code === 'member_gone') await refresh(sid)
-      applyError.value = t('sync.wizard.applyFailed', { code })
+      applyError.value = code === 'timing_changed' ? t('server.problem.timing_changed.detail')
+        : t('sync.wizard.applyFailed', { code })
     }
     message.value = forbidden.value ? t('sync.proposal.forbidden') : applyError.value
   } finally {
@@ -806,9 +808,14 @@ async function finish(profileName: string | null) {
     await sync.flushDelays()
     if (profileName) {
       const before = firstSpread.value
-      const after = proposal.value?.predicted_spread_ms
+      const checked = session.value?.verification
+      const after = checked?.state === 'complete' ? checked.spread_ms : proposal.value?.predicted_spread_ms
       const body: { name: string; kind: SessionPoint; notes?: string } = { name: profileName, kind: point.value }
-      if (before != null && after != null) body.notes = `spread ${formatMs(before)} → ${formatMs(after)} ms`
+      if (before != null && after != null) {
+        body.notes = checked?.state === 'complete'
+          ? `${t('sync.verification.measured', { ms: formatMs(after) })}${checked.passed ? '' : ` ${t('sync.verification.needsWork')}`}`
+          : t('sync.verification.predicted', { before: formatMs(before), after: formatMs(after) })
+      }
       try {
         const created = await captureProfile(props.groupId, body)
         savedName.value = created?.name ?? profileName
@@ -863,7 +870,9 @@ async function toDone() {
 
 const doneState = computed(() => (session.value ?? lastSession.value)?.state ?? null)
 const doneBefore = computed(() => firstSpread.value ?? lastHistory(lastSession.value)?.spread_before_ms ?? null)
-const doneAfter = computed(() => proposal.value?.predicted_spread_ms ?? null)
+const doneVerification = computed(() => (session.value ?? lastSession.value)?.verification)
+const doneVerified = computed(() => doneVerification.value?.state === 'complete' && doneVerification.value.spread_ms != null)
+const doneAfter = computed(() => doneVerified.value ? doneVerification.value!.spread_ms : proposal.value?.predicted_spread_ms ?? null)
 const doneLine = computed(() => (doneState.value && ENDED.has(doneState.value) ? t('sync.done.restored') : t('sync.done.restoring')))
 
 /* -- quick listen: clicks on the whole group for 10 s, in a session of its own ---------- */
@@ -1239,6 +1248,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
         :session="session"
         :proposal="proposal"
         :input-name="usedInput?.name ?? null"
+        :listening-device="usedInput"
         :busy="finishing"
         :error="finishError || saveError"
         @finish="finish"
@@ -1251,6 +1261,8 @@ const volumes = computed(() => session.value?.volumes ?? {})
       :input-name="usedInput?.name ?? null"
       :before="doneBefore"
       :after="doneAfter"
+      :verified="doneVerified"
+      :verification-passed="doneVerification?.passed ?? null"
       :saved="savedName"
       :save-error="saveError"
       :listening="listening"

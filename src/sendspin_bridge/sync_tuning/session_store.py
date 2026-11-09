@@ -222,11 +222,12 @@ class SessionStore:
         except Exception:
             logger.warning("Publishing a sync event failed", exc_info=True)
 
-    def own_resource(self, session_id: str, cleanup: Callable[[], None]) -> None:
+    def own_resource(self, session_id: str, cleanup: Callable[[], None]) -> Callable[[], None]:
         """Release a runtime resource when the session begins restoring, on every end path.
 
         Register outside the session lock. If it already ended, release immediately; cleanup
         runs on a worker so stopping an audio process never holds the session's lock.
+        Returns an idempotent detach function for resources that finish before the session ends.
         """
         session = self.get(session_id)
         with self._lock:
@@ -235,6 +236,16 @@ class SessionStore:
         # that the publisher has already ended the session. No session lock is needed here.
         if session.state in (*_ENDED, "restoring"):
             self._release_resources(session_id)
+
+        def detach() -> None:
+            with self._lock:
+                callbacks = self._cleanups.get(session_id)
+                if callbacks is not None and cleanup in callbacks:
+                    callbacks.remove(cleanup)
+                    if not callbacks:
+                        self._cleanups.pop(session_id, None)
+
+        return detach
 
     def _release_resources(self, session_id: str) -> None:
         with self._lock:
@@ -540,6 +551,45 @@ _publish_extras: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 def set_publish_extras(fn: Callable[[dict[str, Any]], dict[str, Any]] | None) -> None:
     global _publish_extras
     _publish_extras = fn
+
+
+def timing_owner_for(player_ids: set[str]) -> str | None:
+    """The local session owning any of these Sendspin/MA/config ids; never creates a store or does IO.
+
+    Snapshot the session list only. Taking a session lock here while a config writer holds its
+    file lock would invert the session -> config order used by the group controls.
+    """
+    store = _store
+    if store is None or not player_ids:
+        return None
+    with store._lock:
+        sessions = tuple(store._sessions.values())
+    for session in sessions:
+        if session.state in (*_ENDED, "restoring"):
+            continue
+        if any(m.ma_player_id in player_ids or m.client_id in player_ids for m in session.members):
+            return session.id
+    return None
+
+
+def invalidate_verification_for(player_ids: set[str], current_value: Callable[[], float]) -> None:
+    """Never acquire a session's lock on the bridge loop. Read the latest value on the worker so an
+    older queued notification cannot invalidate a check measured after that old notification."""
+    store = _store
+    if store is None:
+        return
+    with store._lock:
+        sessions = tuple(
+            s for s in store._sessions.values() if s.verification and s.verification["state"] == "complete"
+        )
+    if not sessions:
+        return
+
+    def observe() -> None:
+        for session in sessions:
+            session.observe_compensation(player_ids, current_value())
+
+    run_in_background(observe, name="sync-verification-timing")
 
 
 def attach_event_hub(hub: Any) -> None:

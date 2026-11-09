@@ -110,7 +110,7 @@ class FakeRecorder:
         self.loop: object = "not called"
         self.thread: threading.Thread | None = None
 
-    def __call__(self, argv: list[str], seconds: float) -> bytes:
+    def __call__(self, argv: list[str], seconds: float, *, cancelled: threading.Event | None = None) -> bytes:
         try:
             self.loop = asyncio.get_running_loop()
         except RuntimeError:

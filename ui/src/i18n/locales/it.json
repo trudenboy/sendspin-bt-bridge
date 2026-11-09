@@ -2071,9 +2071,17 @@
       },
       "startPhone": "Avvia"
     },
+    "verification": {
+      "start": "Verifica con una nuova registrazione",
+      "help": "Registra nuovamente i clic con l’ingresso del bridge o il telefono per misurare lo scarto residuo dopo l’applicazione. La verifica non cambia i ritardi applicati.",
+      "predicted": "Misurato prima dell’applicazione: {before} ms; scarto residuo previsto per la proposta originale: {after} ms (non misurato di nuovo).",
+      "measured": "Scarto residuo misurato: {ms} ms.",
+      "passed": "Tutti gli altoparlanti verificati rientrano nello scarto consentito.",
+      "needsWork": "La verifica è incompleta oppure il gruppo richiede ancora una regolazione.",
+      "changed": "Il timing è cambiato durante la verifica. Verifica nuovamente; i ritardi applicati sono stati mantenuti."
+    },
     "tune": {
       "help": "I ritardi misurati vengono applicati e i clic continuano. Ascolta ogni altoparlante da solo o confrontane due, regola a mano qualsiasi ritardo, poi concludi.",
-      "spread": "Differenza massima tra gli altoparlanti: {before} ms misurati → circa {after} ms ora.",
       "kept": "Non sentiti o saltati, quindi il loro ritardo è invariato: {names}",
       "ready": "I ritardi misurati sono applicati. Ascolta e regola.",
       "finish": "Concludi",
@@ -2148,7 +2156,6 @@
       "restoringHelp": "Riportiamo i volumi, riattiviamo gli altoparlanti e fermiamo i clic. I ritardi restano come li hai lasciati.",
       "restored": "Gruppo ripristinato",
       "restoredHelp": "Ogni altoparlante è riattivato, i volumi sono tornati e i clic si sono fermati. I nuovi ritardi restano; riavvia la tua musica in Music Assistant.",
-      "spread": "Differenza massima tra gli altoparlanti: {before} ms → circa {after} ms",
       "saved": "Salvato come profilo “{name}”.",
       "saveFailed": "I ritardi sono mantenuti, ma il profilo non è stato salvato ({code}).",
       "listen": "Ascolto rapido",
@@ -2881,6 +2888,12 @@
       }
     },
     "problem": {
+      "timing_changed": {
+        "detail": "Il timing degli altoparlanti è stato modificato altrove. Aggiorna i valori e misura nuovamente il gruppo prima di applicare una proposta."
+      },
+      "config_conflict": {
+        "detail": "Le impostazioni dei lettori sono cambiate mentre questa pagina era aperta. Ricarica la configurazione prima di salvare. Le compensazioni e le calibrazioni attuali sono state mantenute."
+      },
       "already_in_standby": {
         "detail": "L’altoparlante è già in standby."
       },

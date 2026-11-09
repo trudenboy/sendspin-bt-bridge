@@ -158,3 +158,48 @@ def test_a_local_outputs_latency_setting_is_saved(api_client, running, tmp_confi
     assert resp.status_code == 200, resp.text
     player = json.loads(tmp_config.read_text())["players"][0]
     assert player[field] == value
+
+
+def test_a_tuning_session_blocks_external_latency_edits(
+    api_client, running, tmp_config, bridge_loop, monkeypatch, tmp_path
+):
+    from dataclasses import replace
+
+    from sendspin_bridge.sync_tuning import session_store
+    from tests.support.sync_fakes import FakeControl, FakeHost
+
+    control = FakeControl()
+    control.member_list = [replace(m, client_id="dac-1") if m.ma_player_id == "a" else m for m in control.member_list]
+    store = session_store.SessionStore(
+        control_factory=lambda: control, host=FakeHost(), publish=lambda _data: None, snapshot_dir=lambda: tmp_path
+    )
+    monkeypatch.setattr(session_store, "_store", store)
+    store.create("g", "semi", "device")
+    host = _with_hot_apply(_pulse_client(sink=SINK))
+    running.append(host)
+    before = tmp_config.read_bytes()
+    response = api_client.put("/api/v1/devices/dac-1/latency", json={"value": 120})
+    assert response.status_code == 409 and response.json()["code"] == "session_active"
+    assert host.sent == []
+    assert tmp_config.read_bytes() == before
+
+
+def test_home_assistant_uses_the_same_timing_owner(running, tmp_config, bridge_loop, monkeypatch):
+    from sendspin_bridge.services.bluetooth import bt_commands
+
+    host = _pulse_client(sink=SINK)
+    running.append(host)
+    monkeypatch.setattr(bt_commands, "find_client_by_player_id", lambda _id: host)
+    result = bt_commands.apply_device_config_change("dac-1", "static_delay_ms", 120)
+    assert result.success, result.error
+    player = json.loads(tmp_config.read_text())["players"][0]
+    assert player["static_delay_ms"] == 120 and player["static_delay_source"] == "manual"
+    assert host.status["static_delay_source"] == "manual"
+
+
+def test_latency_provenance_cannot_be_an_arbitrary_string(api_client, running, bridge_loop):
+    host = _pulse_client(sink=SINK)
+    running.append(host)
+    response = api_client.put("/api/v1/devices/dac-1/latency", json={"value": 120, "source": "pretend_calibrated"})
+    assert response.status_code == 422
+    assert host.sent == []

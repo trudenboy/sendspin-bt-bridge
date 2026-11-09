@@ -381,6 +381,8 @@ PROBLEM_CODES: tuple[str, ...] = (
     "not_found",
     "method_not_allowed",
     "conflict",
+    "config_conflict",
+    "timing_changed",
     "payload_too_large",
     "invalid_request",
     "too_many_requests",

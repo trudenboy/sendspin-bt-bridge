@@ -6501,6 +6501,12 @@
           },
           "source": {
             "default": "manual",
+            "enum": [
+              "manual",
+              "recommendation",
+              "manual_calibration",
+              "microphone_calibration"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -10677,6 +10683,17 @@
             "title": "State",
             "type": "string"
           },
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A fresh post-Apply measurement, not a prediction."
+          },
           "volumes": {
             "additionalProperties": {
               "anyOf": [
@@ -10711,6 +10728,7 @@
           "departed",
           "measurements",
           "proposal",
+          "verification",
           "history",
           "error",
           "restore_error",
@@ -11244,6 +11262,106 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerificationIn": {
+        "properties": {
+          "action": {
+            "enum": [
+              "start",
+              "finish",
+              "cancel"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "VerificationIn",
+        "type": "object"
+      },
+      "VerificationOut": {
+        "properties": {
+          "delays": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Delays",
+            "type": "object"
+          },
+          "heard": {
+            "default": 0,
+            "title": "Heard",
+            "type": "integer"
+          },
+          "measurements": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MeasurementOut"
+            },
+            "title": "Measurements",
+            "type": "object"
+          },
+          "members": {
+            "description": "Members required when this check started; skipping later cannot pass a partial check.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "spread_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Ms"
+          },
+          "state": {
+            "enum": [
+              "recording",
+              "complete",
+              "cancelled",
+              "invalidated"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unverified": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unverified",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "spread_ms",
+          "passed",
+          "heard",
+          "unverified",
+          "measurements",
+          "delays",
+          "members"
+        ],
+        "title": "VerificationOut",
         "type": "object"
       },
       "VolumeOut": {
@@ -14173,7 +14291,7 @@
     },
     "/api/v1/config": {
       "get": {
-        "description": "Secrets are removed; ``_password_set`` and ``_effective_*`` fields describe the runtime.",
+        "description": "Secrets are removed; ``_password_set`` and ``_effective_*`` fields describe the runtime.\n\n``_players_revision`` and ETag name the current player settings. Round-trip that field or\nsend If-Match when saving players so newer compensation and calibrations cannot be lost.",
         "operationId": "get_config_api_v1_config_get",
         "responses": {
           "200": {
@@ -14184,7 +14302,15 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "ETag": {
+                "description": "Revision of the player settings.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "4XX": {
             "content": {
@@ -14215,8 +14341,28 @@
         ]
       },
       "put": {
-        "description": "Accepts the whole configuration (unknown keys are kept). Validation errors answer 400 with every field.",
+        "description": "Accepts the whole configuration (unknown keys are kept). Validation errors answer 400 with every field.\n\nA stale player revision answers 412 config_conflict before writing or applying anything.\nWithout a revision, existing players retain their current timing. Saves without players keep\nthe latest players, even if their revision changed while the settings page was open.",
         "operationId": "put_config_api_v1_config_put",
+        "parameters": [
+          {
+            "description": "Player settings ETag returned by GET.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Player settings ETag returned by GET.",
+              "title": "If-Match"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -20439,6 +20585,70 @@
           }
         },
         "summary": "Pick the manual editor's listening sound",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/verification": {
+      "post": {
+        "operationId": "verification_api_v1_sync_sessions__session_id__verification_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Re-measure the applied delays without computing or applying a proposal",
         "tags": [
           "sync"
         ]

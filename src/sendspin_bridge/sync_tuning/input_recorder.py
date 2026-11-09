@@ -22,8 +22,13 @@ import shutil
 import struct
 import subprocess
 import threading
+import time
+from typing import TYPE_CHECKING
 
 from sendspin_bridge.sync_tuning.audio_decode import DECODE_RATE
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = [
     "CHANNELS",
@@ -98,7 +103,7 @@ def capture_argv(node: str, *, tool: str | None = None, rate: int = DECODE_RATE,
     raise RecorderUnavailable(f"{chosen} is not a recorder this bridge knows")
 
 
-def run_capture(argv: list[str], seconds: float) -> bytes:
+def run_capture(argv: list[str], seconds: float, *, cancelled: threading.Event | None = None) -> bytes:
     """Run the recorder for *seconds* and return its raw s16le stdout.
 
     A child that refuses the node, dies early or records nothing is ``RecorderUnavailable``; the
@@ -118,7 +123,19 @@ def run_capture(argv: list[str], seconds: float) -> bytes:
     err = b""
     try:
         try:
-            out, err = proc.communicate(timeout=seconds)
+            if cancelled is None:
+                out, err = proc.communicate(timeout=seconds)
+            else:
+                deadline = time.monotonic() + seconds
+                while True:
+                    left = deadline - time.monotonic()
+                    if cancelled.is_set() or left <= 0:
+                        raise subprocess.TimeoutExpired(argv, seconds)
+                    try:
+                        out, err = proc.communicate(timeout=min(0.1, left))
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
         except subprocess.TimeoutExpired:
             timed_out = True
             proc.terminate()
@@ -162,6 +179,9 @@ class RunningCapture:
         self._out = bytearray()
         self._err = b""
         self._got_audio = threading.Event()
+        self._stop_lock = threading.Lock()
+        self._stop_result: bytes | None = None
+        self._stop_error: RecorderUnavailable | None = None
         self._reader = threading.Thread(target=self._read, name="sync-input-recorder", daemon=True)
         self._reader.start()
 
@@ -174,13 +194,31 @@ class RunningCapture:
             self._got_audio.set()
         self._got_audio.set()  # ended: whoever waits for audio stops waiting
 
-    def wait_for_audio(self, timeout: float) -> bool:
+    def wait_for_audio(self, timeout: float, *, check: Callable[[], None] | None = None) -> bool:
         """True once the recorder delivers samples; False when it ended, or delivered none in time."""
-        self._got_audio.wait(timeout)
+        deadline = time.monotonic() + timeout
+        while True:
+            if check is not None:
+                check()
+            left = deadline - time.monotonic()
+            if left <= 0 or self._got_audio.wait(min(0.1, left)):
+                break
         return bool(self._out)
 
     def stop(self) -> bytes:
-        """Stop the recorder and return everything it recorded."""
+        """Stop and reap once, even if a session cancellation races the recording worker."""
+        with self._stop_lock:
+            if self._stop_error is not None:
+                raise self._stop_error
+            if self._stop_result is None:
+                try:
+                    self._stop_result = self._stop()
+                except RecorderUnavailable as exc:
+                    self._stop_error = exc
+                    raise
+            return self._stop_result
+
+    def _stop(self) -> bytes:
         proc = self._proc
         # its output closed (the reader finished) or it was reaped: it ended before being asked to
         exited_by_itself = not self._reader.is_alive() or proc.poll() is not None

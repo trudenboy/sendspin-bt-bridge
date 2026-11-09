@@ -316,3 +316,17 @@ def test_a_better_recording_of_the_same_sequence_replaces_the_worse_one():
     s.record_sequence(good, 16000)
 
     assert {k: v.status for k, v in s.measurements.items()} == {"a": "ok", "b": "ok"}
+
+
+def test_an_external_delay_edit_also_invalidates_the_recorded_sequence():
+    s, control, clock, _ = ready()
+    s.start_sequence(["a", "b"])
+    run(s, clock)
+    pcm, _ = sequence_recording({"a": 0.0, "b": 0.030})
+    s.record_sequence(pcm, 16000)
+    control.delays_now["b"] = 80
+    with pytest.raises(ControlError, match="measure the group again"):
+        s.propose()
+    with pytest.raises(ControlError) as error:
+        s.record_sequence(pcm, 16000)
+    assert error.value.code == "no_sequence"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Header, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
@@ -51,24 +51,45 @@ class SendspinTestIn(BaseModel):
     response_model=BridgeConfig,
     response_model_exclude_unset=True,
     summary="The configuration",
-    responses={200: {"model": BridgeConfig}},
+    responses={
+        200: {
+            "model": BridgeConfig,
+            "headers": {"ETag": {"schema": {"type": "string"}, "description": "Revision of the player settings."}},
+        }
+    },
 )
 def get_config() -> JSONResponse:
-    """Secrets are removed; ``_password_set`` and ``_effective_*`` fields describe the runtime."""
+    """Secrets are removed; ``_password_set`` and ``_effective_*`` fields describe the runtime.
+
+    ``_players_revision`` and ETag name the current player settings. Round-trip that field or
+    send If-Match when saving players so newer compensation and calibrations cannot be lost.
+    """
     # Sent as is, not validated against the model: real configs carry values
     # the bridge accepts but the published schema is stricter about
     # (keepalive_interval 0 = keep-alive off). Validating the answer made
     # those a 500, and the settings screen never loaded.
-    return JSONResponse(cfg.get_config())
+    document = cfg.get_config()
+    return JSONResponse(document, headers={"ETag": f'"{document["_players_revision"]}"'})
 
 
 @router.put("", response_model=SaveResult, summary="Save and apply the configuration")
-async def put_config(request: Request) -> SaveResult:
-    """Accepts the whole configuration (unknown keys are kept). Validation errors answer 400 with every field."""
+async def put_config(
+    request: Request,
+    if_match: str | None = Header(default=None, alias="If-Match", description="Player settings ETag returned by GET."),
+) -> SaveResult:
+    """Accepts the whole configuration (unknown keys are kept). Validation errors answer 400 with every field.
+
+    A stale player revision answers 412 config_conflict before writing or applying anything.
+    Without a revision, existing players retain their current timing. Saves without players keep
+    the latest players, even if their revision changed while the settings page was open.
+    """
     from starlette.concurrency import run_in_threadpool
 
     body = await request.json()
-    return SaveResult(**await run_in_threadpool(cfg.save_config, body))
+    revision = if_match
+    if revision is not None and len(revision) >= 2 and revision.startswith('"') and revision.endswith('"'):
+        revision = revision[1:-1]
+    return SaveResult(**await run_in_threadpool(cfg.save_config, body, expected_revision=revision))
 
 
 @router.post("/validate", response_model=Validation, summary="Validate without saving")

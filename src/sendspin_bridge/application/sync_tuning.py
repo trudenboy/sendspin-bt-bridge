@@ -74,6 +74,7 @@ _STATUS = {
     "recording_invalid": 400,
     "restore_pending": 409,
     "session_state": 409,
+    "timing_changed": 409,
     "no_measurement": 409,
     "group_playing": 409,
     "clicker_stopped": 409,
@@ -459,6 +460,21 @@ def finish(sid: str) -> SyncSessionOut:
     return _act(sid, lambda s: s.finish())
 
 
+def verification(sid: str, action: str) -> SyncSessionOut:
+    session = _session(sid)
+    try:
+        if action == "start":
+            session.start_verification()
+        elif action in ("finish", "cancel"):
+            session.finish_verification(cancel=action == "cancel")
+            session.follow_sound()
+        else:
+            raise UseCaseError(400, "invalid_request", "Unknown verification action")
+    except (ControlError, MaApiError) as exc:
+        _raise(exc)
+    return _session_out(session)
+
+
 def proposal(sid: str) -> ProposalOut:
     """Read-only: the session's current proposal (``no_measurement`` before one was computed)."""
     current = _session(sid).proposal
@@ -789,42 +805,36 @@ async def capture_input(
         _refuse_input("input_unavailable", f"No capture node answers for {entry.get('name') or input_id}")
     if members is not None:
         tool = _recorder_tool(view)
-        with _one_recording(session):
-            return await asyncio.to_thread(_record_sequence_sync, session, node, tool, list(members))
+        return await asyncio.to_thread(_record_input_request, session, node, tool, list(members), None)
     current = session.sequence
     if current is None:
         _refuse_input("session_state", "The measurement has no sequence to record: play it first")
     duration = _recording_seconds(seconds, current, session.point)
     tool = _recorder_tool(view)
-    with _upload_locks_lock:
-        lock = _upload_locks.setdefault(session.id, threading.Lock())
-    if not lock.acquire(blocking=False):
-        _refuse_input("capture_running", "A recording is being measured; wait a moment")
-    try:
-        if not _decode_gate.acquire(blocking=False):
-            _refuse_input("capture_running", "Another recording is being measured; try again in a moment")
-        try:
-            return await asyncio.to_thread(_capture_input_sync, session, node, duration, tool)
-        finally:
-            _decode_gate.release()
-    finally:
-        lock.release()
+    return await asyncio.to_thread(_record_input_request, session, node, tool, None, duration)
+
+
+def _record_input_request(
+    session: SyncSession, node: str, tool: str, members: list[str] | None, duration: float | None
+) -> CaptureResultOut:
+    # The worker owns the session lock, not the awaiting coroutine: a disconnected HTTP client
+    # must not free it while its worker is still recording.
+    with _one_recording(session):
+        if members is not None:
+            return _record_sequence_sync(session, node, tool, members)
+        assert duration is not None
+        return _capture_input_sync(session, node, duration, tool)
 
 
 @contextlib.contextmanager
 def _one_recording(session: SyncSession) -> Iterator[None]:
-    """One recording per session, and one decode in the bridge, at a time."""
+    """One recording per session. The global decode gate is held only for decode and estimation."""
     with _upload_locks_lock:
         lock = _upload_locks.setdefault(session.id, threading.Lock())
     if not lock.acquire(blocking=False):
         _refuse_input("capture_running", "A recording is being measured; wait a moment")
     try:
-        if not _decode_gate.acquire(blocking=False):
-            _refuse_input("capture_running", "Another recording is being measured; try again in a moment")
-        try:
-            yield
-        finally:
-            _decode_gate.release()
+        yield
     finally:
         lock.release()
 
@@ -835,9 +845,96 @@ RECORDER_START_TIMEOUT_S = 3.0
 RECORD_TAIL_S = 1.0
 
 
+def _check_recording(session: SyncSession, cancelled: threading.Event | None = None) -> None:
+    if (cancelled is not None and cancelled.is_set()) or session.state not in ("measuring", "proposed"):
+        _refuse_input("session_state", "The session ended while its input was recording")
+
+
+class _RecordingScope:
+    """Identity and cancellation of one recording, even if verification is cancelled and restarted."""
+
+    def __init__(self, session: SyncSession):
+        self.session = session
+        self.cancelled = threading.Event()
+        self.verification = session.verification
+        self.sequence = session.sequence
+        self.clicks = session.clicker_starts
+
+    def bind_sequence(self) -> None:
+        self.sequence = self.session.sequence
+        self.clicks = self.session.clicker_starts
+
+    def check(self) -> None:
+        _check_recording(self.session, self.cancelled)
+        if self.session.verification is not self.verification or (
+            self.sequence is not None
+            and (self.session.sequence is not self.sequence or self.session.clicker_starts != self.clicks)
+        ):
+            _refuse_input("session_state", "This recording's measurement round has ended")
+
+
+def _recording_sleep(scope: _RecordingScope, seconds: float) -> None:
+    """Sequence waits remain interruptible; the sleeper is also the fake clock used in tests."""
+    left = seconds
+    while left > 0:
+        scope.check()
+        step = min(0.1, left)
+        _sequence_sleep(step)
+        left -= step
+    scope.check()
+
+
+@contextlib.contextmanager
+def _owned_capture(session: SyncSession, capture: Any) -> Iterator[_RecordingScope]:
+    from sendspin_bridge.sync_tuning.input_recorder import RecorderUnavailable
+
+    scope = _RecordingScope(session)
+
+    def cancel() -> None:
+        scope.cancelled.set()
+        with contextlib.suppress(RecorderUnavailable):
+            capture.stop()
+
+    detach = get_store().own_resource(session.id, cancel)
+    try:
+        scope.check()
+        yield scope
+    finally:
+        detach()
+
+
+def _decode_input_recording(
+    session: SyncSession, raw: bytes, *, recorder_started_at: float | None = None, scope: _RecordingScope | None = None
+) -> CaptureResultOut:
+    """Serialize expensive work, not the minutes spent listening to the room."""
+    from sendspin_bridge.sync_tuning import audio_decode, input_recorder
+
+    if not _decode_gate.acquire(blocking=False):
+        _refuse_input("capture_running", "Another recording is being measured; try again in a moment")
+    try:
+        if scope is not None:
+            scope.check()
+        else:
+            _check_recording(session)
+        current = session.sequence
+        if current is None:
+            _refuse_input("session_state", "The measurement sequence ended while the input recorded")
+        try:
+            pcm, rate = audio_decode.decode_to_mono(
+                input_recorder.to_wav(raw), max_seconds=seq.max_duration_s(len(current["members"]), session.point)
+            )
+        except ControlError as exc:
+            _raise(exc)
+        if scope is not None:
+            scope.check()
+        return _measure_sequence(session, pcm, rate, recorder_started_at=recorder_started_at)
+    finally:
+        _decode_gate.release()
+
+
 def _record_sequence_sync(session: SyncSession, node: str, tool: str, members: list[str]) -> CaptureResultOut:
     """Worker thread: open the recorder, play the sequence, stop the recorder after it, measure."""
-    from sendspin_bridge.sync_tuning import audio_decode, input_recorder
+    from sendspin_bridge.sync_tuning import input_recorder
 
     argv = input_recorder.capture_argv(node, tool=tool)
     started = session.now()  # the first sample comes at, or shortly after, this moment
@@ -846,24 +943,22 @@ def _record_sequence_sync(session: SyncSession, node: str, tool: str, members: l
     except input_recorder.RecorderUnavailable as exc:
         _refuse_input("input_unavailable", str(exc))
     try:
-        if not capture.wait_for_audio(RECORDER_START_TIMEOUT_S):
-            _refuse_input("input_unavailable", "The input delivered no audio")
-        try:
-            session.start_sequence(members)
-        except (ControlError, MaApiError) as exc:
-            _raise(exc)
-        _start_air_watch(session)
-        session.run_sequence(sleep=_sequence_sleep)
-        current = session.sequence
-        if current is None or current["phase"] != "done":
-            failed = current is not None and current["phase"] == "failed"
-            _refuse_input(
-                "session_state",
-                "The sequence failed while the input was recording"
-                if failed
-                else "The sequence ended while the input was recording",
-            )
-        _sequence_sleep(RECORD_TAIL_S)
+        with _owned_capture(session, capture) as scope:
+            ready = capture.wait_for_audio(RECORDER_START_TIMEOUT_S, check=scope.check)
+            scope.check()
+            if not ready:
+                _refuse_input("input_unavailable", "The input delivered no audio")
+            try:
+                session.start_sequence(members)
+            except (ControlError, MaApiError) as exc:
+                _raise(exc)
+            scope.bind_sequence()
+            _start_air_watch(session)
+            session.run_sequence(sleep=lambda seconds: _recording_sleep(scope, seconds))
+            current = session.sequence
+            if current is None or current["phase"] != "done":
+                _refuse_input("session_state", "The sequence failed or ended while the input was recording")
+            _recording_sleep(scope, RECORD_TAIL_S)
     except BaseException:
         with contextlib.suppress(input_recorder.RecorderUnavailable):
             capture.stop()
@@ -872,13 +967,7 @@ def _record_sequence_sync(session: SyncSession, node: str, tool: str, members: l
         raw = capture.stop()
     except input_recorder.RecorderUnavailable as exc:
         _refuse_input("input_unavailable", str(exc))
-    try:
-        pcm, rate = audio_decode.decode_to_mono(
-            input_recorder.to_wav(raw), max_seconds=seq.max_duration_s(len(current["members"]), session.point)
-        )
-    except ControlError as exc:
-        _raise(exc)
-    return _measure_sequence(session, pcm, rate, recorder_started_at=started)
+    return _decode_input_recording(session, raw, recorder_started_at=started, scope=scope)
 
 
 def _input_busy(view: Mapping[str, Any], input_id: str) -> bool:
@@ -950,32 +1039,33 @@ def _recording_seconds(seconds: float | None, sequence: Mapping[str, Any], point
 
 def _capture_input_sync(session: SyncSession, node: str, seconds: float, tool: str) -> CaptureResultOut:
     """Worker thread: record the node, decode it exactly as the phone's upload is decoded, measure."""
-    from sendspin_bridge.sync_tuning import audio_decode, input_recorder
+    from sendspin_bridge.sync_tuning import input_recorder
 
     argv = input_recorder.capture_argv(node, tool=tool)
+    scope = _RecordingScope(session)
+    detach = get_store().own_resource(session.id, scope.cancelled.set)
     try:
-        raw = input_recorder.run_capture(argv, seconds)
-    except input_recorder.RecorderUnavailable as exc:
-        raise UseCaseError(_INPUT_STATUS["input_unavailable"], "input_unavailable", str(exc)) from exc
-    current = session.sequence
-    if current is None:
-        raise UseCaseError(
-            _INPUT_STATUS["session_state"], "session_state", "The sequence ended while the input recorded"
-        )
-    try:
-        pcm, rate = audio_decode.decode_to_mono(
-            input_recorder.to_wav(raw), max_seconds=seq.max_duration_s(len(current["members"]), session.point)
-        )
-    except ControlError as exc:
-        _raise(exc)
-    _wait_for_sequence(session)
-    return _measure_sequence(session, pcm, rate)
+        scope.check()
+        try:
+            raw = input_recorder.run_capture(argv, seconds, cancelled=scope.cancelled)
+        except input_recorder.RecorderUnavailable as exc:
+            scope.check()
+            _refuse_input("input_unavailable", str(exc))
+        scope.check()
+        _wait_for_sequence(session, scope)
+        return _decode_input_recording(session, raw, scope=scope)
+    finally:
+        detach()
 
 
-def _wait_for_sequence(session: SyncSession) -> None:
+def _wait_for_sequence(session: SyncSession, scope: _RecordingScope | None = None) -> None:
     """The sequence normally ends before the recording does; a late start leaves only a moment."""
     deadline = time.monotonic() + _SEQUENCE_WAIT_S
     while True:
+        if scope is not None:
+            scope.check()
+        else:
+            _check_recording(session)
         current = session.sequence
         if current is None:
             raise UseCaseError(
@@ -1278,6 +1368,8 @@ class _AirWatch:
 
 def _start_air_watch(session: SyncSession) -> None:
     """A new sequence: forget the last one's folds and, with the air sensor running, watch this one."""
+    if session.verification and session.verification["state"] == "recording":
+        return  # verification must not pair new air folds with the original acoustic measurements
     token = object()
     with _air_lock:
         _air_records.pop(session.id, None)
@@ -1442,6 +1534,11 @@ def save_air_calibrations(sid: str, members: list[str]) -> list[AirCalibrationCa
                     mid,
                 )
         chosen.append((c, str(client.player_id), entry))
+    if chosen:
+        try:
+            session.invalidate_verification()
+        except ControlError as exc:
+            _raise(exc)
     for _c, device_id, entry in chosen:
         devices_uc.save_air_calibration(device_id, entry)
     return [c for c, _d, _e in chosen]

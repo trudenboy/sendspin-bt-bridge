@@ -2071,9 +2071,17 @@
       },
       "startPhone": "Start"
     },
+    "verification": {
+      "start": "Verify with a new recording",
+      "help": "Record fresh clicks with the bridge input or the phone to measure the residual after Apply. This check does not change the applied delays.",
+      "predicted": "{before} ms measured before Apply; predicted residual {after} ms for the original proposal (not re-measured).",
+      "measured": "Measured residual: {ms} ms.",
+      "passed": "Every checked speaker is within the allowed spread.",
+      "needsWork": "Verification is incomplete or the group still needs adjustment.",
+      "changed": "Timing changed during this check. Verify again; the applied delays were kept."
+    },
     "tune": {
       "help": "The measured delays are applied and the clicks keep playing. Listen to each speaker alone or compare two, adjust any delay by hand, then finish.",
-      "spread": "Largest gap between speakers: {before} ms measured → about {after} ms now.",
       "kept": "Not heard or skipped, so their delay is unchanged: {names}",
       "ready": "The measured delays are applied. Listen and adjust.",
       "finish": "Finish",
@@ -2148,7 +2156,6 @@
       "restoringHelp": "Putting the volumes back, unmuting the speakers and stopping the clicks. The delays stay as you left them.",
       "restored": "Group restored",
       "restoredHelp": "Every speaker is unmuted, the volumes are back and the clicks stopped. The new delays stay; start your music again in Music Assistant.",
-      "spread": "Largest gap between speakers: {before} ms → about {after} ms",
       "saved": "Saved as profile “{name}”.",
       "saveFailed": "The delays are kept, but the profile could not be saved ({code}).",
       "listen": "Quick listen",
@@ -2881,6 +2888,12 @@
       }
     },
     "problem": {
+      "timing_changed": {
+        "detail": "Speaker timing changed elsewhere. Refresh the values and measure the group again before applying a proposal."
+      },
+      "config_conflict": {
+        "detail": "Player settings changed while this page was open. Reload the configuration before saving; your current compensation and calibrations have been kept."
+      },
       "already_in_standby": {
         "detail": "The speaker is already on standby."
       },

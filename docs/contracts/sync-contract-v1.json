@@ -444,6 +444,7 @@
         "session_expired",
         "session_state",
         "sync_mute_unsupported",
+        "timing_changed",
         "track_unavailable",
         "upload_running"
       ],
@@ -1438,6 +1439,18 @@
           "title": "State",
           "type": "string"
         },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerificationOut"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A fresh post-Apply measurement, not a prediction."
+        },
         "volumes": {
           "additionalProperties": {
             "anyOf": [
@@ -1472,6 +1485,7 @@
         "departed",
         "measurements",
         "proposal",
+        "verification",
         "history",
         "error",
         "restore_error",
@@ -1489,6 +1503,90 @@
         "air_calibrations"
       ],
       "title": "SyncSessionOut",
+      "type": "object"
+    },
+    "VerificationOut": {
+      "properties": {
+        "delays": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        },
+        "heard": {
+          "default": 0,
+          "title": "Heard",
+          "type": "integer"
+        },
+        "measurements": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MeasurementOut"
+          },
+          "title": "Measurements",
+          "type": "object"
+        },
+        "members": {
+          "description": "Members required when this check started; skipping later cannot pass a partial check.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "passed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Passed"
+        },
+        "spread_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spread Ms"
+        },
+        "state": {
+          "enum": [
+            "recording",
+            "complete",
+            "cancelled",
+            "invalidated"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "unverified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unverified",
+          "type": "array"
+        }
+      },
+      "required": [
+        "state",
+        "spread_ms",
+        "passed",
+        "heard",
+        "unverified",
+        "measurements",
+        "delays",
+        "members"
+      ],
+      "title": "VerificationOut",
       "type": "object"
     }
   },

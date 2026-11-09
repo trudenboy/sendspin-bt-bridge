@@ -7,6 +7,7 @@ import functools
 import json
 import logging
 import os
+import re
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -383,6 +384,9 @@ def _parse_optional_int(
 def get_config() -> dict:
     """The config for the settings screen: secrets removed, effective ports and live device facts added."""
     config = load_config()
+    from sendspin_bridge.config.player_revisions import players_revision
+
+    config["_players_revision"] = players_revision(config)
     config.pop("PLAYER_STATE", None)
     config.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     runtime = _detect_runtime()
@@ -778,6 +782,7 @@ def import_config(raw: bytes) -> dict:
     # A file without the key (a backup from before profiles, or a hand-edited one) keeps the stored
     # profiles; a file that has it replaces them.
     keeps_sync_profiles = "SYNC_PROFILES" not in uploaded
+    uploaded.pop("_players_revision", None)  # read-only GET metadata, not part of a backup
     uploaded.pop("PLAYER_STATE", None)
     uploaded.pop("SENDSPIN_SOURCE_INPUT_STATE", None)
     validation = validate_uploaded_config(uploaded, default_base_listen_port=resolve_base_listen_port())
@@ -805,11 +810,16 @@ def import_config(raw: bytes) -> dict:
         with config_lock:
             stored = store.read_stored() or {}
             players = _players_from_internal(_internal_view(uploaded), uploaded_players, stored, sinks_now)
+            from sendspin_bridge.services.audio.speaker_timing import refuse_config_timing_changes
+
+            timing_owners = refuse_config_timing_changes(_as_v6(stored).get("players") or [], players)
             new_config = {**uploaded, "players": players, "PLAYER_STATE": _kept_player_state(stored, players)}
             new_config["SENDSPIN_SOURCE_INPUT_STATE"] = _kept_source_input_state(stored)
             if keeps_sync_profiles:
                 new_config.pop("SYNC_PROFILES", None)
             store.replace(new_config, preserve=("SYNC_PROFILES",) if keeps_sync_profiles else (), owned=_PRESERVED_KEYS)
+            for owner in timing_owners:
+                owner.invalidate_pending_writes()
     except ValueError as exc:
         logger.error("Refusing to save uploaded config: %s is unreadable (%s)", CONFIG_FILE, exc)
         raise _error(
@@ -863,7 +873,7 @@ def validate_config(config: dict) -> dict:
     }
 
 
-def save_config(config: dict) -> dict:
+def save_config(config: dict, *, expected_revision: str | None = None) -> dict:
     """Validate, persist and apply a config — hot where possible, restarts listed where not.
 
     Returns ``{"warnings": [...], "reconfig": {...}}``.
@@ -872,8 +882,15 @@ def save_config(config: dict) -> dict:
         raise _error("Invalid JSON body")
 
     from sendspin_bridge.config.migration import LEGACY_V5_KEYS
+    from sendspin_bridge.config.player_revisions import keep_player_timing, players_revision
     from sendspin_bridge.config.players import BLUETOOTH, normalize_mac
 
+    config = dict(config)
+    supplied_players = "players" in config
+    body_revision = config.pop("_players_revision", None)
+    revision = expected_revision if expected_revision is not None else body_revision
+    if revision is not None and (not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{64}", revision)):
+        raise _error("Invalid player configuration revision", 400, "invalid_revision")
     config = _without_private_player_keys(config)
     if "players" not in config:
         if any(key in config for key in LEGACY_V5_KEYS):
@@ -1127,6 +1144,20 @@ def save_config(config: dict) -> dict:
             if not config.get("MA_USERNAME") and existing.get("MA_USERNAME"):
                 config["MA_USERNAME"] = existing["MA_USERNAME"]
 
+        from sendspin_bridge.config.store import ConfigStore
+
+        effective_before = ConfigStore(CONFIG_FILE).load() if existing else {}
+        if supplied_players and revision is not None and revision != players_revision(effective_before):
+            raise _error("Player settings changed; reload the configuration before saving", 412, "config_conflict")
+        stored_players = _as_v6(existing_file).get("players") or []
+        if not supplied_players:
+            # Validation copied the players before this lock. They may have changed since then;
+            # a Settings-only save must not roll them back or orphan a newly added player.
+            payload_players = copy.deepcopy(stored_players)
+            from sendspin_bridge.config.players import device_entries
+
+            config["BLUETOOTH_DEVICES"] = device_entries({"players": payload_players})
+
         # HA_INTEGRATION password round-trip semantics — under the lock so a
         # parallel ``POST /api/config`` from another Waitress thread can't
         # change the on-disk password between our existing-read and write.
@@ -1204,11 +1235,16 @@ def save_config(config: dict) -> dict:
         # What the bridge runs on now: the file plus the defaults it does not
         # spell out. Diffing against the raw file read every default as a
         # change and restarted every speaker on an untouched save.
-        from sendspin_bridge.config.store import ConfigStore
+        players = (
+            _players_from_internal(config, payload_players, existing_file, sinks_now)
+            if supplied_players
+            else copy.deepcopy(stored_players)
+        )
+        if supplied_players and revision is None:
+            keep_player_timing(players, stored_players)
+        from sendspin_bridge.services.audio.speaker_timing import refuse_config_timing_changes
 
-        effective_before = ConfigStore(CONFIG_FILE).load() if existing else {}
-
-        players = _players_from_internal(config, payload_players, existing_file, sinks_now)
+        timing_owners = refuse_config_timing_changes(stored_players, players)
         new_file = {k: v for k, v in config.items() if k != "BLUETOOTH_DEVICES"}
         new_file["players"] = players
         new_file["PLAYER_STATE"] = _kept_player_state(existing_file, players)
@@ -1216,6 +1252,8 @@ def save_config(config: dict) -> dict:
 
         try:
             write_config_file(new_file, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
+            for owner in timing_owners:
+                owner.invalidate_pending_writes()
         except OSError as exc:
             raise config_write_error(exc, context="Cannot save bridge config") from exc
 

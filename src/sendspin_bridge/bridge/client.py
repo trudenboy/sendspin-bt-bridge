@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import functools
 import json
 import logging
 import math
@@ -57,9 +56,7 @@ from sendspin_bridge.config import (
     load_player_volume,
     resolve_air_learned,
     save_air_learned_sample,
-    save_device_static_delay,
     save_device_volume,
-    save_player_static_delay,
     save_player_volume,
 )
 from sendspin_bridge.config.players import (
@@ -99,10 +96,7 @@ from sendspin_bridge.services.ipc.commands import (
     Command,
     Reconnect,
     SetAirCalibration,
-    SetMinBufferMs,
-    SetRequiredLeadTimeMs,
     SetStandby,
-    SetStaticDelayMs,
     Transport,
     encode_command,
 )
@@ -127,13 +121,6 @@ _MAX_BIND_FAILURES = 5
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-#: Hot-applied buffer knobs, keyed by the config field they come from.
-_BUFFER_COMMANDS: dict[str, type[SetStaticDelayMs | SetRequiredLeadTimeMs | SetMinBufferMs]] = {
-    "static_delay_ms": SetStaticDelayMs,
-    "required_lead_time_ms": SetRequiredLeadTimeMs,
-    "min_buffer_ms": SetMinBufferMs,
-}
-
 logger = logging.getLogger(__name__)
 
 
@@ -2580,21 +2567,11 @@ class SendspinClient:
         if not isinstance(delay, (int, float)) or isinstance(delay, bool):
             return
         self._seen_server_delay_seq = seq
-        self.static_delay_ms = float(delay)
         set_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        self._update_status(
-            {
-                "static_delay_source": "music_assistant",
-                "static_delay_calibrated_at": set_at,
-                "static_delay_codec": None,
-            }
-        )
+        from sendspin_bridge.services.audio.speaker_timing import timing_for
+
+        timing_for(self).observe_server(float(delay), set_at)
         logger.info("[%s] Music Assistant set the delay to %.0f ms", self.player_name, delay)
-        if self.config_id:
-            save = functools.partial(save_player_static_delay, source="music_assistant", set_at=set_at)
-            self._schedule_persist("static_delay", save, self.config_id, round(delay))
-        elif mac:
-            self._schedule_persist("static_delay", save_device_static_delay, mac, round(delay))
 
     def _schedule_persist(self, key: str, fn, mac: str, value: float) -> None:
         """Debounce a daemon-driven config write and run it off the loop.
@@ -2942,27 +2919,14 @@ class SendspinClient:
 
         for key, value in fields_payload.items():
             if key in ("static_delay_ms", "required_lead_time_ms", "min_buffer_ms"):
+                from sendspin_bridge.application.errors import UseCaseError
+                from sendspin_bridge.services.audio.speaker_timing import timing_for
+
                 try:
-                    delay_ms = float(value) if value is not None else 0.0  # type: ignore[arg-type]
-                except (TypeError, ValueError):
-                    logger.warning("[%s] Ignoring invalid %s: %r", self.player_name, key, value)
+                    await timing_for(self).apply_runtime(key, value)
+                except (TypeError, ValueError, IPCError, UseCaseError) as exc:
+                    logger.warning("[%s] Could not apply %s: %s", self.player_name, key, exc)
                     continue
-                if self.is_running():
-                    try:
-                        await self._send_subprocess_command(_BUFFER_COMMANDS[key](value=delay_ms))
-                    except IPCError as exc:
-                        logger.warning(
-                            "[%s] hot-apply %s IPC failed: %s — parent-state unchanged",
-                            self.player_name,
-                            key,
-                            exc,
-                        )
-                        continue
-                if key == "static_delay_ms":
-                    self.static_delay_ms = delay_ms
-                else:
-                    setattr(self, key, round(delay_ms))
-                self._update_status({key: round(delay_ms)})
                 applied.append(key)
             elif key == "keepalive_interval":
                 try:
@@ -3188,12 +3152,7 @@ class SendspinClient:
                 recommendation = build_latency_recommendation(
                     reported_bt_delay_ms=snapshot.delay_ms,
                     codec_name=codec_name,
-                    calibrated_delay_ms=(
-                        self.status.get("static_delay_ms")
-                        if self.status.get("static_delay_source") in {"microphone_calibration", "manual_calibration"}
-                        else None
-                    ),
-                    calibration_source=self.status.get("static_delay_source"),
+                    **self._timing_recommendation_context(),
                 )
                 revision = f"{snapshot.path}:{snapshot.delay_tenths_ms}:{snapshot.codec_id}"
                 backend_latency = self.status.get("backend_output_latency_ms")
@@ -3241,39 +3200,23 @@ class SendspinClient:
         provenance replaces the marker both in runtime state and config, so
         future BlueZ changes can never overwrite a manual adjustment.
         """
-        if self.status.get("static_delay_source") != "auto_pending" or recommendation.value_ms is None:
-            return False
+        from sendspin_bridge.services.audio.speaker_timing import timing_for
 
-        applied = await self.apply_hot_config({"static_delay_ms": recommendation.value_ms})
-        if "static_delay_ms" not in applied:
-            return False
-
-        source = recommendation.source
         codec = str(codec_name).strip() if codec_name else None
-        calibrated_at = datetime.now(UTC).isoformat()
-        self._update_status(
-            {
-                "static_delay_source": source,
-                "static_delay_calibrated_at": calibrated_at,
-                "static_delay_codec": codec,
-            }
-        )
-        mac = getattr(self.bt_manager, "mac_address", None) if self.bt_manager else None
-        if mac:
-            await asyncio.to_thread(
-                save_device_static_delay,
-                mac,
-                recommendation.value_ms,
-                source=source,
-                codec=codec,
-            )
+        if not await timing_for(self).initialize(recommendation, codec):
+            return False
         logger.info(
             "[%s] Applied initial static delay %d ms from %s; automatic initialization is now complete",
             self.player_name,
             recommendation.value_ms,
-            source,
+            recommendation.source,
         )
         return True
+
+    def _timing_recommendation_context(self) -> dict:
+        from sendspin_bridge.services.audio.speaker_timing import recommendation_context
+
+        return recommendation_context(self)
 
     async def _send_keepalive_burst(self) -> None:
         """Write the configured keepalive payload to the BT PulseAudio sink via paplay.

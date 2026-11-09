@@ -9,7 +9,7 @@ import { ENDED } from '@/stores/sync'
 
 /**
  * The last stage: the group is being restored (mutes taken back, volumes put back, the clicks
- * stopped), then restored. Shows the measured gap before → the predicted one after, whether the
+ * stopped), then restored. Shows a measured verification result, or a clearly labelled prediction, whether the
  * delays were saved as a profile, and offers a quick listen on the whole group.
  */
 const props = defineProps<{
@@ -19,6 +19,8 @@ const props = defineProps<{
   inputName?: string | null
   before: number | null
   after: number | null
+  verified?: boolean
+  verificationPassed?: boolean | null
   saved: string | null
   saveError: string
   listening: boolean
@@ -45,7 +47,11 @@ const restored = computed(() => !!props.state && ENDED.has(props.state))
     </div>
 
     <p v-if="before != null && after != null" data-spread class="text-sm text-text-primary">
-      {{ t('sync.done.spread', { before: formatMs(before), after: formatMs(after) }) }}
+      {{ verified ? t('sync.verification.measured', { ms: formatMs(after) })
+        : t('sync.verification.predicted', { before: formatMs(before), after: formatMs(after) }) }}
+    </p>
+    <p v-if="verificationPassed === false" data-verification-incomplete role="status" class="text-sm text-warning-text">
+      {{ t('sync.verification.needsWork') }}
     </p>
     <p v-if="inputName" data-input-latency-note class="text-xs text-text-secondary">{{ t('sync.input.latencyNote') }}</p>
     <p v-if="saved" data-saved role="status" class="text-sm text-text-primary">{{ t('sync.done.saved', { name: saved }) }}</p>

@@ -100,3 +100,45 @@ def test_a_recorder_that_refuses_the_node_is_unavailable_when_stopped():
 def test_a_recorder_that_cannot_start_is_unavailable():
     with pytest.raises(input_recorder.RecorderUnavailable):
         input_recorder.open_capture(["/nonexistent/recorder"])
+
+
+def test_a_capture_can_be_stopped_concurrently_and_again():
+    from concurrent.futures import ThreadPoolExecutor
+
+    capture = input_recorder.open_capture(_STREAMING)
+    try:
+        assert capture.wait_for_audio(5.0)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: capture.stop(), range(2)))
+        assert results[0] and results[0] == results[1]
+        assert capture.stop() == results[0]
+    finally:
+        capture.stop()
+
+
+def test_a_fixed_duration_capture_reaps_its_child_on_cancellation(tmp_path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    ready = tmp_path / "recording-started"
+    argv = [
+        sys.executable,
+        "-c",
+        "import pathlib, sys, time; "
+        "sys.stdout.buffer.write(b'\\x01\\x00'*160); sys.stdout.flush(); "
+        "pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(60)",
+        str(ready),
+    ]
+    cancelled = threading.Event()
+    import time
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(input_recorder.run_capture, argv, 60.0, cancelled=cancelled)
+        try:
+            deadline = time.monotonic() + 5.0
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert ready.exists()
+        finally:
+            cancelled.set()
+        assert future.result(timeout=5.0)

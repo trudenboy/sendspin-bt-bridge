@@ -2071,9 +2071,17 @@
       },
       "startPhone": "Başlat"
     },
+    "verification": {
+      "start": "Yeni bir kayıtla doğrula",
+      "help": "Uygulamadan sonra kalan farkı ölçmek için köprü girişi veya telefonla tıklamaları yeniden kaydet. Bu kontrol uygulanan gecikmeleri değiştirmez.",
+      "predicted": "Uygulama öncesi ölçüm: {before} ms; ilk öneri için tahmini kalan fark: {after} ms (yeniden ölçülmedi).",
+      "measured": "Ölçülen kalan fark: {ms} ms.",
+      "passed": "Kontrol edilen tüm hoparlörler izin verilen fark içinde.",
+      "needsWork": "Doğrulama eksik veya grupta hâlâ ayarlama gerekiyor.",
+      "changed": "Kontrol sırasında zamanlama değişti. Yeniden doğrula; uygulanan gecikmeler korundu."
+    },
     "tune": {
       "help": "Ölçülen gecikmeler uygulandı ve tıklamalar çalmaya devam ediyor. Her hoparlörü tek başına dinle veya iki tanesini karşılaştır, gereken gecikmeyi elle ayarla, sonra bitir.",
-      "spread": "Hoparlörler arasındaki en büyük fark: ölçülen {before} ms → şimdi yaklaşık {after} ms.",
       "kept": "Duyulmadı veya atlandı, bu yüzden gecikmeleri değişmedi: {names}",
       "ready": "Ölçülen gecikmeler uygulandı. Dinle ve ayarla.",
       "finish": "Bitir",
@@ -2148,7 +2156,6 @@
       "restoringHelp": "Ses düzeyleri geri konuyor, hoparlörlerin sesi açılıyor ve tıklamalar durduruluyor. Gecikmeler bıraktığın gibi kalır.",
       "restored": "Grup geri yüklendi",
       "restoredHelp": "Tüm hoparlörlerin sesi açıldı, ses düzeyleri geri döndü ve tıklamalar durdu. Yeni gecikmeler kalıcı; müziğini Music Assistant’ta yeniden başlat.",
-      "spread": "Hoparlörler arasındaki en büyük fark: {before} ms → yaklaşık {after} ms",
       "saved": "“{name}” profili olarak kaydedildi.",
       "saveFailed": "Gecikmeler korundu, ancak profil kaydedilemedi ({code}).",
       "listen": "Hızlı dinleme",
@@ -2881,6 +2888,12 @@
       }
     },
     "problem": {
+      "timing_changed": {
+        "detail": "Hoparlör zamanlaması başka bir yerden değiştirildi. Bir öneri uygulamadan önce değerleri yenile ve grubu yeniden ölç."
+      },
+      "config_conflict": {
+        "detail": "Bu sayfa açıkken oynatıcı ayarları değişti. Kaydetmeden önce yapılandırmayı yeniden yükle. Mevcut telafi ve kalibrasyonlar korundu."
+      },
       "already_in_standby": {
         "detail": "Hoparlör zaten bekleme modunda."
       },

@@ -945,10 +945,10 @@ async def test_read_subprocess_output_persists_static_delay_from_ma(monkeypatch)
 
     saved: list[tuple[str, int]] = []
 
-    def _fake_save(mac, delay_ms):
+    def _fake_save(mac, delay_ms, **_metadata):
         saved.append((mac, delay_ms))
 
-    monkeypatch.setattr("sendspin_bridge.bridge.client.save_device_static_delay", _fake_save)
+    monkeypatch.setattr("sendspin_bridge.config.save_device_static_delay", _fake_save)
 
     await client._read_subprocess_output()
     await asyncio.sleep(0.1)  # let the debounced write fire
@@ -982,7 +982,7 @@ async def test_read_subprocess_output_skips_static_delay_persist_when_no_mac(mon
 
     saved: list[tuple[str, int]] = []
     monkeypatch.setattr(
-        "sendspin_bridge.bridge.client.save_device_static_delay",
+        "sendspin_bridge.config.save_device_static_delay",
         lambda mac, val: saved.append((mac, val)),
     )
 
@@ -993,6 +993,13 @@ async def test_read_subprocess_output_skips_static_delay_persist_when_no_mac(mon
 
 @pytest.mark.asyncio
 async def test_initial_latency_recommendation_is_applied_and_persisted_once(monkeypatch):
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_player_id", lambda _id: "standalone"
+    )
+    monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", lambda: True)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_runtime_state.get_ma_group_for_player_id", lambda _id: None
+    )
     client = SendspinClient(
         "Test Player",
         "localhost",
@@ -1004,17 +1011,15 @@ async def test_initial_latency_recommendation_is_applied_and_persisted_once(monk
     applied: list[dict[str, int]] = []
     saved: list[tuple[str, int, str | None, str | None]] = []
 
-    async def _apply_hot_config(updates):
-        applied.append(updates)
-        client.static_delay_ms = float(updates["static_delay_ms"])
-        client.status["static_delay_ms"] = float(updates["static_delay_ms"])
-        return ["static_delay_ms"]
+    async def _send(command):
+        applied.append({"static_delay_ms": command.value})
 
-    def _save(mac, value, *, source=None, codec=None):
+    def _save(mac, value, *, source=None, codec=None, **_policy):
         saved.append((mac, value, source, codec))
 
-    monkeypatch.setattr(client, "apply_hot_config", _apply_hot_config)
-    monkeypatch.setattr("sendspin_bridge.bridge.client.save_device_static_delay", _save)
+    monkeypatch.setattr(client, "is_running", lambda: True)
+    monkeypatch.setattr(client, "_send_subprocess_command", _send)
+    monkeypatch.setattr("sendspin_bridge.config.save_device_static_delay", _save)
     recommendation = LatencyRecommendation(
         value_ms=125,
         source="codec_fallback",

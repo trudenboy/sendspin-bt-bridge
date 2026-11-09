@@ -596,6 +596,7 @@ def save_device_static_delay(
     *,
     source: str | None = None,
     codec: str | None = None,
+    strict: bool = False,
 ) -> None:
     """Persist per-device static_delay_ms into the matching player.
 
@@ -604,6 +605,8 @@ def save_device_static_delay(
     restart.  :func:`save_player_static_delay` is the id-keyed twin.
     """
     if not mac or not CONFIG_FILE.exists():
+        if strict:
+            raise FileNotFoundError("The configured Bluetooth player cannot be saved")
         return
     clamped = _clamp_static_delay(mac, delay_ms)
     if clamped is None:
@@ -614,6 +617,8 @@ def save_device_static_delay(
 
         player = find_player_by_mac(cfg, mac)
         if player is None:
+            if strict:
+                raise ValueError(f"Unknown Bluetooth player {mac}")
             logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", mac.strip().upper())
             return
         _set_player_static_delay(player, clamped, source, codec)
@@ -622,6 +627,8 @@ def save_device_static_delay(
         update_config(_set_delay)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save static_delay_ms for %s: %s", mac, e)
+        if strict:
+            raise
 
 
 def save_player_static_delay(
@@ -630,6 +637,8 @@ def save_player_static_delay(
     *,
     source: str,
     set_at: str | None = None,
+    codec: str | None = None,
+    strict: bool = False,
 ) -> None:
     """Persist a player's static_delay_ms by its config id, for any backend.
 
@@ -639,6 +648,8 @@ def save_player_static_delay(
     (default: now) is recorded as ``static_delay_calibrated_at``.
     """
     if not player_id or not CONFIG_FILE.exists():
+        if strict:
+            raise FileNotFoundError("The configured player cannot be saved")
         return
     clamped = _clamp_static_delay(player_id, delay_ms)
     if clamped is None:
@@ -649,26 +660,35 @@ def save_player_static_delay(
 
         player = find_player_by_id(cfg, player_id)
         if player is None:
+            if strict:
+                raise ValueError(f"Unknown player {player_id}")
             logger.warning("Skipping static_delay_ms save for unknown player %s", player_id)
             return
-        _set_player_static_delay(player, clamped, source, None)
+        _set_player_static_delay(player, clamped, source, codec)
         if set_at:
             player["static_delay_calibrated_at"] = set_at
-        player.pop("static_delay_codec", None)
+        if codec is None:
+            player.pop("static_delay_codec", None)
 
     try:
         update_config(_set_delay)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save static_delay_ms for player %s: %s", player_id, e)
+        if strict:
+            raise
 
 
-def save_device_buffer_setting(mac: str | None, field: str, value_ms: int, *, player_id: str | None = None) -> None:
+def save_device_buffer_setting(
+    mac: str | None, field: str, value_ms: int, *, player_id: str | None = None, strict: bool = False
+) -> None:
     """Persist a confirmed per-device Sendspin buffer setting, by Bluetooth address or by config id."""
     if (
         (not mac and not player_id)
         or field not in {"required_lead_time_ms", "min_buffer_ms"}
         or not CONFIG_FILE.exists()
     ):
+        if strict:
+            raise ValueError("The configured player's buffer setting cannot be saved")
         return
     try:
         clamped = max(0, min(30000, int(value_ms)))
@@ -681,11 +701,15 @@ def save_device_buffer_setting(mac: str | None, field: str, value_ms: int, *, pl
         player = find_player_by_mac(cfg, mac) if mac else find_player_by_id(cfg, str(player_id))
         if player is not None:
             player[field] = clamped
+        elif strict:
+            raise ValueError("Unknown configured player")
 
     try:
         update_config(_set_value)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         logger.warning("Could not save %s for %s: %s", field, mac, exc)
+        if strict:
+            raise
 
 
 def load_player_state_for_mac(mac: str) -> dict:

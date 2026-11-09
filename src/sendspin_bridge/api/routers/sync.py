@@ -48,6 +48,7 @@ from sendspin_bridge.application.models.sync import (
     SoundIn,
     SyncGroup,
     SyncSessionOut,
+    VerificationIn,
 )
 from sendspin_bridge.sync_tuning import capture_page
 from sendspin_bridge.sync_tuning import click_track_host as host
@@ -468,6 +469,15 @@ async def capture_input(session_id: str, body: CaptureInputIn) -> CaptureResultO
 )
 def start_sequence(session_id: str, body: SequenceIn) -> SyncSessionOut:
     return uc.start_sequence(session_id, body.members)
+
+
+@router.post(
+    "/sessions/{session_id}/verification",
+    response_model=SyncSessionOut,
+    summary="Re-measure the applied delays without computing or applying a proposal",
+)
+def verification(session_id: str, body: VerificationIn) -> SyncSessionOut:
+    return uc.verification(session_id, body.action)
 
 
 @router.post(

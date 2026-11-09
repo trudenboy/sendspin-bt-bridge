@@ -25,6 +25,7 @@ ErrorCode = Literal[
     "session_active",
     "session_expired",
     "session_state",
+    "timing_changed",
     "member_gone",
     "not_adjustable",
     "recording_invalid",
@@ -170,6 +171,24 @@ class AirCalibrationSaveIn(BaseModel):
     members: list[str] = Field(min_length=1, max_length=16, description="The members whose latency to save.")
 
 
+class VerificationOut(ResponseModel):
+    state: Literal["recording", "complete", "cancelled", "invalidated"]
+    spread_ms: float | None = None
+    passed: bool | None = None
+    heard: int = 0
+    unverified: list[str] = Field(default_factory=list)
+    measurements: dict[str, MeasurementOut] = Field(default_factory=dict)
+    delays: dict[str, int] = Field(default_factory=dict)
+    members: list[str] = Field(
+        default_factory=list,
+        description="Members required when this check started; skipping later cannot pass a partial check.",
+    )
+
+
+class VerificationIn(BaseModel):
+    action: Literal["start", "finish", "cancel"]
+
+
 class SyncSessionOut(ResponseModel):
     """The session resource; also the payload of ``sync`` events."""
 
@@ -192,6 +211,9 @@ class SyncSessionOut(ResponseModel):
     departed: list[str] = Field(default_factory=list, description="Members that left the group mid-session.")
     measurements: dict[str, MeasurementOut]
     proposal: ProposalOut | None
+    verification: VerificationOut | None = Field(
+        default=None, description="A fresh post-Apply measurement, not a prediction."
+    )
     history: list[dict[str, Any]]
     error: str | None
     restore_error: str | None = Field(default=None, description="Code of the last failed restore attempt.")
