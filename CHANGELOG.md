@@ -7,13 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0-beta.27] - 2026-11-09
+
+### Added
+
+- Group sync can verify the applied compensation with a fresh phone or bridge-input recording, reporting the measured residual without applying another proposal. Predictions are labelled as predictions; a partial check, skipped missing speaker or timing change during the check cannot report success.
+
 ### Fixed
 
 - Cancelling a group-sync measurement stops its bridge-input recorder promptly, including while the microphone is still opening. Recording no longer blocks another group's upload from being decoded, and a disconnected request cannot release the session's recording lock while its worker is still running.
 - Saving an old configuration no longer overwrites newer speaker compensation, buffers or air calibrations. Player documents carry a revision; stale saves are refused with a reload message, older clients retain current timing, and bridge-only settings saves keep players added or changed while validation ran.
 - Speaker timing changes share validation, live application and persistence across the Timing panel, Home Assistant and automatic initialization. External edits are refused during group tuning, and a delay changed directly in Music Assistant invalidates the old measurement before planning or applying it. Delayed observations cannot overwrite newer manual settings.
 - Bluetooth delay suggestions and automatic initialization no longer add an absolute delay on top of group-relative, manual or air-targeted compensation. Automatic suggestions wait until Music Assistant has supplied the speaker identity and group context.
-- Group sync can verify the applied compensation with a fresh phone or bridge-input recording, reporting the measured residual without applying another proposal. Predictions are labelled as predictions; a partial check, skipped missing speaker or timing change during the check cannot report success.
 
 ## [3.2.0-beta.26] - 2026-11-07
 
@@ -7059,7 +7064,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.25...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.26...HEAD
+[3.2.0-beta.26]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.25...v3.2.0-beta.26
 [3.2.0-beta.25]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.24...v3.2.0-beta.25
 [3.2.0-beta.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.23...v3.2.0-beta.24
 [3.2.0-beta.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.2.0-beta.22...v3.2.0-beta.23

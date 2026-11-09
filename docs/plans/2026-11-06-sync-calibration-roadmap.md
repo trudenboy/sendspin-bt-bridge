@@ -45,7 +45,7 @@ link-state driven device status in the UI, the Microphone hand-off owner with a 
 | C-D15 | Default work budget is 500 frames/s, enough for 12-block/8-subband SBC at 48 kHz; smaller, high-cost configurations remain refused. |
 | C-D10 | Receive buffer covers the full monitor payload; `MSG_TRUNC` is discarded and counted in loss telemetry so the next record invalidates consumers' continuity. |
 
-## Implemented next (`fix/sync-capture-and-config-revisions`, not released)
+## Released in 3.2.0-beta.27 (`fix/sync-capture-and-config-revisions`)
 
 | Id | Implementation and checks |
 |---|---|
@@ -94,7 +94,7 @@ more robust and closes the loop.
 
 ## Phase 2 — Speaker timing: one writer (candidate #2)
 
-**Implemented in the follow-up worktree:** `SpeakerTiming` owns runtime timing application,
+**Released in beta.27:** `SpeakerTiming` owns runtime timing application,
 explicit persistence and provenance for HTTP/HA/initialization; server observations use the
 same owner without echoing IPC. Config reconfiguration delegates runtime commands to it and
 full saves/imports respect the active-session fence before writing. Compensation writes are
