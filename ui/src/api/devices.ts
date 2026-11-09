@@ -72,7 +72,7 @@ export function unmuteSink(deviceId: string) {
 export function setLatency(
   deviceId: string,
   value: number,
-  opts: { field?: 'static_delay_ms' | 'required_lead_time_ms' | 'min_buffer_ms'; source?: string; revision?: string } = {},
+  opts: { field?: 'static_delay_ms' | 'required_lead_time_ms' | 'min_buffer_ms'; source?: 'manual' | 'recommendation' | 'manual_calibration' | 'microphone_calibration'; revision?: string } = {},
 ) {
   return unwrap(
     api().PUT('/api/v1/devices/{device_id}/latency', {

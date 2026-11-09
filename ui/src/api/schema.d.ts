@@ -910,11 +910,18 @@ export interface paths {
         /**
          * The configuration
          * @description Secrets are removed; ``_password_set`` and ``_effective_*`` fields describe the runtime.
+         *
+         *     ``_players_revision`` and ETag name the current player settings. Round-trip that field or
+         *     send If-Match when saving players so newer compensation and calibrations cannot be lost.
          */
         get: operations["get_config_api_v1_config_get"];
         /**
          * Save and apply the configuration
          * @description Accepts the whole configuration (unknown keys are kept). Validation errors answer 400 with every field.
+         *
+         *     A stale player revision answers 412 config_conflict before writing or applying anything.
+         *     Without a revision, existing players retain their current timing. Saves without players keep
+         *     the latest players, even if their revision changed while the settings page was open.
          */
         put: operations["put_config_api_v1_config_put"];
         post?: never;
@@ -2815,6 +2822,23 @@ export interface paths {
          */
         put: operations["session_sound_api_v1_sync_sessions__session_id__sound_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-measure the applied delays without computing or applying a proposal */
+        post: operations["verification_api_v1_sync_sessions__session_id__verification_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5655,8 +5679,9 @@ export interface components {
             /**
              * Source
              * @default manual
+             * @enum {string}
              */
-            source?: string;
+            source?: "manual" | "recommendation" | "manual_calibration" | "microphone_calibration";
             /** Value */
             value: number;
         };
@@ -7454,6 +7479,8 @@ export interface components {
              * @enum {string}
              */
             state: "created" | "measuring" | "proposed" | "applying" | "tuning" | "restoring" | "done" | "cancelled" | "failed";
+            /** @description A fresh post-Apply measurement, not a prediction. */
+            verification: components["schemas"]["VerificationOut"] | null;
             /**
              * Volumes
              * @description Each member's volume as last read or set.
@@ -7620,6 +7647,46 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VerificationIn */
+        VerificationIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "start" | "finish" | "cancel";
+        };
+        /** VerificationOut */
+        VerificationOut: {
+            /** Delays */
+            delays: {
+                [key: string]: number;
+            };
+            /**
+             * Heard
+             * @default 0
+             */
+            heard: number;
+            /** Measurements */
+            measurements: {
+                [key: string]: components["schemas"]["MeasurementOut"];
+            };
+            /**
+             * Members
+             * @description Members required when this check started; skipping later cannot pass a partial check.
+             */
+            members: string[];
+            /** Passed */
+            passed: boolean | null;
+            /** Spread Ms */
+            spread_ms: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "recording" | "complete" | "cancelled" | "invalidated";
+            /** Unverified */
+            unverified: string[];
         };
         /** VolumeOut */
         VolumeOut: {
@@ -10040,6 +10107,8 @@ export interface operations {
             /** @description Successful Response */
             200: {
                 headers: {
+                    /** @description Revision of the player settings. */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10071,7 +10140,10 @@ export interface operations {
     put_config_api_v1_config_put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Player settings ETag returned by GET. */
+                "If-Match"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -15012,6 +15084,52 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SoundIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    verification_api_v1_sync_sessions__session_id__verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerificationIn"];
             };
         };
         responses: {

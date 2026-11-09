@@ -73,7 +73,7 @@ class RepairIn(BaseModel):
 class LatencyIn(BaseModel):
     field: playback.LatencyField = "static_delay_ms"
     value: float
-    source: str = "manual"
+    source: Literal["manual", "recommendation", "manual_calibration", "microphone_calibration"] = "manual"
     recommendation_revision: str | None = None
 
 

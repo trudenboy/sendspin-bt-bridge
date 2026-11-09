@@ -8,6 +8,8 @@ import { formatMs } from '@/sync/format'
 import { speakerName } from '@/sync/names'
 import AirCalibrations from './AirCalibrations.vue'
 import ManualTuning from './ManualTuning.vue'
+import VerificationPanel from './VerificationPanel.vue'
+import type { ListeningDevice } from '@/api/sync'
 
 /**
  * Stage 3 of the measurement (semi-automatic): the measured delays are applied and the session is the
@@ -20,6 +22,7 @@ const props = defineProps<{
   proposal: SyncProposal
   /** The bridge input the recording came from; null when a browser or phone measured. */
   inputName?: string | null
+  listeningDevice?: ListeningDevice | null
   /** Finishing (or cancelling) is under way. */
   busy?: boolean
   /** A failure to show (already translated). */
@@ -36,6 +39,7 @@ const LARGE_MS = 2000
 const departed = computed(() => props.session.departed ?? [])
 const rows = computed(() => props.proposal.rows.filter((r) => !departed.value.includes(r.member)))
 const measured = computed(() => Object.fromEntries(rows.value.map((r) => [r.member, r.after_ms])))
+const verifying = computed(() => props.session.verification?.state === 'recording')
 const before = computed(() => Object.fromEntries(props.proposal.rows.map((r) => [r.member, r.before_ms])))
 const nameOf = (id: string) => speakerName(props.session.members?.find((m) => m.ma_player_id === id)?.name, id)
 
@@ -78,7 +82,9 @@ function confirmSave() {
   <div data-tune class="flex flex-col gap-4">
     <p class="text-sm text-text-primary">{{ t('sync.tune.help') }}</p>
     <p v-if="spreadBefore != null" data-spread class="text-sm text-text-secondary">
-      {{ t('sync.tune.spread', { before: formatMs(spreadBefore), after: formatMs(proposal.predicted_spread_ms) }) }}
+      {{ session.verification?.state === 'complete' && session.verification.spread_ms != null
+        ? t('sync.verification.measured', { ms: formatMs(session.verification.spread_ms) })
+        : t('sync.verification.predicted', { before: formatMs(spreadBefore), after: formatMs(proposal.predicted_spread_ms) }) }}
     </p>
     <p v-if="kept.length" data-kept class="text-sm text-text-secondary">
       {{ t('sync.tune.kept', { names: kept.join(', ') }) }}
@@ -97,19 +103,20 @@ function confirmSave() {
       </ul>
     </div>
 
-    <ManualTuning :measured="measured" :before="before" />
+    <ManualTuning v-if="!verifying" :measured="measured" :before="before" />
 
-    <AirCalibrations :session="session" />
+    <AirCalibrations v-if="!verifying" :session="session" />
+    <VerificationPanel :session="session" :input="listeningDevice" :disabled="busy" />
 
     <p v-if="error" data-tune-error role="alert" class="text-sm text-error">{{ error }}</p>
     <div class="flex flex-wrap justify-end gap-3">
-      <SbButton type="button" variant="outline" data-cancel :disabled="busy" @click="emit('cancel')">
+      <SbButton type="button" variant="outline" data-cancel :disabled="busy || verifying" @click="emit('cancel')">
         {{ t('sync.wizard.cancel') }}
       </SbButton>
-      <SbButton type="button" variant="outline" data-finish-save :disabled="busy" @click="askName">
+      <SbButton type="button" variant="outline" data-finish-save :disabled="busy || verifying" @click="askName">
         {{ t('sync.tune.finishSave') }}
       </SbButton>
-      <SbButton type="button" data-finish :loading="busy" @click="emit('finish', null)">
+      <SbButton type="button" data-finish :loading="busy" :disabled="verifying" @click="emit('finish', null)">
         {{ t('sync.tune.finish') }}
       </SbButton>
     </div>

@@ -2071,9 +2071,17 @@
       },
       "startPhone": "Starten"
     },
+    "verification": {
+      "start": "Mit einer neuen Aufnahme prüfen",
+      "help": "Nimm die Klicks erneut über den Bridge-Eingang oder das Telefon auf, um die verbleibende Abweichung nach dem Anwenden zu messen. Die Prüfung ändert die angewendeten Verzögerungen nicht.",
+      "predicted": "Vor dem Anwenden gemessen: {before} ms; vorhergesagte Restabweichung des ursprünglichen Vorschlags: {after} ms (nicht erneut gemessen).",
+      "measured": "Gemessene Restabweichung: {ms} ms.",
+      "passed": "Alle geprüften Lautsprecher liegen innerhalb der zulässigen Abweichung.",
+      "needsWork": "Die Prüfung ist unvollständig oder die Gruppe muss weiter abgestimmt werden.",
+      "changed": "Das Timing hat sich während der Prüfung geändert. Prüfe erneut; die angewendeten Verzögerungen wurden beibehalten."
+    },
     "tune": {
       "help": "Die gemessenen Verzögerungen werden angewendet und die Klicks laufen weiter. Höre jeden Lautsprecher einzeln oder vergleiche zwei, passe eine Verzögerung von Hand an und schließe dann ab.",
-      "spread": "Größter Abstand zwischen den Lautsprechern: {before} ms gemessen → jetzt etwa {after} ms.",
       "kept": "Nicht gehört oder übersprungen, daher unverändert: {names}",
       "ready": "Die gemessenen Verzögerungen sind angewendet. Höre zu und passe an.",
       "finish": "Abschließen",
@@ -2148,7 +2156,6 @@
       "restoringHelp": "Lautstärken werden zurückgesetzt, die Stummschaltung der Lautsprecher aufgehoben und die Klicks gestoppt. Die Verzögerungen bleiben wie du sie eingestellt hast.",
       "restored": "Gruppe wiederhergestellt",
       "restoredHelp": "Bei allen Lautsprechern ist die Stummschaltung aufgehoben, die Lautstärken sind zurück und die Klicks gestoppt. Die neuen Verzögerungen bleiben; starte deine Musik in Music Assistant neu.",
-      "spread": "Größter Abstand zwischen den Lautsprechern: {before} ms → etwa {after} ms",
       "saved": "Als Profil „{name}“ gespeichert.",
       "saveFailed": "Die Verzögerungen bleiben, aber das Profil konnte nicht gespeichert werden ({code}).",
       "listen": "Kurzes Reinhören",
@@ -2881,6 +2888,12 @@
       }
     },
     "problem": {
+      "timing_changed": {
+        "detail": "Das Lautsprecher-Timing wurde anderswo geändert. Aktualisiere die Werte und miss die Gruppe erneut, bevor du einen Vorschlag anwendest."
+      },
+      "config_conflict": {
+        "detail": "Die Player-Einstellungen wurden inzwischen geändert. Lade die Konfiguration vor dem Speichern neu. Die aktuellen Kompensationen und Kalibrierungen bleiben erhalten."
+      },
       "already_in_standby": {
         "detail": "Der Lautsprecher ist bereits im Standby."
       },

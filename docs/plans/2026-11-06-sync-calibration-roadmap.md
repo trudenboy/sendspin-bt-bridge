@@ -29,7 +29,7 @@ sync section.
 Also released in beta.25: `refactor/status-read-model` (one read model for every health surface,
 link-state driven device status in the UI, the Microphone hand-off owner with a card seam).
 
-## Implemented next (`fix/sync-phase0`, not released)
+## Released in 3.2.0-beta.26 (`fix/sync-phase0`)
 
 | Id | Implementation and checks |
 |---|---|
@@ -45,12 +45,24 @@ link-state driven device status in the UI, the Microphone hand-off owner with a 
 | C-D15 | Default work budget is 500 frames/s, enough for 12-block/8-subband SBC at 48 kHz; smaller, high-cost configurations remain refused. |
 | C-D10 | Receive buffer covers the full monitor payload; `MSG_TRUNC` is discarded and counted in loss telemetry so the next record invalidates consumers' continuity. |
 
-## Phase 0 — remaining point fixes
+## Implemented next (`fix/sync-capture-and-config-revisions`, not released)
 
-| Id | Problem | Fix | Test |
-|---|---|---|---|
-| A12 | One global decode gate is held for a whole bridge-input recording (up to minutes): other groups cannot measure; cancel does not stop the recorder | Per-session recorder lock; cancel stops the recorder | Cancel during recording ends the child |
-| D-C1 follow-up | Only the Settings page is fixed; any other client sending a full document can still put back runtime-owned player keys | The server keeps `static_delay_*` and `air_*` keys of existing players unless the save carries the config revision it was based on (If-Match) | Stale full save leaves runtime keys; current one may change them |
+| Id | Implementation and checks |
+|---|---|
+| A12 | The recording worker owns the per-session lock until it exits. The global decode gate covers decode and estimation only, not capture or waiting for the sequence. Session resource cleanup stops the live recorder; sequence waits check cancellation every 100 ms. Fixed-duration legacy requests also observe cancellation, and concurrent stop calls reap the recorder once. Tests cover startup cancellation, gate availability during capture, resource detachment and real child-process termination. |
+| D-C1 follow-up | GET config supplies a player revision in `_players_revision` and ETag. A full save may round-trip the field or send If-Match; the revision is compared under the commit lock and stale requests fail with 412 config_conflict before writes or reconfiguration. Clients without a revision keep current timing on existing players. Settings-only saves take the latest players under that lock, including players added during validation. Imports remain explicit replacement operations. Conflict messages are translated in all ten locales. |
+
+The revision covers persisted player settings, not volume caches, secret fields or read-only runtime
+annotations. Current callers that round-trip GET config already carry the revision. A legacy caller
+that intentionally changes existing player timing must fetch a revision or use the dedicated timing
+endpoint; omission is no longer treated as permission to replace runtime-owned timing.
+
+### Remaining checks for this phase
+
+* Validate recorder cancellation on both `parecord` (HAOS) and `pw-record` (PipeWire).
+* The per-session resource owner is process-local; a process crash still relies on the child's
+  process-exit behaviour and the existing persisted group-restore mechanism.
+
 
 ## Phase 1 — finish the Measurement round (candidate #1)
 
@@ -68,8 +80,10 @@ more robust and closes the loop.
 4. **A16 — measure only settled speakers.** Gate a member's solo on its playout being locked and
    past its warm-up (the first steady jump lands ~10 s into a stream); otherwise the start
    transient is baked into its delay.
-5. **Verification.** After Apply, play one short sequence and measure the residual spread; show
-   the measured value instead of `predicted_spread_ms` (arithmetic today).
+5. **Verification — implemented.** The Tune step starts a fresh phone/bridge-input recording round,
+   reports measured residual spread and leaves compensation unchanged. A partial check cannot pass;
+   the original proposal prediction remains explicitly labelled. Remaining: settled-playout gating
+   and acoustic validation during warm-up and reconnection.
 6. **A15, A17.** Refuse a non-adjustable reference up front; `record()` checks that the member
    was the one soloed.
 7. **One definition of sequence timing.** Solo, gap, lead and settle times live in Python and are
@@ -79,6 +93,16 @@ more robust and closes the loop.
    proposal/apply controller.
 
 ## Phase 2 — Speaker timing: one writer (candidate #2)
+
+**Implemented in the follow-up worktree:** `SpeakerTiming` owns runtime timing application,
+explicit persistence and provenance for HTTP/HA/initialization; server observations use the
+same owner without echoing IPC. Config reconfiguration delegates runtime commands to it and
+full saves/imports respect the active-session fence before writing. Compensation writes are
+serialized with generation checks so an older debounce cannot replace a newer command, including
+a configuration commit. The protocol-facing clamps remain defensive checks in the adapters.
+Tests cover IPC failure, non-finite values, HA provenance, active-session rejection and racing
+server observations. External MA edits are re-read before propose/apply and invalidate the round
+rather than planning against an old delay. HTTP provenance is now a finite set of supported sources.
 
 Eight places write a speaker's latency compensation (Timing panel, Home Assistant, Settings,
 auto-fill, Music Assistant mirror, wizard and manual tuning, migration, environment), with four
@@ -93,6 +117,20 @@ persistence paths and ~14 copies of the 0–5000 clamp.
   output's value survives a restart.
 
 ## Phase 3 — Timing model: one meaning of a delay (candidate #3)
+
+**Implemented:** recommendation and initialization share one context policy. Grouped, manually
+confirmed, MA-configured or air-targeted speakers do not receive absolute Bluetooth suggestions.
+Unknown group context is not treated as standalone: automatic suggestions wait for an MA player
+mapping and connected account. Air targets include the current matching learned target. An explicit
+manual change remains available; a stale recommendation cannot bypass this policy through HTTP.
+
+**Post-Apply verification implemented:** a new recording round measures residual spread, keeps
+the applied values and original proposal, and returns to listening. Phone and bridge-input adapters
+are exposed in the Tune screen. Required members are fixed at verification start; partial recordings,
+new skips and delays changed during the round cannot pass. Manual adjustment or air calibration
+invalidates the old verification result. The Tune/Done screens distinguish measured spread from
+predicted residual. This is not yet the dynamic settled-playout gate described in Phase 1 item 4;
+real-room and warm-up validation remains required.
 
 The planner treats delays as relative (earliest = 0), the suggestion and auto-fill as absolute
 (the A2DP delay report), the air calibration as absolute against a reference nobody checks.
@@ -183,8 +221,8 @@ Needed before or after the phases marked *runtime*:
 
 ## Order
 
-Next: Phase 0's remaining A12 (recorder cancellation and gate lifetime), then server revision checks
-for stale player writes. Validate A2 against real room recordings while finishing A9's coherent/live
-path and the phone's clock prior. Then Phase 2 with Phase 3 (where mechanisms collide and compensate
-twice), Phase 4, Phase 5. Phases 6 and 7 wait for their hardware measurements. Phase 8 follows whichever
-area is touched next.
+Next: the settled-playout gate for measurement/verification, trusted-reference checks before saving
+absolute air-to-sound calibration, and Phase 4 (learned target confidence and bounded first jumps).
+The common timing owner and post-Apply verification are implemented above. Validate A2 against real
+room recordings while finishing A9's coherent/live path and the phone's clock prior. Then Phase 5.
+Phases 6 and 7 wait for their hardware measurements. Phase 8 follows whichever area is touched next.

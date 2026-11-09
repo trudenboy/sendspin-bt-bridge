@@ -90,7 +90,7 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     expect(w.get('[data-delay-row][data-member-id="b"] [data-measured]').text()).toContain('Measured: 112 ms (+12)')
     expect(w.find('[data-delay-row][data-member-id="c"] [data-measured]').exists()).toBe(false)
     expect(w.get('[data-kept]').text()).toContain('Porch')
-    expect(w.get('[data-spread]').text()).toContain('12 ms measured → about 1 ms now')
+    expect(w.get('[data-spread]').text()).toContain('12 ms measured before Apply; predicted residual 1 ms')
   })
 
   it("shows the bridge speakers' air-to-sound latencies of the measurement on the tune step", async () => {
@@ -114,7 +114,7 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     useSyncStore().applyEvent(tuned({ state: 'done' }))
     await flushPromises()
     expect(w.get('[data-done]').text()).toContain('Group restored')
-    expect(w.get('[data-spread]').text()).toContain('12 ms → about 1 ms')
+    expect(w.get('[data-spread]').text()).toContain('12 ms measured before Apply; predicted residual 1 ms')
   })
 
   it('finishes and saves a profile of the final delays, with the gap in its notes', async () => {
@@ -124,7 +124,7 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     await w.get('[data-finish-save]').trigger('click'); await flushPromises()
     await w.get('[data-profile-name]').setValue('Evening')
     await w.get('[data-save-confirm]').trigger('click'); await flushPromises()
-    expect(api.captureProfile).toHaveBeenCalledWith('g', { name: 'Evening', kind: 'device', notes: 'spread 12 → 1 ms' })
+    expect(api.captureProfile).toHaveBeenCalledWith('g', { name: 'Evening', kind: 'device', notes: '12 ms measured before Apply; predicted residual 1 ms for the original proposal (not re-measured).' })
     expect(vi.mocked(api.captureProfile).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.finishSession).mock.invocationCallOrder[0]!)
     expect(w.get('[data-saved]').text()).toContain('Evening')
   })

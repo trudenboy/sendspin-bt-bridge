@@ -8,6 +8,9 @@ for it to finish and stops the recorder, and knows where in the file the sequenc
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from sendspin_bridge.application import sync_tuning as uc
@@ -45,7 +48,7 @@ class FakeCapture:
         self.clock.now += self.warmup_s
         return self
 
-    def wait_for_audio(self, timeout: float) -> bool:
+    def wait_for_audio(self, timeout: float, **_checks) -> bool:
         return True
 
     def stop(self) -> bytes:
@@ -106,7 +109,7 @@ def test_a_recorder_that_never_delivers_audio_is_input_unavailable_and_plays_not
     ctl = sync_env[0]
     sid = _ready(api_client)
     capture.sid = sid
-    capture.wait_for_audio = lambda timeout: False
+    capture.wait_for_audio = lambda timeout, **_checks: False
     calls_before = list(ctl.calls)
 
     resp = _record(api_client, sid)
@@ -127,3 +130,118 @@ def test_a_sequence_the_session_refuses_stops_the_recorder(api_client, capture):
     assert resp.status_code == 409 and resp.json()["code"] == "not_adjustable"
     assert stopped == [True]
     assert uc is not None
+
+
+def test_ending_the_session_stops_a_recorder_waiting_for_audio(api_client, capture):
+    sid = _ready(api_client)
+    capture.sid = sid
+    waiting, stopped, release = threading.Event(), threading.Event(), threading.Event()
+
+    def wait_for_audio(_timeout, **_checks):
+        waiting.set()
+        release.wait(5.0)
+        return False
+
+    def stop():
+        stopped.set()
+        release.set()
+        return b""
+
+    capture.wait_for_audio = wait_for_audio
+    capture.stop = stop
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_record, api_client, sid)
+        try:
+            assert waiting.wait(3.0)
+            assert api_client.delete(f"/api/v1/sync/sessions/{sid}").status_code == 204
+            assert stopped.wait(1.0), "the recorder survived its session"
+        finally:
+            release.set()
+        response = future.result(timeout=5.0)
+    assert response.status_code == 409
+    assert response.json()["code"] == "session_state"
+
+
+def test_recording_does_not_hold_the_global_decode_gate(api_client, capture):
+    sid = _ready(api_client)
+    capture.sid = sid
+    capture.payload, _ = sequence_recording({"a": 0.0, "b": 0.030})
+    waiting, release = threading.Event(), threading.Event()
+
+    def wait_for_audio(_timeout, **_checks):
+        waiting.set()
+        release.wait(5.0)
+        return True
+
+    capture.wait_for_audio = wait_for_audio
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_record, api_client, sid)
+        try:
+            assert waiting.wait(3.0)
+            acquired = uc._decode_gate.acquire(blocking=False)
+            if acquired:
+                uc._decode_gate.release()
+            assert acquired, "another group cannot decode while this recorder runs"
+        finally:
+            release.set()
+        assert future.result(timeout=10.0).status_code == 200
+
+
+def test_a_completed_recording_detaches_its_session_resource(api_client, capture):
+    sid = _ready(api_client)
+    capture.sid = sid
+    capture.payload, _ = sequence_recording({"a": 0.0, "b": 0.030})
+    stops: list[bool] = []
+    original_stop = capture.stop
+
+    def stop():
+        stops.append(True)
+        return original_stop()
+
+    capture.stop = stop
+    assert _record(api_client, sid).status_code == 200
+    drained = threading.Event()
+    uc.get_store().own_resource(sid, drained.set)
+    assert api_client.delete(f"/api/v1/sync/sessions/{sid}").status_code == 204
+    assert drained.wait(3.0)
+    assert stops == [True], "the session retained a finished recorder"
+
+
+def test_the_same_bridge_input_can_verify_the_applied_configuration(api_client, capture):
+    sid = _ready(api_client)
+    capture.sid = sid
+    capture.payload, _ = sequence_recording({"a": 0.0, "b": 0.030})
+    assert _record(api_client, sid).status_code == 200
+    assert api_client.post(f"/api/v1/sync/sessions/{sid}/proposal").status_code == 200
+    assert api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).status_code == 200
+    assert api_client.post(f"/api/v1/sync/sessions/{sid}/verification", json={"action": "start"}).status_code == 200
+    capture.payload, _ = sequence_recording({"a": 0.0, "b": 0.001})
+    assert _record(api_client, sid).status_code == 200
+    response = api_client.post(f"/api/v1/sync/sessions/{sid}/verification", json={"action": "finish"})
+    assert response.status_code == 200, response.text
+    result = response.json()["verification"]
+    assert result["passed"] is True
+    assert 0.5 <= result["spread_ms"] <= 1.5
+
+
+def test_a_cancelled_verification_recorder_cannot_join_the_next_check(api_client, capture):
+    sid = _ready(api_client)
+    capture.sid = sid
+    capture.payload, _ = sequence_recording({"a": 0.0, "b": 0.030})
+    assert _record(api_client, sid).status_code == 200
+    assert api_client.post(f"/api/v1/sync/sessions/{sid}/proposal").status_code == 200
+    assert api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).status_code == 200
+    endpoint = f"/api/v1/sync/sessions/{sid}/verification"
+    assert api_client.post(endpoint, json={"action": "start"}).status_code == 200
+
+    def restart_while_opening(_timeout, **_checks):
+        assert api_client.post(endpoint, json={"action": "cancel"}).status_code == 200
+        assert api_client.post(endpoint, json={"action": "start"}).status_code == 200
+        return True
+
+    capture.wait_for_audio = restart_while_opening
+    response = _record(api_client, sid)
+    assert response.status_code == 409 and response.json()["code"] == "session_state"
+    current = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    assert current["verification"]["state"] == "recording"
+    assert current["measurements"] == {} and current["sequence"] is None

@@ -34,7 +34,7 @@ function read(key: string) {
   return undefined
 }
 
-async function apply(field: 'static_delay_ms' | 'min_buffer_ms' | 'required_lead_time_ms', value: number, source = 'manual', revision?: string) {
+async function apply(field: 'static_delay_ms' | 'min_buffer_ms' | 'required_lead_time_ms', value: number, source: 'manual' | 'recommendation' = 'manual', revision?: string) {
   try {
     await setLatency(props.device.id, value, { field, source, revision })
   } catch (e) {
@@ -265,7 +265,7 @@ const syncError = computed(() => props.device.timing.sync_error_ms)
         <SbButton
           variant="outline"
           size="sm"
-          @click="apply('static_delay_ms', suggestion!.suggested_static_delay_ms!, suggestion!.source, suggestion!.revision ?? undefined)"
+          @click="apply('static_delay_ms', suggestion!.suggested_static_delay_ms!, 'recommendation', suggestion!.revision ?? undefined)"
         >{{ t('timing.applySuggestion') }}</SbButton>
       </SettingsRow>
       <SettingsRow v-if="device.music_assistant.syncgroup_id" :label="t('sync.tuneGroup')" :help="t('sync.tuneGroupHelp')">

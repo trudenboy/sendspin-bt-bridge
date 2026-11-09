@@ -2071,9 +2071,17 @@
       },
       "startPhone": "Iniciar"
     },
+    "verification": {
+      "start": "Verificar con una nueva grabación",
+      "help": "Graba los clics de nuevo con la entrada del puente o el teléfono para medir la diferencia restante después de aplicar. Esta comprobación no cambia los retrasos aplicados.",
+      "predicted": "Medido antes de aplicar: {before} ms; diferencia restante prevista para la propuesta original: {after} ms (sin volver a medir).",
+      "measured": "Diferencia restante medida: {ms} ms.",
+      "passed": "Todos los altavoces comprobados están dentro de la diferencia permitida.",
+      "needsWork": "La verificación está incompleta o el grupo aún necesita ajustes.",
+      "changed": "La temporización cambió durante la comprobación. Verifica de nuevo; se conservaron los retrasos aplicados."
+    },
     "tune": {
       "help": "Se aplican los retrasos medidos y los clics siguen sonando. Escucha cada altavoz solo o compara dos, ajusta cualquier retraso a mano y termina.",
-      "spread": "Mayor diferencia entre altavoces: {before} ms medidos → unos {after} ms ahora.",
       "kept": "No oídos u omitidos, así que su retraso no cambia: {names}",
       "ready": "Se aplicaron los retrasos medidos. Escucha y ajusta.",
       "finish": "Terminar",
@@ -2148,7 +2156,6 @@
       "restoringHelp": "Devolviendo los volúmenes, reactivando el sonido de los altavoces y deteniendo los clics. Los retrasos se quedan como los dejaste.",
       "restored": "Grupo restaurado",
       "restoredHelp": "Todos los altavoces tienen sonido, los volúmenes vuelven y los clics se detuvieron. Los nuevos retrasos se mantienen; vuelve a reproducir tu música en Music Assistant.",
-      "spread": "Mayor diferencia entre altavoces: {before} ms → unos {after} ms",
       "saved": "Guardado como perfil «{name}».",
       "saveFailed": "Los retrasos se mantienen, pero no se pudo guardar el perfil ({code}).",
       "listen": "Escucha rápida",
@@ -2881,6 +2888,12 @@
       }
     },
     "problem": {
+      "timing_changed": {
+        "detail": "La temporización de los altavoces cambió desde otro lugar. Actualiza los valores y vuelve a medir el grupo antes de aplicar una propuesta."
+      },
+      "config_conflict": {
+        "detail": "Los ajustes de los reproductores cambiaron mientras esta página estaba abierta. Recarga la configuración antes de guardar. Se han conservado las compensaciones y calibraciones actuales."
+      },
       "already_in_standby": {
         "detail": "El altavoz ya está en espera."
       },

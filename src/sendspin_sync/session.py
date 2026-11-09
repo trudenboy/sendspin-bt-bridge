@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import functools
 import logging
@@ -143,6 +144,8 @@ class SyncSession:
         self.snapshot: Snapshot | None = None
         self.measurements: dict[str, Measurement] = {}
         self.proposal: Proposal | None = None
+        self.verification: dict[str, Any] | None = None
+        self._verification_before: dict[str, Any] | None = None
         self.history: list[dict[str, Any]] = []
         self.error: str | None = None
         self.restore_error: str | None = None
@@ -785,7 +788,12 @@ class SyncSession:
     @_locked
     def _propose(self, current: set[str] | None) -> Proposal:
         self._require(*_MEASURING)
+        if self._verification_before is not None:
+            raise ControlError(
+                "session_state", "Verification measures the residual; it does not create another proposal"
+            )
         self._apply_membership(current)
+        self._check_delay_baseline()
         self.touch()
         spread = planner.spread_ms(self.measurements.values())
         try:
@@ -797,11 +805,37 @@ class SyncSession:
         return self.proposal
 
     # -- applying ------------------------------------------------------------------
+    def _check_delay_baseline(self) -> None:
+        """A remote MA edit cannot be fenced locally. Detect it before planning or writing rather
+        than adding measured lags to delays from the session's original snapshot."""
+        live = self._control.delays(self.members)
+        changed = {
+            m.ma_player_id: live[m.ma_player_id]
+            for m in self.members
+            if m.adjustable and live.get(m.ma_player_id) is not None and live[m.ma_player_id] != self._before(m)
+        }
+        if not changed:
+            return
+        self.members = [dataclasses.replace(m, delay_ms=changed.get(m.ma_player_id, m.delay_ms)) for m in self.members]
+        self._invalidate_round()
+        self._set("measuring")
+        raise ControlError("timing_changed", "Speaker delays changed outside this session; measure the group again")
+
+    def _invalidate_round(self) -> None:
+        self.measurements = {mid: m for mid, m in self.measurements.items() if m.status == "skipped"}
+        self.proposal = None
+        self.sequence = None  # an old file must not repopulate a round measured at the previous delays
+        self._seq_slots = []
+        self._seq_t0 = None
+        self._round_source, self._round_sequence = None, None
+        self._generation += 1
+
     @_locked
     def apply(self, rows: Mapping[str, int] | None = None) -> None:
         """Write the proposal (or ``rows``); the session then goes on as the manual editor ("tuning"):
         the clicks keep playing, the operator listens (solo, A/B), adjusts by hand and finishes."""
         self._require("proposed")
+        self._check_delay_baseline()
         assert self.proposal is not None
         source = rows if rows is not None else {r.member: r.after_ms for r in self.proposal.rows}
         wanted = {mid: _clamp(ms) for mid, ms in source.items()}
@@ -842,9 +876,136 @@ class SyncSession:
                 self._set_member_delay(mid, wanted[mid])
 
     # -- manual --------------------------------------------------------------------
+    def start_verification(self) -> None:
+        """Record the applied configuration again, keeping the original proposal and measurements.
+
+        This deliberately reuses the normal recording paths and their one-clock invariant. It
+        never writes compensation: finishing reports measured spread and returns to listening.
+        """
+        self._host.prepare("measure")
+        with self._lock:
+            self._require("tuning")
+            if self.proposal is None:
+                raise ControlError("session_state", "Apply a measured proposal before verifying")
+            live = self._control.delays(self.members)
+            self.members = [
+                dataclasses.replace(m, delay_ms=live.get(m.ma_player_id, m.delay_ms))
+                if live.get(m.ma_player_id) is not None
+                else m
+                for m in self.members
+            ]
+            skipped = {mid: m for mid, m in self.measurements.items() if m.status == "skipped"}
+            self._verification_before = {
+                "measurements": self.measurements,
+                "proposal": self.proposal,
+                "sequence": self.sequence,
+                "round_source": self._round_source,
+                "round_sequence": self._round_sequence,
+            }
+            self.measurements = dict(skipped)
+            self.sequence = None
+            self._round_source, self._round_sequence = None, None
+            self._generation += 1
+            self.verification = {
+                "state": "recording",
+                "spread_ms": None,
+                "passed": None,
+                "heard": 0,
+                "unverified": [],
+                "measurements": {},
+                "delays": {m.ma_player_id: self._before(m) for m in self.members if m.adjustable},
+                "members": [m.ma_player_id for m in self.members if m.adjustable and m.ma_player_id not in skipped],
+            }
+            self._set("measuring")
+            try:
+                self._start_clicker()
+            except BaseException:
+                self._restore_verified_round()
+                self.verification = {**self.verification, "state": "cancelled", "passed": False}
+                self._set("tuning")
+                raise
+
+    def _restore_verified_round(self) -> None:
+        previous = self._verification_before
+        assert previous is not None
+        self.measurements = previous["measurements"]
+        self.proposal = previous["proposal"]
+        self.sequence = previous["sequence"]
+        self._round_source, self._round_sequence = previous["round_source"], previous["round_sequence"]
+        self._verification_before = None
+        self._generation += 1
+
+    @_locked
+    def invalidate_verification(self) -> None:
+        if self._verification_before is not None:
+            raise ControlError("session_state", "Finish verification before changing the air target")
+        if self.verification is not None:
+            self.verification = None
+            self._changed()
+
+    @_locked
+    def observe_compensation(self, player_ids: set[str], value: float) -> None:
+        """A later server edit invalidates a completed check; an echo of its baseline does not."""
+        if self.verification is None or self.verification["state"] != "complete":
+            return
+        matched = [m.ma_player_id for m in self.members if m.ma_player_id in player_ids or m.client_id in player_ids]
+        if any(self.verification["delays"].get(mid) != value for mid in matched):
+            self.verification = {**self.verification, "state": "invalidated", "passed": False}
+            self._changed()
+
+    @_locked
+    def finish_verification(self, *, cancel: bool = False) -> dict[str, Any]:
+        if self._verification_before is None or self.verification is None:
+            raise ControlError("session_state", "No verification is running")
+        self._require(*_MEASURING)
+        if not cancel:
+            self._refuse_during_sequence()
+        live = {} if cancel else self._control.delays(self.members)
+        baseline = self.verification["delays"]
+        changed = any(live.get(mid) != value for mid, value in baseline.items())
+        expected = set(self.verification["members"])
+        heard = {mid: m for mid, m in self.measurements.items() if mid in expected and m.status == "ok"}
+        missing = sorted(expected - set(heard))
+        spread = round(planner.spread_ms(heard.values()), 2) if len(heard) >= 2 else None
+        state = "cancelled" if cancel else "invalidated" if changed else "complete"
+        try:
+            self._unmute(sorted(self.muted))
+        except ControlError:
+            if not cancel:
+                raise
+            logger.warning("Verification %s cancelled with unmutes still owed; the session retains them", self.id)
+        self.soloed = None
+        result = {
+            "state": state,
+            "spread_ms": spread,
+            "passed": state == "complete" and not missing and spread is not None and spread <= estimator.MAX_SPREAD_MS,
+            "heard": len(heard),
+            "unverified": missing,
+            "measurements": {mid: to_dict(m) for mid, m in self.measurements.items()},
+            "delays": dict(baseline),
+            "members": list(self.verification["members"]),
+        }
+        if state == "complete":
+            before = next((h.get("spread_before_ms") for h in reversed(self.history) if "spread_before_ms" in h), None)
+            self.history.append(
+                {"spread_before_ms": before, "spread_after_ms": spread, "verification_passed": result["passed"]}
+            )
+        self._restore_verified_round()
+        self.verification = result
+        self.members = [
+            dataclasses.replace(m, delay_ms=live[m.ma_player_id]) if live.get(m.ma_player_id) is not None else m
+            for m in self.members
+        ]
+        self.touch()
+        self._set("tuning")
+        return result
+
     @_locked
     def write_delay(self, member: str, ms: int) -> None:
         self._require_active()
+        if self._verification_before is not None:
+            raise ControlError("session_state", "Finish verification before changing compensation")
+        self._refuse_during_sequence()
         m = self._member(member)
         if not m.adjustable:
             raise ControlError("not_adjustable", m.name)
@@ -852,12 +1013,18 @@ class SyncSession:
         self._control.set_delay(m, value)
         self._written[member] = value
         self._set_member_delay(member, value)
+        if self.state in _MEASURING:
+            self._invalidate_round()
+            self.state = "measuring"
+        self.verification = None
         self.touch()
         self._changed()
 
     @_locked
     def reset(self) -> None:
         self._require_active()
+        if self._verification_before is not None:
+            raise ControlError("session_state", "Finish verification before resetting compensation")
         assert self.snapshot is not None
         for mid in list(self._written):
             value = self.snapshot.delays.get(mid, 0)
@@ -865,6 +1032,7 @@ class SyncSession:
             self._set_member_delay(mid, value)
             del self._written[mid]
         self.touch()
+        self.verification = None
         self._changed()
 
     # -- ending --------------------------------------------------------------------
@@ -948,6 +1116,7 @@ class SyncSession:
             "departed": list(self.departed),
             "measurements": {k: to_dict(v) for k, v in self.measurements.items()},
             "proposal": to_dict(self.proposal) if self.proposal else None,
+            "verification": copy.deepcopy(self.verification),
             "history": list(self.history),
             "error": self.error,
             "restore_error": self.restore_error,

@@ -637,6 +637,7 @@
                 "auto_pending",
                 "legacy",
                 "manual",
+                "recommendation",
                 "music_assistant",
                 "bluez_report",
                 "bluez_delay_report",

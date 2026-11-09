@@ -161,6 +161,11 @@ Diagnostics status are the same verdict.
 
 ## Group sync
 
+**Speaker timing** — a speaker's compensation, required lead and ongoing
+buffer. Compensation shifts when the sound is heard; lead and buffer say
+how much audio must be available ahead of it, not how much more latency to
+compensate. A group measurement keeps these settings stable.
+
 **Speaker latency compensation** — a speaker's `static_delay_ms` (0–5000): how
 much earlier the bridge sends its audio so it is heard on time. A larger value
 plays earlier. Group sync sets it relative to the group (the earliest member
@@ -186,6 +191,13 @@ phases and outlive a round.
 **Proposal** — the delays a measurement round implies: each member's lag
 behind the earliest one, added to the delay it had. Applying writes it
 through Music Assistant; it is never older than the round.
+
+**Verification** — a fresh Measurement round after applying a Proposal,
+measuring the remaining audible spread instead of predicting it. It keeps
+the applied compensation unchanged. Every member included when the check
+starts must be heard for it to pass; newly skipping a silent member cannot
+turn an incomplete check into success. Cancelling the check keeps the
+applied compensation, and changing timing makes the previous result stale.
 
 ## Music Assistant
 

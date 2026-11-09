@@ -411,6 +411,31 @@ def apply_device_config_change(player_id: str, key: str, value: Any) -> CommandR
     if client is None:
         return _err(f"Unknown player_id: {player_id}", code=404)
 
+    from sendspin_bridge.services.audio.speaker_timing import FIELDS, timing_for
+
+    if key in FIELDS:
+        from sendspin_bridge.application.errors import UseCaseError
+        from sendspin_bridge.application.runtime import run_on_loop
+
+        # Keep the existing HA contract: malformed/unmigratable configuration is reported
+        # before scheduling a runtime command, rather than being masked by loop availability.
+        with config_lock:
+            current, error = _read_migrated_config()
+            if error is not None:
+                return error
+            if _resolve_config_player(current, player_id) is None:
+                return _err(f"Device {player_id} missing from config", code=404)
+        try:
+            applied = run_on_loop(
+                timing_for(client).change(key, value, source="manual"), timeout=2.0, description="HA timing change"
+            )
+        except UseCaseError as exc:
+            return _err(exc.detail or exc.code, code=exc.status)
+        except Exception as exc:
+            logger.exception("HA timing change failed")
+            return _err(str(exc), code=503)
+        return _ok(f"Applied {key}={applied}")
+
     with config_lock:
         old_config, err = _read_migrated_config()
         if err is not None:

@@ -181,6 +181,13 @@ export function startSequence(id: string, members: string[]): Promise<SyncSessio
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/sequence', { ...sessionPath(id), body: { members } }))
 }
 
+/** A post-Apply recording round; finish reports a measured residual and never applies another proposal. */
+export function verifySession(id: string, action: 'start' | 'finish' | 'cancel'): Promise<SyncSession> {
+  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/verification', {
+    params: { path: { session_id: id } }, body: { action },
+  }))
+}
+
 /**
  * Save bridge speakers' air-to-sound latencies from the last measured sequence (applied live);
  * 409 ``not_eligible`` when a member has none to save (nothing is written then).
