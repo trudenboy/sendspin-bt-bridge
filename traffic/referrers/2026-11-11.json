@@ -1,0 +1,52 @@
+[
+  {
+    "referrer": "aocr.org",
+    "count": 327,
+    "uniques": 320
+  },
+  {
+    "referrer": "Google",
+    "count": 136,
+    "uniques": 100
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 79,
+    "uniques": 65
+  },
+  {
+    "referrer": "github.com",
+    "count": 71,
+    "uniques": 41
+  },
+  {
+    "referrer": "l.facebook.com",
+    "count": 37,
+    "uniques": 23
+  },
+  {
+    "referrer": "facebook.com",
+    "count": 19,
+    "uniques": 17
+  },
+  {
+    "referrer": "lm.facebook.com",
+    "count": 11,
+    "uniques": 10
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 10,
+    "uniques": 9
+  },
+  {
+    "referrer": "Bing",
+    "count": 9,
+    "uniques": 6
+  },
+  {
+    "referrer": "DuckDuckGo",
+    "count": 8,
+    "uniques": 7
+  }
+]
