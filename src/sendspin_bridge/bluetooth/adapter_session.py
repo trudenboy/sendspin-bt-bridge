@@ -37,6 +37,7 @@ import itertools
 import logging
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -223,6 +224,8 @@ class AdapterHandle:
         self._bluez = bluez
         self._link_probe = link_probe
         self._hci_name = ""
+        self._default_hci_cache: str = ""
+        self._default_hci_expires_at = 0.0
         self._verbs = None
 
     # -- identity ------------------------------------------------------
@@ -283,23 +286,31 @@ class AdapterHandle:
         if self._adapter.startswith("hci"):
             self._hci_name = self._adapter
             return self._hci_name
-        adapter_mac = self._adapter
-        if not adapter_mac:
-            # Resolve the controller BlueZ actually uses by default.
-            # Its kernel index is not necessarily hci0.
+        if not self._adapter:
+            now = time.monotonic()
+            if now < self._default_hci_expires_at:
+                return self._default_hci_cache
+
             info = self.bluez.show()
-            if info.outcome is not Outcome.OK or not info.present:
-                return ""
-            adapter_mac = info.mac
-        wanted = DeviceAddress.parse(adapter_mac)
+            resolved = ""
+            if info.outcome is Outcome.OK and info.present:
+                wanted = DeviceAddress.parse(info.mac)
+                if wanted is not None:
+                    for mac, hci in self.bluez.hci_map().items():
+                        if DeviceAddress.parse(mac) == wanted:
+                            resolved = hci
+                            break
+
+            self._default_hci_cache = resolved
+            self._default_hci_expires_at = time.monotonic() + (5.0 if resolved else 1.0)
+            return resolved
+
+        wanted = DeviceAddress.parse(self._adapter)
         if wanted is None:
             return ""
         for mac, hci in self.bluez.hci_map().items():
             if DeviceAddress.parse(mac) == wanted:
-                # Explicit identities can be cached, but BlueZ's
-                # default controller may change during runtime.
-                if self._adapter:
-                    self._hci_name = hci
+                self._hci_name = hci
                 return hci
         return ""
 

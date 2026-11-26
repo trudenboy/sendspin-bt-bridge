@@ -1,7 +1,7 @@
 """Regression tests for default Bluetooth controller identity."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.bluetooth.bluez import Outcome
@@ -55,7 +55,9 @@ def test_default_adapter_does_not_guess_missing_mapping():
     assert handle.dbus_device_path(DEVICE_MAC) is None
 
 
-def test_default_adapter_retries_when_controller_appears():
+@patch("sendspin_bridge.bluetooth.adapter_session.time.monotonic")
+def test_default_adapter_retries_when_controller_appears(clock):
+    clock.return_value = 100.0
     bluez = _transport()
     bluez.hci_map.return_value = {}
 
@@ -67,6 +69,7 @@ def test_default_adapter_retries_when_controller_appears():
         "88A29EA96425": "hci0",
     }
 
+    clock.return_value = 102.0
     assert handle.hci_name == "hci0"
 
 
@@ -95,25 +98,80 @@ def test_explicit_hci_name_remains_unchanged():
     bluez.show.assert_not_called()
 
 
-def test_default_adapter_follows_controller_changes():
+@patch("sendspin_bridge.bluetooth.adapter_session.time.monotonic")
+def test_default_adapter_follows_controller_changes(clock):
+    clock.return_value = 100.0
     bluez = _transport()
     handle = AdapterHandle(adapter="", bluez=bluez)
 
     assert handle.hci_name == "hci1"
 
     bluez.show.return_value.mac = OTHER_MAC
+    clock.return_value = 106.0
 
     assert handle.hci_name == "hci0"
     assert handle.dbus_device_path(DEVICE_MAC) == ("/org/bluez/hci0/dev_E8_07_BF_E3_A4_B4")
 
 
-def test_default_adapter_does_not_keep_stale_mapping():
+@patch("sendspin_bridge.bluetooth.adapter_session.time.monotonic")
+def test_default_adapter_does_not_keep_stale_mapping(clock):
+    clock.return_value = 100.0
     bluez = _transport()
     handle = AdapterHandle(adapter="", bluez=bluez)
 
     assert handle.hci_name == "hci1"
 
     bluez.show.return_value.present = False
+    clock.return_value = 106.0
 
     assert handle.hci_name == ""
     assert handle.dbus_device_path(DEVICE_MAC) is None
+
+
+@patch("sendspin_bridge.bluetooth.adapter_session.time.monotonic")
+def test_default_adapter_reuses_cached_identity(clock):
+    clock.return_value = 100.0
+    bluez = _transport()
+    handle = AdapterHandle(adapter="", bluez=bluez)
+
+    for _ in range(20):
+        assert handle.hci_name == "hci1"
+
+    assert bluez.show.call_count == 1
+    assert bluez.hci_map.call_count == 1
+
+
+@patch("sendspin_bridge.bluetooth.adapter_session.time.monotonic")
+def test_default_adapter_refreshes_after_cache_expiry(clock):
+    clock.return_value = 100.0
+    bluez = _transport()
+    handle = AdapterHandle(adapter="", bluez=bluez)
+
+    assert handle.hci_name == "hci1"
+
+    clock.return_value = 104.0
+    assert handle.hci_name == "hci1"
+    assert bluez.show.call_count == 1
+
+    clock.return_value = 106.0
+    assert handle.hci_name == "hci1"
+    assert bluez.show.call_count == 2
+    assert bluez.hci_map.call_count == 2
+
+
+@patch("sendspin_bridge.bluetooth.adapter_session.time.monotonic")
+def test_default_adapter_caches_failed_lookup_briefly(clock):
+    clock.return_value = 100.0
+    bluez = _transport()
+    bluez.show.return_value.present = False
+    handle = AdapterHandle(adapter="", bluez=bluez)
+
+    assert handle.hci_name == ""
+    assert handle.hci_name == ""
+    assert bluez.show.call_count == 1
+
+    clock.return_value = 102.0
+    bluez.show.return_value.present = True
+
+    assert handle.hci_name == "hci1"
+    assert bluez.show.call_count == 2
