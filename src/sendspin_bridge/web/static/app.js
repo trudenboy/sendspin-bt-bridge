@@ -15471,7 +15471,7 @@ const _ACTION_REGISTRY = {
     'group-mute':               onGroupMute,
     'pause-all':                onPauseAll,
     'group-action':             (_el, _ev, arg) => onGroupAction(arg),
-    'add-bt-device-row':        addBtDeviceRow,
+    'add-bt-device-row':        () => addBtDeviceRow(),
     'add-manual-adapter-row':   () => addManualAdapterRow('', '', ''),
     'load-bt-adapters':         loadBtAdapters,
     'open-bt-scan-modal':       openBtScanModal,
