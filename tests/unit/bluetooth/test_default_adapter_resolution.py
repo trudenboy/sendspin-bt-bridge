@@ -31,9 +31,7 @@ def test_default_adapter_resolves_actual_controller():
 
     assert handle.hci_name == "hci1"
 
-    assert handle.dbus_device_path(DEVICE_MAC) == (
-        "/org/bluez/hci1/dev_E8_07_BF_E3_A4_B4"
-    )
+    assert handle.dbus_device_path(DEVICE_MAC) == ("/org/bluez/hci1/dev_E8_07_BF_E3_A4_B4")
 
 
 def test_default_adapter_keeps_default_command_scope():
@@ -95,3 +93,27 @@ def test_explicit_hci_name_remains_unchanged():
 
     assert handle.hci_name == "hci2"
     bluez.show.assert_not_called()
+
+
+def test_default_adapter_follows_controller_changes():
+    bluez = _transport()
+    handle = AdapterHandle(adapter="", bluez=bluez)
+
+    assert handle.hci_name == "hci1"
+
+    bluez.show.return_value.mac = OTHER_MAC
+
+    assert handle.hci_name == "hci0"
+    assert handle.dbus_device_path(DEVICE_MAC) == ("/org/bluez/hci0/dev_E8_07_BF_E3_A4_B4")
+
+
+def test_default_adapter_does_not_keep_stale_mapping():
+    bluez = _transport()
+    handle = AdapterHandle(adapter="", bluez=bluez)
+
+    assert handle.hci_name == "hci1"
+
+    bluez.show.return_value.present = False
+
+    assert handle.hci_name == ""
+    assert handle.dbus_device_path(DEVICE_MAC) is None

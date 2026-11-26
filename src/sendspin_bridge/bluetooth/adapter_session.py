@@ -296,7 +296,10 @@ class AdapterHandle:
             return ""
         for mac, hci in self.bluez.hci_map().items():
             if DeviceAddress.parse(mac) == wanted:
-                self._hci_name = hci
+                # Explicit identities can be cached, but BlueZ's
+                # default controller may change during runtime.
+                if self._adapter:
+                    self._hci_name = hci
                 return hci
         return ""
 
