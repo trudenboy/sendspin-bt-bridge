@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -59,9 +60,19 @@ assert.deepEqual(
 );
 """.replace("ACTION_EXPRESSION", action)
 
-    subprocess.run(
-        ["node", "-e", script],
-        check=True,
+    node = shutil.which("node")
+    assert node is not None, (
+        "node is required for frontend runtime regression tests"
+    )
+
+    completed = subprocess.run(
+        [node, "-e", script],
         capture_output=True,
         text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert completed.returncode == 0, (
+        completed.stdout + completed.stderr
     )
