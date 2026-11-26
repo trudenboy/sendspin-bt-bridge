@@ -283,9 +283,15 @@ class AdapterHandle:
         if self._adapter.startswith("hci"):
             self._hci_name = self._adapter
             return self._hci_name
-        if not self._adapter:
-            return ""
-        wanted = DeviceAddress.parse(self._adapter)
+        adapter_mac = self._adapter
+        if not adapter_mac:
+            # Resolve the controller BlueZ actually uses by default.
+            # Its kernel index is not necessarily hci0.
+            info = self.bluez.show()
+            if info.outcome is not Outcome.OK or not info.present:
+                return ""
+            adapter_mac = info.mac
+        wanted = DeviceAddress.parse(adapter_mac)
         if wanted is None:
             return ""
         for mac, hci in self.bluez.hci_map().items():
